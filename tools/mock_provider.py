@@ -120,7 +120,8 @@ def make_handler(flavor):
                 self._json({"content": [{"type": "text", "text": reply}]})
             elif flavor == "ollama" and self.path == "/api/chat":
                 self._json({"message": {"role": "assistant", "content": reply}, "done": True})
-            elif flavor in ("openai", "generic") and self.path.rstrip("/").endswith("images/generations"):
+            elif flavor in ("openai", "generic") and self.path.rstrip("/").endswith("images/generations") or \
+                    self.path.rstrip("/").endswith("/v1/images"):
                 # a 1x1 red PNG; the prompt is echoed back as metadata
                 self._json({"created": 0, "data": [{
                     "b64_json": TINY_PNG,

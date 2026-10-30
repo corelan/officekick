@@ -396,8 +396,12 @@ def provider_generate_image(conn, model, prompt, size=None):
         payload["size"] = size
     body = json.dumps(payload).encode("utf-8")
 
-    # /v1 in base -> {base}/images/generations; otherwise guess both spellings
-    if "/v1" in base:
+    # /v1 in base -> {base}/images/generations; otherwise guess both spellings.
+    # openrouter's dedicated image API lives at {base}/images (response shape is
+    # the OpenAI-style {"data":[{"b64_json"...}]}) - try it first there.
+    if conn["type"] == "openrouter":
+        urls = [base + "/images", base + "/images/generations"]
+    elif "/v1" in base:
         urls = [base + "/images/generations"]
     else:
         urls = [base + "/v1/images/generations", base + "/images/generations"]
