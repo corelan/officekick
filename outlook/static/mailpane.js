@@ -493,7 +493,8 @@
     if (!box.classList.contains("hidden")) { box.classList.add("hidden"); box.innerHTML = ""; return; }
     apiJson("/api/sessions/" + sessId, "GET").then(function (doc) {
       var msgs = (doc.exchanges || []);
-      var shown = msgs.slice(-12);
+      // cap the peek at 6 entries: the last 3 requests + 3 responses
+      var shown = msgs.slice(-6);
       var frag = document.createDocumentFragment();
       if (msgs.length > shown.length) {
         var more = document.createElement("div");
@@ -507,7 +508,7 @@
         var who = document.createElement("b");
         who.textContent = (m.role === "user" ? "You" : "AI") + ": ";
         var c = String(m.content || "");
-        if (c.length > 400) c = c.slice(0, 400) + "…";
+        if (c.length > 240) c = c.slice(0, 240) + "…";
         var txt = document.createElement("span");
         txt.textContent = c;
         b.appendChild(who); b.appendChild(txt);

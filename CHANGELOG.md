@@ -1,4 +1,12 @@
 # Changelog
+## [0.3.6] - 2026-10-30
+### Fixed / added
+- Sessions tab: clicking a session name expands/collapses a preview of the
+  last up to 6 entries (3 requests + 3 responses), with shorter snippets.
+- live-report fix: the create_shape/move_shape formatters crashed on
+  op.geometry of raw or failed ops ("undefined is not an object") and masked
+  the underlying error; every geometry access is guarded now.
+
 ## [0.3.5] - 2026-10-30
 ### Added / clarified
 - Honest-capability rule in the SlideKick prompt: SmartArt, stock icons and

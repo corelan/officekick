@@ -518,7 +518,8 @@
     if (!box.classList.contains("hidden")) { box.classList.add("hidden"); box.innerHTML = ""; return; }
     apiJson("/api/sessions/" + sessId, "GET").then(function (doc) {
       var msgs = (doc.exchanges || []);
-      var shown = msgs.slice(-12);
+      // cap the peek at 6 entries: the last 3 requests + 3 responses
+      var shown = msgs.slice(-6);
       var frag = document.createDocumentFragment();
       if (msgs.length > shown.length) {
         var more = document.createElement("div");
@@ -532,7 +533,7 @@
         var who = document.createElement("b");
         who.textContent = (m.role === "user" ? "You" : "AI") + ": ";
         var c = String(m.content || "");
-        if (c.length > 400) c = c.slice(0, 400) + "…";
+        if (c.length > 240) c = c.slice(0, 240) + "…";
         var txt = document.createElement("span");
         txt.textContent = c;
         b.appendChild(who); b.appendChild(txt);
@@ -1729,7 +1730,7 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
           (op.geometry && op.geometry.left != null ? " @ " + Math.round(op.geometry.left) + "," + Math.round(op.geometry.top) : "");
       case "move_shape":
         return "Slide " + op.slide + ", shape " + op.shape + ": " +
-          Object.keys(op.geometry).map(function (p) { return p + "->" + Math.round(op.geometry[p]); }).join(" ");
+          Object.keys(op.geometry || {}).map(function (p) { return p + "->" + Math.round(op.geometry[p]); }).join(" ") || "(no geometry)";
       case "create_image": {
         var pr = op.prompt.length > 60 ? op.prompt.slice(0, 60) + "…" : op.prompt;
         return (op.slide != null ? "Slide " + op.slide + slideTitle(op.slide) : "Slide you have open") +
@@ -1740,7 +1741,7 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
       case "create_shape": {
         var gc = [];
         ["left", "top", "width", "height"].forEach(function (gk2) {
-          if (op.geometry[gk2] != null) gc.push(gk2 + "=" + op.geometry[gk2]);
+          if (op.geometry && op.geometry[gk2] != null) gc.push(gk2 + "=" + op.geometry[gk2]);
         });
         return "Slide " + op.slide + ": " + op.kind + (op.text ? " \"" + op.text + "\"" : "") +
           (gc.length ? " (" + gc.join(", ") + ")" : "");
@@ -1835,9 +1836,9 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
           });
         }
         case "move_shape":
-          return deck.moveShape(cur, op.shape, op.geometry).then(function () {
+          return deck.moveShape(cur, op.shape, op.geometry || {}).then(function () {
             lines.push({ ok: true, text: "move shape " + op.shape + " on slide " + op.slide + ": " +
-              Object.keys(op.geometry).map(function (p) { return p + "->" + Math.round(op.geometry[p]); }).join(" ") });
+              Object.keys(op.geometry || {}).map(function (p) { return p + "->" + Math.round(op.geometry[p]); }).join(" ") });
           });
         case "set_notes":
           return deck.setNotes(cur, op.notes).then(function (nr) {
