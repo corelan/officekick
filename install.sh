@@ -38,7 +38,7 @@ PORT=""
 DEV=0
 NO_AGENT=0
 PURGE=0
-HTTPS=1
+HTTPS=0   # default: plain http://localhost, no keychain changes, no ribbon commands
 SUB="install"
 
 say()  { printf '%s\n' "$*"; }
@@ -51,7 +51,7 @@ while [[ $# -gt 0 ]]; do
     --port) PORT="${2:-}"; shift 2 ;;
     --dev) DEV=1; shift ;;
     --no-launchagent) NO_AGENT=1; shift ;;
-    --http) HTTPS=0; shift ;;
+    --https) HTTPS=1; shift ;;
     --purge) PURGE=1; shift ;;
     install|update|uninstall|status|run|help) SUB="$1"; shift ;;
     -h|--help) SUB="help"; shift ;;
@@ -66,7 +66,7 @@ usage() {
   say "  --port N                port for the local server (default $DEFAULT_PORT)"
   say "  --dev                   serve files directly from this repo (developer mode)"
   say "  --no-launchagent        do not install the login auto-start"
-  say "  --http                  plain HTTP (dev only - ribbon commands need HTTPS)"
+  say "  --https                 serve https + add the ribbon button (trusts a local CA in the login keychain)"
   say "  status                  show current install status"
   say "  run                     run the server in the foreground"
   say "  uninstall [--purge]     remove everything (config too with --purge)"
@@ -165,7 +165,8 @@ pick_port() {
 ensure_local_certs() {
   SCHEME="http"
   if [[ "$HTTPS" != "1" ]]; then
-    warn "--http given: plain HTTP (the PowerPoint ribbon button needs HTTPS)"
+    ok "http://localhost mode (default): no certificates, no keychain changes"
+    ok "ribbon button not included in this mode - add it with: ./install.sh --https"
     return 0
   fi
   if ! command -v openssl >/dev/null 2>&1; then
@@ -270,6 +271,7 @@ do_install() {
 
   resolve_containers
   # stop a previously installed server first so the canonical port frees up
+  say "  ... stopping previously installed local server (if any)"
   launchctl unload "$PLIST" 2>/dev/null || true
   pick_port
   ok "port: $PORT"
@@ -304,8 +306,14 @@ do_install() {
   "${SED:-sed}" \
     -e "s/__SCHEME__/$SCHEME/" \
     -e "s/__PORT__/$PORT/g" \
-    -e "s/__VERSION__/${VERSION}.0/" \
     "$SRC_DIR/manifest.template.xml" > "$mtmp"
+  if [[ "$HTTPS" != "1" ]]; then
+    # ribbon commands require https - drop them in the default http mode so the
+    # add-in stays visible in Home -> Add-ins (commands mode removes the entry)
+    "${SED:-sed}" -i '' -e '/__COMMANDS_BEGIN__/,/__COMMANDS_END__/d' "$mtmp"
+  else
+    "${SED:-sed}" -i '' -e '/__COMMANDS_BEGIN__/d' -e '/__COMMANDS_END__/d' "$mtmp"
+  fi
   if command -v xmllint >/dev/null 2>&1; then
     xmllint --noout "$mtmp" || die "generated manifest is not valid XML"
     ok "manifest valid XML"
@@ -341,12 +349,12 @@ do_install() {
     fi
   else
     say "  ... writing LaunchAgent $PLIST"
-  "$PY" - "$PLIST" "$LAUNCH_LABEL" "$PY" "$SERVER_PY" "$PORT" "$STATIC_DIR" "$CERT_DIR" "$LOG_DIR" <<'PYPLIST'
+  "$PY" - "$PLIST" "$LAUNCH_LABEL" "$PY" "$SERVER_PY" "$PORT" "$STATIC_DIR" "$CERT_DIR" "$LOG_DIR" "$SCHEME" <<'PYPLIST'
 import os, plistlib, sys
 
-plist_path, label, py_bin, server_py, port, static_dir, cert_dir, log_dir = sys.argv[1:9]
+plist_path, label, py_bin, server_py, port, static_dir, cert_dir, log_dir, scheme = sys.argv[1:10]
 args = [py_bin, server_py, "--port", port, "--static-dir", static_dir]
-if os.path.isfile(os.path.join(cert_dir, "localhost.pem")):
+if scheme == "https":
     args += ["--cert", os.path.join(cert_dir, "localhost.pem"),
              "--key", os.path.join(cert_dir, "localhost.key")]
 with open(plist_path, "wb") as fh:
@@ -361,6 +369,7 @@ with open(plist_path, "wb") as fh:
 PYPLIST
     launchctl unload "$PLIST" 2>/dev/null || true
     launchctl load -w "$PLIST"
+  say "  ... restarting local server via LaunchAgent (RunAtLoad + KeepAlive)"
     ok "LaunchAgent installed (starts at login, restarts on crash)"
   fi
 

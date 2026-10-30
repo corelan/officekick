@@ -29,6 +29,7 @@
     <SourceLocation DefaultValue="__SCHEME__://localhost:__PORT__/taskpane.html"/>
   </DefaultSettings>
   <Permissions>ReadWriteDocument</Permissions>
+__COMMANDS_BEGIN__
   <VersionOverrides xmlns="http://schemas.microsoft.com/office/taskpaneappversionoverrides"
                     xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0"
                     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
@@ -97,4 +98,5 @@
       </bt:LongStrings>
     </Resources>
   </VersionOverrides>
+__COMMANDS_END__
 </OfficeApp>

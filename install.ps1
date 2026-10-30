@@ -210,6 +210,7 @@ if ($Action -eq "run") {
 
 # ------------------------------------------------------------------ install
 Say "SlideKick $Version - install/update (Windows)"
+Stop-Server   # stop a previously installed server so updates take effect
 $py = Find-Python
 Ok "python: $py (& $py --version)"
 
@@ -281,7 +282,7 @@ if (-not $h) {
     Start-Process -FilePath $py -ArgumentList ('"' + $serverPy + '" --port ' + $Port) -WindowStyle Hidden
     $h = HealthCheck $Port 20
 }
-if ($h) { Ok "server healthy: http://127.0.0.1:$Port  (config: $ConfigDir\config.json)" }
+if ($h) { Ok "server restarted + healthy: http://127.0.0.1:$Port  (config: $ConfigDir\config.json)" }
 else { Die "server did not become healthy on port $Port - check $(Join-Path $LogDir "server.log") and the task scheduler" }
 
 Say ""

@@ -79,10 +79,14 @@ SlideKick ships in two parts:
   reason / reasoning tag pairs, balanced or truncated; Ollama `thinking` fields;
   OpenAI-style `reasoning_content`) is stripped; unclear output triggers a hidden
   "answer in clean JSON" retry that is never shown.
-- **HTTPS by default**: the local server serves a machine-generated certificate for
-  `localhost` / `127.0.0.1` / `::1` (loopback-only CA, trusted in your login
-  keychain by the installer - no admin needed). Required for the ribbon button;
-  `--http` remains a developer fallback.
+- **Theme-aware UI**: light/dark follows the Office host theme
+  (`OfficeTheme.isDarkTheme`, color-luminance fallback); in the simulator it follows
+  the browser scheme.
+- **Default transport is plain http://localhost** (no certs, no keychain changes,
+  add-in listed under Home -> Add-ins). `./install.sh --https` opts in to a
+  machine-generated loopback CA (trusted once in your login keychain) plus the
+  ribbon button + logo, because Microsoft's add-in-commands UI registers only with
+  https URLs.
 - **Debug logging** (opt-in): appends AI interactions and deck-edit traces to one
   appended file per day (`~/.slidekick/logs/debug-YYYY-MM-DD.log`).
 - **Installer**: detects PowerPoint, deploys the add-in, sideloads/registers the
@@ -202,6 +206,14 @@ dedicated **SlideKick** ribbon tab is always there.
    Editing is move-based: renaming a connection re-points the profiles using it;
    renaming a profile keeps the default star with it. Model lists in the profile
    editors are sorted alphabetically.
+
+   **Server transport**: the default install serves plain `http://localhost` - no
+   certificates, no keychain changes. The add-in registers as a task-pane entry in
+   the Home -> Add-ins dropdown in this mode (add-in commands require https and are
+   left out). Run `./install.sh --https` to opt in to the ribbon button + logo: it
+   generates a loopback-only local CA + localhost certificate, trusts it in your
+   login keychain (one macOS prompt), and re-registers the manifest with https
+   and the ribbon command.
 
 2. **Profiles** tab: name a profile, then for the *content model* and the
    *other-actions model* pick a connection -> pick a model from the live list (or type a

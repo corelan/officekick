@@ -2,18 +2,21 @@
 
 ## 0.1.2
 
-- Permanent ribbon presence: the manifest now declares a dedicated "SlideKick" tab
-  with a task-pane button (VersionOverrides / add-in commands, in the
-  taskpaneappversionoverrides namespace the hosts require) - no more opening the
-  Add-ins dropdown every time. The dropdown entry remains as fallback.
-- The task pane follows the Office host theme (OfficeTheme.isDarkTheme, with
-  body-color luminance fallback and an OfficeThemeChanged subscription); the
-  simulator follows the browser (prefers-color-scheme) or `?theme=dark|light`.
+- Default transport: plain http://localhost (no certificates, no keychain changes);
+  the add-in appears in Home -> Add-ins. `--https` opts in to the ribbon button:
+  loopback-only local CA + localhost certificate, trusted in the login keychain
+  (ribbon UI only registers with https URLs - verified against Office).
+- Permanent ribbon presence via `--https`: OfficeTab(TabHome) button + logo
+  (VersionOverrides in the taskpaneappversionoverrides namespace, XSD-validated).
 - Dual-stack loopback listener (127.0.0.1 + ::1): macOS resolves 'localhost' to
   ::1 first and WKWebView does not fall back to IPv4 on a refusal, which made
   the pane fail with "Load failed" while everything else worked.
 - The pane retries the initial config fetch (3x/1s) to survive opening during
   an installer-run server restart.
+- Installer guarantees: stops the previous server before updating, restarts it
+  via LaunchAgent/RunAtLoad, and health-checks; clears the Office add-in caches
+  on every run (only while PowerPoint is closed); the task pane follows the
+  Office host theme (isDarkTheme + luminance fallback + OfficeThemeChanged).
 
 ## 0.1.1
 
