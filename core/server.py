@@ -29,7 +29,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 APP = "OfficeKick"
-VERSION = "0.1.6"
+VERSION = "0.1.7"
 
 CONNECTION_TYPES = (
     "openai",
@@ -404,6 +404,30 @@ def provider_generate_image(conn, model, prompt, size=None):
         if not base.endswith("/v1"):
             urls.append(base + "/v1/images")
         urls.append(base + "/images/generations")
+        # preflight: reject text-only models with actionable suggestions
+        try:
+            murls = [base + "/models"] if base.endswith("/v1") else [base + "/v1/models", base + "/models"]
+            raw = []
+            for murl in murls:
+                try:
+                    raw = _parse_openai_models_raw(http_request(murl, headers=headers, timeout=30))
+                    if raw:
+                        break
+                except ApiError:
+                    raw = []
+            entry = next((m for m in raw if str(m.get("id") or "") == model), None)
+            if entry is not None and not _model_is_image_capable(entry):
+                sugg = _image_model_suggestion(model, [m["id"] for m in raw if _model_is_image_capable(m)])
+                raise ApiError(
+                    400,
+                    "Model '%s' cannot generate images (OpenRouter lists it as text-only). "
+                    "Image-capable alternative(s): %s%s"
+                    % (model, ", ".join("'%s'" % s for s in sugg) or "(none on this account)",
+                       " - they are the list shown with 'image-capable only'." if sugg else ""))
+        except ApiError:
+            raise
+        except Exception:
+            pass  # preflight is best-effort; the provider's own error is the fallback
     elif "/v1" in base:
         urls = [base + "/images/generations"]
     else:
@@ -545,6 +569,19 @@ IMAGE_MODEL_NAME_HINTS = (
     "image", "imagen", "seedream", "dall", "flux", "banana", "recraft",
     "ideogram", "kolors", "stable-diffusion", "sdxl", "sd3", "playground",
 )
+
+
+def _image_model_suggestion(requested, capable_ids):
+    """Closest image-capable ids for a non-image model id (openrouter preflight)."""
+    ids = [str(x) for x in capable_ids]
+    cand = requested + "-image"
+    if cand in ids:
+        return [cand]
+    low = requested.lower()
+    near = sorted(
+        {i for i in ids if i.lower().startswith(low) or low.startswith(i.lower())},
+        key=len)[:3]
+    return near or ids[:5]
 
 
 def _model_is_image_capable(entry):

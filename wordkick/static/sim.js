@@ -96,8 +96,8 @@
       return { ok: true };
     },
     addImage: async function (payload) {
-      // a standalone image line at the end; rendered as a red placeholder tile
-      var img = { text: "[IMAGE]", style: images.length % 2 ? "Normal" : "Heading 3", image: true };
+      // the sim has no caret: 'at cursor' just marks the line
+      var img = { text: payload && payload.atCursor ? "[IMAGE at cursor]" : "[IMAGE]", style: images.length % 2 ? "Normal" : "Heading 3", image: true };
       paras.push(img);
       images.push({ b64: payload.b64 });
       return { ok: true };

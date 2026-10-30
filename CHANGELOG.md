@@ -1,4 +1,16 @@
 # Changelog
+## [0.1.7] - 2026-10-30
+### Added
+- Word: **insert at cursor** - a pane checkbox feeds the image to the caret/selected
+  range (`getSelection().insertInlinePictureFromBase64(..., "Replace")`, WordApi 1.2);
+  unchecked = end of document (unchanged).
+- OpenRouter image pre-flight: text-only model ids are rejected up front with the
+  closest image-capable suggestion(s), instead of a raw provider 404
+  ("No model found"). Example: picking `google/gemini-3.1-flash-lite` now suggests
+  `google/gemini-3.1-flash-lite-image`.
+### Fixed
+- `provider_chat` unbound `text` crash for unreachable openai-family providers.
+
 ## [0.1.6] - 2026-10-30
 ### Added
 - **Inspector tab** in both panes (request/response log): every call to the local server (chat, models,

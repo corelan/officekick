@@ -334,6 +334,7 @@
     "- Rewrite/improve requests: keep the meaning and structure; reword only.",
     "- If the request is a question/explanation/brainstorm rather than a document change, use format A.",
     "- Image requests: always return an insert_image op (never generate the picture inline); DocKick fetches it with the user's configured image model. Include a concrete, self-contained prompt in the op.",
+    "- Picture placement: 'here / at the cursor / current position' = the image lands at the caret (the pane's 'insert at cursor' checkbox); default = end of document. Keep insert_image minimal (type + prompt only).",
   ].join("\n");
 
   var NOTES_OFF_RULE = "";
@@ -534,7 +535,12 @@
 
   WordDeck.prototype.addImage = function (payload) {
     return this.run("addImage", function (ctx) {
-      ctx.document.body.insertInlinePictureFromBase64(String(payload.b64), "End");
+      if (payload.atCursor) {
+        // WordApi 1.2: insert at the caret / selection
+        ctx.document.getSelection().insertInlinePictureFromBase64(String(payload.b64), "Replace");
+      } else {
+        ctx.document.body.insertInlinePictureFromBase64(String(payload.b64), "End");
+      }
       return ctx.sync().then(function () { return { ok: true }; });
     });
   };
@@ -759,8 +765,10 @@ function applyOps(deck, ops, ctx) {
             }),
           ]).then(function (img) {
             if (!img || !img.b64) throw new FriendlyError("server returned no image data");
-            return deck.addImage({ b64: img.b64 }).then(function () {
-              lines.push({ ok: true, text: "image inserted at end of document (" + imgRef.connection + ":" + imgRef.model + ")" });
+            return deck.addImage({ b64: img.b64, atCursor: $("chat-cursor") && $("chat-cursor").checked }).then(function () {
+              var atCursor = $("chat-cursor") && $("chat-cursor").checked;
+              lines.push({ ok: true, text: "image inserted " + (atCursor ? "at cursor/selection" : "at end of document") +
+                " (" + imgRef.connection + ":" + imgRef.model + ")" });
             });
           });
         }

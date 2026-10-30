@@ -96,7 +96,7 @@ def make_handler(flavor):
                 self._json({"data": [{"id": m} for m in DEFAULT_MODELS]})
             elif flavor == "ollama" and self.path == "/api/tags":
                 self._json({"models": [{"name": m} for m in DEFAULT_MODELS]})
-            elif flavor == "openrouter" and self.path.rstrip("/") == "/v1/models":
+            elif flavor == "openrouter" and self.path.rstrip("/").endswith("/v1/models"):
                 # realistic openrouter shapes: metadata-driven image filtering
                 self._json({"data": [
                     {"id": "openai/gpt-x", "architecture": {"output_modalities": ["text"]}},
