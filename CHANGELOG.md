@@ -8,6 +8,13 @@
   the stored history into the Chat/Actions tab (last 6 exchanges stay in context).
   Names come from a tiny AI call through the profile's other model; a failed
   naming call falls back to the first user message.
+### Fixed
+- Outlook/OWA sideloading: the mail add-in manifest is now https-only (Outlook's
+  dialog rejects http SourceLocations with "Installation failed"), and the loopback
+  leaf certificate gained modern extensions (Subject/Autority Key Identifier,
+  serverAuth) - strict TLS consumers like OWA's checker accept it now. Cert file
+  and keychain CA verified end-to-end (localhost/127.0.0.1/[::1] all strict-verified).
+
 ## [0.1.8] - 2026-10-30
 ### Added
 - **MailKick** - the Outlook add-in (docs/outlook.md): email context, draft_reply /

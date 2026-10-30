@@ -339,14 +339,22 @@ CAEOF
     cat > "$CERT_DIR/leaf.cnf" <<LEAFEOF
 [req]
 distinguished_name = dn
-req_extensions = v3_req
+req_extensions = req_ext
 prompt = no
 [dn]
 CN = localhost
-[v3_req]
+[req_ext]
 basicConstraints = critical, CA:FALSE
 keyUsage = critical, digitalSignature, keyEncipherment
 extendedKeyUsage = serverAuth
+subjectKeyIdentifier = hash
+subjectAltName = DNS:localhost, IP:127.0.0.1, IP:::1
+[v3_ext]
+basicConstraints = critical, CA:FALSE
+keyUsage = critical, digitalSignature, keyEncipherment
+extendedKeyUsage = serverAuth
+subjectKeyIdentifier = hash
+authorityKeyIdentifier = keyid,issuer
 subjectAltName = DNS:localhost, IP:127.0.0.1, IP:::1
 LEAFEOF
     openssl req -x509 -newkey rsa:2048 -nodes -sha256 -days 3650 \
@@ -355,7 +363,7 @@ LEAFEOF
       -keyout "$LEAF_KEY" -out "$CERT_DIR/localhost.csr" -config "$CERT_DIR/leaf.cnf"
     openssl x509 -req -sha256 -days 825 \
       -in "$CERT_DIR/localhost.csr" -CA "$CA_PEM" -CAkey "$CA_KEY" -CAcreateserial \
-      -out "$LEAF_PEM" -extfile "$CERT_DIR/leaf.cnf" -extensions v3_req
+      -out "$LEAF_PEM" -extfile "$CERT_DIR/leaf.cnf" -extensions v3_ext
     rm -f "$CERT_DIR/localhost.csr"
     chmod 600 "$CA_KEY" "$LEAF_KEY"
     ok "certificates generated in $CERT_DIR"
@@ -366,8 +374,14 @@ LEAFEOF
   #   the keypair, and Office then rejects every https URL (add-in vanishes).
   local LOGIN_KC="$HOME/Library/Keychains/login.keychain-db"
   local KC_FP FILE_FP
-  KC_FP="$(security find-certificate -c "OfficeKick Local CA" -p "$LOGIN_KC" 2>/dev/null \
-    | openssl x509 -fingerprint -sha256 -noout 2>/dev/null | sed 's/^.*=//')"
+  local KC_PEMTXT=""
+  KC_PEMTXT="$(security find-certificate -c "OfficeKick Local CA" -p "$LOGIN_KC" -p 2>/dev/null || true)"
+  KC_FP=""
+  if [[ -n "$(printf '%s' "$KC_PEMTXT" | tr -d '[:space:]')" ]]; then
+    KC_FP="$(printf '%s\n' "$KC_PEMTXT" \
+      | { openssl x509 -fingerprint -sha256 -noout 2>/dev/null || true; } \
+      | sed 's/^.*=//' )"
+  fi
   FILE_FP="$(openssl x509 -fingerprint -sha256 -noout -in "$CA_PEM" 2>/dev/null | sed 's/^.*=//')"
   if [[ -n "$KC_FP" && "$KC_FP" == "$FILE_FP" ]]; then
     ok "local CA already trusted (fingerprint match)"
