@@ -5,7 +5,7 @@
            xmlns:ov="http://schemas.microsoft.com/office/taskpaneappversionoverrides"
            xsi:type="TaskPaneApp">
   <Id>c7b1f2a9-86d3-4e58-9a4b-2f6d5e0c3b81</Id>
-  <Version>__VERSION__</Version>
+  <Version>1.0.0.0</Version>
   <ProviderName>Corelan Consulting bv</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>
   <DisplayName DefaultValue="Corelan SlideKick"/>
@@ -29,7 +29,10 @@
     <SourceLocation DefaultValue="http://localhost:__PORT__/taskpane.html"/>
   </DefaultSettings>
   <Permissions>ReadWriteDocument</Permissions>
-  <VersionOverrides xsi:type="VersionOverridesV1_0">
+  <VersionOverrides xmlns="http://schemas.microsoft.com/office/taskpaneappversionoverrides"
+                    xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0"
+                    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                    xsi:type="VersionOverridesV1_0">
     <Hosts>
       <Host xsi:type="Presentation">
         <DesktopFormFactor>
@@ -40,7 +43,6 @@
           </GetStarted>
           <ExtensionPoint xsi:type="PrimaryCommandSurface">
             <CustomTab id="Corelan.SlideKick.Tab">
-              <Label resid="Tab.Label"/>
               <Group id="Corelan.SlideKick.Group">
                 <Label resid="Group.Label"/>
                 <Icon>
@@ -65,6 +67,7 @@
                   </Action>
                 </Control>
               </Group>
+              <Label resid="Tab.Label"/>
             </CustomTab>
           </ExtensionPoint>
         </DesktopFormFactor>

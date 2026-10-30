@@ -3,7 +3,8 @@
 ## 0.1.2
 
 - Permanent ribbon presence: the manifest now declares a dedicated "SlideKick" tab
-  with a task-pane button (VersionOverrides / add-in commands) - no more opening
+  with a task-pane button (VersionOverrides / add-in commands, in the
+  taskpaneappversionoverrides namespace the hosts require) - no more opening the
   Add-ins dropdown every time. The dropdown entry remains as fallback.
 - The task pane follows the Office host theme (OfficeTheme.isDarkTheme, with
   body-color luminance fallback and an OfficeThemeChanged subscription); the

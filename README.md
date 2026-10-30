@@ -243,11 +243,18 @@ dedicated **SlideKick** ribbon tab is always there.
 macOS:  ./install.sh --dev         # serve straight from the repo (edit + reopen pane)
 Win:    .\install.ps1 -Dev
 
-python3 tests/test_slidekick_server.py       # server + adapter test suite (17 tests)
+npx -y office-addin-manifest validate "<install-dir>/manifest/slidekick.xml"  # official manifest validator
+python3 tests/test_slidekick_server.py       # server + adapter test suite (19 tests)
 python3 tools/mock_provider.py --flavor openai --port 8901   # mock provider for the UI
 open http://127.0.0.1:8765/simulator.html    # full task pane + in-memory deck, no PowerPoint
 python3 tools/make_icons.py                  # rebuild icons from logo_corelan.png (sips)
 ```
+
+Note on the validator: it hard-requires HTTPS and has no localhost exception, so it
+reports 3 "insecure URL" errors for the `http://localhost:...` panel/icon URLs.
+Office itself accepts `http://localhost` for sideloaded/Uploaded dev add-ins (see
+the Microsoft sideloading docs), which is what SlideKick uses; an optional HTTPS
+mode with a trusted localhost certificate is planned.
 
 The task pane runs unmodified in the simulator via `sim.js` (same Deck interface the
 Office.js adapter implements), so prompt -> JSON ops -> validation -> approvals ->
