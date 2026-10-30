@@ -49,6 +49,7 @@
     insert_comment:    { label: "insert comment", hint: "Adds a comment anchored to the matching text (WordApi 1.4)." },
     delete_paragraph:  { label: "delete paragraph", hint: "Removes a paragraph by index." },
     rewrite_doc:       { label: "rewrite document", hint: "Replaces the document body with a new set of paragraphs (destructive - review)." },
+    insert_image:      { label: "insert image", hint: "Generates a picture from a description with the profile's image model and inserts it at the end of the document." },
   };
   var OP_TYPES = Object.keys(OPS_META);
 
@@ -231,11 +232,13 @@
     '- {"type":"insert_comment","find":"exact anchor text","text":"comment"} (comments need WordApi 1.4)',
     '- {"type":"delete_paragraph","para":N} (zero-based indices from the outline - never invent them)',
     '- {"type":"rewrite_doc","items":[{"text":"...","style":"..."}]} (DESTROYS the current body - only when explicitly asked for a full rewrite)',
+    '- {"type":"insert_image","prompt":"detailed image description"} (generate a picture from the description and insert it at the end of the document; only when the user asks for a picture/image/illustration/logo)',
     "",
     "Rules:",
     "- Paragraph indices are zero-based and MUST come from the outline below.",
     "- Rewrite/improve requests: keep the meaning and structure; reword only.",
     "- If the request is a question/explanation/brainstorm rather than a document change, use format A.",
+    "- Image requests: always return an insert_image op (never generate the picture inline); DocKick fetches it with the user's configured image model. Include a concrete, self-contained prompt in the op.",
   ].join("\n");
 
   var NOTES_OFF_RULE = "";
@@ -250,7 +253,7 @@
   var HISTORY_MAX_CHARS = 2000;  // per stored message
 
   var CONTENT_ROUTE_RE = new RegExp(
-    "\\b(document|doc|paragraph|paragraphs|text|wording|reword|rewrite|rephrase|outline|comment|comments|table|tables|add|insert|create|make|generate|tighten|restructure|expand|delete|tone)\\b", "i"
+    "\\b(document|doc|paragraph|paragraphs|text|wording|reword|rewrite|rephrase|outline|comment|comments|table|tables|add|insert|create|make|generate|tighten|restructure|expand|delete|tone|image|images|picture|pictures|photo|illustration|logo)\\b", "i"
   );
 
   function historyCap(text) {
@@ -434,6 +437,13 @@
     });
   };
 
+  WordDeck.prototype.addImage = function (payload) {
+    return this.run("addImage", function (ctx) {
+      ctx.document.body.insertInlinePictureFromBase64(String(payload.b64), "End");
+      return ctx.sync().then(function () { return { ok: true }; });
+    });
+  };
+
   WordDeck.prototype.rewriteDoc = function (op) {
     return this.run("rewriteDoc", function (ctx) {
       var body = ctx.document.body;
@@ -547,6 +557,10 @@
           items3.push({ text: (it3 && it3.text != null) ? String(it3.text) : "", style: (it3 && it3.style) || "normal" });
         }
         out.items = items3;
+      } else if (t === "insert_image") {
+        if (typeof op.prompt !== "string" || op.prompt.trim().length < 3) { bad("missing image prompt"); return; }
+        if (op.prompt.length > 1500) { bad("image prompt too long (max 1500 chars)"); return; }
+        out.prompt = op.prompt.trim();
       }
       ops.push(out);
     });
@@ -575,6 +589,10 @@
         return "Delete paragraph " + op.para + paraRef(op.para);
       case "rewrite_doc":
         return "REWRITE document: " + op.items.length + " paragraph(s)";
+      case "insert_image": {
+        var prI = op.prompt && op.prompt.length > 60 ? op.prompt.slice(0, 60) + "…" : (op.prompt || "");
+        return "Image at end of document: '" + prI + "' (profile image model)";
+      }
     }
     return op.type;
   }
@@ -626,6 +644,23 @@ function applyOps(deck, ops, ctx) {
           return deck.rewriteDoc(op).then(function () {
             lines.push({ ok: true, text: "document rewritten: " + op.items.length + " paragraph(s)" });
           });
+        case "insert_image": {
+          var prof = currentProfile();
+          var imgRef = prof && prof.image;
+          if (!imgRef || !imgRef.connection || !imgRef.model) {
+            throw new FriendlyError(
+              "No image model on profile '" + (prof ? prof.name : "?") +
+              "' - set one in Profiles (connection + model with an images API).");
+          }
+          return apiJson("/api/image", "POST", {
+            connection: imgRef.connection, model: imgRef.model, prompt: op.prompt,
+          }).then(function (img) {
+            if (!img || !img.b64) throw new FriendlyError("server returned no image data");
+            return deck.addImage({ b64: img.b64 }).then(function () {
+              lines.push({ ok: true, text: "image inserted at end of document (" + imgRef.connection + ":" + imgRef.model + ")" });
+            });
+          });
+        }
       }
       return Promise.resolve();
     };
@@ -1188,12 +1223,12 @@ function applyOps(deck, ops, ctx) {
   function renderProfiles() {
     // keep the profile-form connection dropdowns in sync with the current
     // config: connections created since the form was opened must show up
-    ["prof-content-conn", "prof-other-conn"].forEach(function (id) {
+    ["prof-content-conn", "prof-other-conn", "prof-image-conn"].forEach(function (id) {
       var sel = $(id);
       fillConnSelect(sel, sel.value || "");
     });
     var list = $("prof-list");
-    var rows = [ "<tr><th>Name</th><th>Content model</th><th>Other model</th></tr>" ];
+    var rows = [ "<tr><th>Name</th><th>Content model</th><th>Other model</th><th>Image model</th></tr>" ];
     (SK.cfg.profiles || []).forEach(function (p) {
       var star = p.name === SK.cfg.defaultProfile ? "*" : "";
       // click the name to edit; deletion lives in the edit form (with confirm)
@@ -1202,7 +1237,7 @@ function applyOps(deck, ops, ctx) {
         esc(p.name) + "</button>" + (star ? " <span class=\"opnote\">(default)</span>" : "");
       rows.push(
         "<tr><td>" + nameCell + "</td>" +
-        "<td>" + esc(modelRefLabel(p.content)) + "</td><td>" + esc(modelRefLabel(p.other)) + "</td></tr>"
+        "<td>" + esc(modelRefLabel(p.content)) + "</td><td>" + esc(modelRefLabel(p.other)) + "</td><td>" + esc(modelRefLabel(p.image)) + "</td></tr>"
       );
     });
     list.innerHTML = rows.join("") || "<tr><td>No profiles yet - add one below.</td></tr>";
@@ -1280,8 +1315,10 @@ function applyOps(deck, ops, ctx) {
     $("prof-name").value = p.name;
     fillConnSelect($("prof-content-conn"), p.content && p.content.connection);
     fillConnSelect($("prof-other-conn"), p.other && p.other.connection);
+    fillConnSelect($("prof-image-conn"), p.image && p.image.connection);
     populateModelSelect("prof-content", p.content && p.content.connection, p.content && p.content.model);
     populateModelSelect("prof-other", p.other && p.other.connection, p.other && p.other.model);
+    populateModelSelect("prof-image", p.image && p.image.connection, p.image && p.image.model);
     setFormMsg($("prof-formmsg"), "", true);
   }
 
@@ -1291,10 +1328,13 @@ function applyOps(deck, ops, ctx) {
     $("prof-name").value = "";
     fillConnSelect($("prof-content-conn"), "");
     fillConnSelect($("prof-other-conn"), "");
+    fillConnSelect($("prof-image-conn"), "");
     $("prof-content-model").innerHTML = '<option value="">(choose a connection first)</option>';
     $("prof-other-model").innerHTML = '<option value="">(choose a connection first)</option>';
+    $("prof-image-model").innerHTML = '<option value="">(optional - choose a connection first)</option>';
     $("prof-content-custom").classList.add("hidden");
     $("prof-other-custom").classList.add("hidden");
+    $("prof-image-custom").classList.add("hidden");
     setFormMsg($("prof-formmsg"), "", true);
   }
 
@@ -1307,10 +1347,14 @@ function applyOps(deck, ops, ctx) {
         model: model,
       };
     };
+    var imageConn = $("prof-image-conn").value;
+    var imageModel = $("prof-image-model").value;
+    if (imageModel === "__custom__") imageModel = $("prof-image-custom").value.trim();
     return {
       name: $("prof-name").value.trim(),
       content: slotValue("prof-content"),
       other: slotValue("prof-other"),
+      image: imageConn && imageModel ? { connection: imageConn, model: imageModel } : null,
     };
   }
 
@@ -1324,6 +1368,7 @@ function applyOps(deck, ops, ctx) {
       // rename: moves the profile; the default-profile pointer follows
       req = apiJson("/api/profiles/rename", "POST", {
         from: SK.editingProf, to: p.name, content: p.content, other: p.other,
+        image: p.image || {},
       });
     } else {
       req = apiJson("/api/profiles", "POST", p);
@@ -1513,7 +1558,7 @@ function applyOps(deck, ops, ctx) {
         populateModelSelect(slot, connName, $(slot + "-model").value);
       });
     });
-    ["content", "other"].forEach(function (slot) {
+    ["content", "other", "image"].forEach(function (slot) {
       $("prof-" + slot + "-conn").addEventListener("change", function () {
         populateModelSelect("prof-" + slot, $("prof-" + slot + "-conn").value, "");
       });

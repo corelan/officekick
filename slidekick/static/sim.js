@@ -106,6 +106,24 @@ window.__SK_SIM__ = true;
       });
       return { ok: true };
     }
+    async addImage({ b64, slide, geometry }) {
+      const i = slide;
+      if (!slides[i]) throw new FriendlyError("Slide " + i + " does not exist");
+      geometry = geometry || {};
+      slides[i].shapes.push({
+        name: "Image (generated)",
+        type: "image",
+        text: "",
+        isTitle: false,
+        isBody: false,
+        left: geometry.left != null ? geometry.left : 40,
+        top: geometry.top != null ? geometry.top : 100,
+        width: geometry.width != null ? geometry.width : 400,
+        height: geometry.height != null ? geometry.height : 240,
+        image: { b64: b64 },
+      });
+      return { ok: true };
+    }
     async moveShape(slideIndex, shapeIndex, geometry) {
       const s = slides[slideIndex];
       if (!s || !s.shapes[shapeIndex]) throw new FriendlyError("Shape " + shapeIndex + " on slide " + slideIndex + " not available");

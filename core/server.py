@@ -29,7 +29,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 APP = "OfficeKick"
-VERSION = "0.1.4"
+VERSION = "0.1.5"
 
 CONNECTION_TYPES = (
     "openai",
@@ -65,8 +65,10 @@ DEFAULT_APPROVALS = {
     "insert_comment": "auto",
     "delete_paragraph": "confirm",
     "rewrite_doc": "confirm",
+    "insert_image": "confirm",
     "apply_layout": "confirm",
     "delete_slide": "confirm",
+    "create_image": "confirm",
 }
 APPROVAL_MODES = ("auto", "confirm", "deny")
 OP_TYPES = tuple(DEFAULT_APPROVALS.keys())
@@ -251,7 +253,7 @@ class Store:
         conn["baseUrl"] = base.rstrip("/")
         conn["name"] = dst
         for prof in self.data["profiles"]:
-            for slot in ("content", "other"):
+            for slot in ("content", "other", "image"):
                 ref = prof.get(slot) or {}
                 if ref.get("connection") == src:
                     ref["connection"] = dst
@@ -272,8 +274,14 @@ class Store:
         prof["name"] = dst
         if self.data.get("defaultProfile") == src:
             self.data["defaultProfile"] = dst
-        for slot in ("content", "other"):
-            ref = updates.get(slot) or {}
+        for slot in ("content", "other", "image"):
+            if slot not in updates and slot != "image" and slot not in prof:
+                continue
+            ref = updates.get(slot)
+            if ref is None or ref == {}:
+                if slot == "image" and ref == {}:
+                    prof.pop("image", None)   # explicit empty = clear the image model
+                continue
             if ref.get("connection") is not None:
                 if not self.find_connection(ref["connection"]):
                     raise ApiError(400, "Profile %s references unknown connection: %r" % (slot, ref["connection"]))
@@ -388,58 +396,58 @@ def provider_generate_image(conn, model, prompt, size=None):
         payload["size"] = size
     body = json.dumps(payload).encode("utf-8")
 
-    def _post(url, extra=None):
-        h = dict(headers)
-        if extra:
-            h.update(extra)
-        req = urllib.request.Request(url, data=body, headers=h, method="POST")
-        try:
-            with urllib.request.urlopen(req, timeout=IMAGE_TIMEOUT) as resp:
-                return resp
-        except urllib.error.HTTPError as exc:
-            detail = ""
-            try:
-                detail = exc.read(400).decode("utf-8", "replace")
-            except Exception:
-                pass
-            raise ApiError(exc.code or 502, "image request failed: HTTP %s %s"
-                           % (exc.code, detail[:200]))
-        except (urllib.error.URLError, socket.timeout, TimeoutError) as exc:
-            raise ApiError(504, "image request timed out or failed: %s" % exc)
-
-    # try with the legacy response_format first (DALL-E style), fall back bare (gpt-image-1)
-    candidates = []
-    for suf in ("/images/generations",):
-        candidates.append(base + suf + ('' if base.endswith("/v1") or "/v1" in base else ""))
-    if "/v1" not in base:
-        candidates = [base + "/v1/images/generations", base + "/images/generations"]
+    # /v1 in base -> {base}/images/generations; otherwise guess both spellings
+    if "/v1" in base:
+        urls = [base + "/images/generations"]
     else:
-        candidates = [base + "/images/generations"]
+        urls = [base + "/v1/images/generations", base + "/images/generations"]
+
     last_err = None
-    for url in candidates:
+    for url in urls:
         for extra in ({"response_format": "b64_json"}, None):
             try:
-                resp = _post(url, extra)
-                data = json.loads(resp.read().decode("utf-8", "replace"))
-                items = data.get("data") or []
-                if not items:
-                    raise ApiError(502, "image response contained no data")
-                if items[0].get("b64_json"):
-                    return items[0]["b64_json"]
-                if items[0].get("url"):
-                    dl = urllib.request.Request(items[0]["url"], headers={"Authorization": "Bearer " + (conn.get("apiKey") or "")})
+                req = urllib.request.Request(
+                    url, data=body, headers=dict(headers, **(extra or {})),
+                    method="POST")
+                with urllib.request.urlopen(req, timeout=IMAGE_TIMEOUT) as resp:
+                    raw = resp.read()          # read INSIDE the with-block
+            except urllib.error.HTTPError as exc:
+                detail = ""
+                try:
+                    detail = exc.read(400).decode("utf-8", "replace")
+                except Exception:
+                    pass
+                last_err = ApiError(exc.code or 502,
+                                    "image request failed: HTTP %s %s"
+                                    % (exc.code, detail[:200]))
+                break                          # HTTP error: next URL, not next variant
+            except (urllib.error.URLError, socket.timeout, TimeoutError) as exc:
+                last_err = ApiError(504, "image request timed out or failed: %s" % exc)
+                break
+            try:
+                data = json.loads(raw.decode("utf-8", "replace"))
+            except Exception:
+                last_err = ApiError(502, "image response was not JSON")
+                continue
+            items = data.get("data") or []
+            if not items:
+                last_err = ApiError(502, "image response contained no data")
+                continue
+            if items[0].get("b64_json"):
+                return items[0]["b64_json"]
+            if items[0].get("url"):
+                try:
+                    dl = urllib.request.Request(
+                        items[0]["url"],
+                        headers={"Authorization": "Bearer " + (conn.get("apiKey") or "")})
                     with urllib.request.urlopen(dl, timeout=IMAGE_TIMEOUT) as r2:
                         return base64.b64encode(r2.read()).decode("ascii")
-                raise ApiError(502, "image response had neither b64_json nor url")
-            except ApiError as exc:
-                last_err = exc
-                if extra is None:
-                    break  # both variants on this URL failed; try the next URL
-                continue
+                except Exception as exc:
+                    raise ApiError(502, "could not download image url: %s" % exc)
+            last_err = ApiError(502, "image response had neither b64_json nor url")
     raise last_err or ApiError(502, "image generation failed")
 
 
-# --------------------------------------------------------------------------- #
 # Provider plumbing
 # --------------------------------------------------------------------------- #
 def _host_of(url):
@@ -1071,6 +1079,18 @@ class SlideKickHandler(BaseHTTPRequestHandler):
                 dbg_line(self.store, "taskpane",
                          str(body.get("category") or "event"), body.get("data"))
                 self._send_json({"ok": True})
+            elif path == "/api/image":
+                conn_name = body.get("connection")
+                conn = self.store.find_connection(conn_name or "")
+                if not conn:
+                    raise ApiError(404, "Unknown connection: %r" % (conn_name,))
+                model = body.get("model") or ""
+                prompt = body.get("prompt") or ""
+                if not model or not prompt:
+                    raise ApiError(400, "image request needs 'model' and 'prompt'")
+                size = body.get("size") or None
+                b64 = provider_generate_image(conn, model, prompt, size)
+                self._send_json({"ok": True, "b64": b64, "model": model})
             else:
                 self._error(404, "Unknown API endpoint: %s" % path)
         except ApiError as exc:

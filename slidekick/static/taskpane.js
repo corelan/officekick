@@ -46,6 +46,7 @@
     set_notes: { label: "set notes", hint: "Writes speaker notes on a slide." },
     create_table: { label: "create table", hint: "Adds a table (new slide when slide is empty; position/size in points)." },
     move_shape: { label: "move/resize shape", hint: "Sets left/top/width/height (points) of one shape - design passes use this." },
+    create_image: { label: "generate + insert image", hint: "Creates an image from a description with the profile's image model (OpenAI-style images API) and inserts it - lands on the slide you have open in Office." },
     apply_layout: { label: "apply layout", hint: "Applies a different slide layout (design change, text kept)." },
     delete_slide: { label: "delete slide", hint: "Removes a slide from the deck." },
   };
@@ -228,6 +229,7 @@
     '- {"type":"set_notes","slide":N,"notes":"..."}',
     '- {"type":"create_table","slide":N|null,"values":[["h1","h2"],["x","y"]],"left":40,"top":150,"width":640} (all cells strings, rows rectangular; slide null = new title slide first; left/top/width optional points)',
     '- {"type":"move_shape","slide":N,"shape":N,"left":40,"top":150,"width":300,"height":60} (points; only the fields to change; keep shapes inside the slide bounds shown in the outline)',
+    '- {"type":"create_image","prompt":"detailed image description","slide":N|null,"width":400} (generate an image from the description and insert it; slide null = the slide the user currently has open; only when the user asks for a picture/image/illustration/logo)',
     '- {"type":"apply_layout","slide":N,"layout":"title_content|title_only|section|blank"} (only when the user asks for layout/design changes)',
     '- {"type":"delete_slide","slide":N}',
     "",
@@ -237,6 +239,7 @@
     "- Reword/tighten requests: only rewrite wording, keep the meaning and slide count.",
     "- If the request is a question/explanation/brainstorm rather than a deck change, use format A.",
     "- Design passes ('design this deck/slide', improve alignment/balance): emit ops (apply_layout, move_shape, create_table) computed from the geometry in the outline; when the user asks only for advice, use format A.",
+    "- Image requests: always return a create_image op (never generate the picture inline); SlideKick fetches it with the user's configured image model. Include a concrete, self-contained prompt in the op.",
   ].join("\n");
 
   var NOTES_OFF_RULE =
@@ -255,7 +258,7 @@
   var HISTORY_MAX_CHARS = 2000;  // per stored message
 
   var CONTENT_ROUTE_RE = new RegExp(
-    "\\b(slide|slides|deck|bullet|bullets|reword|rewrite|rephrase|outline|notes?|title|titles|add|create|make|generate|tighten|restructure|expand|insert|append|design|align|balance|spacing|table|tables|chart)\\b", "i"
+    "\\b(slide|slides|deck|bullet|bullets|reword|rewrite|rephrase|outline|notes?|title|titles|add|create|make|generate|tighten|restructure|expand|insert|append|design|align|balance|spacing|table|tables|chart|image|images|picture|pictures|photo|logo|illustration)\\b", "i"
   );
 
   function historyCap(text) {
@@ -931,6 +934,17 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
         });
         if (!anyM) { bad("nothing to change (no left/top/width/height)"); return; }
         out.slide = op.slide; out.shape = op.shape; out.geometry = geoM;
+      } else if (t === "create_image") {
+        if (typeof op.prompt !== "string" || op.prompt.trim().length < 3) { bad("missing image prompt"); return; }
+        if (op.prompt.length > 1500) { bad("image prompt too long (max 1500 chars)"); return; }
+        if (op.slide != null && !slideOk(op.slide)) { bad("bad slide index"); return; }
+        out.slide = typeof op.slide === "number" ? op.slide : null;
+        out.prompt = op.prompt.trim();
+        var geoI = {};
+        ["left", "top", "width", "height"].forEach(function (p2) {
+          if (typeof op[p2] === "number" && op[p2] >= 0) geoI[p2] = op[p2];
+        });
+        out.geometry = geoI;
       } else if (t === "apply_layout") {
         if (!slideOk(op.slide)) { bad("bad slide index"); return; }
         out.slide = op.slide; out.layout = normalizeLayout(op.layout);
@@ -977,6 +991,11 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
       case "move_shape":
         return "Slide " + op.slide + ", shape " + op.shape + ": " +
           Object.keys(op.geometry).map(function (p) { return p + "->" + Math.round(op.geometry[p]); }).join(" ");
+      case "create_image": {
+        var pr = op.prompt.length > 60 ? op.prompt.slice(0, 60) + "…" : op.prompt;
+        return (op.slide != null ? "Slide " + op.slide + slideTitle(op.slide) : "Slide you have open") +
+          ': image "' + pr + '" (profile image model)';
+      }
       case "apply_layout":
         return "Slide " + op.slide + slideTitle(op.slide) + ": layout -> " + op.layout;
       case "delete_slide":
@@ -1064,6 +1083,25 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
           return deck.applyLayout(cur, op.layout).then(function () {
             lines.push({ ok: true, text: "apply layout '" + op.layout + "' to slide " + op.slide });
           });
+        case "create_image": {
+          var prof = currentProfile();
+          var imgRef = prof && prof.image;
+          if (!imgRef || !imgRef.connection || !imgRef.model) {
+            throw new FriendlyError(
+              "No image model on profile '" + (prof ? prof.name : "?") +
+              "' - set one in Profiles (connection + model with an images API).");
+          }
+          return apiJson("/api/image", "POST", {
+            connection: imgRef.connection, model: imgRef.model, prompt: op.prompt,
+          }).then(function (img) {
+            if (!img || !img.b64) throw new FriendlyError("server returned no image data");
+            return deck.addImage({ b64: img.b64, slide: cur, geometry: op.geometry }).then(function (ri) {
+              var note = !SK.sim && op.slide != null && ctx && op.slide !== ctx.activeSlide
+                ? " (targeting the slide you have open in PowerPoint; requested slide " + op.slide + ")" : "";
+              lines.push({ ok: true, text: "image inserted (" + imgRef.connection + ":" + imgRef.model + ")" + note });
+            });
+          });
+        }
         case "delete_slide":
           return deck.deleteSlide(cur).then(function () {
             lines.push({ ok: true, text: "delete slide " + op.slide + " (" + fmtOp(op, ctx) + ")" });
@@ -1642,12 +1680,12 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
   function renderProfiles() {
     // keep the profile-form connection dropdowns in sync with the current
     // config: connections created since the form was opened must show up
-    ["prof-content-conn", "prof-other-conn"].forEach(function (id) {
+    ["prof-content-conn", "prof-other-conn", "prof-image-conn"].forEach(function (id) {
       var sel = $(id);
       fillConnSelect(sel, sel.value || "");
     });
     var list = $("prof-list");
-    var rows = [ "<tr><th>Name</th><th>Content model</th><th>Other model</th></tr>" ];
+    var rows = [ "<tr><th>Name</th><th>Content model</th><th>Other model</th><th>Image model</th></tr>" ];
     (SK.cfg.profiles || []).forEach(function (p) {
       var star = p.name === SK.cfg.defaultProfile ? "*" : "";
       // click the name to edit; deletion lives in the edit form (with confirm)
@@ -1656,7 +1694,7 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
         esc(p.name) + "</button>" + (star ? " <span class=\"opnote\">(default)</span>" : "");
       rows.push(
         "<tr><td>" + nameCell + "</td>" +
-        "<td>" + esc(modelRefLabel(p.content)) + "</td><td>" + esc(modelRefLabel(p.other)) + "</td></tr>"
+        "<td>" + esc(modelRefLabel(p.content)) + "</td><td>" + esc(modelRefLabel(p.other)) + "</td><td>" + esc(modelRefLabel(p.image)) + "</td></tr>"
       );
     });
     list.innerHTML = rows.join("") || "<tr><td>No profiles yet - add one below.</td></tr>";
@@ -1736,6 +1774,9 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
     fillConnSelect($("prof-other-conn"), p.other && p.other.connection);
     populateModelSelect("prof-content", p.content && p.content.connection, p.content && p.content.model);
     populateModelSelect("prof-other", p.other && p.other.connection, p.other && p.other.model);
+    SK.editingProfImage = p.image || null;
+    fillConnSelect($("prof-image-conn"), p.image && p.image.connection);
+    populateModelSelect("prof-image", p.image && p.image.connection, p.image && p.image.model);
     setFormMsg($("prof-formmsg"), "", true);
   }
 
@@ -1745,10 +1786,14 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
     $("prof-name").value = "";
     fillConnSelect($("prof-content-conn"), "");
     fillConnSelect($("prof-other-conn"), "");
+    fillConnSelect($("prof-image-conn"), "");
     $("prof-content-model").innerHTML = '<option value="">(choose a connection first)</option>';
     $("prof-other-model").innerHTML = '<option value="">(choose a connection first)</option>';
+    $("prof-image-model").innerHTML = '<option value="">(optional - choose a connection first)</option>';
     $("prof-content-custom").classList.add("hidden");
     $("prof-other-custom").classList.add("hidden");
+    $("prof-image-custom").classList.add("hidden");
+    SK.editingProfImage = null;
     setFormMsg($("prof-formmsg"), "", true);
   }
 
@@ -1761,10 +1806,14 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
         model: model,
       };
     };
+    var imageConn = $("prof-image-conn").value;
+    var imageModel = $("prof-image-model").value;
+    if (imageModel === "__custom__") imageModel = $("prof-image-custom").value.trim();
     return {
       name: $("prof-name").value.trim(),
       content: slotValue("prof-content"),
       other: slotValue("prof-other"),
+      image: imageConn && imageModel ? { connection: imageConn, model: imageModel } : null,
     };
   }
 
@@ -1778,6 +1827,7 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
       // rename: moves the profile; the default-profile pointer follows
       req = apiJson("/api/profiles/rename", "POST", {
         from: SK.editingProf, to: p.name, content: p.content, other: p.other,
+        image: p.image || {},
       });
     } else {
       req = apiJson("/api/profiles", "POST", p);
@@ -1968,7 +2018,7 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
         populateModelSelect(slot, connName, $(slot + "-model").value);
       });
     });
-    ["content", "other"].forEach(function (slot) {
+    ["content", "other", "image"].forEach(function (slot) {
       $("prof-" + slot + "-conn").addEventListener("change", function () {
         populateModelSelect("prof-" + slot, $("prof-" + slot + "-conn").value, "");
       });

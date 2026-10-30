@@ -100,6 +100,22 @@ PowerPoint.js creation API and native SmartArt is not reachable from add-ins.
 - `suggest 3 design improvements for the current slide` - via the other model
 - `set the layout of slide 3 to title only`
 
+## Pictures (AI image generation)
+
+Type e.g. `add a picture of a clean data center rack` or `insert a picture of ...`.
+SlideKick/DocKick asks the model for a **create_image/insert_image** op, fetches the
+actual pixels from a provider with an OpenAI-style images API, and inserts them
+(op default = confirm, change per-op in Settings).
+
+- Image models live in the profile: the optional third slot **Image model**
+  (connection + model - e.g. OpenAI with `gpt-image-1`).
+- Generation support: openai and generic-openai servers that implement the
+  images route; openrouter works only if the endpoint implements it;
+  anthropic / ollama / llama.cpp cannot generate images.
+- Insertion (PowerPoint): lands on the slide you currently have open (Office.js
+  limitation); Word: at the end of the document.
+- If the profile has no image model, the run says so instead of failing dark.
+
 ## Simulator & development (PowerPoint)
 
 ```bash

@@ -18,10 +18,13 @@ Standard library only.
 """
 
 import argparse
+import base64
 import json
+import struct
 import sys
 import threading
 import time
+import zlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 DEFAULT_MODELS = ["mock-mini", "mock-large", "mock-vision"]
@@ -34,6 +37,18 @@ DEFAULT_REPLY = json.dumps({
     ],
 })
 
+
+
+def make_png_1x1(color=(255, 0, 0)):
+    """A tiny valid PNG (mock image payloads)."""
+    def chunk(tag, data):
+        c = tag + data
+        return struct.pack(">I", len(data)) + c + struct.pack(">I", zlib.crc32(c) & 0xffffffff)
+    ihdr = struct.pack(">IIBBBBB", 1, 1, 8, 2, 0, 0, 0)
+    raw = zlib.compress(bytes([0, color[0], color[1], color[2]]))
+    return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", ihdr) + chunk(b"IDAT", raw) + chunk(b"IEND", b""))
+
+TINY_PNG = base64.b64encode(make_png_1x1()).decode("ascii")
 
 class MockState:
     reply = DEFAULT_REPLY
@@ -105,6 +120,11 @@ def make_handler(flavor):
                 self._json({"content": [{"type": "text", "text": reply}]})
             elif flavor == "ollama" and self.path == "/api/chat":
                 self._json({"message": {"role": "assistant", "content": reply}, "done": True})
+            elif flavor in ("openai", "generic") and self.path.rstrip("/").endswith("images/generations"):
+                # a 1x1 red PNG; the prompt is echoed back as metadata
+                self._json({"created": 0, "data": [{
+                    "b64_json": TINY_PNG,
+                    "revised_prompt": str((STATE.last_request or {}).get("prompt", ""))[:120]}]})
             else:
                 self._json({"error": {"message": "not found: %s" % self.path}}, 404)
 

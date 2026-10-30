@@ -5,6 +5,7 @@
   function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]; }); }
   "use strict";
 
+  var images = [];
   var initial = function () {
     return [
       { text: "Threat hunting with AI", style: "Heading 1" },
@@ -21,6 +22,7 @@
     paras = initial();
     tables = [];
     comments = [];
+    images = [];
   }
   reset();
 
@@ -93,6 +95,13 @@
       paras.splice(index, 1);
       return { ok: true };
     },
+    addImage: async function (payload) {
+      // a standalone image line at the end; rendered as a red placeholder tile
+      var img = { text: "[IMAGE]", style: images.length % 2 ? "Normal" : "Heading 3", image: true };
+      paras.push(img);
+      images.push({ b64: payload.b64 });
+      return { ok: true };
+    },
     rewriteDoc: async function (items) {
       paras = (items || []).map(function (it) {
         return { text: String(it.text == null ? "" : it.text), style: styleName(it.style) };
@@ -100,7 +109,7 @@
       tables = [];
       return { ok: true };
     },
-    resetAll: function () { reset(); },
+    resetAll: function () { images = []; reset(); },
     renderDebug: function (el) {
       var rows = [];
       rows.push("<h3>Simulator document</h3>");
