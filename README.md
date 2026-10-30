@@ -140,8 +140,12 @@ telling you to quit, re-run, reopen). Your connections/profiles/policy live in
 `~/.slidekick/config.json` and are preserved. Quit PowerPoint first for the
 cache-clear + ribbon refresh to take effect, then reopen.
 
-**In PowerPoint**: open a deck, then click **SlideKick** in the ribbon (its own tab;
-falls back to Home -> Add-ins -> Corelan SlideKick). The task pane opens on the right.
+**In PowerPoint (macOS)**: open a deck, then **Home tab -> Add-ins** (the dropdown
+button) -> **Developer Add-ins** -> **Corelan SlideKick**. The task pane opens on the
+right and the Add-ins entry stays available for every session. (Run the installer
+with `--https` instead and the button sits directly in the Home ribbon in an
+"AI actions" group, with the Corelan logo; the Add-ins route keeps working as a
+fallback.)
 
 ## Install on Windows (PowerShell)
 

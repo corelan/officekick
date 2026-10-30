@@ -250,10 +250,19 @@ clear_office_caches() {
   local container cdir
   for container in "${CONTAINER_PATHS[@]}"; do
     cdir="$container/Data/Library/Caches"
-    [[ -d "$cdir" ]] || continue
-    rm -rf "$cdir/Microsoft" "$cdir/com.microsoft.Powerpoint" \
-           "$cdir/com.microsoft.ctrlstrcaches" "$cdir/WebKit" 2>/dev/null || true
-    ok "cleared Office add-in caches: $cdir"
+    if [[ -d "$cdir" ]]; then
+      rm -rf "$cdir/Microsoft" "$cdir/com.microsoft.Powerpoint" \
+             "$cdir/com.microsoft.ctrlstrcaches" "$cdir/WebKit" 2>/dev/null || true
+      ok "cleared Office add-in caches: $cdir"
+    fi
+    # the WEF registration + resource store (manifest copies, downloaded icons):
+    # rebuilt from the source manifest at launch; removing it forces a clean
+    # re-download so the Add-ins menu picks up current icons
+    local wefstore="$container/Data/Library/Application Support/Microsoft/Office/16.0/Wef"
+    if [[ -d "$wefstore" ]]; then
+      rm -rf "$wefstore" 2>/dev/null || true
+      ok "cleared WEF registration store: $wefstore"
+    fi
   done
 }
 
@@ -396,11 +405,18 @@ PYPLIST
   say "  simulator       : http://127.0.0.1:$PORT/simulator.html   (test without PowerPoint)"
   say ""
   say "First use in PowerPoint:"
-  say "  1. quit and reopen PowerPoint (required when it was already running)"
-  say "  2. open/create a deck"
-  say "  3. click the dedicated 'SlideKick' ribbon tab (fallback: Home -> Add-ins ->"
-  say "     Corelan SlideKick)"
-  say "  4. Connections tab: add a provider; Profiles tab: pick your models"
+  if [[ "$HTTPS" == "1" ]]; then
+    say "  1. quit and reopen PowerPoint (required when it was already running)"
+    say "  2. open/create a deck"
+    say "  3. the Corelan SlideKick button is in the Home tab (AI actions group)"
+    say "     (fallback: Home -> Add-ins -> Developer Add-ins -> Corelan SlideKick)"
+    say "  4. Connections tab: add a provider; Profiles tab: pick your models"
+  else
+    say "  1. quit and reopen PowerPoint (required when it was already running)"
+    say "  2. open/create a deck"
+    say "  3. Home tab -> Add-ins (dropdown) -> Developer Add-ins -> Corelan SlideKick"
+    say "  4. Connections tab: add a provider; Profiles tab: pick your models"
+  fi
   [[ -n "$PP_VERSION" ]] && [[ "$PP_APP" && "$DEV" == "0" ]] && true
 }
 
