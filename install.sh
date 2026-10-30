@@ -69,9 +69,12 @@ migrate_legacy() {
       ok "migrated config: $OLD_CONFIG_DIR/config.json -> $CONFIG_DIR/config.json"
     fi
     if [[ -d "$OLD_CONFIG_DIR/certs" ]]; then
-      mkdir -p "$CONFIG_DIR/certs"
-      if cp -R "$OLD_CONFIG_DIR/certs/." "$CONFIG_DIR/certs/" 2>/dev/null; then
-        ok "migrated certificates -> $CONFIG_DIR/certs"
+      # only seed an EMPTY certs dir (never resurrect certificates the user deleted)
+      if [[ ! -e "$CONFIG_DIR/certs/slidekick-ca.pem" && ! -e "$CONFIG_DIR/certs/localhost.pem" ]]; then
+        mkdir -p "$CONFIG_DIR/certs"
+        if cp -R "$OLD_CONFIG_DIR/certs/." "$CONFIG_DIR/certs/" 2>/dev/null; then
+          ok "migrated certificates -> $CONFIG_DIR/certs"
+        fi
       fi
     fi
   fi
@@ -299,7 +302,7 @@ distinguished_name = dn
 x509_extensions = v3_ca
 prompt = no
 [dn]
-CN = SlideKick Local CA (localhost-only, machine-generated)
+CN = OfficeKick Local CA (localhost-only, machine-generated)
 [v3_ca]
 basicConstraints = critical, CA:TRUE
 keyUsage = critical, keyCertSign, cRLSign
@@ -335,15 +338,17 @@ LEAFEOF
   #   the keypair, and Office then rejects every https URL (add-in vanishes).
   local LOGIN_KC="$HOME/Library/Keychains/login.keychain-db"
   local KC_FP FILE_FP
-  KC_FP="$(security find-certificate -c "SlideKick Local CA" -p "$LOGIN_KC" 2>/dev/null \
+  KC_FP="$(security find-certificate -c "OfficeKick Local CA" -p "$LOGIN_KC" 2>/dev/null \
     | openssl x509 -fingerprint -sha256 -noout 2>/dev/null | sed 's/^.*=//')"
   FILE_FP="$(openssl x509 -fingerprint -sha256 -noout -in "$CA_PEM" 2>/dev/null | sed 's/^.*=//')"
   if [[ -n "$KC_FP" && "$KC_FP" == "$FILE_FP" ]]; then
     ok "local CA already trusted (fingerprint match)"
   else
+    # remove the old-branded CA and any stale copy under the new name
+    security delete-certificate -c "SlideKick Local CA" "$LOGIN_KC" 2>/dev/null || true
     if [[ -n "$KC_FP" && "$KC_FP" != "$FILE_FP" ]]; then
       warn "stale local CA in the keychain (regenerated on disk) - replacing it"
-      security delete-certificate -c "SlideKick Local CA" "$LOGIN_KC" 2>/dev/null || true
+      security delete-certificate -c "OfficeKick Local CA" "$LOGIN_KC" 2>/dev/null || true
     fi
     step "trusting the local CA (login keychain) - approve the mac security prompt"
     if security add-trusted-cert -r trustRoot -k "$LOGIN_KC" "$CA_PEM" 2>/dev/null; then

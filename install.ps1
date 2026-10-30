@@ -22,6 +22,7 @@
 param(
     [int]$Port = 0,
     [switch]$Dev,
+    [switch]$Https,              # serve https (built-in PowerShell PKI; no openssl needed)
     [switch]$NoScheduledTask,
     [switch]$Purge,
     [ValidateSet("install", "uninstall", "status", "run", "help")]
@@ -38,6 +39,7 @@ $SrcDir = Join-Path $RepoDir "slidekick"
 $InstallDir    = Join-Path $env:LOCALAPPDATA $App
 $ManifestDir   = Join-Path $InstallDir "manifest"
 $ConfigDir     = Join-Path $env:USERPROFILE ".officekick"
+$CaName        = "OfficeKick Local CA"
 $LogDir        = Join-Path $InstallDir "logs"
 $ManifestName  = "slidekick.xml"
 $CatalogGUID   = "C7B1F2A9-86D3-4E58-9A4B-2F6D5E0C3B81"
@@ -204,14 +206,138 @@ if ($Action -eq "run") {
         if (-not (Test-Path $serverPy)) { Die "not installed yet (run .\install.ps1 first)" }
     }
     $p = Pick-Port
-    & $py $serverPy --port $p
+    & $py $serverPy --port $p @(([string[]]@()) + (($extraArgs -split " +") | Where-Object { $_ }))
     exit $LASTEXITCODE
+}
+
+# ------------------------------------------------------------------ local https
+# Self-signed, self-created on THIS machine with Windows builtin tooling only:
+# New-SelfSignedCertificate (PKI) creates the CA + leaf; the private key is
+# exported as PKCS#8 PEM via GetRSAPrivateKey/ExportPkcs8PrivateKey (.NET 4.7.2+).
+# No openssl needed. The CA goes to the CurrentUser Root store (one approval dialog).
+function ConvertTo-DerInteger([byte[]]$b) {
+    $list = New-Object System.Collections.Generic.List[byte]
+    $i = 0
+    while ($i -lt $b.Length - 1 -and $b[$i] -eq 0) { $i++ }
+    $core = @()
+    if ($i -lt $b.Length) { $core = $b[$i..($b.Length - 1)] }
+    if ($core.Length -eq 0 -or $core[0] -ge 0x80) { $list.Add([byte]0) | Out-Null }
+    foreach ($x in $core) { $list.Add([byte]$x) | Out-Null }
+    $content = $list.ToArray()
+    $out = New-Object System.Collections.Generic.List[byte]
+    $out.Add([byte]0x02) | Out-Null
+    if ($content.Length -lt 128) { $out.Add([byte]$content.Length) | Out-Null }
+    elseif ($content.Length -lt 256) { $out.Add([byte]0x81) | Out-Null; $out.Add([byte]$content.Length) | Out-Null }
+    else { $out.Add([byte]0x82) | Out-Null; $out.Add([byte](($content.Length -shr 8) -band 0xFF)) | Out-Null; $out.Add([byte]($content.Length -band 0xFF)) | Out-Null }
+    foreach ($x in $content) { $out.Add([byte]$x) | Out-Null }
+    return $out.ToArray()
+}
+
+function ConvertTo-DerSequence([byte[][]]$parts) {
+    $all = New-Object System.Collections.Generic.List[byte]
+    foreach ($p in $parts) { foreach ($x in $p) { $all.Add([byte]$x) | Out-Null } }
+    $content = $all.ToArray()
+    $out = New-Object System.Collections.Generic.List[byte]
+    $out.Add([byte]0x30) | Out-Null
+    if ($content.Length -lt 128) { $out.Add([byte]$content.Length) | Out-Null }
+    elseif ($content.Length -lt 256) { $out.Add([byte]0x81) | Out-Null; $out.Add([byte]$content.Length) | Out-Null }
+    else { $out.Add([byte]0x82) | Out-Null; $out.Add([byte](($content.Length -shr 8) -band 0xFF)) | Out-Null; $out.Add([byte]($content.Length -band 0xFF)) | Out-Null }
+    foreach ($x in $content) { $out.Add([byte]$x) | Out-Null }
+    return $out.ToArray()
+}
+
+function New-LocalCerts {
+    $certDir = Join-Path $env:USERPROFILE ".officekick\certs"
+    if (-not (Test-Path $certDir)) { New-Item -ItemType Directory -Path $certDir -Force | Out-Null }
+    $caPem   = Join-Path $certDir "officekick-ca.pem"
+    $leafPem = Join-Path $certDir "localhost.pem"
+    $leafKey = Join-Path $certDir "localhost.key"
+    if ((Test-Path $caPem) -and (Test-Path $leafPem) -and (Test-Path $leafKey)) {
+        Ok "tls certificates already present: $certDir"
+        return $true
+    }
+    if (-not (Get-Command New-SelfSignedCertificate -ErrorAction SilentlyContinue)) {
+        Warn "New-SelfSignedCertificate not available - keeping plain HTTP"
+        return $false
+    }
+    Say "  ... generating local loopback TLS certificates (Windows builtin PKI)"
+    $ca = New-SelfSignedCertificate -Subject "CN=$CaName (localhost-only, machine-generated)" `
+        -KeyExportPolicy Exportable -KeyUsage CertSign, CRLSign, DigitalSignature `
+        -KeyLength 2048 -HashAlgorithm sha256 -NotAfter (Get-Date).AddYears(8) `
+        -CertStoreLocation "Cert:\CurrentUser\My"
+    $leaf = New-SelfSignedCertificate -Type Custom -Subject "CN=localhost" `
+        -DnsName "localhost" `
+        -TextExtension @(
+            "2.5.29.17={critical}{text}DNS=localhost&IPAddress=127.0.0.1&IPAddress=%3A%3A1",
+            "2.5.29.37={critical}{text}1.3.6.1.5.5.7.3.1") `
+        -Signer $ca -KeyExportPolicy Exportable -KeyLength 2048 -HashAlgorithm sha256 `
+        -NotAfter (Get-Date).AddYears(2) -CertStoreLocation "Cert:\CurrentUser\My"
+    # CA -> PEM (trusted separately), leaf cert -> PEM, leaf key -> PKCS#8 PEM
+    $caPemText = "-----BEGIN CERTIFICATE-----`n" +
+        [Convert]::ToBase64String($ca.RawData, [Base64FormattingOptions]::InsertLineBreaks) +
+        "`n-----END CERTIFICATE-----"
+    Set-Content -Path $caPem -Value $caPemText -Encoding Ascii
+    $leafPemText = "-----BEGIN CERTIFICATE-----`n" +
+        [Convert]::ToBase64String($leaf.RawData, [Base64FormattingOptions]::InsertLineBreaks) +
+        "`n-----END CERTIFICATE-----"
+    Set-Content -Path $leafPem -Value $leafPemText -Encoding Ascii
+    $rsa = [System.Security.Cryptography.X509Certificates.RSACertificateExtensions]::GetRSAPrivateKey($leaf)
+    $keyPem = $null
+    try {
+        # .NET Core 3+ / newer Framework builds
+        $keyBytes = $rsa.ExportPkcs8PrivateKey()
+        $keyPem = "-----BEGIN PRIVATE KEY-----`n" +
+            [Convert]::ToBase64String($keyBytes, [Base64FormattingOptions]::InsertLineBreaks) +
+            "`n-----END PRIVATE KEY-----"
+    } catch {
+        # older .NET Framework: assemble the PKCS#1 RSAPrivateKey in DER ourselves
+        $par = $rsa.ExportParameters($true)
+        $der = ConvertTo-DerSequence @(
+            (ConvertTo-DerInteger ([byte[]]@(0))),
+            (ConvertTo-DerInteger $par.Modulus),
+            (ConvertTo-DerInteger $par.Exponent),
+            (ConvertTo-DerInteger $par.D),
+            (ConvertTo-DerInteger $par.P),
+            (ConvertTo-DerInteger $par.Q),
+            (ConvertTo-DerInteger $par.DP),
+            (ConvertTo-DerInteger $par.DQ),
+            (ConvertTo-DerInteger $par.InverseQ)
+        )
+        $keyPem = "-----BEGIN RSA PRIVATE KEY-----`n" +
+            [Convert]::ToBase64String($der, [Base64FormattingOptions]::InsertLineBreaks) +
+            "`n-----END RSA PRIVATE KEY-----"
+    }
+    Set-Content -Path $leafKey -Value $keyPem -Encoding Ascii
+    # trust the CA for this user (one Windows approval dialog; no admin needed)
+    try {
+        $root = New-Object System.Security.Cryptography.X509Certificates.X509Store("Root", "CurrentUser")
+        $root.Open([System.Security.Cryptography.X509Certificates.OpenFlags]::ReadWrite)
+        $root.Add($ca)   # may pop the confirmation dialog - approve once
+        $root.Close()
+        Ok "local CA trusted (CurrentUser Root) - the pane can use https://localhost"
+    } catch {
+        Warn "could not auto-trust the local CA: $($_.Exception.Message)"
+        Warn "import $caPem into Cert:\CurrentUser\Root manually, then reopen the pane"
+    }
+    Ok "tls certificates written: $certDir"
+    return $true
 }
 
 # ------------------------------------------------------------------ install
 Say "OfficeKick $Version - install/update (Windows): SlideKick + DocKick"
 Stop-Server   # stop a previously installed server so updates take effect
 $py = Find-Python
+$useTls = $false
+if ($Https) { $useTls = New-LocalCerts }
+$extraArgs = ""
+if ($useTls) {
+    $certDir2 = Join-Path $env:USERPROFILE ".officekick\certs"
+    $extraArgs = ('--config "' + $ConfigDir + '\config.json" --static-dir "' + $InstallDir + '"' +
+        ' --cert "' + (Join-Path $certDir2 "localhost.pem") + '"' +
+        ' --key "' + (Join-Path $certDir2 "localhost.key") + '"')
+} else {
+    $extraArgs = ('--config "' + $ConfigDir + '\config.json" --static-dir "' + $InstallDir + '"')
+}
 Ok "python: $py (& $py --version)"
 
 $pp = Find-PowerPoint
@@ -297,11 +423,11 @@ if (Get-Process POWERPNT -ErrorAction SilentlyContinue) {
 }
 
 # ---- auto-start + server ----
-Register-Autostart $py $serverPy $Port
+Register-Autostart $py $serverPy $Port $extraArgs
 
 $h = HealthCheck $Port 20
 if (-not $h) {
-    Start-Process -FilePath $py -ArgumentList ('"' + $serverPy + '" --port ' + $Port) -WindowStyle Hidden
+    Start-Process -FilePath $py -ArgumentList ('"' + $serverPy + '" --port ' + $Port + ' ' + $extraArgs) -WindowStyle Hidden
     $h = HealthCheck $Port 20
 }
 if ($h) { Ok "server restarted + healthy: http://127.0.0.1:$Port  (config: $ConfigDir\config.json)" }
