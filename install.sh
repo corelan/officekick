@@ -152,6 +152,27 @@ pick_port() {
 }
 
 # --------------------------------------------------------------------- #
+# Office add-in cache maintenance
+# --------------------------------------------------------------------- #
+clear_office_caches() {
+  # Only safe with PowerPoint closed: the add-in commands registration cache
+  # (and page caches) refresh while the app is not running.
+  if pgrep -f "Microsoft PowerPoint.app" >/dev/null 2>&1; then
+    warn "PowerPoint is running - NOT clearing the Office add-in caches."
+    warn "quit PowerPoint, re-run ./install.sh (it clears them), then reopen"
+    return 0
+  fi
+  local container cdir
+  for container in "${CONTAINER_PATHS[@]}"; do
+    cdir="$container/Data/Library/Caches"
+    [[ -d "$cdir" ]] || continue
+    rm -rf "$cdir/Microsoft" "$cdir/com.microsoft.Powerpoint" \
+           "$cdir/com.microsoft.ctrlstrcaches" "$cdir/WebKit" 2>/dev/null || true
+    ok "cleared Office add-in caches: $cdir"
+  done
+}
+
+# --------------------------------------------------------------------- #
 # install / update
 # --------------------------------------------------------------------- #
 do_install() {
@@ -219,6 +240,8 @@ do_install() {
     installed_any=1
   done
   [[ "$installed_any" == "1" ]] || die "could not sideload manifest into any PowerPoint container"
+
+  clear_office_caches
 
   # ---- LaunchAgent ----
   if [[ "$NO_AGENT" == "1" ]]; then

@@ -102,9 +102,11 @@ Useful flags: `--port N`, `--dev` (serve straight from the repo), `--no-launchag
 `status`, `run` (foreground server), `uninstall [--purge]`.
 
 **Updating**: re-run `./install.sh`. It overwrites the deployed files, replaces the
-manifest, and reloads the LaunchAgent. Your connections/profiles/policy live in
-`~/.slidekick/config.json` and are preserved. Quit and reopen PowerPoint afterwards so
-it re-reads the manifest.
+manifest, and reloads the LaunchAgent; it also clears Office's add-in caches
+(only while PowerPoint is closed - with PowerPoint running it prints a notice
+telling you to quit, re-run, reopen). Your connections/profiles/policy live in
+`~/.slidekick/config.json` and are preserved. Quit PowerPoint first for the
+cache-clear + ribbon refresh to take effect, then reopen.
 
 **In PowerPoint**: open a deck, then click **SlideKick** in the ribbon (its own tab;
 falls back to Home -> Add-ins -> Corelan SlideKick). The task pane opens on the right.

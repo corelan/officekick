@@ -261,6 +261,18 @@ Set-ItemProperty -Path (Join-Path $CatalogBase $CatalogGUID) -Name "Url"   -Valu
 Set-ItemProperty -Path (Join-Path $CatalogBase $CatalogGUID) -Name "Flags" -Value 1 -Type DWord
 Ok "manifest catalog registered: $ManifestDir (Insert -> My Add-ins -> SHARED FOLDER after restart)"
 
+# ---- clear the Office add-in cache (only while PowerPoint is closed) ----
+if (Get-Process POWERPNT -ErrorAction SilentlyContinue) {
+    Warn "PowerPoint is running - NOT clearing the Office add-in caches."
+    Warn "quit PowerPoint, re-run .\install.ps1 (it clears them), then reopen"
+} else {
+    $wefCache = Join-Path $env:LOCALAPPDATA "Microsoft\Office\16.0\Wef"
+    if (Test-Path $wefCache) {
+        Remove-Item (Join-Path $wefCache "*") -Recurse -Force -ErrorAction SilentlyContinue
+        Ok "cleared Office add-in cache: $wefCache"
+    }
+}
+
 # ---- auto-start + server ----
 Register-Autostart $py $serverPy $Port
 
