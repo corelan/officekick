@@ -1,4 +1,9 @@
 # Changelog
+## [0.2.2] - 2026-10-30
+### UI
+- Chat/Actions: the session name (AI-generated) shows above the Profile/Route
+  controls; the prompt box has a title; "New conversation" moved to the bottom
+  of the chat area (green-bordered).
 ## [0.2.1] - 2026-10-30
 ### Added
 - **MailKick named templates**: create/edit/delete small reusable content blocks

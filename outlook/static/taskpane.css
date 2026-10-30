@@ -532,3 +532,7 @@ body.dark .chip:hover { color: var(--ink); border-color: var(--accent); }
 #chat-new:hover { background: rgba(47,158,91,.14); }
 
 button.armed { border-color: #b00020 !important; color: #fff !important; background: #b00020 !important; }
+
+#chat-session-label { font-weight: 700; margin: 2px 0 6px; }
+.fieldlabel { font-size: 11px; color: var(--muted, #98989d); margin: 2px 0; }
+.chatbottom { margin-top: 6px; }

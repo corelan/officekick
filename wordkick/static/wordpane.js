@@ -361,6 +361,18 @@
     return String(first).replace(/\s+/g, " ").trim().slice(0, 40) || "new session";
   }
 
+  function updateSessionLabel() {
+    var el = $("chat-session-label");
+    if (!el) return;
+    if (SK.history.length && SK.sessionId) {
+      el.textContent = "Session: " + (SK.sessionName || derivedSessionName());
+      el.style.display = "";
+    } else {
+      el.textContent = "";
+      el.style.display = "none";
+    }
+  }
+
   function scheduleSaveSession() {
     if (SK.sessionSaveTimer) clearTimeout(SK.sessionSaveTimer);
     SK.sessionSaveTimer = setTimeout(saveSessionNow, 600);
@@ -410,6 +422,7 @@
       return apiJson("/api/sessions/rename/" + sid, "POST", { name: name }).then(function () {
         SK.sessionName = name;
         dbg("session.named", { id: sid, name: name });
+        updateSessionLabel();
       });
     }).catch(function () { /* derived name stays */ });
   }
@@ -421,6 +434,7 @@
       SK.sessionName = doc.name || "";
       switchTab("chat");
       setStatus("Session resumed: \u201C" + SK.sessionName + "\u201D (" + SK.history.length + " message(s) loaded).", "ok");
+      updateSessionLabel();
       pushHistoryStubRender();
     }).catch(function (err) {
       setStatus("Could not load session: " + ((err && err.message) || err), "error");
@@ -673,6 +687,7 @@
     SK.sessionId = null;      // the next exchange saves as a NEW session
     SK.sessionName = "";
     updateChatMeta();
+    updateSessionLabel();
     renderSessions();
     dbg("history.reset", {});
   }
@@ -2023,6 +2038,7 @@ function applyOps(deck, ops, ctx) {
 
     $("settings-save").addEventListener("click", saveApprovals);
     $("settings-debug-save").addEventListener("click", saveDebugOption);
+    updateSessionLabel();
     wireSessions();
     $("req-clear").addEventListener("click", clearRequests);
     $("req-refresh").addEventListener("click", renderRequests);
