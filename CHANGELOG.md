@@ -1,7 +1,7 @@
 # Changelog
 ## [0.1.6] - 2026-10-30
 ### Added
-- **Requests tab** in both panes: every call to the local server (chat, models,
+- **Inspector tab** in both panes (request/response log): every call to the local server (chat, models,
   image) is logged with HTTP status, duration, connection/model, and request and
   response snippets; errors show in red with the provider's message (billing,
   auth, rate limits, unknown model IDs, network failures). Client-side, last 80
