@@ -34,26 +34,26 @@
         </label>
         <label class="field-inline">Route
           <select id="chat-route">
-            <option value="auto" title="Slide-related requests go to the Content model, everything else to the Other model">auto</option>
+            <option value="auto" title="Document-related requests go to the Content model, everything else to the Other model">auto</option>
             <option value="content">content model</option>
             <option value="other">other model</option>
           </select>
         </label>
-        <label class="field-inline check"><input type="checkbox" id="chat-context" checked /> include deck context</label>
+        <label class="field-inline check"><input type="checkbox" id="chat-context" checked /> include document context</label>
         <label class="field-inline check"><input type="checkbox" id="chat-autoapply" /> auto-apply</label>
-        <button id="chat-refresh-deck" class="btn subtle" type="button">Refresh deck</button>
+        <button id="chat-refresh-deck" class="btn subtle" type="button">Refresh document</button>
         <button id="chat-new" class="btn subtle" type="button" title="Clear the conversation history the AI sees">New conversation</button>
       </div>
 
       <textarea id="chat-input" rows="3"
-        placeholder="e.g. reword the current slide &#10;or: design this deck"></textarea>
+        placeholder="e.g. reword the current paragraph &#10;or: add a table of the key findings"></textarea>
 
       <div class="chips" id="chat-chips">
-        <button class="chip" type="button" data-prompt="Reword the current slide: same meaning, sharper and shorter wording.">Reword current slide</button>
-        <button class="chip" type="button" data-prompt="Design pass on this deck: improve layout, alignment, spacing and visual balance using the shape geometry in the outline. Only adjust what genuinely helps.">Design this deck</button>
-        <button class="chip" type="button" data-prompt="Tighten the bullets on the current slide: shorter, punchier, no filler.">Tighten bullets</button>
-        <button class="chip" type="button" data-prompt="Write speaker notes for the current slide.">Speaker notes (slide)</button>
-        <button class="chip" type="button" data-prompt="Suggest 3 concrete design improvements for the current slide (layout, balance, emphasis).">Design suggestions</button>
+        <button class="chip" type="button" data-prompt="Reword the current paragraph: same meaning, sharper and shorter wording.">Reword paragraph</button>
+        <button class="chip" type="button" data-prompt="Restructure this document: propose better headings and structure, insert the improved outline as styled paragraphs. Only adjust what genuinely helps.">Restructure document</button>
+        <button class="chip" type="button" data-prompt="Tighten the wording of the selected paragraph: shorter, punchier, no filler.">Tighten wording</button>
+        <button class="chip" type="button" data-prompt="Add a review comment on the selected text suggesting how to improve it.">Review comment</button>
+        <button class="chip" type="button" data-prompt="Suggest 3 concrete improvements for this document (structure, tone, clarity).">Improve suggestions</button>
       </div>
 
       <div class="row">
@@ -67,10 +67,10 @@
 
     <!-- ========================= SIMULATOR ========================= -->
     <section id="sim-panel" class="tab" style="display:none">
-      <h2>Simulator deck</h2>
-      <p class="muted">This is DocKick running in a normal browser against an in-memory deck.
-        Ops are applied to the fake deck here instead of Word.</p>
-      <div class="row"><button id="sim-reset" class="btn subtle" type="button">Reset simulator deck</button></div>
+      <h2>Simulator document</h2>
+      <p class="muted">This is DocKick running in a normal browser against an in-memory document.
+        Ops are applied to the fake document here instead of Word.</p>
+      <div class="row"><button id="sim-reset" class="btn subtle" type="button">Reset simulator document</button></div>
       <div id="sim-deck-view" class="sim-deck"></div>
     </section>
 
@@ -105,7 +105,7 @@
 
     <!-- =========================== PROFILES =========================== -->
     <section id="tab-profiles" class="tab">
-      <div class="muted">A profile pairs a <b>content model</b> (slide edits/generation) with an
+      <div class="muted">A profile pairs a <b>content model</b> (document edits/generation) with an
         <b>other-actions model</b> (chat, brainstorming, advice). ★ = default profile.</div>
       <table class="list" id="prof-list"></table>
       <div class="row"><button id="prof-new" class="btn subtle" type="button">+ New profile</button></div>
@@ -116,7 +116,7 @@
           <input id="prof-name" type="text" maxlength="64" placeholder="e.g. daily-driver" />
         </label>
         <fieldset>
-          <legend>Content model <span class="muted">(slide creation &amp; edits)</span></legend>
+          <legend>Content model <span class="muted">(document edits)</span></legend>
           <label>Connection <select id="prof-content-conn"></select></label>
           <div class="row row-tight">
             <label class="grow">Model <select id="prof-content-model"></select></label>
@@ -145,25 +145,21 @@
     <!-- =========================== SETTINGS =========================== -->
     <section id="tab-settings" class="tab">
       <h2>Approval policy per action</h2>
-      <p class="muted">DocKick never sends deck changes without this policy:
+      <p class="muted">DocKick never sends document changes without this policy:
         <b>auto</b> = apply immediately, <b>confirm</b> = apply only after you tick it in the
         preview, <b>deny</b> = blocked with a notice.</p>
       <table class="list" id="approvals-table"></table>
-      <label class="field-inline check" style="margin:8px 0 4px 0"><input type="checkbox" id="settings-notes" />
-        Generate speaker notes when creating or editing slides</label>
-      <p class="muted" style="margin:0 0 4px 0">When off (default), notes are never generated or
-        written on slides - notes actions from the model are skipped and the prompt tells the
-        model not to produce them. Turn it on here if you want notes.</p>
+
       <div class="row">
         <button id="settings-save" class="btn primary" type="button">Save policy</button>
       </div>
       <div id="settings-msg" class="formmsg"></div>
 
       <h2>Debug logging</h2>
-      <p class="muted">When enabled, DocKick appends AI interactions and deck-edit traces
+      <p class="muted">When enabled, DocKick appends AI interactions and document-edit traces
         to <span id="debug-path" class="small"></span> (one file per day). Debug output
-        contains slide text content and full provider payloads - keep it off when working
-        on sensitive decks.</p>
+        contains document text content and full provider payloads - keep it off when working
+        on sensitive documents.</p>
       <div class="row">
         <label class="field-inline check"><input type="checkbox" id="settings-debug" /> enable debug logging</label>
       </div>
@@ -176,11 +172,11 @@
       <table class="kv" id="about-info"></table>
       <h2>Using it inside Word</h2>
       <ol class="small">
-        <li>Open a deck.</li>
+        <li>Open a document.</li>
         <li>Home tab → <b>Add-ins</b> (dropdown) → <b>Developer Add-ins</b> →
           <b>Corelan DocKick</b>. With the installer's <b>--https</b> option the
           button is also available directly in the Home ribbon.</li>
-        <li>The pane opens on the right; the deck appears in the summary line.</li>
+        <li>The pane opens on the right; the document appears in the summary line.</li>
       </ol>
     </section>
   </main>

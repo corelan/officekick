@@ -1,5 +1,5 @@
 /*
- * SlideKick task pane (runs inside PowerPoint via Office.js, or in the
+ * DocKick task pane (runs inside Microsoft Word via Office.js, or in the
  * browser via sim.js for offline testing).
  *
  * Pipeline: free-text instruction -> profile/route -> /api/chat -> reasoning
@@ -286,7 +286,7 @@
   }
 
   // ------------------------------------------------------------------ //
-  // Office deck adapter (thin wrapper around PowerPoint.run)
+  // Word document adapter (thin wrapper around Word.run)
   // ------------------------------------------------------------------ //
     function WordDeck() {
     this.word = true;
@@ -683,7 +683,7 @@ function applyOps(deck, ops, ctx) {
     SK.busy = true;
     setRunEnabled(false);
     var wantCtx = $("chat-context").checked;
-    setStatus("Collecting deck context…", "busy");
+    setStatus("Collecting document context…", "busy");
     var ctxPromise = wantCtx ? SK.deck.getContext({}).catch(function (err) {
       setStatus("Could not read the deck (" + err.message + ") - continuing without context.", "error");
       return null;
@@ -823,7 +823,7 @@ function applyOps(deck, ops, ctx) {
       mb.appendChild(document.createElement("h4")).textContent = "DocKick could not write this automatically - copy manually:";
       res.manualNotes.forEach(function (mn) {
         var ta = document.createElement("textarea");
-        ta.value = "Slide " + (mn.slide + 1) + ": " + mn.text;
+        ta.value = mn.text;
         mb.appendChild(ta);
       });
       result.appendChild(mb);
@@ -1011,7 +1011,7 @@ function applyOps(deck, ops, ctx) {
           mb.appendChild(document.createElement("h4")).textContent = "Notes could not be written automatically - copy manually:";
           res.manualNotes.forEach(function (mn) {
             var ta = document.createElement("textarea");
-            ta.value = "Slide " + (mn.slide + 1) + ": " + mn.text;
+            ta.value = mn.text;
             mb.appendChild(ta);
           });
           result.appendChild(mb);
@@ -1436,7 +1436,7 @@ function applyOps(deck, ops, ctx) {
       $("chat-output").innerHTML = "";
       setStatus("Conversation history cleared.", "ok");
     });
-    $("chat-refresh-deck").addEventListener("click", function () { updateDeckSummary(); setStatus("Deck refreshed.", ""); });
+    $("chat-refresh-deck").addEventListener("click", function () { updateDeckSummary(); setStatus("Document refreshed.", ""); });
     Array.prototype.forEach.call(document.querySelectorAll("#chat-chips .chip"), function (chip) {
       chip.addEventListener("click", function () {
         $("chat-input").value = chip.dataset.prompt;
@@ -1535,7 +1535,7 @@ function applyOps(deck, ops, ctx) {
       window.SimDeck.resetAll();
       renderSimDeck();
       updateDeckSummary();
-      setStatus("Simulator deck reset.", "");
+      setStatus("Simulator document reset.", "");
     });
   }
 
@@ -1581,7 +1581,7 @@ function applyOps(deck, ops, ctx) {
       setTimeout(function () { bootLoad(attempt + 1); }, 1000);
       return;
     }
-    setStatus("Cannot reach the SlideKick server: " + err.message + " Is it running? (install.sh / install.ps1 / LaunchAgent)", "error");
+    setStatus("Cannot reach the DocKick server: " + err.message + " Is it running? (install.sh / install.ps1 / LaunchAgent)", "error");
     $("statusbar").textContent = "server unreachable: " + err.message;
   }
 
@@ -1594,7 +1594,7 @@ function applyOps(deck, ops, ctx) {
       var simTab = $("sim-panel");
       simTab.style.display = "";
       var nav = document.createElement("button");
-      nav.textContent = "Sim deck";
+      nav.textContent = "Sim document";
       nav.dataset.tab = "sim";
       $("tabs").appendChild(nav);
       nav.addEventListener("click", function () { switchTab("sim"); });
