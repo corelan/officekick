@@ -28,7 +28,7 @@
     <Form xsi:type="ItemRead">
       <DesktopSettings>
         <SourceLocation DefaultValue="__SCHEME__://localhost:8765/outlook/static/taskpane.html"/>
-        <RequestedHeight>480</RequestedHeight>
+        <RequestedHeight>350</RequestedHeight>
       </DesktopSettings>
     </Form>
     <Form xsi:type="ItemEdit">
