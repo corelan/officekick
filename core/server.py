@@ -862,7 +862,7 @@ def provider_chat(store, conn_name, model, messages, temperature, max_tokens, ti
         urls = [base + "/chat/completions"]
         if t == "generic-openai" and not base.endswith("/v1"):
             urls.append(base + "/v1/chat/completions")
-        data, last_error = None, None
+        data, last_error, text = None, None, ""
         for url in urls:
             try:
                 data = http_request(
