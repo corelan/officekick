@@ -309,9 +309,10 @@
     return undefined;
   }
 
+  // (in SYSTEM_PROMPT: explicit newline rule)
   var SYSTEM_PROMPT = [
     "You are MailKick, an AI assistant inside a Microsoft Outlook task pane.",
-    "You get the current email context and a user request. Reply with ONLY one JSON",
+    "You get the current email context and a user request. In text fields use real line breaks, never literal backslash-n. Reply with ONLY one JSON",
     "object - never commentary, never code fences, never reasoning. Format A",
     "(conversational):",
     '{"kind":"reply","text":"your answer"}',
@@ -774,13 +775,19 @@
     "\\b(email|mail|message|reply|respond|respond|draft|summary|summarize|translate|categorize|category|categories|subject|body|sender|attach|attachment|compose|send)\\b", "i"
   );
 
+  function cleanLiteralNL(t) {
+    // a model that writes \\n inside its JSON strings would render a literal "\n";
+    // turn those into real line breaks (display + history + draft html)
+    return String(t).replace(/\\n/g, "\n");
+  }
+
   function assistantHistoryText(parsed) {
     // a compact recap for the next round; never the raw ops JSON
     if (!parsed || !parsed.ok) {
       var rawT = (SK.lastModelText && SK.lastModelText.text) || "";
       return String(rawT).slice(0, 400);
     }
-    if (parsed.kind === "reply") return String(parsed.text || "").slice(0, HISTORY_MAX_CHARS);
+    if (parsed.kind === "reply") return cleanLiteralNL(parsed.text || "").slice(0, HISTORY_MAX_CHARS);
     var ops = parsed.ops || [];
     var parts = ops.slice(0, 3).map(function (op) {
       var d = fmtOp(op, SK.lastCtx);
@@ -871,7 +878,7 @@
 
   function toHtml(text) {
     // the model returns draft_reply/compose_body as TEXT; wrap to minimal HTML
-    var escd = String(text)
+    var escd = cleanLiteralNL(String(text))
       .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
     return "<p>" + escd.split(/\n{2,}/).join("</p><p>").replace(/\n/g, "<br />") + "</p>";
   }
@@ -1268,7 +1275,7 @@ function applyOps(deck, ops, ctx) {
     if (parsed.kind === "reply") {
       var box2 = document.createElement("div");
       box2.className = "reply-text";
-      box2.textContent = parsed.text;
+      box2.textContent = cleanLiteralNL(parsed.text);
       out.appendChild(box2);
       setStatus("Done.", "ok");
       return;
