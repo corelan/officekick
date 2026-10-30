@@ -2,6 +2,10 @@
 
 ## 0.1.2
 
+- Fixed: the "auto-apply" checkbox now actually works - all-`auto` runs apply
+  without the proposals step; runs containing confirm/blocked/invalid actions
+  still open the gated preview (with the new Select all button).
+
 - Default transport: plain http://localhost (no certificates, no keychain changes);
   the add-in appears in Home -> Add-ins. `--https` opts in to the ribbon button:
   loopback-only local CA + localhost certificate, trusted in the login keychain

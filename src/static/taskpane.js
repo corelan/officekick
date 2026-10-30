@@ -1075,12 +1075,61 @@
       setStatus("Done.", "ok");
       return;
     }
+    // auto-apply: skip the preview entirely when every action's policy is 'auto'
+    // and nothing is invalid/blocked - approvals still halt the run otherwise
+    var allAuto = validation.invalid.length === 0 &&
+      validation.ops.length > 0 &&
+      validation.ops.every(function (op) { return approvalMode(op.type) === "auto"; });
+    if ($("chat-autoapply").checked && allAuto && SK.deck.capabilities().text) {
+      dbg("ops.autoapply", { count: validation.ops.length });
+      var autoBox = document.createElement("div");
+      autoBox.className = "opsbox";
+      var autoH = document.createElement("h3");
+      autoH.textContent = "Auto-applied " + validation.ops.length + " action(s) (auto-apply)";
+      autoBox.appendChild(autoH);
+      var autoResult = document.createElement("div");
+      autoBox.appendChild(autoResult);
+      out.appendChild(autoBox);
+      setStatus("Auto-apply: running " + validation.ops.length + " action(s)…", "busy");
+      applyOps(SK.deck, validation.ops, ctx).then(function (res) {
+        renderApplyResult(autoResult, res);
+        var fails = res.lines.filter(function (l) { return !l.ok; }).length;
+        setStatus(fails ? "Auto-applied with " + fails + " error(s)." : "Auto-applied " + validation.ops.length + " action(s).", fails ? "error" : "ok");
+        renderSimDeck();
+        updateDeckSummary();
+        dbg("ops.applied", { lines: res.lines, autoapply: true });
+      }).catch(function (err) {
+        setStatus((err && err.message) || String(err), "error");
+      });
+      return;
+    }
     renderOpsPreview(out, validation, ctx);
   }
 
   // ------------------------------------------------------------------ //
   // Ops preview + approval gate
   // ------------------------------------------------------------------ //
+  function renderApplyResult(result, res) {
+    result.innerHTML = "";
+    res.lines.forEach(function (l) {
+      var d = document.createElement("div");
+      d.className = "resultline " + (l.ok ? "ok" : "fail");
+      d.textContent = l.text;
+      result.appendChild(d);
+    });
+    if (res.manualNotes.length) {
+      var mb = document.createElement("div");
+      mb.className = "manualbox";
+      mb.appendChild(document.createElement("h4")).textContent = "Notes could not be written automatically - copy manually:";
+      res.manualNotes.forEach(function (mn) {
+        var ta = document.createElement("textarea");
+        ta.value = "Slide " + (mn.slide + 1) + ": " + mn.text;
+        mb.appendChild(ta);
+      });
+      result.appendChild(mb);
+    }
+  }
+
   function renderOpsPreview(out, validation, ctx) {
     var caps = SK.deck.capabilities();
     var box = document.createElement("div");
@@ -1134,6 +1183,7 @@
         lab.textContent = cb.checked ? "(approved for this session)" : "(needs approval)";
         cb.addEventListener("change", function () {
           lab.textContent = cb.checked ? (SK.sessionApprovals[row.op.type] === "auto" ? "(approved for this session)" : "(approved once)") : "(needs approval)";
+          updateApplyLabel();
         });
         r.appendChild(cb);
         r.appendChild(lab);
@@ -1182,8 +1232,32 @@
     btnrow.className = "row";
     var applyBtn = document.createElement("button");
     applyBtn.className = "btn primary";
-    applyBtn.textContent = "Apply " + autoOps + " auto" + (confirmOps ? " + chosen of " + confirmOps + " approval" : "");
-    applyBtn.disabled = autoOps + confirmOps === 0 || !caps.text;
+    var updateApplyLabel = function () {
+      var approved = rows.filter(function (r) {
+        return r.mode === "confirm" && r._cb && r._cb.checked;
+      }).length;
+      applyBtn.textContent = "Apply " + autoOps + " auto" +
+        (confirmOps ? " + " + approved + "/" + confirmOps + " approved" : "");
+      applyBtn.disabled = (autoOps + approved === 0) || !caps.text;
+    };
+    updateApplyLabel();
+    if (confirmOps > 0) {
+      var selectAllBtn = document.createElement("button");
+      selectAllBtn.className = "btn subtle";
+      selectAllBtn.textContent = "Select all (" + confirmOps + ")";
+      selectAllBtn.disabled = !caps.text;
+      selectAllBtn.addEventListener("click", function (ev) {
+        ev.preventDefault();
+        rows.forEach(function (r) {
+          if (r.mode === "confirm" && r._cb && !r._cb.checked) {
+            r._cb.checked = true;
+            r._cb.dispatchEvent(new Event("change"));
+          }
+        });
+        dbg("ops.selectall", { count: confirmOps });
+      });
+      btnrow.appendChild(selectAllBtn);
+    }
     var discardBtn = document.createElement("button");
     discardBtn.className = "btn subtle";
     discardBtn.textContent = "Discard";

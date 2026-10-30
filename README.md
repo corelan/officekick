@@ -100,6 +100,9 @@ SlideKick ships in two parts:
   the browser scheme.
 - **Simulator**: the exact task pane runs in a normal browser against an in-memory deck,
   for testing without PowerPoint.
+- **Auto-apply**: the "auto-apply" checkbox in the pane applies instantly (no review
+  step) when every action of a run is `auto` by approval policy; any action requiring
+  approval still opens the gated preview with the Select all button.
 
 ## Requirements
 
@@ -249,9 +252,11 @@ dedicated **SlideKick** ribbon tab is always there.
   | reply | conversational answer - never touches the deck | n/a |
 
   Change any of these in **Settings**. `confirm` shows a checkbox per action (unchecked
-  by default), with a *don't ask again this session* option. `deny` blocks the action
-  with a visible notice. The auto-apply checkbox only shortcuts the extra Apply click -
-  it never bypasses the policy.
+  by default), with a *don't ask again this session* option; the preview also has a
+  **Select all** button to approve everything pending at once. `deny` blocks the action
+  with a visible notice. The **auto-apply** checkbox skips the review step entirely for
+  runs where every action is `auto` by policy - if any action needs approval (or is
+  blocked), the gated preview appears exactly as without it.
 
 - Notes that cannot be written automatically on older Office builds fall back to a
   copy-paste box in the pane.
