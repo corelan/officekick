@@ -315,13 +315,12 @@ open http://127.0.0.1:8765/simulator.html    # full task pane + in-memory deck, 
 python3 tools/make_icons.py                  # rebuild icons from logo_corelan.png (sips)
 ```
 
-Note on the validator: the official `office-addin-manifest` validator passes fully -
-the local server serves **HTTPS** by default (a machine-generated certificate for
-`localhost`/`127.0.0.1`/`::1`, issued by a loopback-only local CA that the installer
-trusts in your login keychain). Microsoft's add-in-commands/ribbon UI only registers
-with https URLs, which is why this is default. `--http` on `install.sh` is a
-developer fallback: the pane still works over the Add-ins dropdown, but the ribbon
-button will not appear.
+Note on the validator: the official `office-addin-manifest` validator validates the
+rendered manifest **fully** in `--https` mode (the machine-generated loopback CA
+covers all URLs, schema and version checks pass). In the default plain-http mode it
+reports "insecure URL" errors for the `http://localhost` task-pane/icon URLs - that
+is expected: the validator has no localhost exception, while Office itself accepts
+http://localhost for the task-pane route (which is the default mode's design).
 
 The task pane runs unmodified in the simulator via `sim.js` (same Deck interface the
 Office.js adapter implements), so prompt -> JSON ops -> validation -> approvals ->
