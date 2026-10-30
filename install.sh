@@ -49,6 +49,27 @@ DEV=0
 NO_AGENT=0
 PURGE=0
 HTTPS=0   # default: plain http://localhost, no keychain changes, no ribbon commands
+# scheme persistence: plain ./install.sh KEEPS the mode the running LaunchAgent
+# uses, so a later default reinstall does not silently undo an earlier --https.
+MODE_FORCED=0
+for a in "$@"; do
+  [[ "$a" == "--https" || "$a" == "--http" || "$a" == "--purge" || "$a" == "uninstall" ]] && MODE_FORCED=1 && break
+done
+detect_scheme_from_agent() {
+  local plist="$HOME/Library/LaunchAgents/${LAUNCH_LABEL:-com.corelan.officekick}.plist"
+  if [[ -f "$plist" ]]; then
+    if grep -q -- "--cert" "$plist"; then
+      HTTPS=1
+    else
+      HTTPS=0
+    fi
+    return 0
+  fi
+  return 1
+}
+if [[ "$MODE_FORCED" != "1" ]] && detect_scheme_from_agent; then
+  echo "[scheme] keeping the running install's transport: $([[ $HTTPS == 1 ]] && echo https || echo http) (use --https/--http to switch)"
+fi
 SUB="install"
 
 say()   { printf '%s\n' "$*"; }
@@ -100,6 +121,7 @@ while [[ $# -gt 0 ]]; do
     --dev) DEV=1; shift ;;
     --no-launchagent) NO_AGENT=1; shift ;;
     --https) HTTPS=1; shift ;;
+    --http) HTTPS=0; shift ;;
     --purge) PURGE=1; shift ;;
     install|update|uninstall|status|run|help) SUB="$1"; shift ;;
     -h|--help) SUB="help"; shift ;;
@@ -282,6 +304,9 @@ ensure_local_certs() {
     say "        (no ribbon button in this mode - opt in with: ./install.sh --https 🔐)"
     return 0
   fi
+  warn "https/ribbon mode: on current Office-Mac builds (16.114 verified) the add-in registers"
+  warn "but is NOT shown in the Add-ins list while commands are enabled - if it disappears,"
+  warn "switch back with: ./install.sh --http  (the pane works in both transports)"
   if ! command -v openssl >/dev/null 2>&1; then
     warn "openssl not found - falling back to plain HTTP (ribbon button will not appear)"
     HTTPS=0

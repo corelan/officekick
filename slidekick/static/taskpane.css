@@ -204,3 +204,16 @@ body.dark .chip:hover { color: var(--ink); border-color: var(--accent); }
 .aboutfoot { border-top: 1px solid var(--border); margin-top: 16px; padding-top: 10px; }
 .aboutfoot p { margin: 2px 0; font-size: 12px; }
 .aboutfoot a { color: var(--primary); text-decoration: underline; }
+
+
+/* Requests tab */
+.req-list { display: flex; flex-direction: column; gap: 8px; }
+.reqrow { border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; font-size: 12px; }
+.reqrow.reqbad { border-color: var(--danger, #b00020); background: rgba(176,0,32,.06); }
+.reqhead { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.reqbadge { font-weight: 700; padding: 1px 6px; border-radius: 10px; font-size: 11px; }
+.reqbadge.ok { background: rgba(48,150,80,.15); }
+.reqbadge.bad { background: rgba(176,0,32,.2); }
+.reqerr { color: var(--danger, #b00020); font-weight: 600; margin-top: 3px; white-space: pre-wrap; word-break: break-word; }
+.reqrow details { margin-top: 4px; }
+.reqrow pre { margin: 4px 0 0; white-space: pre-wrap; word-break: break-word; font-size: 11px; max-height: 220px; overflow: auto; }

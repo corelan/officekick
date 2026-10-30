@@ -21,6 +21,7 @@
       <button data-tab="profiles">Profiles</button>
       <button data-tab="settings">Settings</button>
       <button data-tab="about">About</button>
+      <button data-tab="requests">Requests</button>
     </nav>
   </header>
 
@@ -196,7 +197,17 @@
         See the <a href="https://github.com/corelan/officekick/blob/main/LICENSE" target="_blank">LICENSE</a>.
       </div>
     </section>
-  </main>
+      <!-- ============================ REQUESTS ============================ -->
+    <section id="tab-requests" class="tab">
+      <div class="row row-wrap">
+        <button id="req-clear" class="btn subtle" type="button">Clear log</button>
+        <button id="req-refresh" class="btn subtle" type="button">Refresh</button>
+        <span class="opnote" id="req-note">Every request to the local server is logged (chat / models / image). Errors show in red with the provider's message.</span>
+      </div>
+      <div id="req-list" class="req-list"></div>
+    </section>
+
+</main>
 
   <footer class="sk-footer">
     <span id="statusbar">starting…</span>

@@ -133,22 +133,116 @@
     } catch (e) { /* never break the pane over logging */ }
   }
 
+  function logApi(entry) {
+    SK.apiLog = SK.apiLog || [];
+    entry.at = entry.at || Date.now();
+    SK.apiLog.unshift(entry);
+    if (SK.apiLog.length > 80) SK.apiLog.pop();
+    if (SK.activeTab === "requests") renderRequests();
+  }
+
+  function fmtClock(ms) {
+    var d = new Date(ms);
+    return ("0" + d.getHours()).slice(-2) + ":" + ("0" + d.getMinutes()).slice(-2) +
+      ":" + ("0" + d.getSeconds()).slice(-2);
+  }
+
+  function renderRequests() {
+    var box = $("req-list");
+    if (!box) return;
+    var entries = SK.apiLog || [];
+    if (!entries.length) {
+      box.innerHTML = '<div class="opnote">No requests yet. Every AI call (chat, models, image) is logged here with status, duration and payloads.</div>';
+      return;
+    }
+    var frag = document.createDocumentFragment();
+    entries.forEach(function (e) {
+      var row = document.createElement("div");
+      row.className = "reqrow " + (e.ok ? "reqok" : "reqbad");
+      var head = document.createElement("div");
+      head.className = "reqhead";
+      var badge = document.createElement("span");
+      badge.className = "reqbadge " + (e.ok ? "ok" : "bad");
+      badge.textContent = e.ok ? ("HTTP " + e.status) : (e.status ? ("HTTP " + e.status) : "NETWORK");
+      head.appendChild(badge);
+      var lab = document.createElement("span");
+      lab.textContent = " " + e.method + " " + e.path +
+        (e.conn ? "  [" + e.conn + (e.model ? ":" + e.model : "") + "]" : "") +
+        "  " + fmtClock(e.at) + "  " + e.ms + " ms";
+      head.appendChild(lab);
+      row.appendChild(head);
+      if (e.err) {
+        var err = document.createElement("div");
+        err.className = "reqerr";
+        err.textContent = e.err;
+        row.appendChild(err);
+      }
+      if (e.req || e.resp) {
+        var det = document.createElement("details");
+        var sum = document.createElement("summary");
+        sum.textContent = "payload";
+        det.appendChild(sum);
+        var pre = document.createElement("pre");
+        pre.textContent = (e.req ? "Request:\n" + e.req : "") + (e.resp ? "\nResponse:\n" + e.resp : "");
+        det.appendChild(pre);
+        row.appendChild(det);
+      }
+      frag.appendChild(row);
+    });
+    box.innerHTML = "";
+    box.appendChild(frag);
+  }
+
+  function clearRequests() {
+    SK.apiLog = [];
+    renderRequests();
+  }
+
   function apiJson(path, method, body) {
-    var opts = { method: method || "GET", headers: {} };
+    var t0 = Date.now();
+    var verb = method || "GET";
+    var opts = { method: verb, headers: {} };
+    var bodyStr = "";
     if (body !== undefined) {
       opts.headers["Content-Type"] = "application/json";
-      opts.body = JSON.stringify(body);
+      bodyStr = JSON.stringify(body);
+      opts.body = bodyStr;
     }
-    return fetch(path, opts).then(function (resp) {
+    var fetchPromise;
+    try {
+      fetchPromise = fetch(path, opts);
+    } catch (syncErr) {
+      logApi({ path: path, method: verb, status: 0, ok: false,
+        err: "network (sync): " + String(syncErr && syncErr.message || syncErr),
+        req: bodyStr.slice(0, 1600) });
+      throw new FriendlyError("Cannot reach the OfficeKick server (" + path + ")");
+    }
+    return fetchPromise.then(function (resp) {
       return resp.text().then(function (text) {
         var data = null;
         try { data = text ? JSON.parse(text) : {}; } catch (e) { /* non-json */ }
-        if (!resp.ok) {
+        var okResp = resp.ok;
+        logApi({
+          path: path, method: verb,
+          conn: body && body.connection || null,
+          model: body && body.model || null,
+          status: resp.status, ms: Date.now() - t0, ok: !!okResp,
+          err: okResp ? null : (data && data.error ? String(data.error) : "HTTP " + resp.status),
+          req: bodyStr.slice(0, 1600), resp: (text || "").slice(0, 1600),
+        });
+        if (!okResp) {
           var msg = data && data.error ? data.error : "HTTP " + resp.status;
           throw new FriendlyError(msg);
         }
         return data || {};
       });
+    }, function (fetchErr) {
+      logApi({ path: path, method: verb, status: 0, ok: false,
+        conn: body && body.connection || null, model: body && body.model || null,
+        err: "network: " + String(fetchErr && fetchErr.message || fetchErr),
+        req: bodyStr.slice(0, 1600) });
+      throw new FriendlyError("Cannot reach the OfficeKick server (" + path + "): " +
+        String(fetchErr && fetchErr.message || fetchErr));
     });
   }
 
@@ -1566,6 +1660,7 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
   // ------------------------------------------------------------------ //
   function switchTab(id) {
     SK.activeTab = id;
+    if (id === "requests") renderRequests();
     Array.prototype.forEach.call(document.querySelectorAll("#tabs button"), function (b) {
       b.classList.toggle("active", b.dataset.tab === id);
     });
@@ -2072,6 +2167,8 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
 
     $("settings-save").addEventListener("click", saveApprovals);
     $("settings-debug-save").addEventListener("click", saveDebugOption);
+    $("req-clear").addEventListener("click", clearRequests);
+    $("req-refresh").addEventListener("click", renderRequests);
     $("sim-reset").addEventListener("click", function () {
       window.SimDeck.resetAll();
       renderSimDeck();
