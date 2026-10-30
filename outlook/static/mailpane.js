@@ -50,6 +50,7 @@
     compose_body:   { label: "replace compose text", hint: "Rewrites the body of the email you are composing (review first)." },
     set_categories: { label: "categories", hint: "Adds Outlook categories to the selected message (must exist in your master list)." },
     save_draft:     { label: "save draft", hint: "Saves the message you are composing as a draft." },
+    new_message:    { label: "new message from template", hint: "Opens a prefilled NEW email window (to/subject/body) - you review and send." },
   };
   var OP_TYPES = Object.keys(OPS_META);
 
@@ -322,8 +323,10 @@
     '- {"type":"compose_body","html":"<p>...</p>"} (COMPOSE mode only: replaces the body of the email being written)',
     '- {"type":"set_categories","names":["Category"]} (must already exist in the mailbox master category list)',
     '- {"type":"save_draft"} (COMPOSE mode: saves the message being composed as a draft)',
+    '- {"type":"new_message","to":["someone@example.com"]?,"subject":"..."","html":"..."} (read or compose: opens a NEW email window prefilled; simple inline tags only)',
     "",
     "Rules:",
+    "- Named templates: when the request mentions a template, its content is listed in the EMAIL CONTEXT (NAMED TEMPLATE '<name>'). Use it as the structural/wording base for draft_reply/compose_body/new_message, then adapt per the user's instructions and the email context.",
     "- Choose ops that match the mode stated in the EMAIL CONTEXT; wrong-mode ops are rejected.",
     "- Reply/summary/translate/brainstorm requests that need no change: use format A.",
     "- Keep reply drafts short and human; greeting + body + signoff unless told otherwise.",
@@ -570,6 +573,16 @@
           b.className = "btn subtle" + (pair[1] ? " danger" : "");
           b.textContent = pair[0];
           b.addEventListener("click", function () {
+            if (pair[1] && b.dataset.armed !== "1") {
+              // two-stage confirm: the second click within 3.5 s deletes
+              b.dataset.armed = "1";
+              b.textContent = "Really delete?";
+              b.classList.add("armed");
+              setTimeout(function () {
+                if (b.parentNode) { b.dataset.armed = "0"; b.textContent = "Delete"; b.classList.remove("armed"); }
+              }, 3500);
+              return;
+            }
             if (pair[1]) deleteSession(row.id); else resumeSession(row.id);
           });
           actions.appendChild(b);
@@ -592,6 +605,140 @@
   }
 
   // wire the sessions tab buttons (called from wireEvents)
+  var editingTpl = null;
+
+  function renderTemplates() {
+    apiJson("/api/templates", "GET").then(function (res) {
+      var rows = res.templates || [];
+      SK.templateIds = {};
+      var list = $("tpl-list");
+      if (!list) return;
+      var frag = document.createDocumentFragment();
+      var cnt = $("tpl-count");
+      if (cnt) cnt.textContent = rows.length + " template(s)";
+      if (!rows.length) {
+        var e = document.createElement("div");
+        e.className = "opnote";
+        e.textContent = "No templates yet. Create one, then say \u201Creply using template <name> \u2026\u201D.";
+        frag.appendChild(e);
+      }
+      rows.forEach(function (t) {
+        SK.templateIds[String(t.id)] = t.name;
+        var card = document.createElement("div");
+        card.className = "tplcard";
+        var head = document.createElement("div");
+        head.className = "sesshead";
+        var name = document.createElement("span");
+        name.className = "tplname";
+        name.title = "Click to show the template content";
+        name.textContent = t.name;
+        var when = new Date(t.updated * 1000);
+        var meta = document.createElement("span");
+        meta.className = "sessmeta";
+        meta.textContent = t.len + " chars · " + ("0" + when.getHours()).slice(-2) + ":" + ("0" + when.getMinutes()).slice(-2) + " · " + when.toLocaleDateString();
+        var actions = document.createElement("span");
+        actions.className = "sessactions";
+        var useBtn = document.createElement("button");
+        useBtn.className = "btn subtle";
+        useBtn.textContent = "Use";
+        useBtn.title = "Prefill the prompt to use this template";
+        useBtn.addEventListener("click", function () {
+          var inp = $("chat-input");
+          inp.value = "reply using template " + t.name + ": ";
+          switchTab("chat");
+          inp.focus();
+        });
+        var editBtn = document.createElement("button");
+        editBtn.className = "btn subtle";
+        editBtn.textContent = "Edit";
+        editBtn.addEventListener("click", function () { editTemplate(t.id); });
+        var delBtn = document.createElement("button");
+        delBtn.className = "btn subtle danger";
+        delBtn.textContent = "Delete";
+        delBtn.addEventListener("click", function () {
+          apiJson("/api/templates/" + t.id, "DELETE").then(function () { renderTemplates(); setFormMsg($("tpl-formmsg"), "Template deleted.", true); })
+            .catch(function (err) { setFormMsg($("tpl-formmsg"), err.message); });
+        });
+        actions.appendChild(useBtn); actions.appendChild(editBtn); actions.appendChild(delBtn);
+        head.appendChild(name); head.appendChild(meta); head.appendChild(actions);
+        card.appendChild(head);
+        var show = document.createElement("div");
+        show.className = "tplbody hidden";
+        name.addEventListener("click", function () {
+          apiJson("/api/templates/" + t.id, "GET").then(function (doc) {
+            if (show.classList.contains("hidden")) { show.textContent = doc.body || "(empty)"; show.classList.remove("hidden"); }
+            else { show.classList.add("hidden"); }
+          });
+        });
+        card.appendChild(show);
+        frag.appendChild(card);
+      });
+      list.innerHTML = "";
+      list.appendChild(frag);
+    }).catch(function (err) {
+      var list = $("tpl-list");
+      if (list) list.innerHTML = '<div class="opnote">Cannot reach the templates store: ' + esc((err && err.message) || String(err)) + "</div>";
+    });
+  }
+
+  function editTemplate(tid) {
+    apiJson("/api/templates/" + tid, "GET").then(function (doc) {
+      editingTpl = doc.id;
+      $("tpl-form-title").textContent = "Edit template: " + doc.name;
+      $("tpl-name").value = doc.name;
+      $("tpl-body").value = doc.body || "";
+      $("tpl-delete").classList.remove("hidden");
+      $("tpl-cancel").classList.remove("hidden");
+      setFormMsg($("tpl-formmsg"), "", true);
+      $("tpl-name").focus();
+    });
+  }
+
+  function resetTplForm() {
+    editingTpl = null;
+    $("tpl-form-title").textContent = "New template";
+    $("tpl-name").value = "";
+    $("tpl-body").value = "";
+    $("tpl-delete").classList.add("hidden");
+    $("tpl-cancel").classList.add("hidden");
+    setFormMsg($("tpl-formmsg"), "", true);
+  }
+
+  function saveTemplate() {
+    var name = $("tpl-name").value.trim();
+    var body = $("tpl-body").value;
+    if (!name) { setFormMsg($("tpl-formmsg"), "A name is required."); return; }
+    if (!body.trim()) { setFormMsg($("tpl-formmsg"), "The template has no content."); return; }
+    var req = editingTpl
+      ? apiJson("/api/templates/" + editingTpl, "PUT", { name: name, body: body })
+      : apiJson("/api/templates", "POST", { name: name, body: body });
+    req.then(function () {
+      setFormMsg($("tpl-formmsg"), "Template saved.", true);
+      editingTpl = editingTpl || null;
+      openTemplatesRender();
+    }).catch(function (err) { setFormMsg($("tpl-formmsg"), err.message); });
+  }
+
+  function openTemplatesRender() { renderTemplates(); }
+
+  function wireTemplates() {
+    var nw = $("tpl-new");
+    if (nw) nw.addEventListener("click", resetTplForm);
+    var rf = $("tpl-refresh");
+    if (rf) rf.addEventListener("click", renderTemplates);
+    var sv = $("tpl-save");
+    if (sv) sv.addEventListener("click", saveTemplate);
+    var cn = $("tpl-cancel");
+    if (cn) cn.addEventListener("click", resetTplForm);
+    var dl = $("tpl-delete");
+    if (dl) dl.addEventListener("click", function () {
+      if (!editingTpl) return;
+      apiJson("/api/templates/" + editingTpl, "DELETE").then(function () {
+        resetTplForm(); renderTemplates();
+      }).catch(function (err) { setFormMsg($("tpl-formmsg"), err.message); });
+    });
+  }
+
   function wireSessions() {
     var nw = $("sess-new");
     if (nw) nw.addEventListener("click", function () {
@@ -610,6 +757,42 @@
   var CONTENT_ROUTE_RE = new RegExp(
     "\\b(email|mail|message|reply|respond|respond|draft|summary|summarize|translate|categorize|category|categories|subject|body|sender|attach|attachment|compose|send)\\b", "i"
   );
+
+  function assistantHistoryText(parsed) {
+    // a compact recap for the next round; never the raw ops JSON
+    if (!parsed || !parsed.ok) {
+      var rawT = (SK.lastModelText && SK.lastModelText.text) || "";
+      return String(rawT).slice(0, 400);
+    }
+    if (parsed.kind === "reply") return String(parsed.text || "").slice(0, HISTORY_MAX_CHARS);
+    var ops = parsed.ops || [];
+    var parts = ops.slice(0, 3).map(function (op) {
+      var d = fmtOp(op, SK.lastCtx);
+      return d.length > 110 ? d.slice(0, 110) + "…" : d;
+    });
+    return ("Applied: " + parts.join("; ") + (ops.length > 3 ? " (+" + (ops.length - 3) + " more)" : ""))
+      .slice(0, HISTORY_MAX_CHARS);
+  }
+
+  function getTemplateBlock(instruction) {
+    var text = String(instruction || "");
+    var m = /\btemplates?\s+(?:named\s+)?["\u201c]?([a-zA-Z0-9][a-zA-Z0-9 _.-]{1,48})["\u201c]?/i.exec(text);
+    return apiJson("/api/templates", "GET").then(function (res) {
+      var tpls = res.templates || [];
+      if (!m || !tpls.length) return "";
+      var want = m[1].trim().toLowerCase();
+      var hit = null;
+      tpls.forEach(function (t) {
+        var n = String(t.name).toLowerCase();
+        if (!hit && (n === want || n.startsWith(want) || want.startsWith(n))) hit = t;
+      });
+      if (!hit) return "";
+      return apiJson("/api/templates/" + hit.id, "GET").then(function (doc) {
+        if (!doc || !doc.body) return "NAMED TEMPLATE '" + hit.name + "': (body missing)";
+        return "NAMED TEMPLATE '" + doc.name + "':\n" + String(doc.body).slice(0, 6000);
+      });
+    }).catch(function () { return ""; });
+  }
 
   function historyCap(text) {
     var s = String(text || "");
@@ -774,6 +957,23 @@
     });
   };
 
+  MailDeck.prototype.newMessage = function (payload) {
+    return promisify(function (resolve, reject) {
+      var mb = Office.context.mailbox;
+      if (!mb || !mb.displayNewMessageFormAsync) {
+        reject(new FriendlyError("this Outlook build cannot open new-message windows from add-ins (Mailbox 1.9)."));
+        return;
+      }
+      mb.displayNewMessageFormAsync({
+        htmlBody: String(payload.html),
+        subject: payload.subject || "",
+        toRecipients: (payload.to || []).map(function (a) { return { emailAddress: String(a) }; }),
+      }, function (r) {
+        r.status === "succeeded" ? resolve({ ok: true }) : reject(new FriendlyError(r.error && r.error.message || "failed"));
+      });
+    });
+  };
+
   MailDeck.prototype.saveDraft = function () {
     return promisify(function (resolve, reject) {
       var item = Office.context.mailbox.item;
@@ -846,6 +1046,18 @@
         out.names = names.map(String);
       } else if (t === "save_draft") {
         if (!ctx || ctx.mode !== "compose") { bad("save draft works only while composing"); return; }
+      } else if (t === "new_message") {
+        var toList = Array.isArray(op.to) ? op.to.filter(function (x) { return typeof x === "string" && x; }) : [];
+        var nmHtml = op.html;
+        if (typeof nmHtml !== "string" || nmHtml.length < 2) {
+          if (typeof op.text === "string" && op.text.length >= 2) nmHtml = op.text;
+          else { bad("missing message text"); return; }
+        }
+        if (toList.length > 50) { bad("too many recipients (max 50)"); return; }
+        if (nmHtml.length > 60000) { bad("message too long (max 60000 chars)"); return; }
+        out.to = toList;
+        out.subject = typeof op.subject === "string" ? op.subject.slice(0, 200) : "";
+        out.html = nmHtml;
       }
       ops.push(out);
     });
@@ -864,6 +1076,11 @@
         return "Add categories: " + op.names.join(", ");
       case "save_draft":
         return "Save the message being composed as draft";
+      case "new_message": {
+        var prN = op.html.length > 70 ? op.html.slice(0, 70) + "…" : op.html;
+        var toN = (op.to && op.to.length) ? " -> " + op.to.join(", ") : "";
+        return "New email window" + toN + (op.subject ? " '" + op.subject + "'" : "") + ": " + prN + " - review and send";
+      }
     }
     return op.type;
   }
@@ -887,6 +1104,10 @@ function applyOps(deck, ops, ctx) {
         case "save_draft":
           return deck.saveDraft().then(function () {
             lines.push({ ok: true, text: "draft saved" });
+          });
+        case "new_message":
+          return deck.newMessage({ to: op.to, subject: op.subject, html: op.html }).then(function () {
+            lines.push({ ok: true, text: "new email window opened - review and send" });
           });
       }
       return Promise.resolve();
@@ -956,35 +1177,39 @@ function applyOps(deck, ops, ctx) {
 
     ctxPromise.then(function (ctx) {
       SK.lastCtx = ctx;
-      var sys = SYSTEM_PROMPT + "\nHost: " + (SK.sim ? "DocKick simulator" : SK.deck.capabilities().host);
-            var user = (ctx ? formatContext(ctx) : "(no deck context requested)") + "\n\nUSER REQUEST:\n" + instruction;
-      var messages = [
-        { role: "system", content: sys },
-      ].concat(SK.history.slice(-(HISTORY_MAX_EXCHANGES * 2)))
-       .concat([{ role: "user", content: user }]);
-      dbg("prompt", { profile: prof.name, route: route, model: ref.model, connection: ref.connection, instruction: instruction, hadContext: !!ctx, messages: messages });
-      setStatus("Asking " + ref.model + " (via " + ref.connection + ")…", "busy");
-      return apiJson("/api/chat", "POST", { connection: ref.connection, model: ref.model, messages: messages }).then(function (resp) {
-        dbg("response", { text: resp.text, elapsedMs: resp.elapsedMs });
-        SK.lastModelText = { text: resp.text };
-        var parsed = tryParse(resp.text);
-        if (!parsed.ok) {
-          setStatus("Model output unclear - silently re-asking for clean JSON…", "busy");
-          var repair = messages.concat([
-            { role: "assistant", content: resp.text },
-            { role: "user", content: REPAIR_ASK },
-          ]);
-          dbg("repair.request", {});
-          return apiJson("/api/chat", "POST", { connection: ref.connection, model: ref.model, messages: repair }).then(function (resp2) {
-            dbg("repair.response", { text: resp2.text, elapsedMs: resp2.elapsedMs });
-            SK.lastModelText = { text: resp2.text };
-            return tryParse(resp2.text);
-          });
-        }
-        return parsed;
-      }).then(function (parsed) {
-        renderParsed(parsed, ctx, instruction);
-        pushHistory(instruction, (SK.lastModelText && SK.lastModelText.text) || parsed.text || "");
+      var sys = SYSTEM_PROMPT + "\nHost: " + (SK.sim ? "MailKick simulator" : SK.deck.capabilities().host);
+      if (!(SK.cfg && SK.cfg.generateNotes)) sys += "\n" + NOTES_OFF_RULE;
+      var ctxText = ctx ? formatContext(ctx) : "(no email context requested)";
+      return getTemplateBlock(instruction).then(function (tplBlock) {
+        var user = ctxText + "\n\n" + (tplBlock ? tplBlock + "\n" : "") + "\nUSER REQUEST:\n" + instruction;
+        var messages = [
+          { role: "system", content: sys },
+        ].concat(SK.history.slice(-(HISTORY_MAX_EXCHANGES * 2)))
+         .concat([{ role: "user", content: user }]);
+        dbg("prompt", { profile: prof.name, route: route, model: ref.model, connection: ref.connection, instruction: instruction, hadContext: !!ctx, templateUsed: !!tplBlock, history: SK.history.length, messages: messages });
+        setStatus("Asking " + ref.model + " (via " + ref.connection + ")…", "busy");
+        return apiJson("/api/chat", "POST", { connection: ref.connection, model: ref.model, messages: messages }).then(function (resp) {
+          dbg("response", { text: resp.text, elapsedMs: resp.elapsedMs });
+          SK.lastModelText = { text: resp.text };
+          var parsed = tryParse(resp.text);
+          if (!parsed.ok) {
+            setStatus("Model output unclear - silently re-asking for clean JSON…", "busy");
+            var repair = messages.concat([
+              { role: "assistant", content: resp.text },
+              { role: "user", content: REPAIR_ASK },
+            ]);
+            dbg("repair.request", {});
+            return apiJson("/api/chat", "POST", { connection: ref.connection, model: ref.model, messages: repair }).then(function (resp2) {
+              dbg("repair.response", { text: resp2.text, elapsedMs: resp2.elapsedMs });
+              SK.lastModelText = { text: resp2.text };
+              return tryParse(resp2.text);
+            });
+          }
+          return parsed;
+        }).then(function (parsed) {
+          renderParsed(parsed, ctx, instruction);
+          pushHistory(instruction, assistantHistoryText(parsed));
+        });
       });
     }).catch(function (err) {
       var msg = err && err.friendly ? err.message : (err && err.message) || String(err);
@@ -1320,6 +1545,7 @@ function applyOps(deck, ops, ctx) {
     SK.activeTab = id;
     if (id === "requests") renderRequests();
     if (id === "sessions") renderSessions();
+    if (id === "templates") renderTemplates();
     Array.prototype.forEach.call(document.querySelectorAll("#tabs button"), function (b) {
       b.classList.toggle("active", b.dataset.tab === id);
     });
@@ -1714,6 +1940,7 @@ function applyOps(deck, ops, ctx) {
     $("chat-new").addEventListener("click", function () {
       resetHistory();
       $("chat-output").innerHTML = "";
+      $("chat-input").value = "";
       setStatus("Conversation history cleared.", "ok");
     });
     $("chat-refresh-deck").addEventListener("click", function () { updateDeckSummary(); setStatus("Email refreshed.", ""); });
@@ -1824,6 +2051,7 @@ function applyOps(deck, ops, ctx) {
     $("settings-save").addEventListener("click", saveApprovals);
     $("settings-debug-save").addEventListener("click", saveDebugOption);
     wireSessions();
+    wireTemplates();
     $("req-clear").addEventListener("click", clearRequests);
     $("req-refresh").addEventListener("click", renderRequests);
     $("sim-reset").addEventListener("click", function () {

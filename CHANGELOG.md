@@ -1,4 +1,16 @@
 # Changelog
+## [0.2.1] - 2026-10-30
+### Added
+- **MailKick named templates**: create/edit/delete small reusable content blocks
+  (Templates tab); say "reply using template <name> ..." or "new mail from
+  template <name> ..." and MailKick injects only that template into the AI's
+  context; for replies the template + the original mail + instructions drive the
+  draft; for new mail a `new_message` op opens a prefilled compose window. You
+  always review and send - MailKick never sends anything automatically.
+- Templates list: name/date/length cards, name-click = content peek, Use button
+  prefills the prompt.
+### UI
+- "New conversation" now also clears the prompt box and has a green border.
 ## [0.2.0] - 2026-10-30
 ### Added
 - **Sessions** (all three add-ins): conversations persist locally in

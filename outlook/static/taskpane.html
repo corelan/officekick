@@ -22,7 +22,7 @@
       <button data-tab="settings">Settings</button>
       <button data-tab="about">About</button>
       <button data-tab="sessions">Sessions</button>
-      <button data-tab="requests">Inspector</button>
+      <button data-tab="templates">Templates</button>\n      <button data-tab="requests">Inspector</button>
     </nav>
   </header>
 
@@ -211,6 +211,35 @@
         context); click a session <b>name</b> to peek at its last interactions before
         resuming; the Rename button renames it; Delete removes it permanently.</div>
       <div id="sess-list" class="sess-list"></div>
+    </section>
+
+    <!-- ============================ TEMPLATES ============================ -->
+    <section id="tab-templates" class="tab">
+      <div class="opnote">Named content templates for replies and new mail. Type
+        "reply using template <name> ..." (or "new mail from template <name> ...") and MailKick
+        injects that template into the AI's context. Templates are stored locally on the server;
+        nothing is ever sent automatically - reply/compose/new-mail windows are always yours to review.</div>
+      <div class="row row-wrap">
+        <button id="tpl-new" class="btn subtle" type="button">+ New template</button>
+        <button id="tpl-refresh" class="btn subtle" type="button">Refresh</button>
+        <span class="opnote" id="tpl-count"></span>
+      </div>
+
+      <form id="tpl-form" autocomplete="off">
+        <h2 id="tpl-form-title">New template</h2>
+        <label>Name <input id="tpl-name" type="text" maxlength="48" placeholder="e.g. standard follow-up" /></label>
+        <label>Content (plain text; the AI adapts it to each email)
+          <textarea id="tpl-body" rows="6" spellcheck="false" placeholder="Hi [name],\n\nHere is the information from the meeting: ...\n\nBest regards,\nPeter"></textarea>
+        </label>
+        <div class="row">
+          <button id="tpl-save" class="btn primary" type="button">Save template</button>
+          <button id="tpl-cancel" class="btn subtle hidden" type="button">Cancel</button>
+          <button id="tpl-delete" class="btn danger hidden" type="button">Delete</button>
+        </div>
+        <div id="tpl-formmsg" class="formmsg"></div>
+      </form>
+
+      <div id="tpl-list" class="tpl-list"></div>
     </section>
 
     <!-- ============================ REQUESTS ============================ -->

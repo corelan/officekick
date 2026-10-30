@@ -586,6 +586,16 @@
           b.className = "btn subtle" + (pair[1] ? " danger" : "");
           b.textContent = pair[0];
           b.addEventListener("click", function () {
+            if (pair[1] && b.dataset.armed !== "1") {
+              // two-stage confirm: the second click within 3.5 s deletes
+              b.dataset.armed = "1";
+              b.textContent = "Really delete?";
+              b.classList.add("armed");
+              setTimeout(function () {
+                if (b.parentNode) { b.dataset.armed = "0"; b.textContent = "Delete"; b.classList.remove("armed"); }
+              }, 3500);
+              return;
+            }
             if (pair[1]) deleteSession(row.id); else resumeSession(row.id);
           });
           actions.appendChild(b);
@@ -2374,6 +2384,7 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
     $("chat-new").addEventListener("click", function () {
       resetHistory();
       $("chat-output").innerHTML = "";
+      $("chat-input").value = "";
       setStatus("Conversation history cleared.", "ok");
     });
     $("chat-refresh-deck").addEventListener("click", function () { updateDeckSummary(); setStatus("Deck refreshed.", ""); });

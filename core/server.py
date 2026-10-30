@@ -31,7 +31,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 APP = "OfficeKick"
-VERSION = "0.2.0"
+VERSION = "0.2.1"
 
 CONNECTION_TYPES = (
     "openai",
@@ -70,6 +70,7 @@ DEFAULT_APPROVALS = {
     "insert_image": "confirm",
     "apply_layout": "confirm",
     "draft_reply": "confirm",
+    "new_message": "confirm",
     "compose_body": "confirm",
     "set_categories": "auto",
     "save_draft": "auto",
@@ -198,6 +199,80 @@ class SessionStore:
         return out[-40:]
 
 
+# --------------------------------------------------------------------------- #
+# Named templates (MailKick): small reusable content blocks, stored locally
+# --------------------------------------------------------------------------- #
+
+class TemplateStore:
+    def __init__(self, base_dir):
+        self.dir = Path(base_dir) / "templates"
+        try:
+            self.dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+            os.chmod(self.dir, 0o700)
+        except OSError:
+            pass
+        for f in self.dir.glob("*.json"):
+            try:
+                os.chmod(f, 0o600)
+            except OSError:
+                pass
+
+    def list(self):
+        items = []
+        for f in self.dir.glob("*.json"):
+            try:
+                data = json.loads(f.read_text(encoding="utf-8"))
+                items.append({
+                    "id": data.get("id", f.stem),
+                    "name": data.get("name") or "template",
+                    "updated": data.get("updated") or f.stat().st_mtime,
+                    "len": len(data.get("body") or ""),
+                })
+            except Exception:
+                continue
+        items.sort(key=lambda x: x["name"].lower())
+        return items
+
+    def get(self, tid):
+        if not tid or len(tid) > 64 or not re.match(r"^[a-f0-9-]{1,64}$", tid):
+            raise ApiError(400, "Invalid template id")
+        f = self.dir / (tid + ".json")
+        if not f.is_file():
+            raise ApiError(404, "Unknown template: %s" % tid)
+        try:
+            return json.loads(f.read_text(encoding="utf-8"))
+        except Exception:
+            raise ApiError(500, "Template file unreadable")
+
+    def _write(self, tid, name, body, updated=None):
+        doc = {"id": tid, "name": name[:64], "body": body[:20000], "updated": updated or time.time()}
+        f = self.dir / (tid + ".json")
+        f.write_text(json.dumps(doc, indent=1), encoding="utf-8")
+        os.chmod(f, 0o600)
+        return {"id": tid, "name": doc["name"], "updated": doc["updated"], "len": len(doc["body"])}
+
+    def create(self, name, body):
+        name = str(name or "").strip()
+        if not name or len(name) > 64:
+            raise ApiError(400, "Template name must be 1-64 chars")
+        if not isinstance(body, (str,)) or not body.strip():
+            raise ApiError(400, "Template body is empty")
+        return self._write(uuid.uuid4().hex, name, body.strip()[:20000])
+
+    def update(self, tid, name=None, body=None):
+        doc = self.get(tid)
+        nn = str(name or doc.get("name") or "").strip()[:64]
+        if not nn:
+            raise ApiError(400, "Template name cannot be empty")
+        nb = (body if isinstance(body, str) and body.strip() else doc.get("body") or "")
+        return self._write(tid, nn, nb.strip()[:20000], doc.get("updated"))
+
+    def delete(self, tid):
+        self.get(tid)
+        (self.dir / (tid + ".json")).unlink()
+        return {"ok": True}
+
+
 class Store:
     def __init__(self, path):
         self.path = Path(path).expanduser()
@@ -210,6 +285,7 @@ class Store:
         self.data = None
         self.force_debug = False  # CLI --debug override
         self.sessions = SessionStore(self.path.parent)
+        self.templates = TemplateStore(self.path.parent)
 
     def load(self):
         if self.path.exists():
@@ -1218,6 +1294,11 @@ class SlideKickHandler(BaseHTTPRequestHandler):
             elif path.startswith("/api/sessions/"):
                 sid = path[len("/api/sessions/"):]
                 self._send_json(self.store.sessions.get(sid))
+            elif path == "/api/templates":
+                self._send_json({"templates": self.store.templates.list()})
+            elif path.startswith("/api/templates/"):
+                tid = path[len("/api/templates/"):]
+                self._send_json(self.store.templates.get(tid))
             elif path.startswith("/api/"):
                 self._error(404, "Unknown API endpoint: %s" % path)
             else:
@@ -1256,6 +1337,9 @@ class SlideKickHandler(BaseHTTPRequestHandler):
                 doc = self.store.sessions.create(body.get("name") or "session",
                                                  body.get("exchanges") or [])
                 self._send_json({"ok": True, "session": doc})
+            elif path == "/api/templates":
+                doc = self.store.templates.create(body.get("name"), body.get("body"))
+                self._send_json({"ok": True, "template": doc})
             elif path.startswith("/api/sessions/rename/"):
                 sid = path[len("/api/sessions/rename/"):]
                 doc = self.store.sessions.rename(sid, body.get("name"))
@@ -1367,6 +1451,10 @@ class SlideKickHandler(BaseHTTPRequestHandler):
                 doc = self.store.sessions.upsert(
                     sid, body.get("name"), body.get("exchanges") or [])
                 self._send_json({"ok": True, "session": doc})
+            elif path.startswith("/api/templates/"):
+                tid = urllib.parse.unquote(path[len("/api/templates/"):])
+                doc = self.store.templates.update(tid, body.get("name"), body.get("body"))
+                self._send_json({"ok": True, "template": doc})
             else:
                 self._error(404, "Unknown API endpoint: %s" % path)
         except ApiError as exc:
@@ -1393,6 +1481,9 @@ class SlideKickHandler(BaseHTTPRequestHandler):
             elif path.startswith("/api/sessions/"):
                 sid = urllib.parse.unquote(path[len("/api/sessions/"):])
                 self._send_json(self.store.sessions.delete(sid))
+            elif path.startswith("/api/templates/"):
+                tid = urllib.parse.unquote(path[len("/api/templates/"):])
+                self._send_json(self.store.templates.delete(tid))
             else:
                 self._error(404, "Unknown API endpoint: %s" % path)
         except ApiError as exc:

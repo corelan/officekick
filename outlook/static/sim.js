@@ -50,6 +50,13 @@
       log.push("categories added: " + names.join(", "));
       return { ok: true };
     },
+    newMessage: async function (payload) {
+      // opens a simulated compose draft prefilled - the user "sends" it
+      compose = { subject: String(payload.subject || "(no subject)"),
+                  bodyText: String(payload.html) };
+      log.push("new message window opened (prefilled)");
+      return { ok: true };
+    },
     saveDraft: async function () {
       if (!compose) throw new FriendlyError("save draft works only while composing");
       log.push("draft saved");
