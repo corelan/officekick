@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.1.4
+
+- **DocKick** - the Word add-in - is real: own manifest template (Host
+  "Document", own add-in Id) and a Word ops engine with the same pipeline,
+  approval gate, auto-apply, Select all, history and theme support:
+  insert/edit paragraphs (built-in styles), find/replace, tables (WordApi 1.3),
+  comments (WordApi 1.4, manual-paste fallback on older builds), paragraph
+  deletion and full-document rewrites (confirm by default). Verified in the
+  Word simulator end-to-end (auto-applied + gated runs).
+- install.sh / install.ps1 deploy and sideload DocKick automatically once
+  `wordkick/manifest.template.xml` exists; Word's presence is detected
+  separately from PowerPoint's.
+- Repository/branding: officekick umbrella, docs/architecture.md rewritten.
 ## 0.1.3
 - Repository renamed to **officekick** (umbrella): `core/` holds the shared server,
   `slidekick/` the PowerPoint add-in, `wordkick/` the planned Word sibling (**DocKick**,

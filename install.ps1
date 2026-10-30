@@ -250,7 +250,7 @@ if ($LASTEXITCODE -ne 0) { Die "server source failed to compile" }
 
 # ---- manifest ----
 $tpl = Join-Path $SrcDir "manifest.template.xml"
-$xml = (Get-Content $tpl -Raw) -replace "__PORT__", "$Port" -replace "__VERSION__", "$Version.0"
+$xml = (Get-Content $tpl -Raw) -replace "__PORT__", "$Port" -replace "__SCHEME__", "http" -replace "__VERSION__", "$Version.0"
 $manifestPath = Join-Path $ManifestDir $ManifestName
 Set-Content -Path $manifestPath -Value $xml -Encoding UTF8
 try {
@@ -258,6 +258,23 @@ try {
     Ok "manifest rendered + valid XML"
 } catch {
     Die "generated manifest is not valid XML: $($_.Exception.Message)"
+}
+
+# ---- DocKick (Word) manifest: rendered when its template exists (both add-ins
+# are discovered through the same per-user trusted catalog) ----
+$wordTpl = Join-Path $RepoDir "wordkick\manifest.template.xml"
+if (Test-Path $wordTpl) {
+    $xml2 = (Get-Content $wordTpl -Raw) -replace "__PORT__", "$Port" -replace "__SCHEME__", "http"
+    $wordManifestPath = Join-Path $ManifestDir "dockick.xml"
+    Set-Content -Path $wordManifestPath -Value $xml2 -Encoding UTF8
+    try {
+        [xml](Get-Content $wordManifestPath -Raw) > $null
+        Ok "DocKick manifest rendered + valid XML"
+    } catch {
+        Die "DocKick manifest is not valid XML: $($_.Exception.Message)"
+    }
+} else {
+    Warn "wordkick\manifest.template.xml not found - DocKick skipped"
 }
 
 # ---- trusted catalog (per-user, no admin) ----

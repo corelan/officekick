@@ -8,8 +8,10 @@ technology stack:
   deck`, `add a table of the findings` - and SlideKick reads your deck, routes
   the request to the model you chose, and applies the changes **after** the
   per-action approval policy allows it.
-- **DocKick** for Word (`wordkick/`) - planned; same connections, profiles and
-  approval model, with a Word-specific ops engine.
+- **DocKick** for Word (`wordkick/`) - shipped (v1): same connections, profiles
+  and approval model; Word ops: insert/edit paragraphs (with built-in styles),
+  find/replace, tables, comments, paragraph deletion and full-document rewrites
+  (gated). Simulator: `http://127.0.0.1:8765/wordkick/static/simulator.html`.
 
 You pick your own AI provider and models. Nothing goes through a third-party
 service: the add-ins talk to the providers *you* configure, from one small
@@ -21,7 +23,7 @@ once and available in every Office app.
 officekick/
   core/       the local companion server (python stdlib) + shared config
   slidekick/  PowerPoint add-in (manifest template + task pane + commands)
-  wordkick/   Word add-in (DocKick - planned skeleton)
+  wordkick/   Word add-in (DocKick)
   tools/      mock AI provider + icon generator
   tests/      server test suite
 ```

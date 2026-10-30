@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<OfficeApp xmlns="http://schemas.microsoft.com/office/appforoffice/1.1"
+           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+           xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0"
+           xmlns:ov="http://schemas.microsoft.com/office/taskpaneappversionoverrides"
+           xsi:type="TaskPaneApp">
+  <Id>ce1e8f09-db1c-4598-8f5b-6a65b7802d59</Id>
+  <Version>1.0.0.0</Version>
+  <ProviderName>Corelan Consulting bv</ProviderName>
+  <DefaultLocale>en-US</DefaultLocale>
+  <DisplayName DefaultValue="Corelan DocKick"/>
+  <Description DefaultValue="AI assistant for Word: insert content, rewrite paragraphs, add tables and comments using your own AI providers (OpenAI, Anthropic, OpenRouter, OpenAI-compatible, Ollama, llama.cpp). Shares connections, profiles and approval policy with SlideKick."/>
+  <IconUrl DefaultValue="__SCHEME__://localhost:__PORT__/wordkick/static/assets/icon32.png"/>
+  <HighResolutionIconUrl DefaultValue="__SCHEME__://localhost:__PORT__/wordkick/static/assets/icon80.png"/>
+  <SupportUrl DefaultValue="https://github.com/corelan/officekick"/>
+  <AppDomains>
+    <AppDomain>__SCHEME__://localhost:__PORT__</AppDomain>
+    <AppDomain>__SCHEME__://127.0.0.1:__PORT__</AppDomain>
+  </AppDomains>
+  <Hosts>
+    <Host Name="Document"/>
+  </Hosts>
+  <Requirements>
+    <Sets DefaultMinVersion="1.1">
+      <Set Name="WordApi" MinVersion="1.1"/>
+    </Sets>
+  </Requirements>
+  <DefaultSettings>
+    <SourceLocation DefaultValue="__SCHEME__://localhost:__PORT__/wordkick/static/taskpane.html"/>
+  </DefaultSettings>
+  <Permissions>ReadWriteDocument</Permissions>
+__COMMANDS_BEGIN__
+  <VersionOverrides xmlns="http://schemas.microsoft.com/office/taskpaneappversionoverrides"
+                    xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0"
+                    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                    xsi:type="VersionOverridesV1_0">
+    <Hosts>
+      <Host xsi:type="Document">
+        <DesktopFormFactor>
+          <GetStarted>
+            <Title resid="GetStarted.Title"/>
+            <Description resid="GetStarted.Description"/>
+            <LearnMoreUrl resid="GetStarted.LearnMoreUrl"/>
+          </GetStarted>
+          <FunctionFile resid="Commands.Url"/>
+          <ExtensionPoint xsi:type="PrimaryCommandSurface">
+            <OfficeTab id="TabHome">
+              <Group id="Corelan.DocKick.HomeGroup">
+                <Label resid="Group.Label"/>
+                <Icon>
+                  <bt:Image size="16" resid="Icon.16"/>
+                  <bt:Image size="32" resid="Icon.32"/>
+                  <bt:Image size="80" resid="Icon.80"/>
+                </Icon>
+                <Control xsi:type="Button" id="Corelan.DocKick.Button">
+                  <Label resid="Button.Label"/>
+                  <Supertip>
+                    <Title resid="Button.SupertipTitle"/>
+                    <Description resid="Button.SupertipDescription"/>
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="Icon.16"/>
+                    <bt:Image size="32" resid="Icon.32"/>
+                    <bt:Image size="80" resid="Icon.80"/>
+                  </Icon>
+                  <Action xsi:type="ShowTaskpane">
+                    <TaskpaneId>Default</TaskpaneId>
+                    <SourceLocation resid="Taskpane.Url"/>
+                  </Action>
+                </Control>
+              </Group>
+            </OfficeTab>
+          </ExtensionPoint>
+        </DesktopFormFactor>
+      </Host>
+    </Hosts>
+    <Resources>
+      <bt:Images>
+        <bt:Image id="Icon.16" DefaultValue="__SCHEME__://localhost:__PORT__/wordkick/static/assets/icon16.png"/>
+        <bt:Image id="Icon.32" DefaultValue="__SCHEME__://localhost:__PORT__/wordkick/static/assets/icon32.png"/>
+        <bt:Image id="Icon.80" DefaultValue="__SCHEME__://localhost:__PORT__/wordkick/static/assets/icon80.png"/>
+      </bt:Images>
+      <bt:Urls>
+        <bt:Url id="Taskpane.Url" DefaultValue="__SCHEME__://localhost:__PORT__/wordkick/static/taskpane.html"/>
+        <bt:Url id="Commands.Url" DefaultValue="__SCHEME__://localhost:__PORT__/wordkick/static/commands.html"/>
+        <bt:Url id="GetStarted.LearnMoreUrl" DefaultValue="https://github.com/corelan/officekick"/>
+      </bt:Urls>
+      <bt:ShortStrings>
+        <bt:String id="GetStarted.Title" DefaultValue="Corelan DocKick"/>
+        <bt:String id="Tab.Label" DefaultValue="DocKick"/>
+        <bt:String id="Group.Label" DefaultValue="AI actions"/>
+        <bt:String id="Button.Label" DefaultValue="Corelan DocKick"/>
+      </bt:ShortStrings>
+      <bt:LongStrings>
+        <bt:String id="GetStarted.Description" DefaultValue="AI assistant for your documents: insert content, rewrite text, tables and comments, using your own AI providers."/>
+        <bt:String id="Button.SupertipTitle" DefaultValue="Open DocKick"/>
+        <bt:String id="Button.SupertipDescription" DefaultValue="Open the Corelan DocKick AI task pane."/>
+      </bt:LongStrings>
+    </Resources>
+  </VersionOverrides>
+__COMMANDS_END__
+</OfficeApp>
