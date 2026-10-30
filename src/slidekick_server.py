@@ -112,6 +112,8 @@ class Store:
         for op in OP_TYPES:
             approvals.setdefault(op, DEFAULT_APPROVALS[op])
         self.data.setdefault("debug", False)
+        # speaker-notes generation is opt-in (off by default)
+        self.data.setdefault("generateNotes", False)
         self.save()
 
     def save(self):
@@ -303,6 +305,7 @@ class Store:
             "defaultProfile": d.get("defaultProfile"),
             "approvals": d.get("approvals") or dict(DEFAULT_APPROVALS),
             "debug": bool(d.get("debug")),
+            "generateNotes": bool(d.get("generateNotes", False)),
         }
 
 
@@ -997,6 +1000,9 @@ class SlideKickHandler(BaseHTTPRequestHandler):
                     changed = True
                 if "debug" in body and body["debug"] is not None:
                     self.store.set_debug(bool(body["debug"]))
+                    changed = True
+                if "generateNotes" in body and body["generateNotes"] is not None:
+                    self.store.data["generateNotes"] = bool(body["generateNotes"])
                     changed = True
                 if changed:
                     self.store.save()

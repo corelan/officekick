@@ -5,6 +5,16 @@
 - Fixed: the "auto-apply" checkbox now actually works - all-`auto` runs apply
   without the proposals step; runs containing confirm/blocked/invalid actions
   still open the gated preview (with the new Select all button).
+- Fixed: a dropped variable declaration in the ops validator crashed every deck-edit
+  run (regression introduced with the speaker-notes switch).
+- Speaker-notes generation is opt-in (off by default): Settings toggle, prompt rule for
+  the model, and client-side skipping of notes actions while the setting is off.
+- Conversation history: the pane sends the last exchanges with each request
+  (session-only, capped) so follow-ups like "use the 2nd title" work; "New
+  conversation" clears it.
+- Installer: waits for the previous server's listener to exit before picking the port
+  and kills a stubborn stale listener instead of drifting to the next port (which
+  desynced the manifest URLs).
 
 - Default transport: plain http://localhost (no certificates, no keychain changes);
   the add-in appears in Home -> Add-ins. `--https` opts in to the ribbon button:

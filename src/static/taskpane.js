@@ -18,6 +18,7 @@
     busy: false,
     modelsCache: {},     // connName -> {list:[...], at:ms}
     sessionApprovals: {},// opType -> 'auto' when approved for this session
+    history: [],         // conversation turns shown to the model (session-only)
     editingConn: null,
     editingProf: null,
     connBaseDirty: false,
@@ -233,15 +234,50 @@
     "- If the request is a question/explanation/brainstorm rather than a deck change, use format A.",
   ].join("\n");
 
+  var NOTES_OFF_RULE =
+    "- Speaker-notes generation is DISABLED for this user (Settings). Never generate notes:" +
+    " omit the notes field in create_slide/edit_slide ops and never emit set_notes ops." +
+    " If the user explicitly asks for speaker notes, use format A (reply) and tell them to" +
+    " enable 'Generate speaker notes' in Settings.";
+
   var REPAIR_ASK =
     "Your previous answer did not follow the required format. " +
     "Reply again with ONLY the JSON object (format A or B) and nothing else: " +
     'either {"kind":"reply","text":"..."} or {"kind":"slide_ops","ops":[...]} - ' +
     "no reasoning, no fences, no commentary.";
 
+  var HISTORY_MAX_EXCHANGES = 6; // oldest turns are dropped, newest kept
+  var HISTORY_MAX_CHARS = 2000;  // per stored message
+
   var CONTENT_ROUTE_RE = new RegExp(
     "\\b(slide|slides|deck|bullet|bullets|reword|rewrite|rephrase|outline|notes?|title|titles|add|create|make|generate|tighten|restructure|expand|insert|append)\\b", "i"
   );
+
+  function historyCap(text) {
+    var s = String(text || "");
+    return s.length > HISTORY_MAX_CHARS ? s.slice(0, HISTORY_MAX_CHARS) + " [truncated]" : s;
+  }
+
+  function pushHistory(userText, assistantText) {
+    SK.history.push({ role: "user", content: historyCap(userText) });
+    SK.history.push({ role: "assistant", content: historyCap(assistantText) });
+    while (SK.history.length > HISTORY_MAX_EXCHANGES * 2) SK.history.shift();
+    updateChatMeta();
+    dbg("history.push", { exchanges: Math.floor(SK.history.length / 2) });
+  }
+
+  function resetHistory() {
+    SK.history = [];
+    updateChatMeta();
+    dbg("history.reset", {});
+  }
+
+  function updateChatMeta() {
+    var el = $("chat-history-note");
+    if (!el) return;
+    var n = Math.floor(SK.history.length / 2);
+    el.textContent = n ? "AI sees the last " + n + " exchange(s)" : "new conversation";
+  }
 
   function routeToModel(prof, route, instruction) {
     if (route === "content") return prof.content;
@@ -749,6 +785,8 @@
   // ------------------------------------------------------------------ //
   function validateOps(rawOps, ctx) {
     var ops = [], invalid = [];
+    var notesDropped = 0;
+    var notesOff = !(SK.cfg && SK.cfg.generateNotes);
     (rawOps || []).forEach(function (op, index) {
       if (!op || typeof op !== "object") { invalid.push({ op: op, reason: "not an object" }); return; }
       var t = op.type;
@@ -774,7 +812,7 @@
           body = op.body.split(/\r|\n/);
         }
         out.body = body;
-        out.notes = typeof op.notes === "string" ? op.notes : null;
+        out.notes = notesOff ? null : (typeof op.notes === "string" ? op.notes : null);
         out.after = typeof op.after === "number" ? op.after : null;
       } else if (t === "edit_slide") {
         if (!slideOk(op.slide)) { bad("bad slide index"); return; }
@@ -784,7 +822,7 @@
         if (Array.isArray(op.body)) { body2 = []; op.body.forEach(function (b) { if (b != null) body2.push(String(b)); }); }
         else if (typeof op.body === "string" && op.body.length) body2 = op.body.split(/\r|\n/);
         out.body = body2;
-        out.notes = typeof op.notes === "string" ? op.notes : null;
+        out.notes = notesOff ? null : (typeof op.notes === "string" ? op.notes : null);
         if (out.title === null && out.body === null && out.notes === null) { bad("nothing to change (all fields null)"); return; }
       } else if (t === "replace_text") {
         if (!slideOk(op.slide)) { bad("bad slide index"); return; }
@@ -792,6 +830,7 @@
         if (typeof op.text !== "string") { bad("missing text"); return; }
         out.slide = op.slide; out.shape = op.shape; out.text = op.text;
       } else if (t === "set_notes") {
+        if (notesOff) { notesDropped++; return; } // speaker-notes generation disabled
         if (!slideOk(op.slide)) { bad("bad slide index"); return; }
         if (typeof op.notes !== "string" || !op.notes) { bad("missing notes"); return; }
         out.slide = op.slide; out.notes = op.notes;
@@ -804,7 +843,7 @@
       }
       ops.push(out);
     });
-    return { ops: ops, invalid: invalid };
+    return { ops: ops, invalid: invalid, notesDropped: notesDropped };
   }
 
   function approvalMode(opType) {
@@ -996,15 +1035,17 @@
     ctxPromise.then(function (ctx) {
       SK.lastCtx = ctx;
       var sys = SYSTEM_PROMPT + "\nHost: " + (SK.sim ? "SlideKick simulator" : SK.deck.capabilities().host);
+      if (!(SK.cfg && SK.cfg.generateNotes)) sys += "\n" + NOTES_OFF_RULE;
       var user = (ctx ? formatContext(ctx) : "(no deck context requested)") + "\n\nUSER REQUEST:\n" + instruction;
       var messages = [
         { role: "system", content: sys },
-        { role: "user", content: user },
-      ];
+      ].concat(SK.history.slice(-(HISTORY_MAX_EXCHANGES * 2)))
+       .concat([{ role: "user", content: user }]);
       dbg("prompt", { profile: prof.name, route: route, model: ref.model, connection: ref.connection, instruction: instruction, hadContext: !!ctx, messages: messages });
       setStatus("Asking " + ref.model + " (via " + ref.connection + ")…", "busy");
       return apiJson("/api/chat", "POST", { connection: ref.connection, model: ref.model, messages: messages }).then(function (resp) {
         dbg("response", { text: resp.text, elapsedMs: resp.elapsedMs });
+        SK.lastModelText = { text: resp.text };
         var parsed = tryParse(resp.text);
         if (!parsed.ok) {
           setStatus("Model output unclear - silently re-asking for clean JSON…", "busy");
@@ -1015,12 +1056,14 @@
           dbg("repair.request", {});
           return apiJson("/api/chat", "POST", { connection: ref.connection, model: ref.model, messages: repair }).then(function (resp2) {
             dbg("repair.response", { text: resp2.text, elapsedMs: resp2.elapsedMs });
+            SK.lastModelText = { text: resp2.text };
             return tryParse(resp2.text);
           });
         }
         return parsed;
       }).then(function (parsed) {
         renderParsed(parsed, ctx, instruction);
+        pushHistory(instruction, (SK.lastModelText && SK.lastModelText.text) || parsed.text || "");
       });
     }).catch(function (err) {
       var msg = err && err.friendly ? err.message : (err && err.message) || String(err);
@@ -1085,7 +1128,8 @@
       var autoBox = document.createElement("div");
       autoBox.className = "opsbox";
       var autoH = document.createElement("h3");
-      autoH.textContent = "Auto-applied " + validation.ops.length + " action(s) (auto-apply)";
+      autoH.textContent = "Auto-applied " + validation.ops.length + " action(s) (auto-apply)" +
+        (validation.notesDropped ? " - " + validation.notesDropped + " notes action(s) skipped (setting off)" : "");
       autoBox.appendChild(autoH);
       var autoResult = document.createElement("div");
       autoBox.appendChild(autoResult);
@@ -1263,10 +1307,12 @@
     discardBtn.textContent = "Discard";
     btnrow.appendChild(applyBtn);
     btnrow.appendChild(discardBtn);
-    if (denyOps || invalidOps) {
+    if (denyOps || invalidOps || validation.notesDropped) {
       var info = document.createElement("span");
       info.className = "opnote";
-      info.textContent = (denyOps ? denyOps + " blocked, " : "") + (invalidOps ? invalidOps + " invalid, " : "") + (autoOps + denyOps + invalidOps ? "rest not applied" : "");
+      info.textContent = (denyOps ? denyOps + " blocked, " : "") + (invalidOps ? invalidOps + " invalid, " : "") +
+        (validation.notesDropped ? validation.notesDropped + " notes action(s) skipped (Generate speaker notes is off), " : "") +
+        (autoOps + denyOps + invalidOps + validation.notesDropped ? "rest not affected" : "");
       btnrow.appendChild(info);
     }
     box.appendChild(btnrow);
@@ -1637,6 +1683,7 @@
     });
     table.innerHTML = rows.join("");
     $("settings-debug").checked = !!SK.cfg.debug;
+    $("settings-notes").checked = !!SK.cfg.generateNotes;
     $("debug-path").textContent = SK.cfg.configPath.replace(/config\.json$/, "logs") + "/debug-YYYY-MM-DD.log";
   }
 
@@ -1646,8 +1693,8 @@
       var el = document.querySelector('input[name="appr-' + t + '"]:checked');
       approvals[t] = el ? el.value : "confirm";
     });
-    apiJson("/api/settings", "PUT", { approvals: approvals }).then(function () {
-      setFormMsg($("settings-msg"), "Approval policy saved.", true);
+    apiJson("/api/settings", "PUT", { approvals: approvals, generateNotes: $("settings-notes").checked }).then(function () {
+      setFormMsg($("settings-msg"), "Approval policy + speaker-notes setting saved.", true);
       return loadConfigAndRender();
     }).catch(function (err) { setFormMsg($("settings-msg"), err.message); });
   }
@@ -1728,6 +1775,11 @@
     $("chat-run").addEventListener("click", runPrompt);
     $("chat-input").addEventListener("keydown", function (ev) {
       if ((ev.metaKey || ev.ctrlKey) && ev.key === "Enter") { ev.preventDefault(); runPrompt(); }
+    });
+    $("chat-new").addEventListener("click", function () {
+      resetHistory();
+      $("chat-output").innerHTML = "";
+      setStatus("Conversation history cleared.", "ok");
     });
     $("chat-refresh-deck").addEventListener("click", function () { updateDeckSummary(); setStatus("Deck refreshed.", ""); });
     Array.prototype.forEach.call(document.querySelectorAll("#chat-chips .chip"), function (chip) {

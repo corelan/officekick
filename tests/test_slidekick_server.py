@@ -185,6 +185,21 @@ class TestSlideKickServer(unittest.TestCase):
         st, cfg = self.S.req("/api/config")
         self.assertTrue(cfg["debug"])
 
+    def test_generate_notes_off_by_default_and_persist(self):
+        st, cfg = self.S.req("/api/config")
+        self.assertFalse(cfg["generateNotes"])  # default: no note generation
+        st, body = self.S.req("/api/settings", "PUT", {"generateNotes": True})
+        self.assertEqual(st, 200)
+        st, cfg = self.S.req("/api/config")
+        self.assertTrue(cfg["generateNotes"])
+        # persists across a cold reload of the same config file
+        from slidekick_server import Store
+        store2 = Store(self.S.store.path)
+        store2.load()
+        self.assertTrue(store2.data.get("generateNotes"))
+        st, body = self.S.req("/api/settings", "PUT", {"generateNotes": False})
+        self.assertEqual(st, 200)
+
     def test_profiles(self):
         self.S.req("/api/connections", "POST", {
             "name": "ollama-local", "type": "ollama",

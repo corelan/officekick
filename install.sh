@@ -152,13 +152,30 @@ health() { # health PORT -> prints server JSON on success; nonzero rc if unreach
 }
 
 pick_port() {
-  local p
+  local p waited=0
   # explicit choice
   if [[ -n "$PORT" ]]; then return 0; fi
+  # the previous server is SIGTERMed by launchctl unload above; wait for its
+  # listener to actually disappear (a still-bound socket means the process is
+  # exiting) - otherwise we would drift to PORT+1 while the manifest keeps PORT
+  while [[ "$(port_busy "$DEFAULT_PORT")" != "free" && "$waited" -lt 25 ]]; do
+    sleep 0.2; waited=$((waited + 1))
+  done
   # if our own server already runs on the default port, keep it (update path)
   local h
   h="$(health "$DEFAULT_PORT" 2>/dev/null || true)"
   if [[ "$h" == *SlideKick* ]]; then PORT="$DEFAULT_PORT"; return 0; fi
+  # stubborn listener (busy but not our healthy server): kill it instead of
+  # drifting to PORT+1, which would desync the manifest URLs
+  if [[ "$(port_busy "$DEFAULT_PORT")" != "free" ]]; then
+    local stale
+    stale="$(lsof -tnP -iTCP:"$DEFAULT_PORT" -sTCP:LISTEN 2>/dev/null | head -1)"
+    if [[ -n "$stale" ]]; then
+      warn "killing stale listener on port $DEFAULT_PORT (pid $stale)"
+      kill "$stale" 2>/dev/null || true
+      sleep 1
+    fi
+  fi
   [[ "$(port_busy "$DEFAULT_PORT")" == "free" ]] && PORT="$DEFAULT_PORT" && return 0
   for p in $(seq $((DEFAULT_PORT + 1)) $((DEFAULT_PORT + 19))); do
     [[ "$(port_busy "$p")" == "free" ]] && PORT="$p" && return 0

@@ -42,6 +42,7 @@
         <label class="field-inline check"><input type="checkbox" id="chat-context" checked /> include deck context</label>
         <label class="field-inline check"><input type="checkbox" id="chat-autoapply" /> auto-apply</label>
         <button id="chat-refresh-deck" class="btn subtle" type="button">Refresh deck</button>
+        <button id="chat-new" class="btn subtle" type="button" title="Clear the conversation history the AI sees">New conversation</button>
       </div>
 
       <textarea id="chat-input" rows="3"
@@ -148,6 +149,11 @@
         <b>auto</b> = apply immediately, <b>confirm</b> = apply only after you tick it in the
         preview, <b>deny</b> = blocked with a notice.</p>
       <table class="list" id="approvals-table"></table>
+      <label class="field-inline check" style="margin:8px 0 4px 0"><input type="checkbox" id="settings-notes" />
+        Generate speaker notes when creating or editing slides</label>
+      <p class="muted" style="margin:0 0 4px 0">When off (default), notes are never generated or
+        written on slides - notes actions from the model are skipped and the prompt tells the
+        model not to produce them. Turn it on here if you want notes.</p>
       <div class="row">
         <button id="settings-save" class="btn primary" type="button">Save policy</button>
       </div>

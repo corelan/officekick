@@ -103,6 +103,14 @@ SlideKick ships in two parts:
 - **Auto-apply**: the "auto-apply" checkbox in the pane applies instantly (no review
   step) when every action of a run is `auto` by approval policy; any action requiring
   approval still opens the gated preview with the Select all button.
+- **Conversation memory**: follow-up requests automatically include your recent turns
+  (last 6 exchanges, session-only) - when SlideKick answers a question, typing your
+  next request is a reply ("use the 2nd title you suggested"). **New conversation**
+  clears it. Nothing is stored on disk.
+- **Speaker notes are opt-in (off by default)**: SlideKick only generates or writes
+  speaker notes when "Generate speaker notes" is enabled in Settings. When off, the
+  model is told not to produce notes and any notes actions it returns anyway are
+  skipped and shown as such.
 
 ## Requirements
 
@@ -258,7 +266,12 @@ dedicated **SlideKick** ribbon tab is always there.
   runs where every action is `auto` by policy - if any action needs approval (or is
   blocked), the gated preview appears exactly as without it.
 
-- Notes that cannot be written automatically on older Office builds fall back to a
+- - Deck objects the add-in can create with today's Office.js: slides (with layout),
+  text, and tables (PowerPointApi 1.8 `addTable`). Native SmartArt is not supported by
+  the Office.js API - for diagram-like visuals SlideKick composes real shapes
+  (boxes/arrows), which stay editable.
+
+Notes that cannot be written automatically on older Office builds fall back to a
   copy-paste box in the pane.
 
 ## Supported requests in real life
