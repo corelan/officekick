@@ -406,6 +406,8 @@ def provider_generate_image(conn, model, prompt, size=None):
     else:
         urls = [base + "/v1/images/generations", base + "/images/generations"]
 
+    print("[image] conn=%s model=%s prompt=%r start" % (conn["name"], model, prompt[:60]), flush=True)
+    t0 = time.time()
     last_err = None
     for url in urls:
         for extra in ({"response_format": "b64_json"}, None):
@@ -438,6 +440,7 @@ def provider_generate_image(conn, model, prompt, size=None):
                 last_err = ApiError(502, "image response contained no data")
                 continue
             if items[0].get("b64_json"):
+                print("[image] conn=%s done in %.1fs (%d b64 chars)" % (conn["name"], time.time() - t0, len(items[0]["b64_json"])), flush=True)
                 return items[0]["b64_json"]
             if items[0].get("url"):
                 try:
@@ -449,6 +452,7 @@ def provider_generate_image(conn, model, prompt, size=None):
                 except Exception as exc:
                     raise ApiError(502, "could not download image url: %s" % exc)
             last_err = ApiError(502, "image response had neither b64_json nor url")
+    print("[image] conn=%s FAILED in %.1fs: %s" % (conn["name"], time.time() - t0, last_err), flush=True)
     raise last_err or ApiError(502, "image generation failed")
 
 

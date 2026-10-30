@@ -652,9 +652,17 @@ function applyOps(deck, ops, ctx) {
               "No image model on profile '" + (prof ? prof.name : "?") +
               "' - set one in Profiles (connection + model with an images API).");
           }
-          return apiJson("/api/image", "POST", {
-            connection: imgRef.connection, model: imgRef.model, prompt: op.prompt,
-          }).then(function (img) {
+          setStatus("Generating image… (often 30-90 s depending on the model)", "busy");
+          return Promise.race([
+            apiJson("/api/image", "POST", {
+              connection: imgRef.connection, model: imgRef.model, prompt: op.prompt,
+            }),
+            new Promise(function (_, rej) {
+              setTimeout(function () {
+                rej(new FriendlyError("image generation timed out after 300 s (no answer from '" + imgRef.model + "')"));
+              }, 300000);
+            }),
+          ]).then(function (img) {
             if (!img || !img.b64) throw new FriendlyError("server returned no image data");
             return deck.addImage({ b64: img.b64 }).then(function () {
               lines.push({ ok: true, text: "image inserted at end of document (" + imgRef.connection + ":" + imgRef.model + ")" });
