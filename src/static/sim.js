@@ -71,6 +71,7 @@ window.__SK_SIM__ = true;
       const out = slides.map((s, i) => ({
         idx: i,
         title: s.shapes[0] ? s.shapes[0].text : "",
+        slideWidth: 960, slideHeight: 540,
         shapes: s.shapes.map((sh, j) => ({
           idx: j,
           name: sh.name,
@@ -78,9 +79,40 @@ window.__SK_SIM__ = true;
           text: sh.text,
           isTitle: sh.isTitle,
           isBody: sh.isBody,
+          left: sh.left != null ? sh.left : 20,
+          top: sh.top != null ? sh.top : 20,
+          width: sh.width != null ? sh.width : 300,
+          height: sh.height != null ? sh.height : 50,
+          table: sh.table || null,
         })),
       }));
       return { slideCount: slides.length, slides: out, selected: selected.slice(), host: "simulator" };
+    }
+    async addTable({ values, slide, geometry }) {
+      const i = slide;
+      if (!slides[i]) throw new FriendlyError("Slide " + i + " does not exist");
+      geometry = geometry || {};
+      slides[i].shapes.push({
+        name: "Table " + values.length + "x" + values[0].length,
+        type: "table",
+        text: "",
+        isTitle: false,
+        isBody: false,
+        left: geometry.left != null ? geometry.left : 40,
+        top: geometry.top != null ? geometry.top : 150,
+        width: geometry.width != null ? geometry.width : 600,
+        height: 30 * values.length,
+        table: { rows: values.length, cols: values[0].length, values: values },
+      });
+      return { ok: true };
+    }
+    async moveShape(slideIndex, shapeIndex, geometry) {
+      const s = slides[slideIndex];
+      if (!s || !s.shapes[shapeIndex]) throw new FriendlyError("Shape " + shapeIndex + " on slide " + slideIndex + " not available");
+      ["left", "top", "width", "height"].forEach((p) => {
+        if (geometry[p] != null) s.shapes[shapeIndex][p] = geometry[p];
+      });
+      return { ok: true };
     }
     async addSlide({ layout, title, body, notes }) {
       const lay = normalizeLayout(layout);

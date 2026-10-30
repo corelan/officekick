@@ -44,6 +44,8 @@
     edit_slide: { label: "edit slide", hint: "Replaces title / body / speaker notes of an existing slide." },
     replace_text: { label: "replace text", hint: "Rewrites the text of one shape in place." },
     set_notes: { label: "set notes", hint: "Writes speaker notes on a slide." },
+    create_table: { label: "create table", hint: "Adds a table (new slide when slide is empty; position/size in points)." },
+    move_shape: { label: "move/resize shape", hint: "Sets left/top/width/height (points) of one shape - design passes use this." },
     apply_layout: { label: "apply layout", hint: "Applies a different slide layout (design change, text kept)." },
     delete_slide: { label: "delete slide", hint: "Removes a slide from the deck." },
   };
@@ -224,6 +226,8 @@
     '- {"type":"edit_slide","slide":N,"title":"..."|null,"body":[...]|null,"notes":"..."|null} (null means: leave unchanged)',
     '- {"type":"replace_text","slide":N,"shape":N,"text":"..."} (reword one shape; N refers to the shape numbers listed for that slide)',
     '- {"type":"set_notes","slide":N,"notes":"..."}',
+    '- {"type":"create_table","slide":N|null,"values":[["h1","h2"],["x","y"]],"left":40,"top":150,"width":640} (all cells strings, rows rectangular; slide null = new title slide first; left/top/width optional points)',
+    '- {"type":"move_shape","slide":N,"shape":N,"left":40,"top":150,"width":300,"height":60} (points; only the fields to change; keep shapes inside the slide bounds shown in the outline)',
     '- {"type":"apply_layout","slide":N,"layout":"title_content|title_only|section|blank"} (only when the user asks for layout/design changes)',
     '- {"type":"delete_slide","slide":N}',
     "",
@@ -232,6 +236,7 @@
     "- One body element = one bullet/paragraph; keep bullets short unless told otherwise.",
     "- Reword/tighten requests: only rewrite wording, keep the meaning and slide count.",
     "- If the request is a question/explanation/brainstorm rather than a deck change, use format A.",
+    "- Design passes ('design this deck/slide', improve alignment/balance): emit ops (apply_layout, move_shape, create_table) computed from the geometry in the outline; when the user asks only for advice, use format A.",
   ].join("\n");
 
   var NOTES_OFF_RULE =
@@ -250,7 +255,7 @@
   var HISTORY_MAX_CHARS = 2000;  // per stored message
 
   var CONTENT_ROUTE_RE = new RegExp(
-    "\\b(slide|slides|deck|bullet|bullets|reword|rewrite|rephrase|outline|notes?|title|titles|add|create|make|generate|tighten|restructure|expand|insert|append)\\b", "i"
+    "\\b(slide|slides|deck|bullet|bullets|reword|rewrite|rephrase|outline|notes?|title|titles|add|create|make|generate|tighten|restructure|expand|insert|append|design|align|balance|spacing|table|tables|chart)\\b", "i"
   );
 
   function historyCap(text) {
@@ -366,6 +371,27 @@
   // PlaceholderFormat (PowerPointApi 1.8) is the reliable, localization-safe way
   // to find title/body placeholders. It throws when loaded on non-placeholder
   // shapes, so gate every load on shape.type === "placeholder" and probe once.
+  OfficeDeck.prototype._probeGeometry = function () {
+    var self = this;
+    if (this._geoApi !== undefined) return Promise.resolve();
+    var supported = false;
+    try { supported = Office.context.requirements.isSetSupported("PowerPointApi", "1.4"); } catch (e) { /* optimistic */ }
+    if (!supported) { this._geoApi = false; return Promise.resolve(); }
+    return this.run("probeGeometry", function (ctx) {
+      var slides = ctx.presentation.slides;
+      slides.load("items/id");
+      return ctx.sync().then(function () {
+        if (!slides.items.length) { self._geoApi = true; return null; }
+        var shapes = slides.items[0].shapes;
+        shapes.load("items/left,items/width");
+        return ctx.sync().then(function () {
+          self._geoApi = true;
+          return null;
+        });
+      });
+    }).catch(function () { self._geoApi = false; });
+  };
+
   OfficeDeck.prototype._probePlaceholders = function () {
     var self = this;
     if (this._pfApi !== undefined) return Promise.resolve();
@@ -401,6 +427,7 @@
     var pre = Promise.resolve();
     if (this._textApi === undefined) pre = pre.then(function () { return self._probeTextApi(); });
     if (this._pfApi === undefined) pre = pre.then(function () { return self._probePlaceholders(); });
+    if (this._geoApi === undefined) pre = pre.then(function () { return self._probeGeometry(); });
     return pre.then(function () {
       var wantText = self._textApi !== false;
       var wantPf = self._pfApi === true;
@@ -413,7 +440,8 @@
           var count = slides.items.length;
           var n = Math.min(count, limit);
           for (var i = 0; i < n; i++) {
-            slides.items[i].shapes.load("items/type,items/name,items/id");
+            slides.items[i].shapes.load("items/type,items/name,items/id" +
+              (self._geoApi ? ",items/left,items/top,items/width,items/height" : ""));
           }
           return ctx.sync().then(function () {
             var data = [];
@@ -425,10 +453,15 @@
               var slideData = { idx: i2, shapes: [] };
               for (var j = 0; j < shpProxies.length; j++) {
                 var sh = shpProxies[j];
-                slideData.shapes.push({
+                var entry = {
                   idx: j, name: sh.name || "",
                   type: sh.type || "", text: undefined, ptype: undefined,
-                });
+                };
+                if (self._geoApi) {
+                  entry.left = sh.left; entry.top = sh.top;
+                  entry.width = sh.width; entry.height = sh.height;
+                }
+                slideData.shapes.push(entry);
                 flat.push(slideData.shapes[slideData.shapes.length - 1]);
                 if (wantText) {
                   var tf = sh.getTextFrameOrNullObject();
@@ -594,7 +627,39 @@
     });
   };
 
-  OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceholderText(i, "title", text); };
+    OfficeDeck.prototype.addTable = function (op) {
+    var self = this;
+    // capability gate: PowerPointApi 1.8
+    var tblOk = false;
+    try { tblOk = Office.context.requirements.isSetSupported("PowerPointApi", "1.8"); } catch (e) { /* ignore */ }
+    if (!tblOk) {
+      return Promise.reject(new FriendlyError(
+        "Table creation needs PowerPointApi 1.8 - this PowerPoint build does not support it (update Microsoft 365)."));
+    }
+    return this.run("addTable", function (ctx) {
+      var slide = ctx.presentation.slides.getItemAt(op.slide);
+      var opt = { values: op.values };
+      if (op.geometry && op.geometry.left != null) opt.left = op.geometry.left;
+      if (op.geometry && op.geometry.top != null) opt.top = op.geometry.top;
+      if (op.geometry && op.geometry.width != null) opt.width = op.geometry.width;
+      slide.shapes.addTable(op.values.length, op.values[0].length, opt);
+      return ctx.sync().then(function () {
+        return { ok: true, newIndex: op.slide };
+      });
+    });
+  };
+
+  OfficeDeck.prototype.moveShape = function (slideIndex, shapeIndex, geometry) {
+    return this.run("moveShape", function (ctx) {
+      var shape = ctx.presentation.slides.getItemAt(slideIndex).shapes.getItemAt(shapeIndex);
+      ["left", "top", "width", "height"].forEach(function (p) {
+        if (geometry[p] != null) shape[p] = geometry[p];
+      });
+      return ctx.sync().then(function () { return { ok: true }; });
+    });
+  };
+
+OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceholderText(i, "title", text); };
   OfficeDeck.prototype.setSlideBody = function (i, lines) { return this._setPlaceholderText(i, "body", lines); };
 
   OfficeDeck.prototype._setPlaceholderText = function (i, role, lines) {
@@ -834,6 +899,38 @@
         if (!slideOk(op.slide)) { bad("bad slide index"); return; }
         if (typeof op.notes !== "string" || !op.notes) { bad("missing notes"); return; }
         out.slide = op.slide; out.notes = op.notes;
+      } else if (t === "create_table") {
+        var vals = Array.isArray(op.values) ? op.values : null;
+        if (!vals) { bad("missing values (2D array)"); return; }
+        var rowsT = [];
+        var cols = 0;
+        for (var vi = 0; vi < vals.length; vi++) {
+          var rowT = vals[vi];
+          if (!Array.isArray(rowT)) { bad("values must be an array of arrays"); return; }
+          if (vi === 0) cols = rowT.length;
+          if (rowT.length !== cols || cols < 1) { bad("values rows must be rectangular"); return; }
+          rowsT.push(rowT.map(function (c) { return c == null ? "" : String(c); }));
+        }
+        if (op.slide != null && !slideOk(op.slide)) { bad("bad slide index"); return; }
+        out.slide = typeof op.slide === "number" ? op.slide : null;
+        out.title = typeof op.title === "string" ? op.title : "";
+        out.values = rowsT;
+        var geoT = {};
+        ["left", "top", "width", "height"].forEach(function (p2) {
+          if (typeof op[p2] === "number" && op[p2] >= 0) geoT[p2] = op[p2];
+        });
+        out.geometry = geoT;
+      } else if (t === "move_shape") {
+        if (!slideOk(op.slide)) { bad("bad slide index"); return; }
+        var shapeInCtx = ctx && ctx.slides[op.slide] &&
+          (ctx.slides[op.slide].shapes || []).some(function (s) { return s.idx === op.shape; });
+        if (!shapeInCtx) { bad("shape " + op.shape + " not in the context list for slide " + op.slide); return; }
+        var anyM = false, geoM = {};
+        ["left", "top", "width", "height"].forEach(function (p3) {
+          if (typeof op[p3] === "number") { geoM[p3] = op[p3]; anyM = true; }
+        });
+        if (!anyM) { bad("nothing to change (no left/top/width/height)"); return; }
+        out.slide = op.slide; out.shape = op.shape; out.geometry = geoM;
       } else if (t === "apply_layout") {
         if (!slideOk(op.slide)) { bad("bad slide index"); return; }
         out.slide = op.slide; out.layout = normalizeLayout(op.layout);
@@ -873,6 +970,13 @@
         return "Slide " + op.slide + ", shape " + op.shape + ": -> " + op.text;
       case "set_notes":
         return "Slide " + op.slide + slideTitle(op.slide) + ": speaker notes (" + op.notes.length + " chars)";
+      case "create_table":
+        return (op.slide != null ? "Slide " + op.slide + slideTitle(op.slide) : "New slide") +
+          ': table ' + op.values.length + "x" + op.values[0].length +
+          (op.geometry && op.geometry.left != null ? " @ " + Math.round(op.geometry.left) + "," + Math.round(op.geometry.top) : "");
+      case "move_shape":
+        return "Slide " + op.slide + ", shape " + op.shape + ": " +
+          Object.keys(op.geometry).map(function (p) { return p + "->" + Math.round(op.geometry[p]); }).join(" ");
       case "apply_layout":
         return "Slide " + op.slide + slideTitle(op.slide) + ": layout -> " + op.layout;
       case "delete_slide":
@@ -932,6 +1036,24 @@
         case "replace_text":
           return deck.setShapeText(cur, op.shape, op.text).then(function () {
             lines.push({ ok: true, text: "replace text on slide " + op.slide + " shape " + op.shape });
+          });
+        case "create_table": {
+          var runTable = function (slideIndex) {
+            return deck.addTable({ values: op.values, slide: slideIndex, geometry: op.geometry }).then(function (r) {
+              lines.push({ ok: true, text: "create table " + op.values.length + "x" + op.values[0].length + " -> " +
+                (op.slide !== undefined && op.slide !== null ? "slide " + op.slide : "new slide " + (r && r.newIndex != null ? r.newIndex : slideIndex)) });
+            });
+          };
+          if (op.slide !== undefined && op.slide !== null) return runTable(cur);
+          return deck.addSlide({ layout: "title_only", title: op.title || "" }).then(function (created) {
+            lines.push({ ok: true, text: "create slide -> appended at index " + created.index + " (for table)" });
+            return runTable(created.index);
+          });
+        }
+        case "move_shape":
+          return deck.moveShape(cur, op.shape, op.geometry).then(function () {
+            lines.push({ ok: true, text: "move shape " + op.shape + " on slide " + op.slide + ": " +
+              Object.keys(op.geometry).map(function (p) { return p + "->" + Math.round(op.geometry[p]); }).join(" ") });
           });
         case "set_notes":
           return deck.setNotes(cur, op.notes).then(function (nr) {
@@ -1712,7 +1834,7 @@
   // ------------------------------------------------------------------ //
   function renderAbout() {
     var kv = [
-      ["SlideKick add-in", "0.1.0"],
+      ["SlideKick add-in", SK.cfg ? "v" + (SK.cfg.version || "0.1.3") : "0.1.3"],
       ["Server", "v" + (SK.cfg ? SK.cfg.version || "0.1.0" : "?") + " on 127.0.0.1:" + (SK.cfg ? SK.cfg.port : "?")],
       ["Config file", SK.cfg ? SK.cfg.configPath : "?"],
       ["Connections", SK.cfg ? (SK.cfg.connections || []).length : "?"],

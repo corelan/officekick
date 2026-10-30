@@ -27,7 +27,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 APP = "SlideKick"
-VERSION = "0.1.2"
+VERSION = "0.1.3"
 
 CONNECTION_TYPES = (
     "openai",
@@ -56,6 +56,8 @@ DEFAULT_APPROVALS = {
     "edit_slide": "auto",
     "replace_text": "auto",
     "set_notes": "auto",
+    "create_table": "auto",
+    "move_shape": "auto",
     "apply_layout": "confirm",
     "delete_slide": "confirm",
 }

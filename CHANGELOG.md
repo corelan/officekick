@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.1.3
+
+- New ops: `create_table` (PowerPointApi 1.8 addTable; new title slide when slide is
+  omitted; position/size in points) and `move_shape` (left/top/width/height in points).
+  Both default to `auto` in the approval policy (configurable in Settings like the rest).
+- "Design this deck": AI design passes over the deck layout/alignment/balance; the
+  deck outline now includes shape geometry (and slide size) so the model can compute
+  concrete moves. Microsoft's built-in Designer/Design Ideas cannot be invoked by
+  add-ins - the chip and 'design ...' instructions run SlideKick's own AI pass.
+- Installer: port probing now ignores lingering CLOSE_WAIT sockets (lsof-listener
+  first, then a SO_REUSEADDR bind probe matching the server's own bind); the drifted
+  port desync between manifest and server is gone for good.
+- Manifest version bumped (1.0.1.0) so Office re-registers the updated pane cleanly;
+  the About tab reads its version from the server.
 ## 0.1.2
 
 - Fixed: the "auto-apply" checkbox now actually works - all-`auto` runs apply

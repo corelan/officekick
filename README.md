@@ -151,6 +151,14 @@ telling you to quit, re-run, reopen). Your connections/profiles/policy live in
 `~/.slidekick/config.json` and are preserved. Quit PowerPoint first for the
 cache-clear + ribbon refresh to take effect, then reopen.
 
+
+**Design on demand**: use the "Design this deck" chip (or type e.g. "design this deck",
+"rebalance slide 3", "align everything to the left"). SlideKick sends the slide geometry
+(shape positions/sizes, points) and the model returns `move_shape` / `apply_layout` /
+`create_table` ops, which pass through the same approval gate. Note: Microsoft's built-in
+*Designer* (Design Ideas) cannot be invoked by add-ins - this is SlideKick's own AI design
+pass, and its edits stay fully editable in PowerPoint.
+
 **In PowerPoint (macOS)**: open a deck, then **Home tab -> Add-ins** (the dropdown
 button) -> **Developer Add-ins** -> **Corelan SlideKick**. The task pane opens on the
 right and the Add-ins entry stays available for every session. (Run the installer
@@ -255,6 +263,8 @@ dedicated **SlideKick** ribbon tab is always there.
   | edit slide | replace title / body / notes of an existing slide | auto |
   | replace text | reword one shape in place (the "reword" path) | auto |
   | set notes | write speaker notes | auto |
+| create table | adds a table (optionally on a new title slide; position/size in points) | auto |
+| move/resize shape | sets left/top/width/height (points) of one shape | auto |
   | apply layout | switch a slide's layout (design change, text kept) | confirm |
   | delete slide | remove a slide | confirm |
   | reply | conversational answer - never touches the deck | n/a |
@@ -266,10 +276,10 @@ dedicated **SlideKick** ribbon tab is always there.
   runs where every action is `auto` by policy - if any action needs approval (or is
   blocked), the gated preview appears exactly as without it.
 
-- - Deck objects the add-in can create with today's Office.js: slides (with layout),
-  text, and tables (PowerPointApi 1.8 `addTable`). Native SmartArt is not supported by
-  the Office.js API - for diagram-like visuals SlideKick composes real shapes
-  (boxes/arrows), which stay editable.
+- - Deck objects the add-in can create with today's Office.js: slides (with layout), text,
+  tables (PowerPointApi 1.8 `addTable`), and shape geometry edits (left/top/width/height in
+  points). Charts have no PowerPoint.js creation API, and native SmartArt is not reachable
+  from add-ins: "Design this deck" instead composes editable shapes/tables via AI.
 
 Notes that cannot be written automatically on older Office builds fall back to a
   copy-paste box in the pane.

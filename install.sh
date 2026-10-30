@@ -130,9 +130,19 @@ resolve_containers() {
   fi
 }
 
-port_busy() { "$PY" - "$1" <<'PYEOF'
+port_busy() {
+  # authoritative check first: is anything LISTENING?
+  if lsof -nP -iTCP:"$1" -sTCP:LISTEN 2>/dev/null | grep -q LISTEN; then
+    echo busy
+    return 0
+  fi
+  # no listener: lingering CLOSE_WAIT/FIN_WAIT sockets from the previous
+  # server can still fail a plain bind - probe with SO_REUSEADDR, which is
+  # exactly what the SlideKick server itself uses, so it matches reality
+  "$PY" - "$1" <<'PYEOF'
 import socket, sys
 s = socket.socket()
+s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 try:
     s.bind(("127.0.0.1", int(sys.argv[1])))
     print("free")
