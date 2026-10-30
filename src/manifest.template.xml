@@ -41,9 +41,10 @@
             <Description resid="GetStarted.Description"/>
             <LearnMoreUrl resid="GetStarted.LearnMoreUrl"/>
           </GetStarted>
+          <FunctionFile resid="Commands.Url"/>
           <ExtensionPoint xsi:type="PrimaryCommandSurface">
-            <CustomTab id="Corelan.SlideKick.Tab">
-              <Group id="Corelan.SlideKick.Group">
+            <OfficeTab id="TabHome">
+              <Group id="Corelan.SlideKick.HomeGroup">
                 <Label resid="Group.Label"/>
                 <Icon>
                   <bt:Image size="16" resid="Icon.16"/>
@@ -67,8 +68,7 @@
                   </Action>
                 </Control>
               </Group>
-              <Label resid="Tab.Label"/>
-            </CustomTab>
+            </OfficeTab>
           </ExtensionPoint>
         </DesktopFormFactor>
       </Host>
@@ -81,6 +81,7 @@
       </bt:Images>
       <bt:Urls>
         <bt:Url id="Taskpane.Url" DefaultValue="http://localhost:__PORT__/taskpane.html"/>
+        <bt:Url id="Commands.Url" DefaultValue="http://localhost:__PORT__/commands.html"/>
         <bt:Url id="GetStarted.LearnMoreUrl" DefaultValue="https://github.com/corelan/slidekick"/>
       </bt:Urls>
       <bt:ShortStrings>
