@@ -51,4 +51,6 @@ Key design points:
   attach the stored key server-side.
 - **Sideload path on macOS** (documented by Microsoft): copy the classic XML manifest
   to `~/Library/Containers/com.microsoft.Powerpoint/Data/Documents/wef/`; the add-in
-  appears under Home -> Add-ins after restarting PowerPoint.
+  appears under Home -> Add-ins after restarting PowerPoint. On Windows the same
+  manifest is registered as a per-user trusted catalog
+  (`HKCU\...\Office\16.0\Wef\TrustedCatalogs`) - see `install.ps1`.

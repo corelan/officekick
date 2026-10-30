@@ -47,12 +47,15 @@ machine.
 
 ## Requirements
 
-- macOS with Microsoft PowerPoint for Mac (Microsoft 365). Slide editing needs
-  PowerPointApi ~1.8 (PowerPoint 16.96 / 2504 or newer - current 365 builds are fine).
-- python3 >= 3.8 (Apple Command Line Tools or Homebrew).
-- An AI provider reachable from your Mac (cloud API or local Ollama/llama-server).
+- macOS (install.sh) or Windows 10/11 (install.ps1)
+- Microsoft PowerPoint from Microsoft 365. Slide editing needs PowerPointApi ~1.8
+  (Mac 16.96 / 2504+, Windows 2504+ builds; perpetual/LTSC editions run the pane
+  read-only). A current build is standard on Microsoft 365.
+- python3 >= 3.8 (Apple Command Line Tools or Homebrew; on Windows python.org
+  or the py launcher)
+- An AI provider reachable from your machine (cloud API or local Ollama/llama-server).
 
-## Install / update
+## Install / update (macOS)
 
 ```bash
 git clone https://github.com/corelan/slidekick.git
@@ -81,6 +84,46 @@ it re-reads the manifest.
 
 **In PowerPoint**: open a deck, then **Home tab -> Add-ins -> Corelan SlideKick**. The task pane
 opens on the right.
+
+## Install on Windows (PowerShell)
+
+Same add-in, same server, same config format and Settings - only the registration
+layer differs (per-user trusted catalog + Scheduled Task instead of Wef folder +
+LaunchAgent). No administrator rights required.
+
+```powershell
+git clone https://github.com/corelan/slidekick.git
+cd slidekick
+.\install.ps1
+```
+
+The installer:
+
+1. finds python3 (>= 3.8; python.org install or the `py` launcher - the Microsoft
+   Store stub is skipped) and locates `POWERPNT.EXE` (App Paths registry or the
+   Office16 directories),
+2. deploys to `%LOCALAPPDATA%\SlideKick` via robocopy (update = idempotent), config
+   lives in `%USERPROFILE%\.slidekick` (same as macOS),
+3. renders the manifest and registers its folder as a per-user trusted catalog
+   (`HKCU\Software\Microsoft\Office\16.0\Wef\TrustedCatalogs`),
+4. registers Scheduled Task `SlideKickServer` (logon trigger, restart-on-crash); if
+   task registration is blocked it falls back to a Startup-folder .cmd,
+5. starts the server now and health-checks it (loopback only - no firewall prompt).
+
+Useful flags: `-Port N`, `-Dev`, `-NoScheduledTask`, `-Action status`, `-Action run`,
+`-Action uninstall [-Purge]`.
+
+**In PowerPoint (Windows)**: quit and reopen PowerPoint, then **Insert -> My Add-ins
+(dropdown) -> SHARED FOLDER -> Corelan SlideKick -> Add**.
+
+**Windows notes**:
+
+- Needs a current Microsoft 365 build (WebView2 add-in runtime). Old perpetual builds
+  whose add-in runtime is IE11-based cannot load the pane.
+- Perpetual/LTSC editions cap below PowerPointApi 1.8: the pane runs read-only there
+  (reading and advice work, edits are refused with a clear message).
+- Title/body placeholders are detected via `placeholderFormat` on modern builds
+  (localization-safe, also used on macOS); older builds fall back to shape names.
 
 ## First run
 

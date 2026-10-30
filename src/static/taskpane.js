@@ -213,6 +213,7 @@
   function OfficeDeck() {
     this.office = true;
     this._textApi = undefined; // undefined = unknown, true/false once probed
+    this._pfApi = undefined;   // placeholderFormat detection (PowerPointApi 1.8)
     this._caps = null;
   }
 
@@ -225,6 +226,7 @@
     return {
       text: this._textApi !== false,
       textProbed: this._textApi === true || this._textApi === false,
+      placeholders: this._pfApi === true,
       selection: sel,
       host: "PowerPoint " + version,
     };
@@ -283,12 +285,47 @@
     );
   };
 
+  // PlaceholderFormat (PowerPointApi 1.8) is the reliable, localization-safe way
+  // to find title/body placeholders. It throws when loaded on non-placeholder
+  // shapes, so gate every load on shape.type === "placeholder" and probe once.
+  OfficeDeck.prototype._probePlaceholders = function () {
+    var self = this;
+    if (this._pfApi !== undefined) return Promise.resolve();
+    return this.run("probePlaceholders", function (ctx) {
+      var slides = ctx.presentation.slides;
+      slides.load("items/id");
+      return ctx.sync().then(function () {
+        if (!slides.items.length) return "skip";
+        var shapes = slides.items[0].shapes;
+        shapes.load("items/type,items/name,items/id");
+        return ctx.sync().then(function () {
+          var ph = null;
+          shapes.items.forEach(function (sh) {
+            if (sh.type === "placeholder" && !ph) ph = sh;
+          });
+          if (!ph) return "skip"; // nothing to probe; keep name heuristics
+          ph.load("placeholderFormat");
+          return ctx.sync().then(function () {
+            ph.placeholderFormat.load("type");
+            return ctx.sync();
+          });
+        });
+      });
+    }).then(
+      function (res) { if (res !== "skip") self._pfApi = true; },
+      function () { self._pfApi = false; } // older host: fall back to names
+    );
+  };
+
   OfficeDeck.prototype.getContext = function (opts) {
     opts = opts || {};
     var self = this;
-    var pre = this._textApi === undefined ? this._probeTextApi() : Promise.resolve();
+    var pre = Promise.resolve();
+    if (this._textApi === undefined) pre = pre.then(function () { return self._probeTextApi(); });
+    if (this._pfApi === undefined) pre = pre.then(function () { return self._probePlaceholders(); });
     return pre.then(function () {
       var wantText = self._textApi !== false;
+      var wantPf = self._pfApi === true;
       var limit = Math.min(opts.maxSlides || 60, 200);
       return self.run("getContext", function (ctx) {
         var pres = ctx.presentation;
@@ -302,53 +339,69 @@
           }
           return ctx.sync().then(function () {
             var data = [];
+            var flat = [];     // same order as data shapes, flattened
             var tfs = [];
+            var phList = [];
             for (var i2 = 0; i2 < n; i2++) {
               var shpProxies = slides.items[i2].shapes.items;
               var slideData = { idx: i2, shapes: [] };
               for (var j = 0; j < shpProxies.length; j++) {
+                var sh = shpProxies[j];
                 slideData.shapes.push({
-                  idx: j, name: shpProxies[j].name || "",
-                  type: shpProxies[j].type || "", text: undefined,
+                  idx: j, name: sh.name || "",
+                  type: sh.type || "", text: undefined, ptype: undefined,
                 });
-                if (!wantText) continue;
-                var tf = shpProxies[j].getTextFrameOrNullObject();
-                tf.load("isNullObject,hasText");
-                tfs.push({ tf: tf, shape: slideData.shapes[j] });
+                flat.push(slideData.shapes[slideData.shapes.length - 1]);
+                if (wantText) {
+                  var tf = sh.getTextFrameOrNullObject();
+                  tf.load("isNullObject,hasText");
+                  tfs.push({ tf: tf, shape: flat[flat.length - 1] });
+                }
+                if (wantPf && sh.type === "placeholder") {
+                  sh.load("placeholderFormat");
+                  phList.push({ sh: sh, flatIdx: flat.length - 1 });
+                }
               }
               data.push(slideData);
             }
-            var afterTf = wantText ? ctx.sync() : Promise.resolve();
-            return afterTf.then(function () {
-              var trs = [];
-              tfs.forEach(function (entry) {
-                if (!entry.tf.isNullObject && entry.tf.hasText) {
-                  entry.tf.textRange.load("text");
-                  trs.push(entry);
-                }
-              });
-              var afterTr = wantText ? ctx.sync() : Promise.resolve();
-              return afterTr.then(function () {
-                trs.forEach(function (entry) { entry.shape.text = entry.tf.textRange.text || ""; });
-                if (wantText) {
-                  data.forEach(function (s) {
-                    s.shapes.forEach(function (sh) { if (sh.text === undefined) sh.text = ""; });
+            var afterLoads = (wantText || wantPf) ? ctx.sync() : Promise.resolve();
+            return afterLoads.then(function () {
+              phList.forEach(function (e) { e.sh.placeholderFormat.load("type"); });
+              var afterPf = wantPf ? ctx.sync() : Promise.resolve();
+              return afterPf.then(function () {
+                phList.forEach(function (e) {
+                  flat[e.flatIdx].ptype = e.sh.placeholderFormat.type;
+                });
+                var trs = [];
+                tfs.forEach(function (entry) {
+                  if (!entry.tf.isNullObject && entry.tf.hasText) {
+                    entry.tf.textRange.load("text");
+                    trs.push(entry);
+                  }
+                });
+                var afterTr = wantText ? ctx.sync() : Promise.resolve();
+                return afterTr.then(function () {
+                  trs.forEach(function (entry) { entry.shape.text = entry.tf.textRange.text || ""; });
+                  if (wantText) {
+                    data.forEach(function (s) {
+                      s.shapes.forEach(function (sh) { if (sh.text === undefined) sh.text = ""; });
+                    });
+                  }
+                }).then(function () {
+                  var selected = [];
+                  var selSupported = false;
+                  try { selSupported = !!pres.getSelectedSlides; } catch (e) { selSupported = false; }
+                  if (!selSupported) return { count: count, data: data, selected: [] };
+                  var sel = pres.getSelectedSlides();
+                  sel.load("items/id");
+                  return ctx.sync().then(function () {
+                    var idToIdx = {};
+                    for (var i3 = 0; i3 < n; i3++) idToIdx[slides.items[i3].id] = i3;
+                    (sel.items || []).forEach(function (s) {
+                      if (idToIdx[s.id] !== undefined) selected.push(idToIdx[s.id]);
+                    });
+                    return { count: count, data: data, selected: selected };
                   });
-                }
-              }).then(function () {
-                var selected = [];
-                var selSupported = false;
-                try { selSupported = !!pres.getSelectedSlides; } catch (e) { selSupported = false; }
-                if (!selSupported) return { count: count, data: data, selected: [] };
-                var sel = pres.getSelectedSlides();
-                sel.load("items/id");
-                return ctx.sync().then(function () {
-                  var idToIdx = {};
-                  for (var i3 = 0; i3 < n; i3++) idToIdx[slides.items[i3].id] = i3;
-                  (sel.items || []).forEach(function (s) {
-                    if (idToIdx[s.id] !== undefined) selected.push(idToIdx[s.id]);
-                  });
-                  return { count: count, data: data, selected: selected };
                 });
               });
             });
@@ -415,32 +468,44 @@
             var shapes = slide.shapes;
             shapes.load("items/type,items/name,items/id");
             return ctx.sync().then(function () {
-              var tfs = [];
-              shapes.items.forEach(function (sh) {
+              var metas = [];
+              var phList = [];
+              var wantPf = self._pfApi === true;
+              shapes.items.forEach(function (sh, j) {
+                metas.push({ sh: sh, name: sh.name || "", type: sh.type || "", ptype: undefined, tf: null });
                 var tf = sh.getTextFrameOrNullObject();
                 tf.load("isNullObject,hasText");
-                tfs.push({ tf: tf, name: sh.name || "", type: sh.type || "" });
+                metas[j].tf = tf;
+                if (wantPf && sh.type === "placeholder") {
+                  sh.load("placeholderFormat");
+                  phList.push({ sh: sh, idx: j });
+                }
               });
               return ctx.sync().then(function () {
-                var titleEntry = null, bodyEntry = null;
-                tfs.forEach(function (e) {
-                  if (e.tf.isNullObject) return;
-                  if (!titleEntry && isTitleShape(e.name, e.type)) titleEntry = e;
-                  else if (!bodyEntry && isBodyShape(e.name, e.type)) bodyEntry = e;
-                });
-                var toSet = [];
-                if (op.title && titleEntry) {
-                  titleEntry.tf.textRange.load("text");
-                  toSet.push({ e: titleEntry, v: String(op.title) });
-                }
-                if (op.body && op.body.length && bodyEntry) {
-                  bodyEntry.tf.textRange.load("text");
-                  toSet.push({ e: bodyEntry, v: op.body.join("\r") });
-                }
-                return ctx.sync().then(function () {
-                  toSet.forEach(function (t) { t.e.tf.textRange.text = t.v; });
+                phList.forEach(function (e) { e.sh.placeholderFormat.load("type"); });
+                var afterPf = wantPf ? ctx.sync() : Promise.resolve();
+                return afterPf.then(function () {
+                  phList.forEach(function (e) { metas[e.idx].ptype = e.sh.placeholderFormat.type; });
+                  var titleEntry = null, bodyEntry = null;
+                  metas.forEach(function (m) {
+                    if (m.tf.isNullObject) return;
+                    if (!titleEntry && isTitleShape(m.name, m.type, m.ptype)) titleEntry = m;
+                    else if (!bodyEntry && isBodyShape(m.name, m.type, m.ptype)) bodyEntry = m;
+                  });
+                  var toSet = [];
+                  if (op.title && titleEntry) {
+                    titleEntry.tf.textRange.load("text");
+                    toSet.push({ e: titleEntry, v: String(op.title) });
+                  }
+                  if (op.body && op.body.length && bodyEntry) {
+                    bodyEntry.tf.textRange.load("text");
+                    toSet.push({ e: bodyEntry, v: op.body.join("\r") });
+                  }
                   return ctx.sync().then(function () {
-                    return { index: newIndex };
+                    toSet.forEach(function (t) { t.e.tf.textRange.text = t.v; });
+                    return ctx.sync().then(function () {
+                      return { index: newIndex };
+                    });
                   });
                 });
               });
@@ -462,38 +527,46 @@
       var shapes = slide.shapes;
       shapes.load("items/type,items/name,items/id");
       return ctx.sync().then(function () {
-        var tfProxies = [];
-        shapes.items.forEach(function (sh) {
+        var metas = [];
+        var phList = [];
+        var wantPf = self._pfApi === true;
+        shapes.items.forEach(function (sh, j) {
+          metas.push({ sh: sh, name: sh.name || "", type: sh.type || "", ptype: undefined, tf: null });
           var tf = sh.getTextFrameOrNullObject();
           tf.load("isNullObject,hasText");
-          tfProxies.push({ tf: tf });
+          metas[j].tf = tf;
+          if (wantPf && sh.type === "placeholder") {
+            sh.load("placeholderFormat");
+            phList.push({ sh: sh, idx: j });
+          }
         });
         return ctx.sync().then(function () {
-          var cands = [];
-          tfProxies.forEach(function (entry, idx) {
-            if (entry.tf.isNullObject) return;
-            var meta = shapes.items[idx];
-            entry.shape = meta;
-            cands.push(entry);
-          });
-          var pick = null;
-          if (role === "title") {
-            pick = cands.find(function (e) { return isTitleShape(e.shape.name, e.shape.type); });
-          } else {
-            pick = cands.find(function (e) { return isBodyShape(e.shape.name, e.shape.type); });
-          }
-          if (!pick) {
-            throw new FriendlyError(
-              role === "title"
-                ? "No title placeholder found on slide " + i
-                : "No body/content placeholder found on slide " + i
-            );
-          }
-          if (!pick.tf.hasText && joined === "") return null;
-          pick.tf.textRange.load("text");
-          return ctx.sync().then(function () {
-            pick.tf.textRange.text = joined;
-            return ctx.sync();
+          phList.forEach(function (e) { e.sh.placeholderFormat.load("type"); });
+          var afterPf = wantPf ? ctx.sync() : Promise.resolve();
+          return afterPf.then(function () {
+            phList.forEach(function (e) { metas[e.idx].ptype = e.sh.placeholderFormat.type; });
+            var pick = null;
+            metas.forEach(function (m) {
+              if (m.tf.isNullObject) return;
+              if (role === "title") {
+                if (!pick && isTitleShape(m.name, m.type, m.ptype)) pick = m;
+              } else {
+                if (!pick && isBodyShape(m.name, m.type, m.ptype)) pick = m;
+              }
+            });
+            if (!pick) {
+              throw new FriendlyError(
+                role === "title"
+                  ? "No title placeholder found on slide " + i
+                  : "No body/content placeholder found on slide " + i
+              );
+            }
+            if (!pick.tf.hasText && joined === "") return null;
+            pick.tf.textRange.load("text");
+            return ctx.sync().then(function () {
+              pick.tf.textRange.text = joined;
+              return ctx.sync();
+            });
           });
         });
       });
@@ -519,6 +592,7 @@
   };
 
   OfficeDeck.prototype.setNotes = function (i, text) {
+    var self = this;
     return this.run("setNotes", function (ctx) {
       var slide = ctx.presentation.slides.getItemAt(i);
       if (!slide.notesPage) {
@@ -527,27 +601,40 @@
       var shapes = slide.notesPage.shapes;
       shapes.load("items/type,items/name,items/id");
       return ctx.sync().then(function () {
-        var tfs = [];
-        shapes.items.forEach(function (sh) {
+        var metas = [];
+        var phList = [];
+        var wantPf = self._pfApi === true;
+        shapes.items.forEach(function (sh, j) {
+          metas.push({ sh: sh, name: sh.name || "", type: sh.type || "", ptype: undefined, tf: null });
           var tf = sh.getTextFrameOrNullObject();
           tf.load("isNullObject,hasText");
-          tfs.push({ tf: tf, name: sh.name || "" });
+          metas[j].tf = tf;
+          if (wantPf && sh.type === "placeholder") {
+            sh.load("placeholderFormat");
+            phList.push({ sh: sh, idx: j });
+          }
         });
         return ctx.sync().then(function () {
-          var pick = null;
-          tfs.forEach(function (e) {
-            if (e.tf.isNullObject) return;
-            if (!pick && /body|notes|content|text/i.test(e.name)) pick = e;
-            else if (!pick && e.tf.hasText) pick = e;
-            else if (!pick && !/slide|date|footer|header|number/i.test(e.name)) pick = e;
-          });
-          if (!pick) {
-            return { manual: true, reason: "no notes body found on slide " + i };
-          }
-          pick.tf.textRange.load("text");
-          return ctx.sync().then(function () {
-            pick.tf.textRange.text = String(text == null ? "" : text);
-            return ctx.sync().then(function () { return { manual: false }; });
+          phList.forEach(function (e) { e.sh.placeholderFormat.load("type"); });
+          var afterPf = wantPf ? ctx.sync() : Promise.resolve();
+          return afterPf.then(function () {
+            phList.forEach(function (e) { metas[e.idx].ptype = e.sh.placeholderFormat.type; });
+            var pick = null;
+            metas.forEach(function (m) {
+              if (m.tf.isNullObject) return;
+              if (isBodyShape(m.name, m.type, m.ptype) && !pick) pick = m; // notes body is a Body placeholder
+              else if (!pick && /body|notes|content|text/i.test(m.name)) pick = m;
+              else if (!pick && m.tf.hasText) pick = m;
+              else if (!pick && !m.ptype && !/slide|date|footer|header|number/i.test(m.name)) pick = m;
+            });
+            if (!pick) {
+              return { manual: true, reason: "no notes body found on slide " + i };
+            }
+            pick.tf.textRange.load("text");
+            return ctx.sync().then(function () {
+              pick.tf.textRange.text = String(text == null ? "" : text);
+              return ctx.sync().then(function () { return { manual: false }; });
+            });
           });
         });
       });
@@ -600,12 +687,17 @@
     return "blank";
   }
 
-  function isTitleShape(name, type) {
+  function isTitleShape(name, type, ptype) {
+    // placeholderFormat.type (PowerPointApi 1.8) wins: localization-safe on all hosts
+    var t = String(ptype || "").toLowerCase();
+    if (t) return t === "title" || t === "centertitle";
     return /placeholder/i.test(String(type || "")) && /title/i.test(String(name || ""));
   }
-  function isBodyShape(name, type) {
-    var n = String(name || ""), t = String(type || "");
-    if (!/placeholder|textbox/i.test(t)) return false;
+  function isBodyShape(name, type, ptype) {
+    var t = String(ptype || "").toLowerCase();
+    if (t) return t === "body" || t === "subtitle" || t === "content" || t === "verticalbody";
+    var n = String(name || ""), ty = String(type || "");
+    if (!/placeholder|textbox/i.test(ty)) return false;
     if (/title/i.test(n)) return false;
     return /content|text|body|subtitle/i.test(n);
   }

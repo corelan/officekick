@@ -26,7 +26,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 APP = "SlideKick"
-VERSION = "0.1.0"
+VERSION = "0.1.1"
 
 CONNECTION_TYPES = (
     "openai",

@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.1.1
+
+- Windows support: `install.ps1` (per-user trusted catalog via HKCU, scheduled task
+  with Startup fallback, robocopy deploy) - same add-in code, server and config as
+  macOS; documented in README.
+- Localization-safe placeholder detection via `Shape.placeholderFormat`
+  (PowerPointApi 1.8) with the shape-name heuristic as fallback - matters for
+  Windows Office in non-English UI languages.
+- License: no trademark claim over "SlideKick"; "Corelan" is a registered EU
+  trademark of Corelan Consulting bv.
+- Profiles tab now repopulates connection dropdowns on config load; connections
+  referenced by profiles cannot be deleted (409 + UI hint); delete errors surfaced.
+
 ## 0.1.0 - initial release
 
 - Office task-pane add-in for PowerPoint on macOS (Office.js), sideloaded via the

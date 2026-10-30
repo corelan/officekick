@@ -33,8 +33,11 @@ LICENSE TERMS ("LicenseRef-Corelan-SlideKick-1.0")
    (e) your modified version is licensed under the same terms.
 
 5. Trademarks.
-   No right is granted to use the names "SlideKick", "Corelan", or the marks of
-   Corelan Consulting bv for promotion or endorsement.
+   No trademark claim is made over the name "SlideKick"; it only identifies the
+   original software project. "Corelan" is a registered trademark of Corelan Consulting bv. 
+   Nothing in this license grants any trademark rights: in particular, 
+   no right is granted to use the "Corelan" mark or the marks of Corelan Consulting bv 
+   for promotion or endorsement.
 
 6. Third-party components.
    This software runs against Microsoft Office / Office.js and AI provider APIs that
