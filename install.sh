@@ -142,7 +142,7 @@ pick_port() {
   if [[ -n "$PORT" ]]; then return 0; fi
   # if our own server already runs on the default port, keep it (update path)
   local h
-  h="$(health "$DEFAULT_PORT" || true)"
+  h="$(health "$DEFAULT_PORT" 2>/dev/null || true)"
   if [[ "$h" == *SlideKick* ]]; then PORT="$DEFAULT_PORT"; return 0; fi
   [[ "$(port_busy "$DEFAULT_PORT")" == "free" ]] && PORT="$DEFAULT_PORT" && return 0
   for p in $(seq $((DEFAULT_PORT + 1)) $((DEFAULT_PORT + 19))); do
@@ -260,7 +260,7 @@ PLISTEOF
   # ---- health check ----
   local tries=0 h=""
   while [[ $tries -lt 20 ]]; do
-    h="$(health "$PORT" || true)"
+    h="$(health "$PORT" 2>/dev/null || true)"
     if [[ "$h" == *'"ok": true'* ]]; then break; fi
     sleep 0.5
     tries=$((tries + 1))
@@ -282,7 +282,8 @@ PLISTEOF
   say "First use in PowerPoint:"
   say "  1. quit and reopen PowerPoint (required when it was already running)"
   say "  2. open/create a deck"
-  say "  3. Home tab -> Add-ins -> Corelan SlideKick"
+  say "  3. click the dedicated 'SlideKick' ribbon tab (fallback: Home -> Add-ins ->"
+  say "     Corelan SlideKick)"
   say "  4. Connections tab: add a provider; Profiles tab: pick your models"
   [[ -n "$PP_VERSION" ]] && [[ "$PP_APP" && "$DEV" == "0" ]] && true
 }
