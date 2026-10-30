@@ -877,6 +877,7 @@
   }
 
   MailDeck.prototype.getContext = function (opts) {
+    var minimal = !!(opts && opts.minimal);
     return promisify(function (resolve, reject) {
       try {
         var item = Office.context.mailbox.item;
@@ -884,43 +885,41 @@
           reject(new FriendlyError("Open or select a message first (the reading pane must stay open)."));
           return;
         }
-        var out = { host: "Outlook", mode: "", subject: "", sender: "", to: "", bodyText: "", categories: [] };
+        var out = { host: "Outlook", mode: "", subject: "", sender: "", to: "", bodyText: "", categories: [], warnings: [], minimal: minimal };
         var isCompose = (item.getAsync !== undefined && item.subject && item.subject.getAsync);
         out.mode = isCompose ? "compose" : "read";
-        var steps = [];
-        var subjPromise = promisify(resolve, reject) ? null : null;
-        // subject
-        steps.push(new Promise(function (res, rej) {
-          if (isCompose) item.subject.getAsync(function (r) { r.status === "succeeded" ? res(r.value) : rej(new FriendlyError(r.error.message)); });
-          else res(String(item.subject || ""));
-        }));
-        // body
-        steps.push(new Promise(function (res, rej) {
-          item.body.getAsync("text", function (r) { r.status === "succeeded" ? res(r.value) : rej(new FriendlyError(r.error.message)); });
-        }));
-        // recipients (to)
-        steps.push(new Promise(function (res, rej) {
-          item.to.getAsync(function (r) {
-            if (r.status !== "succeeded") { res(""); return; }
-            res(r.value.map(function (x) { return x.displayName || x.emailAddress || ""; }).join(", "));
-          });
-        }));
-        // categories
-        steps.push(new Promise(function (res) {
-          if (!item.categories || !item.categories.getAsync) { res([]); return; }
-          item.categories.getAsync(function (r) {
-            res(r.status === "succeeded" ? (r.value || []).map(function (c) { return c.displayName; }) : []);
-          });
-        }));
-        Promise.all(steps).then(function (vals) {
+        Promise.all([
+          new Promise(function (res, rej) {
+            if (isCompose) item.subject.getAsync(function (r) { r.status === "succeeded" ? res(r.value) : rej(new FriendlyError(r.error.message)); });
+            else res(String(item.subject || ""));
+          })
+        ]).then(function (vals) {
           out.subject = String(vals[0] || "");
-          out.bodyText = String(vals[1] || "");
-          out.to = String(vals[2] || "");
-          out.categories = vals[3] || [];
-          if (out.mode === "read" && Office.context.mailbox.item.from) {
-            out.sender = (Office.context.mailbox.item.from.displayName || Office.context.mailbox.item.from.emailAddress || "");
+          if (out.mode === "read" && item.from) {
+            out.sender = (item.from.displayName || item.from.emailAddress || "");
           }
-          resolve(out);
+          if (minimal) { resolve(out); return; }
+          // optional steps: degrade to defaults on failure instead of failing the whole context
+          var opt = function (fn, fallback) {
+            return new Promise(function (res) {
+              try { fn(function (r) { (r && r.status === "succeeded") ? res(r.value) : res(fallback); }, res); }
+              catch (e) { res(fallback); }
+            });
+          };
+          return Promise.all([
+            opt(function (ok, fail) { item.to.getAsync(ok, fail); }, ""),
+            opt(function (ok, fail) { item.categories ? item.categories.getAsync(ok, fail) : ok([]); }, []),
+          ]).then(function (vals2) {
+            out.to = String(vals2[0] || "");
+            out.categories = (vals2[1] || []).map(function (c) { return c.displayName || c; });
+            var done = function (txt) { out.bodyText = String(txt || ""); resolve(out); };
+            try {
+              item.body.getAsync("text", function (r) {
+                if (r.status === "succeeded") done(r.value);
+                else { out.warnings.push("body: " + (r.error && r.error.message || "read failed")); resolve(out); }
+              });
+            } catch (e) { out.warnings.push("body: " + e.message); resolve(out); }
+          });
         }, reject);
       } catch (e) { reject(e); }
     });
@@ -1154,6 +1153,8 @@ function applyOps(deck, ops, ctx) {
     var body = String(ctx.bodyText || "");
     if (body.length > 4000) body = body.slice(0, 4000) + "…[truncated]";
     lines.push("BODY:\n" + body);
+    if (ctx.warnings && ctx.warnings.length) lines.push("(warnings: " + ctx.warnings.join("; ") + ")");
+    if (ctx.minimal) lines.push("(minimal context: the full email body was not included - the 'include email context' box was unticked)");
     return lines.join("\n");
   }
 
@@ -1186,17 +1187,17 @@ function applyOps(deck, ops, ctx) {
     SK.busy = true;
     setRunEnabled(false);
     var wantCtx = $("chat-context").checked;
-    setStatus("Collecting document context…", "busy");
-    var ctxPromise = wantCtx ? SK.deck.getContext({}).catch(function (err) {
-      setStatus("Could not read the deck (" + err.message + ") - continuing without context.", "error");
+    setStatus("Collecting email context…", "busy");
+    var ctxPromise = SK.deck.getContext({ minimal: !wantCtx }).catch(function (err) {
+      setStatus("Could not read the email (" + err.message + ") - continuing without context.", "error");
       return null;
-    }) : Promise.resolve(null);
+    });
 
     ctxPromise.then(function (ctx) {
       SK.lastCtx = ctx;
       var sys = SYSTEM_PROMPT + "\nHost: " + (SK.sim ? "MailKick simulator" : SK.deck.capabilities().host);
       if (!(SK.cfg && SK.cfg.generateNotes)) sys += "\n" + NOTES_OFF_RULE;
-      var ctxText = ctx ? formatContext(ctx) : "(no email context requested)";
+      var ctxText = ctx ? formatContext(ctx) : "(no email could be read - make sure an email is open or selected and the reading pane stays open)";
       return getTemplateBlock(instruction).then(function (tplBlock) {
         var user = ctxText + "\n\n" + (tplBlock ? tplBlock + "\n" : "") + "\nUSER REQUEST:\n" + instruction;
         var messages = [

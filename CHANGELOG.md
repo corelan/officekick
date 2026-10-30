@@ -1,4 +1,19 @@
 # Changelog
+## [0.2.4] - 2026-10-30
+### Fixed
+- **MailKick "there was no email"**: the model now always receives at least a
+  minimal context (subject + sender + read/compose mode) even when the
+  include-email-context box is unticked; optional reads (recipients /
+  categories / body) degrade individually instead of failing the whole
+  collection. Outlook wording fixed ("email", not "deck"/"document").
+### Changed
+- Outlook manifest: standard VersionOverrides for the read/compose ribbon
+  buttons; `RequestedHeight` 480 -> 350 (schema max) - the official validator
+  now passes; `install.sh` GUID refs reconciled to the shipped manifest Id.
+### Repo
+- `tests/` is untracked and gitignored (local-only); docs/outlook.md rewritten
+  (templates, sessions, Inspector, install/uninstall, limits).
+
 ## [0.2.3] - 2026-10-30
 ### Added
 - **Formatting**: a `format_text` op. SlideKick: bold / italic / color / size /

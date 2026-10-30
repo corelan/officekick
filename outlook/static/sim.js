@@ -25,12 +25,13 @@
     word: "Outlook",
     capabilities: function () { return { text: true, host: "Outlook" }; },
     getContext: async function (opts) {
+      var minimal = !!(opts && opts.minimal);
       if (compose) {
         return { host: "Outlook", mode: "compose", sender: email.from, to: "you@corelan.example",
-                 subject: compose.subject, bodyText: compose.bodyText, categories: [] };
+                 subject: compose.subject, bodyText: minimal ? "" : compose.bodyText, categories: [], warnings: [], minimal: minimal };
       }
       return { host: "Outlook", mode: "read", sender: email.from, to: email.to,
-               subject: email.subject, bodyText: email.body, categories: email.categories.slice() };
+               subject: email.subject, bodyText: minimal ? "" : email.body, categories: email.categories.slice(), warnings: [], minimal: minimal };
     },
     draftReply: async function (html) {
       log.push("reply window opened with " + String(html).length + " chars");
