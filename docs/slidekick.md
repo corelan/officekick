@@ -106,7 +106,6 @@ PowerPoint.js creation API and native SmartArt is not reachable from add-ins.
 ./install.sh --dev                                  # serve straight from the repo
 open http://127.0.0.1:8765/slidekick/static/simulator.html   # the exact task pane + in-memory deck
 python3 tools/mock_provider.py --flavor openai --port 8901    # mock provider for the UI
-python3 tests/test_slidekick_server.py              # server + adapter test suite
 npx -y office-addin-manifest validate "$HOME/Library/Application Support/OfficeKick/manifest/slidekick.xml"
 python3 tools/make_icons.py                         # rebuild icons from logo_corelan.png
 ```

@@ -9,3 +9,5 @@ dist/
 node_modules/
 *.code-workspace
 tests/
+# internal test suite - not published
+tests/

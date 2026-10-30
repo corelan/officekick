@@ -14,6 +14,7 @@ Runs on 127.0.0.1 only. Python 3.8+ standard library, no third-party deps.
 """
 
 import argparse
+import base64
 import json
 import os
 import socket
@@ -78,6 +79,7 @@ ANTHROPIC_FALLBACK_MODELS = (
 )
 
 MAX_BODY_BYTES = 2 * 1024 * 1024
+IMAGE_TIMEOUT = 300   # image generation is slow (60-180s)
 
 
 class ApiError(Exception):
@@ -193,12 +195,14 @@ class Store:
                 return True
         return False
 
-    def upsert_profile(self, name, content, other):
+    def upsert_profile(self, name, content, other, image=None):
         prof = {
             "name": name,
             "content": {"connection": content[0], "model": content[1]},
             "other": {"connection": other[0], "model": other[1]},
         }
+        if image:
+            prof["image"] = {"connection": image[0], "model": image[1]}
         for i, p in enumerate(self.data["profiles"]):
             if p["name"] == name:
                 self.data["profiles"][i] = prof
@@ -355,6 +359,84 @@ def dbg_line(store, source, category, payload):
                 fh.write(line + "\n")
     except Exception:
         pass
+
+
+# --------------------------------------------------------------------------- #
+# Image generation (providers with an OpenAI-style images API)
+# --------------------------------------------------------------------------- #
+
+UNSUPPORTED_IMAGE_TYPES = ("anthropic", "ollama", "llamacpp")
+
+
+def provider_generate_image(conn, model, prompt, size=None):
+    """POST {base}/images/generations; returns base64 image bytes or raises ApiError."""
+    if conn["type"] in UNSUPPORTED_IMAGE_TYPES:
+        raise ApiError(400, "Provider type '%s' does not support image generation"
+                       % (conn["type"],))
+    base = (conn.get("baseUrl") or "").rstrip("/")
+    if not base:
+        raise ApiError(400, "Connection '%s' has no Base URL" % (conn["name"],))
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer " + (conn.get("apiKey") or ""),
+    }
+    if conn["type"] == "openrouter":
+        headers["HTTP-Referer"] = "https://github.com/corelan/officekick"
+        headers["X-Title"] = "OfficeKick"
+    payload = {"model": model, "prompt": prompt, "n": 1}
+    if size:
+        payload["size"] = size
+    body = json.dumps(payload).encode("utf-8")
+
+    def _post(url, extra=None):
+        h = dict(headers)
+        if extra:
+            h.update(extra)
+        req = urllib.request.Request(url, data=body, headers=h, method="POST")
+        try:
+            with urllib.request.urlopen(req, timeout=IMAGE_TIMEOUT) as resp:
+                return resp
+        except urllib.error.HTTPError as exc:
+            detail = ""
+            try:
+                detail = exc.read(400).decode("utf-8", "replace")
+            except Exception:
+                pass
+            raise ApiError(exc.code or 502, "image request failed: HTTP %s %s"
+                           % (exc.code, detail[:200]))
+        except (urllib.error.URLError, socket.timeout, TimeoutError) as exc:
+            raise ApiError(504, "image request timed out or failed: %s" % exc)
+
+    # try with the legacy response_format first (DALL-E style), fall back bare (gpt-image-1)
+    candidates = []
+    for suf in ("/images/generations",):
+        candidates.append(base + suf + ('' if base.endswith("/v1") or "/v1" in base else ""))
+    if "/v1" not in base:
+        candidates = [base + "/v1/images/generations", base + "/images/generations"]
+    else:
+        candidates = [base + "/images/generations"]
+    last_err = None
+    for url in candidates:
+        for extra in ({"response_format": "b64_json"}, None):
+            try:
+                resp = _post(url, extra)
+                data = json.loads(resp.read().decode("utf-8", "replace"))
+                items = data.get("data") or []
+                if not items:
+                    raise ApiError(502, "image response contained no data")
+                if items[0].get("b64_json"):
+                    return items[0]["b64_json"]
+                if items[0].get("url"):
+                    dl = urllib.request.Request(items[0]["url"], headers={"Authorization": "Bearer " + (conn.get("apiKey") or "")})
+                    with urllib.request.urlopen(dl, timeout=IMAGE_TIMEOUT) as r2:
+                        return base64.b64encode(r2.read()).decode("ascii")
+                raise ApiError(502, "image response had neither b64_json nor url")
+            except ApiError as exc:
+                last_err = exc
+                if extra is None:
+                    break  # both variants on this URL failed; try the next URL
+                continue
+    raise last_err or ApiError(502, "image generation failed")
 
 
 # --------------------------------------------------------------------------- #
@@ -758,8 +840,12 @@ def validate_profile_body(store, body):
     if not valid_name(name):
         raise ApiError(400, "Profile name must be 1-64 chars")
     refs = []
-    for slot in ("content", "other"):
-        ref = body.get(slot) or {}
+    for slot in ("content", "other", "image"):
+        ref = body.get(slot)
+        if ref is None or ref == {}:
+            if slot == "image":
+                continue  # image model is optional
+            raise ApiError(400, "Profile %s slot missing" % slot)
         conn, model = ref.get("connection"), ref.get("model")
         if not store.find_connection(conn):
             raise ApiError(
@@ -767,8 +853,14 @@ def validate_profile_body(store, body):
             )
         if not isinstance(model, str) or not model.strip():
             raise ApiError(400, "Profile %s has no model selected" % slot)
-        refs.append((conn, model.strip()))
-    return name.strip(), refs[0], refs[1]
+        refs.append((slot, conn, model.strip()))
+    by_slot = {slot: (conn, model) for slot, conn, model in refs}
+    return (
+        name.strip(),
+        by_slot["content"],
+        by_slot["other"],
+        by_slot.get("image"),
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -914,8 +1006,8 @@ class SlideKickHandler(BaseHTTPRequestHandler):
                 self.store.upsert_connection(name, ctype, base, key)
                 self._send_json({"ok": True, "name": name})
             elif path == "/api/profiles":
-                name, content, other = validate_profile_body(self.store, body)
-                self.store.upsert_profile(name, content, other)
+                name, content, other, image = validate_profile_body(self.store, body)
+                self.store.upsert_profile(name, content, other, image)
                 self._send_json({"ok": True, "name": name})
             elif path == "/api/connections/rename":
                 self.store.rename_connection(
