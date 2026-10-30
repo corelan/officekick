@@ -134,7 +134,9 @@ table.list { width: 100%; border-collapse: collapse; background: var(--panel); b
 table.list th, table.list td { text-align: left; padding: 6px 8px; border-top: 1px solid var(--line); font-size: 12.5px; }
 table.list th { font-size: 11px; text-transform: uppercase; letter-spacing: .4px; color: var(--muted); border-top: none; }
 table.list tr.editing { background: #fffbeb; }
-table.list .minibtn { border: none; background: none; color: var(--primary); cursor: pointer; font: inherit; padding: 0 4px; text-decoration: underline; }
+table.list .namebtn { border: none; background: none; color: var(--primary); font-weight: 700; text-decoration: underline; cursor: pointer; font: inherit; padding: 0; }
+.namebtn:hover { color: var(--accent-ink); }
+.minibtn { border: none; background: none; color: var(--primary); cursor: pointer; font: inherit; padding: 0 4px; text-decoration: underline; }
 
 form#conn-form, form#prof-form {
   background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px; margin-top: 10px;

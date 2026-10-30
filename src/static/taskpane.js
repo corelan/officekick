@@ -1296,42 +1296,25 @@
       }).join("");
     }
     var list = $("conn-list");
-    var rows = [ "<tr><th>Name</th><th>Type</th><th>Base URL</th><th>Key</th><th></th></tr>" ];
+    var rows = [ "<tr><th>Name</th><th>Type</th><th>Base URL</th><th>Key</th></tr>" ];
     (SK.cfg.connections || []).forEach(function (c) {
       var used = (SK.cfg.profiles || []).filter(function (p) {
         return (p.content && p.content.connection === c.name) ||
                (p.other && p.other.connection === c.name);
       }).map(function (p) { return p.name; });
+      // click the name to edit; deletion lives in the edit form (with confirm)
+      var nameCell =
+        '<button class="namebtn" data-edit="' + esc(c.name) + '" title="edit">' +
+        esc(c.name) + "</button>" +
+        (used.length ? '<br /><span class="opnote">in use: ' + esc(used.join(", ")) + "</span>" : "");
       rows.push(
-        "<tr><td><b>" + esc(c.name) + "</b></td><td>" + esc(c.type) + "</td><td>" + esc(c.baseUrl || "-") + "</td>" +
-        "<td>" + (c.hasKey ? "set" : "—") + "</td>" +
-        '<td><button class="minibtn" data-edit="' + esc(c.name) + '">edit</button> ' +
-        '<button class="minibtn" data-del="' + esc(c.name) + '" title="' + (used.length ? "in use by profile(s): " + esc(used.join(", ")) : "delete") + '">delete</button> ' +
-        (used.length ? '<span class="opnote">in use: ' + esc(used.join(", ")) + "</span>" : "") +
-        "</td></tr>"
+        "<tr><td>" + nameCell + "</td><td>" + esc(c.type) + "</td><td>" + esc(c.baseUrl || "-") + "</td>" +
+        "<td>" + (c.hasKey ? "set" : "—") + "</td></tr>"
       );
     });
     list.innerHTML = rows.join("") || "<tr><td>No connections yet - add one below.</td></tr>";
     Array.prototype.forEach.call(list.querySelectorAll("[data-edit]"), function (b) {
       b.addEventListener("click", function () { editConnection(b.dataset.edit); });
-    });
-    Array.prototype.forEach.call(list.querySelectorAll("[data-del]"), function (b) {
-      b.addEventListener("click", function () {
-        var name = b.dataset.del;
-        var used = (SK.cfg.profiles || []).filter(function (p) {
-          return (p.content && p.content.connection === name) ||
-                 (p.other && p.other.connection === name);
-        }).map(function (p) { return p.name; });
-        if (used.length) {
-          window.alert("Connection '" + name + "' is used by profile(s): " + used.join(", ") +
-            ". Remove it from those profiles first.");
-          return;
-        }
-        if (!window.confirm("Delete connection '" + name + "'?")) return;
-        apiJson("/api/connections/" + encodeURIComponent(name), "DELETE")
-          .then(loadConfigAndRender)
-          .catch(function (err) { window.alert(err.message); });
-      });
     });
   }
 
@@ -1422,25 +1405,21 @@
       fillConnSelect(sel, sel.value || "");
     });
     var list = $("prof-list");
-    var rows = [ "<tr><th>Name</th><th>Content model</th><th>Other model</th><th></th></tr>" ];
+    var rows = [ "<tr><th>Name</th><th>Content model</th><th>Other model</th></tr>" ];
     (SK.cfg.profiles || []).forEach(function (p) {
       var star = p.name === SK.cfg.defaultProfile ? "*" : "";
+      // click the name to edit; deletion lives in the edit form (with confirm)
+      var nameCell =
+        '<button class="namebtn" data-edit="' + esc(p.name) + '" title="edit">' +
+        esc(p.name) + "</button>" + (star ? " <span class=\"opnote\">(default)</span>" : "");
       rows.push(
-        "<tr><td><b>" + esc(p.name) + "</b> " + star + "</td>" +
-        "<td>" + esc(modelRefLabel(p.content)) + "</td><td>" + esc(modelRefLabel(p.other)) + "</td>" +
-        '<td><button class="minibtn" data-edit="' + esc(p.name) + '">edit</button> ' +
-        '<button class="minibtn" data-del="' + esc(p.name) + '">delete</button></td></tr>'
+        "<tr><td>" + nameCell + "</td>" +
+        "<td>" + esc(modelRefLabel(p.content)) + "</td><td>" + esc(modelRefLabel(p.other)) + "</td></tr>"
       );
     });
     list.innerHTML = rows.join("") || "<tr><td>No profiles yet - add one below.</td></tr>";
     Array.prototype.forEach.call(list.querySelectorAll("[data-edit]"), function (b) {
       b.addEventListener("click", function () { editProfile(b.dataset.edit); });
-    });
-    Array.prototype.forEach.call(list.querySelectorAll("[data-del]"), function (b) {
-      b.addEventListener("click", function () {
-        if (!window.confirm("Delete profile '" + b.dataset.del + "'?")) return;
-        apiJson("/api/profiles/" + encodeURIComponent(b.dataset.del), "DELETE").then(loadConfigAndRender);
-      });
     });
   }
 
@@ -1688,10 +1667,23 @@
     $("conn-save").addEventListener("click", saveConnection);
     $("conn-test").addEventListener("click", testConnection);
     $("conn-delete").addEventListener("click", function () {
-      var v = connFormValues();
-      if (!SK.editingConn) { setFormMsg($("conn-formmsg"), "Nothing selected to delete."); return; }
+      if (!SK.editingConn) {
+        setFormMsg($("conn-formmsg"), "Nothing selected to delete - click a connection name first.");
+        return;
+      }
+      var used = (SK.cfg.profiles || []).filter(function (p) {
+        return (p.content && p.content.connection === SK.editingConn) ||
+               (p.other && p.other.connection === SK.editingConn);
+      }).map(function (p) { return p.name; });
+      if (used.length) {
+        window.alert("Connection '" + SK.editingConn + "' is used by profile(s): " +
+          used.join(", ") + ". Remove it from those profiles first.");
+        return;
+      }
       if (!window.confirm("Delete connection '" + SK.editingConn + "'?")) return;
-      apiJson("/api/connections/" + encodeURIComponent(SK.editingConn), "DELETE").then(resetConnForm).then(loadConfigAndRender);
+      apiJson("/api/connections/" + encodeURIComponent(SK.editingConn), "DELETE")
+        .then(function () { resetConnForm(); return loadConfigAndRender(); })
+        .catch(function (err) { window.alert(err.message); });
     });
     $("conn-type").addEventListener("change", function () {
       var t = CONN_TYPE_BY_ID[$("conn-type").value];
@@ -1702,6 +1694,16 @@
 
     $("prof-new").addEventListener("click", resetProfForm);
     $("prof-save").addEventListener("click", saveProfile);
+    $("prof-delete").addEventListener("click", function () {
+      if (!SK.editingProf) {
+        setFormMsg($("prof-formmsg"), "Nothing selected to delete - click a profile name first.");
+        return;
+      }
+      if (!window.confirm("Delete profile '" + SK.editingProf + "'?")) return;
+      apiJson("/api/profiles/" + encodeURIComponent(SK.editingProf), "DELETE")
+        .then(function () { resetProfForm(); return loadConfigAndRender(); })
+        .catch(function (err) { window.alert(err.message); });
+    });
     $("prof-default").addEventListener("click", function () {
       var name = $("prof-name").value.trim();
       if (!name) { setFormMsg($("prof-formmsg"), "Fill in the profile name first."); return; }
