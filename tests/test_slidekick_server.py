@@ -206,6 +206,24 @@ class TestSlideKickServer(unittest.TestCase):
         st, _ = self.S.req("/api/settings", "PUT", {"defaultProfile": "nope"}, True)
         self.assertEqual(st, 400)
 
+    def test_delete_protected_connection(self):
+        # a connection referenced by a profile must not be deletable (409)
+        self.S.req("/api/connections", "POST", {
+            "name": "used-conn", "type": "openai",
+            "baseUrl": "https://api.openai.com/v1"})
+        self.S.req("/api/profiles", "POST", {
+            "name": "guard", "content": {"connection": "used-conn", "model": "gpt"},
+            "other": {"connection": "used-conn", "model": "gpt"}})
+        st, data = self.S.req("/api/connections/used-conn", "DELETE", None, True)
+        self.assertEqual(st, 409)
+        self.assertIn("used by profile", data["error"])
+        st, cfg = self.S.req("/api/config")
+        self.assertTrue(any(c["name"] == "used-conn" for c in cfg["connections"]))
+        # after removing the profile, deletion succeeds
+        self.S.req("/api/profiles/guard", "DELETE")
+        st, _ = self.S.req("/api/connections/used-conn", "DELETE")
+        self.assertEqual(st, 200)
+
     def test_models_openai_compatible_with_key(self):
         m = self.mock("openai")
         mp.STATE.require_key = "test-key"

@@ -159,17 +159,21 @@ class Store:
         return conn
 
     def delete_connection(self, name):
+        users = [
+            p["name"] for p in self.data["profiles"]
+            if (p.get("content") or {}).get("connection") == name
+            or (p.get("other") or {}).get("connection") == name
+        ]
+        if users:
+            raise ApiError(
+                409,
+                "Connection '%s' is used by profile(s): %s - remove it from "
+                "those profiles first." % (name, ", ".join(users)),
+            )
         conns = self.data["connections"]
         for i, c in enumerate(conns):
             if c["name"] == name:
                 del conns[i]
-                # clean up dangling profile references
-                for prof in self.data["profiles"]:
-                    for slot in ("content", "other"):
-                        ref = prof.get(slot) or {}
-                        if ref.get("connection") == name:
-                            ref["connection"] = None
-                            ref["model"] = None
                 if self.data.get("defaultProfile") and not self.find_profile(
                     self.data["defaultProfile"]
                 ):

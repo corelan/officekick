@@ -1164,11 +1164,17 @@
     var list = $("conn-list");
     var rows = [ "<tr><th>Name</th><th>Type</th><th>Base URL</th><th>Key</th><th></th></tr>" ];
     (SK.cfg.connections || []).forEach(function (c) {
+      var used = (SK.cfg.profiles || []).filter(function (p) {
+        return (p.content && p.content.connection === c.name) ||
+               (p.other && p.other.connection === c.name);
+      }).map(function (p) { return p.name; });
       rows.push(
         "<tr><td><b>" + esc(c.name) + "</b></td><td>" + esc(c.type) + "</td><td>" + esc(c.baseUrl || "-") + "</td>" +
         "<td>" + (c.hasKey ? "set" : "—") + "</td>" +
         '<td><button class="minibtn" data-edit="' + esc(c.name) + '">edit</button> ' +
-        '<button class="minibtn" data-del="' + esc(c.name) + '">delete</button></td></tr>'
+        '<button class="minibtn" data-del="' + esc(c.name) + '" title="' + (used.length ? "in use by profile(s): " + esc(used.join(", ")) : "delete") + '">delete</button> ' +
+        (used.length ? '<span class="opnote">in use: ' + esc(used.join(", ")) + "</span>" : "") +
+        "</td></tr>"
       );
     });
     list.innerHTML = rows.join("") || "<tr><td>No connections yet - add one below.</td></tr>";
@@ -1177,8 +1183,20 @@
     });
     Array.prototype.forEach.call(list.querySelectorAll("[data-del]"), function (b) {
       b.addEventListener("click", function () {
-        if (!window.confirm("Delete connection '" + b.dataset.del + "'? Profiles referencing it keep their slots empty.")) return;
-        apiJson("/api/connections/" + encodeURIComponent(b.dataset.del), "DELETE").then(loadConfigAndRender);
+        var name = b.dataset.del;
+        var used = (SK.cfg.profiles || []).filter(function (p) {
+          return (p.content && p.content.connection === name) ||
+                 (p.other && p.other.connection === name);
+        }).map(function (p) { return p.name; });
+        if (used.length) {
+          window.alert("Connection '" + name + "' is used by profile(s): " + used.join(", ") +
+            ". Remove it from those profiles first.");
+          return;
+        }
+        if (!window.confirm("Delete connection '" + name + "'?")) return;
+        apiJson("/api/connections/" + encodeURIComponent(name), "DELETE")
+          .then(loadConfigAndRender)
+          .catch(function (err) { window.alert(err.message); });
       });
     });
   }
@@ -1253,6 +1271,12 @@
   // Profiles tab
   // ------------------------------------------------------------------ //
   function renderProfiles() {
+    // keep the profile-form connection dropdowns in sync with the current
+    // config: connections created since the form was opened must show up
+    ["prof-content-conn", "prof-other-conn"].forEach(function (id) {
+      var sel = $(id);
+      fillConnSelect(sel, sel.value || "");
+    });
     var list = $("prof-list");
     var rows = [ "<tr><th>Name</th><th>Content model</th><th>Other model</th><th></th></tr>" ];
     (SK.cfg.profiles || []).forEach(function (p) {
