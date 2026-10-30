@@ -577,7 +577,10 @@ do_install() {
     say "MailKick sideload step (Outlook-Mac has no wef-folder sideload):"
     say "   1) open https://aka.ms/olksideload (Outlook on the web Add-Ins dialog)"
     say "   2) My add-ins -> Custom Addins -> Add a custom add-in -> Add from File"
-    say "   3) choose: $INSTALL_DIR/manifest/$OUTLOOK_MANIFEST_NAME"
+    cp "$INSTALL_DIR/manifest/$OUTLOOK_MANIFEST_NAME" "$HOME/Downloads/$OUTLOOK_MANIFEST_NAME" 2>/dev/null
+    say "   3) choose: $HOME/Downloads/$OUTLOOK_MANIFEST_NAME (a visible copy of the hidden one:
+       $INSTALL_DIR/manifest/$OUTLOOK_MANIFEST_NAME - ~/Library is invisible in file pickers;
+       use Cmd+Shift+G and paste the full path if you prefer the original)"
     say "   (Windows: the same trusted catalog as SlideKick/DocKick installs it automatically)"
   else
     warn "MailKick not built yet - skipping Outlook"
