@@ -1,4 +1,15 @@
 # Changelog
+## [0.1.8] - 2026-10-30
+### Added
+- **MailKick** - the Outlook add-in (docs/outlook.md): email context, draft_reply /
+  compose_body / set_categories / save_draft ops, read+compose modes, simulator,
+  installer manifest render + Mac sideload instructions + the Windows catalog step.
+### Fixed
+- SlideKick: OfficeDeck.addImage was missing (real-PowerPoint image runs aborted
+  with 'deck.addImage is not a function'); implemented via the Common API
+  setSelectedDataAsync(Image) with optional left/top/width/height (points) -
+  targets the slide you have open.
+
 ## [0.1.7] - 2026-10-30
 ### Added
 - Word: **insert at cursor** - a pane checkbox feeds the image to the caret/selected

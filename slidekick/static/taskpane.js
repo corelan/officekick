@@ -757,6 +757,25 @@
     });
   };
 
+OfficeDeck.prototype.addImage = function (payload) {
+  return new Promise(function (resolve, reject) {
+    try {
+      var opts = { coercionType: Office.CoercionType.Image };
+      var geo = payload.geometry || {};
+      if (geo.left != null) opts.imageLeft = geo.left;
+      if (geo.top != null) opts.imageTop = geo.top;
+      if (geo.width != null) opts.imageWidth = geo.width;
+      if (geo.height != null) opts.imageHeight = geo.height;
+      Office.context.document.setSelectedDataAsync(String(payload.b64), opts, function (ar) {
+        if (ar && ar.status === Office.AsyncResultStatus.Succeeded) resolve({ ok: true });
+        else reject(new FriendlyError("image insert failed: " + ((ar && ar.error && ar.error.message) || (ar && ar.status) || "unknown")));
+      });
+    } catch (e) {
+      reject(new FriendlyError("image insert failed: " + (e && e.message || e)));
+    }
+  });
+};
+
 OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceholderText(i, "title", text); };
   OfficeDeck.prototype.setSlideBody = function (i, lines) { return this._setPlaceholderText(i, "body", lines); };
 

@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<OfficeApp xmlns="http://schemas.microsoft.com/office/appforoffice/1.1"
+           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+           xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0"
+           xsi:type="MailApp">
+  <Id>7b19ce43-2af0-4f52-9c07-8e9b9d6f4a01</Id>
+  <Version>1.0.0.0</Version>
+  <ProviderName>Corelan Consulting bv</ProviderName>
+  <DefaultLocale>en-US</DefaultLocale>
+  <DisplayName DefaultValue="Corelan MailKick"/>
+  <Description DefaultValue="AI assistant for Outlook: summarize and translate email, draft replies, refine what you are composing, and categorize - using your own AI providers (OpenAI, Anthropic, OpenRouter, OpenAI-compatible, Ollama, llama.cpp). Shares connections and profiles with SlideKick/DocKick."/>
+  <IconUrl DefaultValue="__SCHEME__://localhost:__PORT__/outlook/static/assets/icon32.png"/>
+  <HighResolutionIconUrl DefaultValue="__SCHEME__://localhost:__PORT__/outlook/static/assets/icon80.png"/>
+  <SupportUrl DefaultValue="https://github.com/corelan/officekick"/>
+  <AppDomains>
+    <AppDomain>__SCHEME__://localhost:__PORT__</AppDomain>
+    <AppDomain>__SCHEME__://127.0.0.1:__PORT__</AppDomain>
+  </AppDomains>
+  <Hosts>
+    <Host Name="Mailbox"/>
+  </Hosts>
+  <Requirements>
+    <Sets DefaultMinVersion="1.1">
+      <Set Name="Mailbox" MinVersion="1.8" />
+    </Sets>
+  </Requirements>
+  <FormSettings>
+    <Form xsi:type="ItemRead">
+      <DesktopSettings>
+        <SourceLocation DefaultValue="__SCHEME__://localhost:__PORT__/outlook/static/taskpane.html"/>
+        <RequestedHeight>480</RequestedHeight>
+      </DesktopSettings>
+    </Form>
+    <Form xsi:type="ItemEdit">
+      <DesktopSettings>
+        <SourceLocation DefaultValue="__SCHEME__://localhost:__PORT__/outlook/static/taskpane.html"/>
+      </DesktopSettings>
+    </Form>
+  </FormSettings>
+  <Permissions>ReadWriteItem</Permissions>
+  <Rule xsi:type="RuleCollection" Mode="Or">
+    <Rule xsi:type="ItemIs" ItemType="Message" FormType="Read" />
+    <Rule xsi:type="ItemIs" ItemType="Message" FormType="Edit" />
+  </Rule>
+</OfficeApp>

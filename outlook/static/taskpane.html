@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MailKick</title>
+  <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+  <link rel="stylesheet" href="taskpane.css" />
+  <link rel="icon" href="assets/icon32.png" />
+</head>
+<body>
+  <header class="sk-header">
+    <div class="sk-brand">
+      <img src="assets/icon32.png" alt="" width="20" height="20" />
+      <span>Corelan MailKick</span>
+      <span id="host-badge" class="sk-badge" style="display:none"></span>
+    </div>
+    <nav class="sk-tabs" id="tabs">
+      <button data-tab="chat" class="active">Chat / Actions</button>
+      <button data-tab="connections">Connections</button>
+      <button data-tab="profiles">Profiles</button>
+      <button data-tab="settings">Settings</button>
+      <button data-tab="about">About</button>
+      <button data-tab="requests">Inspector</button>
+    </nav>
+  </header>
+
+  <main class="sk-main">
+
+    <!-- ============================ CHAT ============================ -->
+    <section id="tab-chat" class="tab active">
+      <div class="row row-wrap">
+        <label class="field-inline">Profile
+          <select id="chat-profile"></select>
+        </label>
+        <label class="field-inline">Route
+          <select id="chat-route">
+            <option value="auto" title="Document-related requests go to the Content model, everything else to the Other model">auto</option>
+            <option value="content">content model</option>
+            <option value="other">other model</option>
+          </select>
+        </label>
+        <label class="field-inline check"><input type="checkbox" id="chat-context" checked /> include email context</label>
+        <label class="field-inline check"><input type="checkbox" id="chat-autoapply" /> auto-apply</label>
+        <button id="chat-refresh-deck" class="btn subtle" type="button">Refresh email</button>
+        <button id="chat-new" class="btn subtle" type="button" title="Clear the conversation history the AI sees">New conversation</button>
+      </div>
+
+      <textarea id="chat-input" rows="3"
+        placeholder="e.g. reword the current paragraph &#10;or: add a table of the key findings"></textarea>
+
+      <div class="chips" id="chat-chips">
+        <button class="chip" type="button" data-prompt="Reword the current paragraph: same meaning, sharper and shorter wording.">Reword paragraph</button>
+        <button class="chip" type="button" data-prompt="Restructure this document: propose better headings and structure, insert the improved outline as styled paragraphs. Only adjust what genuinely helps.">Restructure document</button>
+        <button class="chip" type="button" data-prompt="Tighten the wording of the selected paragraph: shorter, punchier, no filler.">Tighten wording</button>
+        <button class="chip" type="button" data-prompt="Add a review comment on the selected text suggesting how to improve it.">Review comment</button>
+        <button class="chip" type="button" data-prompt="Suggest 3 concrete improvements for this document (structure, tone, clarity).">Improve suggestions</button>
+      </div>
+
+      <div class="row">
+        <button id="chat-run" class="btn primary" type="button">Run</button>
+        <span id="deck-summary" class="muted"></span>
+      </div>
+
+      <div id="chat-status" class="status hidden"></div>
+      <div id="chat-output" class="output" aria-live="polite"></div>
+    </section>
+
+    <!-- ========================= SIMULATOR ========================= -->
+    <section id="sim-panel" class="tab" style="display:none">
+      <h2>Simulator email</h2>
+      <p class="muted">This is MailKick running in a normal browser against an in-memory mailbox.
+        Ops are applied to the fake email here instead of Outlook.</p>
+      <div class="row"><button id="sim-reset" class="btn subtle" type="button">Reset simulator document</button></div>
+      <div id="sim-deck-view" class="sim-deck"></div>
+    </section>
+
+    <!-- ========================== CONNECTIONS ========================== -->
+    <section id="tab-connections" class="tab">
+      <table class="list" id="conn-list"></table>
+      <div class="row"><button id="conn-new" class="btn subtle" type="button">+ New connection</button></div>
+
+      <form id="conn-form" autocomplete="off">
+        <h2 id="conn-form-title">New connection</h2>
+        <label>Name
+          <input id="conn-name" type="text" maxlength="64" placeholder="e.g. openrouter-main" />
+        </label>
+        <label>Type
+          <select id="conn-type"></select>
+        </label>
+        <label>Base URL
+          <input id="conn-base" type="text" placeholder="https://…" spellcheck="false" />
+        </label>
+        <label>API Key <span class="muted">(leave empty to keep an existing key)</span>
+          <input id="conn-key" type="password" placeholder="" autocomplete="new-password" spellcheck="false" />
+        </label>
+        <div class="row">
+          <button id="conn-save" class="btn primary" type="button">Save</button>
+          <button id="conn-test" class="btn" type="button">Test connection</button>
+          <button id="conn-delete" class="btn danger" type="button">Delete</button>
+        </div>
+        <div id="conn-formmsg" class="formmsg"></div>
+        <div id="conn-testout" class="testout"></div>
+      </form>
+    </section>
+
+    <!-- =========================== PROFILES =========================== -->
+    <section id="tab-profiles" class="tab">
+      <div class="muted">A profile pairs a <b>content model</b> (document edits/generation) with an
+        <b>other-actions model</b> (chat, brainstorming, advice). ★ = default profile.</div>
+      <table class="list" id="prof-list"></table>
+      <div class="row"><button id="prof-new" class="btn subtle" type="button">+ New profile</button></div>
+
+      <form id="prof-form" autocomplete="off">
+        <h2 id="prof-form-title">New profile</h2>
+        <label>Profile name
+          <input id="prof-name" type="text" maxlength="64" placeholder="e.g. daily-driver" />
+        </label>
+        <fieldset>
+          <legend>Content model <span class="muted">(document edits)</span></legend>
+          <label>Connection <select id="prof-content-conn"></select></label>
+          <div class="row row-tight">
+            <label class="grow">Model <select id="prof-content-model"></select></label>
+            <button class="btn subtle" type="button" data-refresh="content">Refresh list</button>
+          </div>
+          <input id="prof-content-custom" type="text" placeholder="custom model id" class="hidden" spellcheck="false" />
+        </fieldset>
+        <fieldset>
+          <legend>Other-actions model <span class="muted">(chat / brainstorm / advice)</span></legend>
+          <label>Connection <select id="prof-other-conn"></select></label>
+          <div class="row row-tight">
+            <label class="grow">Model <select id="prof-other-model"></select></label>
+            <button class="btn subtle" type="button" data-refresh="other">Refresh list</button>
+          </div>
+          <input id="prof-other-custom" type="text" placeholder="custom model id" class="hidden" spellcheck="false" />
+        </fieldset>
+        <fieldset>
+          <legend>Image model <span class="muted">(optional - pictures via an images API; e.g. gpt-image-1)</span></legend>
+          <label>Connection <select id="prof-image-conn"></select></label>
+<button class="btn subtle" type="button" id="prof-image-toggle" title="Toggles between image-capable models only and the full list (>420 on OpenRouter)">show all models</button>
+          <div class="row row-tight">
+            <label class="grow">Model <select id="prof-image-model"></select></label>
+            <button class="btn subtle" type="button" data-refresh="image">Refresh list</button>
+          </div>
+          <input id="prof-image-custom" type="text" placeholder="custom model id" class="hidden" spellcheck="false" />
+        </fieldset>
+        <div class="row">
+          <button id="prof-save" class="btn primary" type="button">Save profile</button>
+          <button id="prof-default" class="btn" type="button">Set as default</button>
+          <button id="prof-delete" class="btn danger" type="button">Delete</button>
+        </div>
+        <div id="prof-formmsg" class="formmsg"></div>
+      </form>
+    </section>
+
+    <!-- =========================== SETTINGS =========================== -->
+    <section id="tab-settings" class="tab">
+      <h2>Approval policy per action</h2>
+      <p class="muted">MailKick never sends document changes without this policy:
+        <b>auto</b> = apply immediately, <b>confirm</b> = apply only after you tick it in the
+        preview, <b>deny</b> = blocked with a notice.</p>
+      <table class="list" id="approvals-table"></table>
+
+      <div class="row">
+        <button id="settings-save" class="btn primary" type="button">Save policy</button>
+      </div>
+      <div id="settings-msg" class="formmsg"></div>
+
+      <h2>Debug logging</h2>
+      <p class="muted">When enabled, MailKick appends AI interactions and document-edit traces
+        to <span id="debug-path" class="small"></span> (one file per day). Debug output
+        contains document text content and full provider payloads - keep it off when working
+        on sensitive documents.</p>
+      <div class="row">
+        <label class="field-inline check"><input type="checkbox" id="settings-debug" /> enable debug logging</label>
+      </div>
+      <div class="row"><button id="settings-debug-save" class="btn" type="button">Save debug setting</button></div>
+    </section>
+
+    <!-- ============================= ABOUT ============================= -->
+    <section id="tab-about" class="tab">
+      <h2>About</h2>
+      <table class="kv" id="about-info"></table>
+      <h2>Using it inside Outlook</h2>
+      <ol class="small">
+        <li>Select a message (or open one to compose).</li>
+        <li>Home tab → <b>Add-ins</b> (dropdown) → <b>Developer Add-ins</b> →
+          <b>Corelan MailKick</b>. With the installer's <b>--https</b> option the
+          button is also available directly in the Home ribbon.</li>
+        <li>The pane opens on the right; the document appears in the summary line.</li>
+      </ol>
+
+      <div class="aboutfoot">
+        <p>© 2026 <b>Corelan Consulting bv</b> — <a href="https://github.com/corelan/officekick" target="_blank">github.com/corelan/officekick</a></p>
+        <p class="muted">Free to use with attribution. Provided "as is", use at your own risk;
+        may not be sold or commercialized; modifications must reference the original author.
+        See the <a href="https://github.com/corelan/officekick/blob/main/LICENSE" target="_blank">LICENSE</a>.
+      </div>
+    </section>
+      <!-- ============================ REQUESTS ============================ -->
+    <section id="tab-requests" class="tab">
+      <div class="row row-wrap">
+        <button id="req-clear" class="btn subtle" type="button">Clear log</button>
+        <button id="req-refresh" class="btn subtle" type="button">Refresh</button>
+        <span class="opnote" id="req-note">Every request to the local server is logged (chat / models / image). Errors show in red with the provider's message.</span>
+      </div>
+      <div id="req-list" class="req-list"></div>
+    </section>
+
+</main>
+
+  <footer class="sk-footer">
+    <span id="statusbar">starting…</span>
+  </footer>
+
+  <script src="mailpane.js"></script>
+</body>
+</html>

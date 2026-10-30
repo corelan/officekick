@@ -1,0 +1,1633 @@
+/*
+ * MailKick task pane (runs inside Microsoft Outlook via Office.js, or in the
+ * browser via sim.js for offline testing).
+ *
+ * Pipeline: free-text instruction -> profile/route -> /api/chat -> reasoning
+ * stripping -> JSON ops extraction (hidden repair round on unclear output)
+ * -> validation against deck context -> approval gate -> Office.js apply.
+ */
+(function () {
+  "use strict";
+
+  var $ = function (id) { return document.getElementById(id); };
+
+  var SK = {
+    profImageFilter: true,
+    sim: false,
+    deck: null,
+    cfg: null,
+    busy: false,
+    modelsCache: {},     // connName -> {list:[...], at:ms}
+    sessionApprovals: {},// opType -> 'auto' when approved for this session
+    history: [],         // conversation turns shown to the model (session-only)
+    editingConn: null,
+    editingProf: null,
+    connBaseDirty: false,
+    lastCtx: null,
+    activeTab: "chat",
+  };
+
+  var CONN_TYPES = [
+    { id: "openai", label: "OpenAI (native)", base: "https://api.openai.com/v1", keyHint: "sk-..." },
+    { id: "anthropic", label: "Anthropic (native)", base: "https://api.anthropic.com", keyHint: "sk-ant-..." },
+    { id: "openrouter", label: "OpenRouter", base: "https://openrouter.ai/api/v1", keyHint: "sk-or-..." },
+    { id: "generic-openai", label: "OpenAI-compatible (generic)", base: "", keyHint: "optional" },
+    { id: "ollama", label: "Ollama", base: "http://localhost:11434", keyHint: "usually empty" },
+    { id: "llamacpp", label: "llama.cpp (llama-server)", base: "http://localhost:8080", keyHint: "usually empty" },
+  ];
+  var CONN_TYPE_BY_ID = {};
+  CONN_TYPES.forEach(function (t) { CONN_TYPE_BY_ID[t.id] = t; });
+
+  // styles for insert_paragraphs live in WORD_STYLES above
+
+  var WORD_STYLES = ["normal", "title", "heading1", "heading2", "heading3", "quote", "listParagraph"];
+
+  var OPS_META = {
+    draft_reply:    { label: "draft reply", hint: "Opens a reply window with AI-written HTML content - you review and send." },
+    compose_body:   { label: "replace compose text", hint: "Rewrites the body of the email you are composing (review first)." },
+    set_categories: { label: "categories", hint: "Adds Outlook categories to the selected message (must exist in your master list)." },
+    save_draft:     { label: "save draft", hint: "Saves the message you are composing as a draft." },
+  };
+  var OP_TYPES = Object.keys(OPS_META);
+
+  function FriendlyError(message) {
+    this.name = "FriendlyError";
+    this.friendly = true;
+    this.message = message;
+  }
+  FriendlyError.prototype = Object.create(Error.prototype);
+
+  // ------------------------------------------------------------------ //
+  // Misc helpers
+  // ------------------------------------------------------------------ //
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c];
+    });
+  }
+
+  function setStatus(text, cls) {
+    var el = $("chat-status");
+    el.className = "status" + (cls ? " " + cls : "") + (text ? "" : " hidden");
+    el.textContent = text || "";
+  }
+
+  // theme: follow the Office host (isDarkTheme covers Black/Dark Gray; fall
+  // back to body-color luminance; simulator follows the browser or ?theme=)
+  function luminance(hexColor) {
+    var m = /^\s*#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})/i.exec(hexColor || "");
+    if (!m) return 1;
+    return (0.2126 * parseInt(m[1], 16) +
+            0.7152 * parseInt(m[2], 16) +
+            0.0722 * parseInt(m[3], 16)) / 255;
+  }
+
+  function applyTheme() {
+    var dark = false, mode = "none";
+    try {
+      var t = Office && Office.context && Office.context.officeTheme;
+      if (t) {
+        if (typeof t.isDarkTheme === "boolean") { dark = t.isDarkTheme; mode = "host.isDarkTheme"; }
+        else if (t.bodyBackgroundColor) { dark = luminance(t.bodyBackgroundColor) < 0.5; mode = "host.luminance"; }
+      }
+    } catch (e) { /* theme API not available */ }
+    if (mode === "none") {
+      var q = new URLSearchParams(String(window.location.search || ""));
+      var forced = q.get("theme");
+      if (forced) { dark = forced.toLowerCase() === "dark"; mode = "forced"; }
+      else if (window.matchMedia) { dark = window.matchMedia("(prefers-color-scheme: dark)").matches; mode = "browser"; }
+    }
+    document.body.classList.toggle("dark", dark);
+    SK.theme = { dark: dark, via: mode };
+    dbg("theme", SK.theme);
+  }
+
+  function watchTheme() {
+    try {
+      Office.context.addHandlerAsync(Office.EventType.OfficeThemeChanged, function () {
+        applyTheme();
+        setStatus("Switched to " + (SK.theme.dark ? "dark" : "light") + " theme.", "");
+      }, function (asyncResult) { /* subscribed (or unsupported) */ });
+    } catch (e) { /* event not available on this host */ }
+    document.addEventListener("visibilitychange", function () {
+      if (!document.hidden) applyTheme();
+    });
+  }
+
+  function setFormMsg(el, text, ok) {
+    el.textContent = text || "";
+    el.className = "formmsg" + (ok ? " ok" : text ? " bad" : "");
+  }
+
+  function dbg(category, data) {
+    try {
+      if (!SK.cfg || !SK.cfg.debug) return;
+      fetch("/api/debug", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ category: "ui." + category, data: data }),
+      }).catch(function () {});
+    } catch (e) { /* never break the pane over logging */ }
+  }
+
+  function logApi(entry) {
+    SK.apiLog = SK.apiLog || [];
+    entry.at = entry.at || Date.now();
+    SK.apiLog.unshift(entry);
+    if (SK.apiLog.length > 80) SK.apiLog.pop();
+    if (SK.activeTab === "requests") renderRequests();
+  }
+
+  function fmtClock(ms) {
+    var d = new Date(ms);
+    return ("0" + d.getHours()).slice(-2) + ":" + ("0" + d.getMinutes()).slice(-2) +
+      ":" + ("0" + d.getSeconds()).slice(-2);
+  }
+
+  function renderRequests() {
+    var box = $("req-list");
+    if (!box) return;
+    var entries = SK.apiLog || [];
+    if (!entries.length) {
+      box.innerHTML = '<div class="opnote">No requests yet. Every AI call (chat, models, image) is logged here with status, duration and payloads.</div>';
+      return;
+    }
+    var frag = document.createDocumentFragment();
+    entries.forEach(function (e) {
+      var row = document.createElement("div");
+      row.className = "reqrow " + (e.ok ? "reqok" : "reqbad");
+      var head = document.createElement("div");
+      head.className = "reqhead";
+      var badge = document.createElement("span");
+      badge.className = "reqbadge " + (e.ok ? "ok" : "bad");
+      badge.textContent = e.ok ? ("HTTP " + e.status) : (e.status ? ("HTTP " + e.status) : "NETWORK");
+      head.appendChild(badge);
+      var lab = document.createElement("span");
+      lab.textContent = " " + e.method + " " + e.path +
+        (e.conn ? "  [" + e.conn + (e.model ? ":" + e.model : "") + "]" : "") +
+        "  " + fmtClock(e.at) + "  " + e.ms + " ms";
+      head.appendChild(lab);
+      row.appendChild(head);
+      if (e.err) {
+        var err = document.createElement("div");
+        err.className = "reqerr";
+        err.textContent = e.err;
+        row.appendChild(err);
+      }
+      if (e.req || e.resp) {
+        var det = document.createElement("details");
+        var sum = document.createElement("summary");
+        sum.textContent = "payload";
+        det.appendChild(sum);
+        var pre = document.createElement("pre");
+        pre.textContent = (e.req ? "Request:\n" + e.req : "") + (e.resp ? "\nResponse:\n" + e.resp : "");
+        det.appendChild(pre);
+        row.appendChild(det);
+      }
+      frag.appendChild(row);
+    });
+    box.innerHTML = "";
+    box.appendChild(frag);
+  }
+
+  function clearRequests() {
+    SK.apiLog = [];
+    renderRequests();
+  }
+
+  function apiJson(path, method, body) {
+    var t0 = Date.now();
+    var verb = method || "GET";
+    var opts = { method: verb, headers: {} };
+    var bodyStr = "";
+    if (body !== undefined) {
+      opts.headers["Content-Type"] = "application/json";
+      bodyStr = JSON.stringify(body);
+      opts.body = bodyStr;
+    }
+    var fetchPromise;
+    try {
+      fetchPromise = fetch(path, opts);
+    } catch (syncErr) {
+      logApi({ path: path, method: verb, status: 0, ok: false,
+        err: "network (sync): " + String(syncErr && syncErr.message || syncErr),
+        req: bodyStr.slice(0, 1600) });
+      throw new FriendlyError("Cannot reach the OfficeKick server (" + path + ")");
+    }
+    return fetchPromise.then(function (resp) {
+      return resp.text().then(function (text) {
+        var data = null;
+        try { data = text ? JSON.parse(text) : {}; } catch (e) { /* non-json */ }
+        var okResp = resp.ok;
+        logApi({
+          path: path, method: verb,
+          conn: body && body.connection || null,
+          model: body && body.model || null,
+          status: resp.status, ms: Date.now() - t0, ok: !!okResp,
+          err: okResp ? null : (data && data.error ? String(data.error) : "HTTP " + resp.status),
+          req: bodyStr.slice(0, 1600), resp: (text || "").slice(0, 1600),
+        });
+        if (!okResp) {
+          var msg = data && data.error ? data.error : "HTTP " + resp.status;
+          throw new FriendlyError(msg);
+        }
+        return data || {};
+      });
+    }, function (fetchErr) {
+      logApi({ path: path, method: verb, status: 0, ok: false,
+        conn: body && body.connection || null, model: body && body.model || null,
+        err: "network: " + String(fetchErr && fetchErr.message || fetchErr),
+        req: bodyStr.slice(0, 1600) });
+      throw new FriendlyError("Cannot reach the OfficeKick server (" + path + "): " +
+        String(fetchErr && fetchErr.message || fetchErr));
+    });
+  }
+
+  // ------------------------------------------------------------------ //
+  // Reasoning stripping (chain-of-thought wrappers). Tag strings are built
+  // via character codes so they never appear verbatim in this file.
+  // ------------------------------------------------------------------ //
+  var STRIP_RES = (function () {
+    var lt = String.fromCharCode(60), gt = String.fromCharCode(62);
+    var tags = ["think", "thinking", "reason", "reasoning"];
+    var res = [];
+    tags.forEach(function (tag) {
+      var opener = lt + tag + gt;
+      var closer = lt + "/" + tag + gt;
+      res.push(new RegExp(escapeRe(opener) + "[\\s\\S]*?" + escapeRe(closer) + "\\s*", "gi"));
+      res.push(new RegExp(escapeRe(opener) + "[\\s\\S]*$", "i"));
+    });
+    return res;
+  })();
+  function escapeRe(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
+
+  function stripReasoning(text) {
+    var out = String(text == null ? "" : text);
+    STRIP_RES.forEach(function (rx) { out = out.replace(rx, ""); });
+    return out.trim();
+  }
+
+  // ------------------------------------------------------------------ //
+  // JSON extraction (tolerant): direct parse, fence strip, balanced scan.
+  // ------------------------------------------------------------------ //
+  var FENCE = String.fromCharCode(96, 96, 96);
+
+  function extractObject(text) {
+    var t = String(text == null ? "" : text).trim();
+    var candidates = [t];
+    var noFence = t.split(FENCE).join("").trim(); // remove all fence markers
+    if (noFence !== t) candidates.push(noFence);
+    for (var i = 0; i < candidates.length; i++) {
+      try { return JSON.parse(candidates[i]); } catch (e) { /* continue */ }
+    }
+    // scan for the first balanced { ... } (string-aware)
+    var start = t.indexOf("{");
+    if (start >= 0) {
+      var depth = 0, inStr = false, escNext = false;
+      for (var k = start; k < t.length; k++) {
+        var c = t.charAt(k);
+        if (inStr) {
+          if (escNext) escNext = false;
+          else if (c === "\\") escNext = true;
+          else if (c === "\"") inStr = false;
+          continue;
+        }
+        if (c === "\"") { inStr = true; continue; }
+        if (c === "{") depth++;
+        else if (c === "}") {
+          depth--;
+          if (depth === 0) {
+            try { return JSON.parse(t.slice(start, k + 1)); } catch (e) { break; }
+          }
+        }
+      }
+    }
+    return undefined;
+  }
+
+  var SYSTEM_PROMPT = [
+    "You are MailKick, an AI assistant inside a Microsoft Outlook task pane.",
+    "You get the current email context and a user request. Reply with ONLY one JSON",
+    "object - never commentary, never code fences, never reasoning. Format A",
+    "(conversational):",
+    '{"kind":"reply","text":"your answer"}',
+    "Format B (mailbox actions):",
+    '{"kind":"mail_ops","ops":[ ... ]}',
+    "",
+    "Allowed op types:",
+    '- {"type":"draft_reply","html":"<p>reply text</p>"} (READ mode: opens a reply window with this content; simple inline tags only - p, br, b, i, a, ul, li)',
+    '- {"type":"compose_body","html":"<p>...</p>"} (COMPOSE mode only: replaces the body of the email being written)',
+    '- {"type":"set_categories","names":["Category"]} (must already exist in the mailbox master category list)',
+    '- {"type":"save_draft"} (COMPOSE mode: saves the message being composed as a draft)',
+    "",
+    "Rules:",
+    "- Choose ops that match the mode stated in the EMAIL CONTEXT; wrong-mode ops are rejected.",
+    "- Reply/summary/translate/brainstorm requests that need no change: use format A.",
+    "- Keep reply drafts short and human; greeting + body + signoff unless told otherwise.",
+  ].join("\n");
+
+  var NOTES_OFF_RULE = "";
+
+  var REPAIR_ASK =
+    "Your previous answer did not follow the required format. " +
+    "Reply again with ONLY the JSON object (format A or B) and nothing else: " +
+    'either {"kind":"reply","text":"..."} or {"kind":"slide_ops","ops":[...]} - ' +
+    "no reasoning, no fences, no commentary.";
+
+  var HISTORY_MAX_EXCHANGES = 6; // oldest turns are dropped, newest kept
+  var HISTORY_MAX_CHARS = 2000;  // per stored message
+
+  var CONTENT_ROUTE_RE = new RegExp(
+    "\\b(email|mail|message|reply|respond|respond|draft|summary|summarize|translate|categorize|category|categories|subject|body|sender|attach|attachment|compose|send)\\b", "i"
+  );
+
+  function historyCap(text) {
+    var s = String(text || "");
+    return s.length > HISTORY_MAX_CHARS ? s.slice(0, HISTORY_MAX_CHARS) + " [truncated]" : s;
+  }
+
+  function pushHistory(userText, assistantText) {
+    SK.history.push({ role: "user", content: historyCap(userText) });
+    SK.history.push({ role: "assistant", content: historyCap(assistantText) });
+    while (SK.history.length > HISTORY_MAX_EXCHANGES * 2) SK.history.shift();
+    updateChatMeta();
+    dbg("history.push", { exchanges: Math.floor(SK.history.length / 2) });
+  }
+
+  function resetHistory() {
+    SK.history = [];
+    updateChatMeta();
+    dbg("history.reset", {});
+  }
+
+  function updateChatMeta() {
+    var el = $("chat-history-note");
+    if (!el) return;
+    var n = Math.floor(SK.history.length / 2);
+    el.textContent = n ? "AI sees the last " + n + " exchange(s)" : "new conversation";
+  }
+
+  function routeToModel(prof, route, instruction) {
+    if (route === "content") return prof.content;
+    if (route === "other") return prof.other;
+    return CONTENT_ROUTE_RE.test(instruction) ? prof.content : prof.other;
+  }
+
+  // ------------------------------------------------------------------ //
+  // Mailbox adapter (Outlook mailbox.item via Office.js)
+  // ------------------------------------------------------------------ //
+    function MailDeck() {}
+
+  MailDeck.prototype.run = function (name, fn) {
+    // Outlook's mailbox API = a plain object once Office.onReady resolved;
+    // no Word.run-style context batching - each op = its own async sequence
+    var self = this;
+    return fn(self);
+  };
+
+  MailDeck.prototype.capabilities = function () {
+    return { text: true, host: "Outlook" };
+  };
+
+  function promisify(fn) {
+    return new Promise(function (resolve, reject) {
+      try { fn(resolve, reject); } catch (e) { reject(e); }
+    });
+  }
+
+  function toHtml(text) {
+    // the model returns draft_reply/compose_body as TEXT; wrap to minimal HTML
+    var escd = String(text)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    return "<p>" + escd.split(/\n{2,}/).join("</p><p>").replace(/\n/g, "<br />") + "</p>";
+  }
+
+  MailDeck.prototype.getContext = function (opts) {
+    return promisify(function (resolve, reject) {
+      try {
+        var item = Office.context.mailbox.item;
+        if (!item) {
+          reject(new FriendlyError("Open or select a message first (the reading pane must stay open)."));
+          return;
+        }
+        var out = { host: "Outlook", mode: "", subject: "", sender: "", to: "", bodyText: "", categories: [] };
+        var isCompose = (item.getAsync !== undefined && item.subject && item.subject.getAsync);
+        out.mode = isCompose ? "compose" : "read";
+        var steps = [];
+        var subjPromise = promisify(resolve, reject) ? null : null;
+        // subject
+        steps.push(new Promise(function (res, rej) {
+          if (isCompose) item.subject.getAsync(function (r) { r.status === "succeeded" ? res(r.value) : rej(new FriendlyError(r.error.message)); });
+          else res(String(item.subject || ""));
+        }));
+        // body
+        steps.push(new Promise(function (res, rej) {
+          item.body.getAsync("text", function (r) { r.status === "succeeded" ? res(r.value) : rej(new FriendlyError(r.error.message)); });
+        }));
+        // recipients (to)
+        steps.push(new Promise(function (res, rej) {
+          item.to.getAsync(function (r) {
+            if (r.status !== "succeeded") { res(""); return; }
+            res(r.value.map(function (x) { return x.displayName || x.emailAddress || ""; }).join(", "));
+          });
+        }));
+        // categories
+        steps.push(new Promise(function (res) {
+          if (!item.categories || !item.categories.getAsync) { res([]); return; }
+          item.categories.getAsync(function (r) {
+            res(r.status === "succeeded" ? (r.value || []).map(function (c) { return c.displayName; }) : []);
+          });
+        }));
+        Promise.all(steps).then(function (vals) {
+          out.subject = String(vals[0] || "");
+          out.bodyText = String(vals[1] || "");
+          out.to = String(vals[2] || "");
+          out.categories = vals[3] || [];
+          if (out.mode === "read" && Office.context.mailbox.item.from) {
+            out.sender = (Office.context.mailbox.item.from.displayName || Office.context.mailbox.item.from.emailAddress || "");
+          }
+          resolve(out);
+        }, reject);
+      } catch (e) { reject(e); }
+    });
+  };
+
+  MailDeck.prototype.draftReply = function (html) {
+    return promisify(function (resolve, reject) {
+      var item = Office.context.mailbox.item;
+      if (!item || !item.displayReplyForm) {
+        reject(new FriendlyError("Open a received message first (a reply needs an existing email)."));
+        return;
+      }
+      item.displayReplyForm(String(html));
+      resolve({ ok: true });
+    });
+  };
+
+  MailDeck.prototype.composeBody = function (html) {
+    return promisify(function (resolve, reject) {
+      var item = Office.context.mailbox.item;
+      if (!item || !item.body || !item.body.setAsync) {
+        reject(new FriendlyError("replace compose text works only while composing an email."));
+        return;
+      }
+      item.body.setAsync(String(html), { coercionType: Office.CoercionType.Html }, function (r) {
+        r.status === "succeeded" ? resolve({ ok: true }) : reject(new FriendlyError(r.error.message));
+      });
+    });
+  };
+
+  MailDeck.prototype.setCategories = function (names) {
+    return promisify(function (resolve, reject) {
+      var item = Office.context.mailbox.item;
+      if (!item || !item.categories || !item.categories.addAsync) {
+        reject(new FriendlyError("this Outlook build does not support categories from add-ins (Mailbox 1.8)."));
+        return;
+      }
+      Office.context.mailbox.masterCategories.getAsync(function (mr) {
+        if (mr.status !== "succeeded") { reject(new FriendlyError("could not read the mailbox category list: " + mr.error.message)); return; }
+        var known = {};
+        (mr.value || []).forEach(function (c) { known[c.displayName.toLowerCase()] = true; });
+        var unknown = (names || []).filter(function (n) { return !known[String(n).toLowerCase()]; });
+        if (unknown.length) {
+          reject(new FriendlyError("category not in your master list: " + unknown.join(", ") + " - create it in Outlook first."));
+          return;
+        }
+        item.categories.addAsync(names.map(String), function (r) {
+          r.status === "succeeded" ? resolve({ ok: true }) : reject(new FriendlyError(r.error.message));
+        });
+      });
+    });
+  };
+
+  MailDeck.prototype.saveDraft = function () {
+    return promisify(function (resolve, reject) {
+      var item = Office.context.mailbox.item;
+      if (!item || !item.saveAsync) {
+        reject(new FriendlyError("save draft works only while composing an email."));
+        return;
+      }
+      item.saveAsync(function (r) {
+        r.status === "succeeded" ? resolve({ ok: true }) : reject(new FriendlyError(r.error.message));
+      });
+    });
+  };
+
+  MailDeck.prototype.renderDebug = function (el) { el.innerHTML = ""; };
+  function styleNameOf(kind) {
+    if (!kind || String(kind).toLowerCase() === "normal") return null; // doc default
+    var k = String(kind).toLowerCase();
+    if (k === "title") return "Title";
+    if (k === "heading1") return "Heading 1";
+    if (k === "heading2") return "Heading 2";
+    if (k === "heading3") return "Heading 3";
+    if (k === "quote") return "Quote";
+    if (k === "listparagraph") return "List Paragraph";
+    return null;
+  }
+
+    // ------------------------------------------------------------------ //
+  // Word ops validation + formatting
+  // ------------------------------------------------------------------ //
+  function approvalMode(opType) {
+    return SK.sessionApprovals[opType] || (SK.cfg && SK.cfg.approvals && SK.cfg.approvals[opType]) || "confirm";
+  }
+
+  function validateOps(rawOps, ctx) {
+    var ops = [], invalid = [];
+    (rawOps || []).forEach(function (op, index) {
+      if (!op || typeof op !== "object") { invalid.push({ op: op, reason: "not an object" }); return; }
+      var t = op.type;
+      if (OP_TYPES.indexOf(t) < 0) { invalid.push({ op: op, reason: "unknown op type '" + t + "'" }); return; }
+      if (!ctx && t !== "draft_reply" && t !== "set_categories") {
+        invalid.push({ op: op, reason: "needs email context (enable \u0027include email context\u0027)" });
+        return;
+      }
+      var bad = function (reason) { invalid.push({ op: op, reason: reason }); };
+      var paraOk = function (v) { return typeof v === "number" && Math.floor(v) === v && v >= 0 && (!ctx || v < ctx.paragraphCount); };
+      var out = { type: t };
+      if (t === "draft_reply") {
+        var html = op.html;
+        if (typeof html !== "string" || html.length < 2) {
+          if (typeof op.text === "string" && op.text.length >= 2) html = op.text;
+          else { bad("missing reply text"); return; }
+        }
+        if (html.length > 20000) { bad("reply too long (max 20000 chars)"); return; }
+        out.html = html;
+      } else if (t === "compose_body") {
+        if (!ctx || ctx.mode !== "compose") { bad("compose_body works only on an email being composed"); return; }
+        var cb = op.html;
+        if (typeof cb !== "string" || cb.length < 2) {
+          if (typeof op.text === "string" && op.text.length >= 2) cb = op.text;
+          else { bad("missing body text"); return; }
+        }
+        if (cb.length > 60000) { bad("body too long (max 60000 chars)"); return; }
+        out.html = cb;
+      } else if (t === "set_categories") {
+        var names = op.names || op.categories;
+        if (!Array.isArray(names) || !names.length || names.length > 6) { bad("missing names (1-6)"); return; }
+        if (!names.every(function (nm) { return typeof nm === "string" && nm.length >= 1 && nm.length <= 64; })) {
+          bad("bad category names"); return;
+        }
+        out.names = names.map(String);
+      } else if (t === "save_draft") {
+        if (!ctx || ctx.mode !== "compose") { bad("save draft works only while composing"); return; }
+      }
+      ops.push(out);
+    });
+    return { ops: ops, invalid: invalid, notesDropped: 0 };
+  }
+
+  function fmtOp(op, ctx) {
+    switch (op.type) {
+      case "draft_reply": {
+        var pr = op.html.length > 70 ? op.html.slice(0, 70) + "…" : op.html;
+        return "Reply window with: " + pr;
+      }
+      case "compose_body":
+        return "REPLACE the email you are composing (" + op.html.length + " chars) - review";
+      case "set_categories":
+        return "Add categories: " + op.names.join(", ");
+      case "save_draft":
+        return "Save the message being composed as draft";
+    }
+    return op.type;
+  }
+
+function applyOps(deck, ops, ctx) {
+    var lines = [], manualNotes = [];
+    var runOne = function (op) {
+      switch (op.type) {
+        case "draft_reply":
+          return deck.draftReply(op.html).then(function () {
+            lines.push({ ok: true, text: "reply window opened with AI content - review and send" });
+          });
+        case "compose_body":
+          return deck.composeBody(op.html).then(function () {
+            lines.push({ ok: true, text: "compose body replaced (" + op.html.length + " chars)" });
+          });
+        case "set_categories":
+          return deck.setCategories(op.names).then(function () {
+            lines.push({ ok: true, text: "categories added: " + op.names.join(", ") });
+          });
+        case "save_draft":
+          return deck.saveDraft().then(function () {
+            lines.push({ ok: true, text: "draft saved" });
+          });
+      }
+      return Promise.resolve();
+    };
+    var chain = Promise.resolve();
+    ops.forEach(function (op) {
+      chain = chain.then(function () { return runOne(op); }, function (err) {
+        lines.push({ ok: false, text: fmtOp(op, ctx) + " - " + ((err && err.message) || String(err)) });
+        return Promise.resolve();
+      });
+    });
+    return chain.then(function () {
+      return { lines: lines, manualNotes: manualNotes };
+    });
+  }
+
+  // ------------------------------------------------------------------ //
+  // Chat / prompt flow
+  // ------------------------------------------------------------------ //
+  function formatContext(ctx) {
+    var lines = [];
+    lines.push("EMAIL CONTEXT (host: " + ctx.host + ", mode: " + ctx.mode + "):");
+    if (ctx.sender) lines.push("FROM: " + ctx.sender);
+    if (ctx.to) lines.push("TO: " + ctx.to);
+    if (ctx.subject) lines.push("SUBJECT: " + ctx.subject);
+    if (ctx.categories && ctx.categories.length) lines.push("CATEGORIES: " + ctx.categories.join(", "));
+    var body = String(ctx.bodyText || "");
+    if (body.length > 4000) body = body.slice(0, 4000) + "…[truncated]";
+    lines.push("BODY:\n" + body);
+    return lines.join("\n");
+  }
+
+  function currentProfile() {
+    var name = $("chat-profile").value;
+    if (!SK.cfg) return null;
+    var prof = (SK.cfg.profiles || []).find(function (p) { return p.name === name; });
+    if (prof) return prof;
+    var def = SK.cfg.defaultProfile;
+    return (SK.cfg.profiles || []).find(function (p) { return p.name === def; }) || (SK.cfg.profiles || [])[0] || null;
+  }
+
+  function setRunEnabled(on) {
+    $("chat-run").disabled = !on || SK.busy;
+  }
+
+  function runPrompt() {
+    if (SK.busy) return;
+    var input = $("chat-input");
+    var instruction = input.value.trim();
+    if (!instruction) return;
+    var prof = currentProfile();
+    if (!prof) { setStatus("No profile yet - create one on the Profiles tab first.", "error"); switchTab("profiles"); return; }
+    var route = $("chat-route").value;
+    var ref = routeToModel(prof, route, instruction);
+    if (!ref || !ref.connection || !ref.model) {
+      setStatus("Profile '" + prof.name + "' has no model assigned for this route. Open Profiles and pick connection + model.", "error");
+      return;
+    }
+    SK.busy = true;
+    setRunEnabled(false);
+    var wantCtx = $("chat-context").checked;
+    setStatus("Collecting document context…", "busy");
+    var ctxPromise = wantCtx ? SK.deck.getContext({}).catch(function (err) {
+      setStatus("Could not read the deck (" + err.message + ") - continuing without context.", "error");
+      return null;
+    }) : Promise.resolve(null);
+
+    ctxPromise.then(function (ctx) {
+      SK.lastCtx = ctx;
+      var sys = SYSTEM_PROMPT + "\nHost: " + (SK.sim ? "DocKick simulator" : SK.deck.capabilities().host);
+            var user = (ctx ? formatContext(ctx) : "(no deck context requested)") + "\n\nUSER REQUEST:\n" + instruction;
+      var messages = [
+        { role: "system", content: sys },
+      ].concat(SK.history.slice(-(HISTORY_MAX_EXCHANGES * 2)))
+       .concat([{ role: "user", content: user }]);
+      dbg("prompt", { profile: prof.name, route: route, model: ref.model, connection: ref.connection, instruction: instruction, hadContext: !!ctx, messages: messages });
+      setStatus("Asking " + ref.model + " (via " + ref.connection + ")…", "busy");
+      return apiJson("/api/chat", "POST", { connection: ref.connection, model: ref.model, messages: messages }).then(function (resp) {
+        dbg("response", { text: resp.text, elapsedMs: resp.elapsedMs });
+        SK.lastModelText = { text: resp.text };
+        var parsed = tryParse(resp.text);
+        if (!parsed.ok) {
+          setStatus("Model output unclear - silently re-asking for clean JSON…", "busy");
+          var repair = messages.concat([
+            { role: "assistant", content: resp.text },
+            { role: "user", content: REPAIR_ASK },
+          ]);
+          dbg("repair.request", {});
+          return apiJson("/api/chat", "POST", { connection: ref.connection, model: ref.model, messages: repair }).then(function (resp2) {
+            dbg("repair.response", { text: resp2.text, elapsedMs: resp2.elapsedMs });
+            SK.lastModelText = { text: resp2.text };
+            return tryParse(resp2.text);
+          });
+        }
+        return parsed;
+      }).then(function (parsed) {
+        renderParsed(parsed, ctx, instruction);
+        pushHistory(instruction, (SK.lastModelText && SK.lastModelText.text) || parsed.text || "");
+      });
+    }).catch(function (err) {
+      var msg = err && err.friendly ? err.message : (err && err.message) || String(err);
+      setStatus(msg, "error");
+    }).then(function () {
+      SK.busy = false;
+      setRunEnabled(true);
+    });
+  }
+
+  function tryParse(text) {
+    var stripped = stripReasoning(text);
+    if (!stripped) return { ok: false, text: text };
+    var obj = extractObject(stripped);
+    if (obj && typeof obj === "object") {
+      if (obj.kind === "reply" && typeof obj.text === "string") return { ok: true, kind: "reply", text: obj.text };
+      if (obj.kind === "slide_ops" && Array.isArray(obj.ops)) return { ok: true, kind: "slide_ops", ops: obj.ops };
+      if (Array.isArray(obj.ops)) return { ok: true, kind: "slide_ops", ops: obj.ops }; // tolerate missing kind
+    }
+    return { ok: false, text: stripped };
+  }
+
+  function renderParsed(parsed, ctx, instruction) {
+    var out = $("chat-output");
+    out.innerHTML = "";
+    if (!parsed.ok) {
+      var box = document.createElement("div");
+      box.className = "reply-text";
+      box.textContent = parsed.text || "(empty response)";
+      out.appendChild(box);
+      var note = document.createElement("div");
+      note.className = "opnote";
+      note.textContent = "Shown as text: the model did not return a valid action JSON. Enable debug logging (Settings) to inspect the raw output.";
+      out.appendChild(note);
+      setStatus("Done (reply as text).", "ok");
+      return;
+    }
+    if (parsed.kind === "reply") {
+      var box2 = document.createElement("div");
+      box2.className = "reply-text";
+      box2.textContent = parsed.text;
+      out.appendChild(box2);
+      setStatus("Done.", "ok");
+      return;
+    }
+    var validation = validateOps(parsed.ops, ctx);
+    if (!validation.ops.length && !validation.invalid.length) {
+      var box3 = document.createElement("div");
+      box3.className = "reply-text";
+      box3.textContent = "(model returned an empty action list)";
+      out.appendChild(box3);
+      setStatus("Done.", "ok");
+      return;
+    }
+    // auto-apply: skip the preview entirely when every action's policy is 'auto'
+    // and nothing is invalid/blocked - approvals still halt the run otherwise
+    var allAuto = validation.invalid.length === 0 &&
+      validation.ops.length > 0 &&
+      validation.ops.every(function (op) { return approvalMode(op.type) === "auto"; });
+    if ($("chat-autoapply").checked && allAuto && SK.deck.capabilities().text) {
+      dbg("ops.autoapply", { count: validation.ops.length });
+      var autoBox = document.createElement("div");
+      autoBox.className = "opsbox";
+      var autoH = document.createElement("h3");
+      autoH.textContent = "Auto-applied " + validation.ops.length + " action(s) (auto-apply)" +
+        (validation.notesDropped ? " - " + validation.notesDropped + " notes action(s) skipped (setting off)" : "");
+      autoBox.appendChild(autoH);
+      var autoResult = document.createElement("div");
+      autoBox.appendChild(autoResult);
+      out.appendChild(autoBox);
+      setStatus("Auto-apply: running " + validation.ops.length + " action(s)…", "busy");
+      applyOps(SK.deck, validation.ops, ctx).then(function (res) {
+        renderApplyResult(autoResult, res);
+        var fails = res.lines.filter(function (l) { return !l.ok; }).length;
+        setStatus(fails ? "Auto-applied with " + fails + " error(s)." : "Auto-applied " + validation.ops.length + " action(s).", fails ? "error" : "ok");
+        renderSimDeck();
+        updateDeckSummary();
+        dbg("ops.applied", { lines: res.lines, autoapply: true });
+      }).catch(function (err) {
+        setStatus((err && err.message) || String(err), "error");
+      });
+      return;
+    }
+    renderOpsPreview(out, validation, ctx);
+  }
+
+  // ------------------------------------------------------------------ //
+  // Ops preview + approval gate
+  // ------------------------------------------------------------------ //
+  function renderApplyResult(result, res) {
+    result.innerHTML = "";
+    res.lines.forEach(function (l) {
+      var d = document.createElement("div");
+      d.className = "resultline " + (l.ok ? "ok" : "fail");
+      d.textContent = l.text;
+      result.appendChild(d);
+    });
+    if (res.manualNotes.length) {
+      var mb = document.createElement("div");
+      mb.className = "manualbox";
+      mb.appendChild(document.createElement("h4")).textContent = "DocKick could not write this automatically - copy manually:";
+      res.manualNotes.forEach(function (mn) {
+        var ta = document.createElement("textarea");
+        ta.value = mn.text;
+        mb.appendChild(ta);
+      });
+      result.appendChild(mb);
+    }
+  }
+
+  function renderOpsPreview(out, validation, ctx) {
+    var caps = SK.deck.capabilities();
+    var box = document.createElement("div");
+    box.className = "opsbox";
+    var h = document.createElement("h3");
+    h.textContent = "Proposed actions" + ($("chat-autoapply").checked ? " (auto-apply)" : "") + " - approval policy: " +
+      OP_TYPES.filter(function (t) { return approvalMode(t) !== "auto"; }).map(function (t) { return OPS_META[t].label + "=" + approvalMode(t); }).join(", ");
+    box.appendChild(h);
+
+    if (!caps.text) {
+      var warn = document.createElement("div");
+      warn.className = "status error";
+      warn.textContent = "This Word build lacks the required Word.js APIs. DocKick can read but not modify. Update Microsoft 365 to enable edits.";
+      box.appendChild(warn);
+    }
+
+    var confirmTypes = {};
+    var rows = [];
+    validation.ops.forEach(function (op) {
+      var mode = approvalMode(op.type);
+      rows.push({ op: op, mode: mode });
+      if (mode === "confirm") confirmTypes[op.type] = true;
+    });
+    validation.invalid.forEach(function (entry) {
+      rows.push({ op: entry.op || { type: "?" }, mode: "invalid", reason: entry.reason });
+    });
+
+    var tableRows = document.createElement("div");
+    rows.forEach(function (row) {
+      var r = document.createElement("div");
+      r.className = "oprow" + (row.mode === "deny" ? " blocked" : row.mode === "invalid" ? " invalid" : "");
+      var badge = document.createElement("span");
+      badge.className = "optype " + row.op.type;
+      badge.textContent = (OPS_META[row.op.type] || { label: row.op.type }).label;
+      var desc = document.createElement("span");
+      desc.className = "opdesc";
+      var text = row.mode === "deny" ? fmtOp(row.op, ctx) + "  - blocked by approval policy"
+        : row.mode === "invalid" ? (row.op && row.op.type ? row.op.type + ": " : "") + (row.reason || "invalid")
+        : fmtOp(row.op, ctx);
+      desc.textContent = text;
+      r.appendChild(badge);
+      r.appendChild(desc);
+      if (row.mode === "confirm") {
+        var cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.className = "opcheckbox";
+        cb.checked = SK.sessionApprovals[row.op.type] === "auto"; // remembered => pre-approved
+        cb.dataset.optype = row.op.type;
+        var lab = document.createElement("span");
+        lab.className = "opnote";
+        lab.textContent = cb.checked ? "(approved for this session)" : "(needs approval)";
+        cb.addEventListener("change", function () {
+          lab.textContent = cb.checked ? (SK.sessionApprovals[row.op.type] === "auto" ? "(approved for this session)" : "(approved once)") : "(needs approval)";
+          updateApplyLabel();
+        });
+        r.appendChild(cb);
+        r.appendChild(lab);
+        row._cb = cb;
+      } else if (row.mode === "auto") {
+        var note2 = document.createElement("span");
+        note2.className = "opnote";
+        note2.textContent = "auto";
+        r.appendChild(note2);
+      } else if (row.mode === "deny") {
+        var note3 = document.createElement("span");
+        note3.className = "opnote";
+        note3.textContent = "denied";
+        r.appendChild(note3);
+      } else {
+        var note4 = document.createElement("span");
+        note4.className = "opnote";
+        note4.textContent = row.reason || "";
+        r.appendChild(note4);
+      }
+      tableRows.appendChild(r);
+    });
+    box.appendChild(tableRows);
+
+    // remember-for-session checkboxes (one per confirm type present)
+    var remember = {};
+    Object.keys(confirmTypes).forEach(function (type) {
+      if (SK.sessionApprovals[type] === "auto") return; // already remembered
+      var lab2 = document.createElement("label");
+      lab2.className = "field-inline check";
+      var cb2 = document.createElement("input");
+      cb2.type = "checkbox";
+      cb2.dataset.optype = type;
+      remember[type] = cb2;
+      lab2.appendChild(cb2);
+      lab2.appendChild(document.createTextNode("don't ask again for '" + OPS_META[type].label + "' this session"));
+      box.appendChild(lab2);
+    });
+
+    var autoOps = rows.filter(function (r) { return r.mode === "auto"; }).length;
+    var confirmOps = rows.filter(function (r) { return r.mode === "confirm"; }).length;
+    var denyOps = rows.filter(function (r) { return r.mode === "deny"; }).length;
+    var invalidOps = validation.invalid.length;
+
+    var btnrow = document.createElement("div");
+    btnrow.className = "row";
+    var applyBtn = document.createElement("button");
+    applyBtn.className = "btn primary";
+    var updateApplyLabel = function () {
+      var approved = rows.filter(function (r) {
+        return r.mode === "confirm" && r._cb && r._cb.checked;
+      }).length;
+      applyBtn.textContent = "Apply " + autoOps + " auto" +
+        (confirmOps ? " + " + approved + "/" + confirmOps + " approved" : "");
+      applyBtn.disabled = (autoOps + approved === 0) || !caps.text;
+    };
+    updateApplyLabel();
+    if (confirmOps > 0) {
+      var selectAllBtn = document.createElement("button");
+      selectAllBtn.className = "btn subtle";
+      selectAllBtn.textContent = "Select all (" + confirmOps + ")";
+      selectAllBtn.disabled = !caps.text;
+      selectAllBtn.addEventListener("click", function (ev) {
+        ev.preventDefault();
+        rows.forEach(function (r) {
+          if (r.mode === "confirm" && r._cb && !r._cb.checked) {
+            r._cb.checked = true;
+            r._cb.dispatchEvent(new Event("change"));
+          }
+        });
+        dbg("ops.selectall", { count: confirmOps });
+      });
+      btnrow.appendChild(selectAllBtn);
+    }
+    var discardBtn = document.createElement("button");
+    discardBtn.className = "btn subtle";
+    discardBtn.textContent = "Discard";
+    btnrow.appendChild(applyBtn);
+    btnrow.appendChild(discardBtn);
+    if (denyOps || invalidOps || validation.notesDropped) {
+      var info = document.createElement("span");
+      info.className = "opnote";
+      info.textContent = (denyOps ? denyOps + " blocked, " : "") + (invalidOps ? invalidOps + " invalid, " : "") +
+        (validation.notesDropped ? validation.notesDropped + " notes action(s) skipped (Generate speaker notes is off), " : "") +
+        (autoOps + denyOps + invalidOps + validation.notesDropped ? "rest not affected" : "");
+      btnrow.appendChild(info);
+    }
+    box.appendChild(btnrow);
+
+    var result = document.createElement("div");
+    box.appendChild(result);
+
+    discardBtn.addEventListener("click", function () {
+      box.parentNode.removeChild(box);
+      setStatus("Discarded proposed actions.", "");
+      dbg("ops.discarded", {});
+    });
+
+    applyBtn.addEventListener("click", function () {
+      var chosen = [];
+      rows.forEach(function (row) {
+        if (row.mode === "auto") chosen.push(row.op);
+        else if (row.mode === "confirm" && row._cb && row._cb.checked) chosen.push(row.op);
+      });
+      Object.keys(remember).forEach(function (type) {
+        if (remember[type].checked && chosen.some(function (op) { return op.type === type; })) {
+          SK.sessionApprovals[type] = "auto";
+        }
+      });
+      if (!chosen.length) { setStatus("Nothing approved - nothing applied.", ""); return; }
+      dbg("ops.apply", { approved: chosen.map(function (op) { return op.type; }), count: chosen.length });
+      applyBtn.disabled = true;
+      setStatus("Applying " + chosen.length + " op(s)…", "busy");
+      applyOps(SK.deck, chosen, SK.lastCtx || ctx).then(function (res) {
+        result.innerHTML = "";
+        res.lines.forEach(function (l) {
+          var d = document.createElement("div");
+          d.className = "resultline " + (l.ok ? "ok" : "fail");
+          d.textContent = l.text;
+          result.appendChild(d);
+        });
+        if (res.manualNotes.length) {
+          var mb = document.createElement("div");
+          mb.className = "manualbox";
+          mb.appendChild(document.createElement("h4")).textContent = "Notes could not be written automatically - copy manually:";
+          res.manualNotes.forEach(function (mn) {
+            var ta = document.createElement("textarea");
+            ta.value = mn.text;
+            mb.appendChild(ta);
+          });
+          result.appendChild(mb);
+        }
+        var fails = res.lines.filter(function (l) { return !l.ok; }).length;
+        setStatus(fails ? "Applied with " + fails + " error(s)." : "Applied " + chosen.length + " op(s).", fails ? "error" : "ok");
+        renderSimDeck();
+        updateDeckSummary();
+        dbg("ops.applied", { lines: res.lines, manualNotes: res.manualNotes });
+      });
+    });
+
+    out.appendChild(box);
+    setStatus(confirmOps ? "Approval needed before applying." : "Review proposed actions.", "");
+    dbg("ops.preview", { total: rows.length, auto: autoOps, confirm: confirmOps, deny: rows.filter(function (r) { return r.mode === "deny"; }).length, invalid: invalidOps });
+  }
+
+  // ------------------------------------------------------------------ //
+  // Deck summary + sim renderer
+  // ------------------------------------------------------------------ //
+  function updateDeckSummary() {
+    var el = $("deck-summary");
+    if (!SK.deck) { el.textContent = ""; return; }
+    SK.deck.getContext({ maxParas: 1 }).then(function (ctx) {
+      var sel = ctx.selected && ctx.selected.length ? " (text selected)" : "";
+      el.textContent = "Email: " + (ctx.subject || "(open an email)") + " - mode " + ctx.mode + " - " + ctx.host;
+    }).catch(function (err) {
+      el.textContent = "Document: unreadable (" + err.message + ")";
+    });
+  }
+
+  function renderSimDeck() {
+    if (!SK.sim) return;
+    SK.deck.renderDebug($("sim-deck-view"));
+  }
+
+  // ------------------------------------------------------------------ //
+  // Tabs
+  // ------------------------------------------------------------------ //
+  function switchTab(id) {
+    SK.activeTab = id;
+    if (id === "requests") renderRequests();
+    Array.prototype.forEach.call(document.querySelectorAll("#tabs button"), function (b) {
+      b.classList.toggle("active", b.dataset.tab === id);
+    });
+    Array.prototype.forEach.call(document.querySelectorAll(".tab"), function (s) {
+      s.classList.toggle("active", s.id === "tab-" + id);
+    });
+  }
+
+  // ------------------------------------------------------------------ //
+  // Connections tab
+  // ------------------------------------------------------------------ //
+  function renderConnections() {
+    var ts = $("conn-type");
+    if (!ts.options.length) {
+      ts.innerHTML = CONN_TYPES.map(function (t) {
+        return '<option value="' + t.id + '">' + esc(t.label) + "</option>";
+      }).join("");
+    }
+    var list = $("conn-list");
+    var rows = [ "<tr><th>Name</th><th>Type</th><th>Base URL</th><th>Key</th></tr>" ];
+    (SK.cfg.connections || []).forEach(function (c) {
+      var used = (SK.cfg.profiles || []).filter(function (p) {
+        return (p.content && p.content.connection === c.name) ||
+               (p.other && p.other.connection === c.name);
+      }).map(function (p) { return p.name; });
+      // click the name to edit; deletion lives in the edit form (with confirm)
+      var nameCell =
+        '<button class="namebtn" data-edit="' + esc(c.name) + '" title="edit">' +
+        esc(c.name) + "</button>" +
+        (used.length ? '<br /><span class="opnote">in use: ' + esc(used.join(", ")) + "</span>" : "");
+      rows.push(
+        "<tr><td>" + nameCell + "</td><td>" + esc(c.type) + "</td><td>" + esc(c.baseUrl || "-") + "</td>" +
+        "<td>" + (c.hasKey ? "set" : "—") + "</td></tr>"
+      );
+    });
+    list.innerHTML = rows.join("") || "<tr><td>No connections yet - add one below.</td></tr>";
+    Array.prototype.forEach.call(list.querySelectorAll("[data-edit]"), function (b) {
+      b.addEventListener("click", function () { editConnection(b.dataset.edit); });
+    });
+  }
+
+  function editConnection(name) {
+    var c = (SK.cfg.connections || []).find(function (x) { return x.name === name; });
+    if (!c) return;
+    SK.editingConn = name;
+    SK.connBaseDirty = true;
+    $("conn-form-title").textContent = "Edit connection: " + name;
+    $("conn-name").value = c.name;
+    $("conn-type").value = c.type;
+    $("conn-base").value = c.baseUrl || "";
+    $("conn-key").value = "";
+    $("conn-key").placeholder = "saved - leave empty to keep";
+    setFormMsg($("conn-formmsg"), "", true);
+    $("conn-testout").innerHTML = "";
+  }
+
+  function resetConnForm() {
+    SK.editingConn = null;
+    SK.connBaseDirty = false;
+    $("conn-form-title").textContent = "New connection";
+    $("conn-name").value = "";
+    $("conn-type").value = "openai";
+    $("conn-base").value = CONN_TYPE_BY_ID["openai"].base;
+    $("conn-key").value = "";
+    $("conn-key").placeholder = "";
+    setFormMsg($("conn-formmsg"), "", true);
+    $("conn-testout").innerHTML = "";
+  }
+
+  function connFormValues() {
+    return {
+      name: $("conn-name").value.trim(),
+      type: $("conn-type").value,
+      baseUrl: $("conn-base").value.trim(),
+      apiKey: $("conn-key").value,
+    };
+  }
+
+  function saveConnection() {
+    var v = connFormValues();
+    if (!v.name) { setFormMsg($("conn-formmsg"), "Name is required."); return; }
+    if (!v.baseUrl) { setFormMsg($("conn-formmsg"), "Base URL is required (type " + v.type + " has no default)."); return; }
+    var req;
+    if (SK.editingConn && SK.editingConn !== v.name) {
+      // rename: moves the connection and re-points profile references
+      var rb = { from: SK.editingConn, to: v.name, type: v.type, baseUrl: v.baseUrl };
+      if (v.apiKey) rb.apiKey = v.apiKey;
+      req = apiJson("/api/connections/rename", "POST", rb);
+    } else {
+      var body = { name: v.name, type: v.type, baseUrl: v.baseUrl };
+      if (v.apiKey) body.apiKey = v.apiKey;
+      req = apiJson("/api/connections", "POST", body);
+    }
+    req.then(function () {
+      setFormMsg($("conn-formmsg"), "Saved connection '" + v.name + "'.", true);
+      SK.editingConn = v.name;
+      SK.connBaseDirty = false;
+      return loadConfigAndRender();
+    }).catch(function (err) { setFormMsg($("conn-formmsg"), err.message); });
+  }
+
+  function testConnection() {
+    var v = connFormValues();
+    if (SK.editingConn && v.name === SK.editingConn && !v.apiKey) v.apiKey = "";
+    setFormMsg($("conn-formmsg"), "Testing…", true);
+    apiJson("/api/test-connection", "POST", v).then(function (res) {
+      var models = res.models || [];
+      $("conn-testout").innerHTML =
+        '<span class="m">' + esc(models.length) + " model(s)" + (res.source === "fallback" ? " (fallback list)" : "") + ":</span> " +
+        esc(models.slice(0, 6).join(", ")) + (models.length > 6 ? ", …" : "");
+      setFormMsg($("conn-formmsg"), "Connection OK.", true);
+    }).catch(function (err) {
+      $("conn-testout").innerHTML = "";
+      setFormMsg($("conn-formmsg"), "Test failed: " + err.message);
+    });
+  }
+
+  // ------------------------------------------------------------------ //
+  // Profiles tab
+  // ------------------------------------------------------------------ //
+  function renderProfiles() {
+    // keep the profile-form connection dropdowns in sync with the current
+    // config: connections created since the form was opened must show up
+    ["prof-content-conn", "prof-other-conn", "prof-image-conn"].forEach(function (id) {
+      var sel = $(id);
+      fillConnSelect(sel, sel.value || "");
+    });
+    var list = $("prof-list");
+    var rows = [ "<tr><th>Name</th><th>Content model</th><th>Other model</th><th>Image model</th></tr>" ];
+    (SK.cfg.profiles || []).forEach(function (p) {
+      var star = p.name === SK.cfg.defaultProfile ? "*" : "";
+      // click the name to edit; deletion lives in the edit form (with confirm)
+      var nameCell =
+        '<button class="namebtn" data-edit="' + esc(p.name) + '" title="edit">' +
+        esc(p.name) + "</button>" + (star ? " <span class=\"opnote\">(default)</span>" : "");
+      rows.push(
+        "<tr><td>" + nameCell + "</td>" +
+        "<td>" + esc(modelRefLabel(p.content)) + "</td><td>" + esc(modelRefLabel(p.other)) + "</td><td>" + esc(modelRefLabel(p.image)) + "</td></tr>"
+      );
+    });
+    list.innerHTML = rows.join("") || "<tr><td>No profiles yet - add one below.</td></tr>";
+    Array.prototype.forEach.call(list.querySelectorAll("[data-edit]"), function (b) {
+      b.addEventListener("click", function () { editProfile(b.dataset.edit); });
+    });
+  }
+
+  function modelRefLabel(ref) {
+    if (!ref || !ref.connection || !ref.model) return "(not set)";
+    return ref.connection + " : " + ref.model;
+  }
+
+  function fillConnSelect(sel, selected) {
+    sel.innerHTML = "";
+    var opts = [ '<option value="">(choose connection)</option>' ];
+    (SK.cfg.connections || []).forEach(function (c) {
+      opts.push('<option value="' + esc(c.name) + '"' + (c.name === selected ? " selected" : "") + ">" + esc(c.name + " [" + c.type + "]") + "</option>");
+    });
+    sel.innerHTML = opts.join("");
+  }
+
+  function modelsCacheGet(connName, force, capability) {
+    var key = connName + (capability ? "::" + capability : "");
+    var cached = SK.modelsCache[key];
+    if (cached && !force && Date.now() - cached.at < 5 * 60 * 1000 && cached.list.length) {
+      return Promise.resolve(cached.list);
+    }
+    var url = "/api/models?connection=" + encodeURIComponent(connName) +
+      (capability ? "&capability=" + encodeURIComponent(capability) : "");
+    return apiJson(url, "GET").then(function (res) {
+      var list = (res.models || []).map(String);
+      SK.modelsCache[key] = { list: list, at: Date.now(), source: res.source };
+      return list;
+    });
+  }
+
+  function populateModelSelect(slot, connName, prefer, capability) {
+    var sel = $(slot + "-conn") && $(slot + "-model");
+    var modelSel = $(slot + "-model");
+    var custom = $(slot + "-custom");
+    modelSel.innerHTML = '<option value="">loading…</option>';
+    custom.classList.add("hidden");
+    if (!connName) {
+      modelSel.innerHTML = '<option value="">(choose a connection first)</option>';
+      return Promise.resolve();
+    }
+    return modelsCacheGet(connName, false, capability).then(function (list) {
+      modelSel.innerHTML = "";
+      var sorted = list.slice().sort(function (a, b) {
+        var la = String(a || "").toLowerCase(), lb = String(b || "").toLowerCase();
+        return la === lb ? String(a).localeCompare(String(b)) : (la < lb ? -1 : 1);
+      });
+      var opts = ['<option value="">(select model)</option>'];
+      sorted.forEach(function (m) {
+        opts.push('<option value="' + esc(m) + '"' + (m === prefer ? " selected" : "") + ">" + esc(m) + "</option>");
+      });
+      opts.push('<option value="__custom__">custom model id…</option>');
+      modelSel.innerHTML = opts.join("");
+      if (prefer && list.indexOf(prefer) < 0) {
+        modelSel.value = "__custom__";
+        custom.classList.remove("hidden");
+        custom.value = prefer;
+      } else {
+        custom.value = "";
+      }
+      modelSel.value = modelSel.value || (list.length ? list[0] : "");
+    }).catch(function (err) {
+      modelSel.innerHTML = '<option value="">error: ' + esc(err.message) + '</option>';
+    });
+  }
+
+  function editProfile(name) {
+    var p = (SK.cfg.profiles || []).find(function (x) { return x.name === name; });
+    if (!p) return;
+    SK.editingProf = name;
+    $("prof-form-title").textContent = "Edit profile: " + name;
+    $("prof-name").value = p.name;
+    fillConnSelect($("prof-content-conn"), p.content && p.content.connection);
+    fillConnSelect($("prof-other-conn"), p.other && p.other.connection);
+    fillConnSelect($("prof-image-conn"), p.image && p.image.connection);
+    populateModelSelect("prof-content", p.content && p.content.connection, p.content && p.content.model);
+    populateModelSelect("prof-other", p.other && p.other.connection, p.other && p.other.model);
+    populateModelSelect("prof-image", p.image && p.image.connection, p.image && p.image.model, SK.profImageFilter ? "image" : null);
+    setFormMsg($("prof-formmsg"), "", true);
+  }
+
+  function resetProfForm() {
+    SK.editingProf = null;
+    $("prof-form-title").textContent = "New profile";
+    $("prof-name").value = "";
+    fillConnSelect($("prof-content-conn"), "");
+    fillConnSelect($("prof-other-conn"), "");
+    fillConnSelect($("prof-image-conn"), "");
+    $("prof-content-model").innerHTML = '<option value="">(choose a connection first)</option>';
+    $("prof-other-model").innerHTML = '<option value="">(choose a connection first)</option>';
+    $("prof-image-model").innerHTML = '<option value="">(optional - choose a connection first)</option>';
+    $("prof-content-custom").classList.add("hidden");
+    $("prof-other-custom").classList.add("hidden");
+    $("prof-image-custom").classList.add("hidden");
+    setFormMsg($("prof-formmsg"), "", true);
+  }
+
+  function profileFromForm() {
+    var slotValue = function (slot) {
+      var model = $(slot + "-model").value;
+      if (model === "__custom__") model = $(slot + "-custom").value.trim();
+      return {
+        connection: $(slot + "-conn").value,
+        model: model,
+      };
+    };
+    var imageConn = $("prof-image-conn").value;
+    var imageModel = $("prof-image-model").value;
+    if (imageModel === "__custom__") imageModel = $("prof-image-custom").value.trim();
+    return {
+      name: $("prof-name").value.trim(),
+      content: slotValue("prof-content"),
+      other: slotValue("prof-other"),
+      image: imageConn && imageModel ? { connection: imageConn, model: imageModel } : null,
+    };
+  }
+
+  function saveProfile() {
+    var p = profileFromForm();
+    if (!p.name) { setFormMsg($("prof-formmsg"), "Profile name is required."); return; }
+    if (!p.content.connection || !p.content.model) { setFormMsg($("prof-formmsg"), "Pick connection + model for the content model."); return; }
+    if (!p.other.connection || !p.other.model) { setFormMsg($("prof-formmsg"), "Pick connection + model for the other-actions model."); return; }
+    var req;
+    if (SK.editingProf && SK.editingProf !== p.name) {
+      // rename: moves the profile; the default-profile pointer follows
+      req = apiJson("/api/profiles/rename", "POST", {
+        from: SK.editingProf, to: p.name, content: p.content, other: p.other,
+        image: p.image || {},
+      });
+    } else {
+      req = apiJson("/api/profiles", "POST", p);
+    }
+    req.then(function () {
+      setFormMsg($("prof-formmsg"), "Saved profile '" + p.name + "'.", true);
+      SK.editingProf = p.name;
+      return loadConfigAndRender();
+    }).catch(function (err) { setFormMsg($("prof-formmsg"), err.message); });
+  }
+
+  // ------------------------------------------------------------------ //
+  // Settings tab (approvals + debug)
+  // ------------------------------------------------------------------ //
+  function renderSettings() {
+    var table = $("approvals-table");
+    var rows = ['<tr><th>Action</th><th>What it does</th><th>Policy</th></tr>'];
+    OP_TYPES.forEach(function (t) {
+      var mode = (SK.cfg.approvals || {})[t] || "confirm";
+      var radios = ["auto", "confirm", "deny"].map(function (m) {
+        return '<label style="font-weight:400;margin:0 6px 0 0"><input type="radio" name="appr-' + esc(t) + '" value="' + m + '"' +
+          (m === mode ? " checked" : "") + " /> " + m + "</label>";
+      }).join("");
+      rows.push("<tr><td><b>" + esc(OPS_META[t].label) + "</b></td><td class='muted'>" + esc(OPS_META[t].hint) + "</td><td>" + radios + "</td></tr>");
+    });
+    table.innerHTML = rows.join("");
+    $("settings-debug").checked = !!SK.cfg.debug;
+        $("debug-path").textContent = SK.cfg.configPath.replace(/config\.json$/, "logs") + "/debug-YYYY-MM-DD.log";
+  }
+
+  function saveApprovals() {
+    var approvals = {};
+    OP_TYPES.forEach(function (t) {
+      var el = document.querySelector('input[name="appr-' + t + '"]:checked');
+      approvals[t] = el ? el.value : "confirm";
+    });
+    apiJson("/api/settings", "PUT", { approvals: approvals, generateNotes: SK.cfg ? !!SK.cfg.generateNotes : false }).then(function () {
+      setFormMsg($("settings-msg"), "Approval policy + speaker-notes setting saved.", true);
+      return loadConfigAndRender();
+    }).catch(function (err) { setFormMsg($("settings-msg"), err.message); });
+  }
+
+  function saveDebugOption() {
+    apiJson("/api/settings", "PUT", { debug: $("settings-debug").checked }).then(function () {
+      return loadConfigAndRender();
+    }).then(function () {
+      setFormMsg($("settings-msg"), SK.cfg.debug ? "Debug logging ON - writing to the daily log." : "Debug logging off.", true);
+    }).catch(function (err) { setFormMsg($("settings-msg"), err.message); });
+  }
+
+  // ------------------------------------------------------------------ //
+  // About tab
+  // ------------------------------------------------------------------ //
+  function renderAbout() {
+    var kv = [
+      ["DocKick add-in", SK.cfg ? "v" + (SK.cfg.version || "0.1.3") : "0.1.3"],
+      ["Server", "v" + (SK.cfg ? SK.cfg.version || "0.1.0" : "?") + " on 127.0.0.1:" + (SK.cfg ? SK.cfg.port : "?")],
+      ["Config file", SK.cfg ? SK.cfg.configPath : "?"],
+      ["Connections", SK.cfg ? (SK.cfg.connections || []).length : "?"],
+      ["Profiles", SK.cfg ? (SK.cfg.profiles || []).length : "?"],
+      ["Debug logging", SK.cfg && SK.cfg.debug ? "on" : "off"],
+    ];
+    $("about-info").innerHTML = kv.map(function (r) {
+      return "<tr><td>" + esc(r[0]) + "</td><td>" + esc(r[1]) + "</td></tr>";
+    }).join("");
+  }
+
+  // ------------------------------------------------------------------ //
+  // Boot + wiring
+  // ------------------------------------------------------------------ //
+  function renderChat() {
+    var sel = $("chat-profile");
+    var opts = [];
+    var def = SK.cfg.defaultProfile;
+    (SK.cfg.profiles || []).forEach(function (p) {
+      opts.push('<option value="' + esc(p.name) + '"' + (p.name === def ? " selected" : "") + ">" + esc(p.name) + "</option>");
+    });
+    if (!opts.length) opts.push('<option value="">(no profiles yet)</option>');
+    sel.innerHTML = opts.join("");
+  }
+
+  function loadConfigAndRender() {
+    return apiJson("/api/config", "GET").then(function (cfg) {
+      SK.cfg = cfg;
+      dbg("config.loaded", { connections: (cfg.connections || []).length, profiles: (cfg.profiles || []).length, debug: cfg.debug });
+      renderChat();
+      renderConnections();
+      renderProfiles();
+      renderSettings();
+      renderAbout();
+      var onboarding = $("chat-output");
+      if (!(cfg.connections || []).length && !document.getElementById("onboarding-banner")) {
+        var b = document.createElement("div");
+        b.id = "onboarding-banner";
+        b.className = "status error";
+        b.textContent = "No AI connections configured yet. Open the Connections tab and add one (e.g. Ollama on http://localhost:11434 - no key needed).";
+        onboarding.insertBefore(b, onboarding.firstChild);
+      }
+      if ((cfg.connections || []).length && document.getElementById("onboarding-banner")) {
+        var el = document.getElementById("onboarding-banner");
+        el.parentNode.removeChild(el);
+      }
+      $("statusbar").textContent = "DocKick v" + (cfg.version || "0.1.0") +
+        " - server 127.0.0.1:" + cfg.port + " - default profile: " +
+        (cfg.defaultProfile || "(none)") + " - debug " + (cfg.debug ? "ON" : "off") +
+        " - connections: " + (cfg.connections || []).length;
+      return cfg;
+    });
+  }
+
+  function wireEvents() {
+    Array.prototype.forEach.call(document.querySelectorAll("#tabs button"), function (b) {
+      b.addEventListener("click", function () { switchTab(b.dataset.tab); });
+    });
+
+    $("chat-run").addEventListener("click", runPrompt);
+    $("chat-input").addEventListener("keydown", function (ev) {
+      if ((ev.metaKey || ev.ctrlKey) && ev.key === "Enter") { ev.preventDefault(); runPrompt(); }
+    });
+    $("chat-new").addEventListener("click", function () {
+      resetHistory();
+      $("chat-output").innerHTML = "";
+      setStatus("Conversation history cleared.", "ok");
+    });
+    $("chat-refresh-deck").addEventListener("click", function () { updateDeckSummary(); setStatus("Document refreshed.", ""); });
+    Array.prototype.forEach.call(document.querySelectorAll("#chat-chips .chip"), function (chip) {
+      chip.addEventListener("click", function () {
+        $("chat-input").value = chip.dataset.prompt;
+        $("chat-input").focus();
+      });
+    });
+
+    $("conn-new").addEventListener("click", resetConnForm);
+    $("conn-save").addEventListener("click", saveConnection);
+    $("conn-test").addEventListener("click", testConnection);
+    $("conn-delete").addEventListener("click", function () {
+      if (!SK.editingConn) {
+        setFormMsg($("conn-formmsg"), "Nothing selected to delete - click a connection name first.");
+        return;
+      }
+      var used = (SK.cfg.profiles || []).filter(function (p) {
+        return (p.content && p.content.connection === SK.editingConn) ||
+               (p.other && p.other.connection === SK.editingConn);
+      }).map(function (p) { return p.name; });
+      if (used.length) {
+        window.alert("Connection '" + SK.editingConn + "' is used by profile(s): " +
+          used.join(", ") + ". Remove it from those profiles first.");
+        return;
+      }
+      if (!window.confirm("Delete connection '" + SK.editingConn + "'?")) return;
+      apiJson("/api/connections/" + encodeURIComponent(SK.editingConn), "DELETE")
+        .then(function () { resetConnForm(); return loadConfigAndRender(); })
+        .catch(function (err) { window.alert(err.message); });
+    });
+    $("conn-type").addEventListener("change", function () {
+      var t = CONN_TYPE_BY_ID[$("conn-type").value];
+      if (t && !SK.connBaseDirty) $("conn-base").value = t.base;
+      $("conn-key").placeholder = t && t.keyHint ? t.keyHint : "";
+    });
+    $("conn-base").addEventListener("input", function () { SK.connBaseDirty = true; });
+
+    $("prof-new").addEventListener("click", resetProfForm);
+    $("prof-save").addEventListener("click", saveProfile);
+    $("prof-delete").addEventListener("click", function () {
+      if (!SK.editingProf) {
+        setFormMsg($("prof-formmsg"), "Nothing selected to delete - click a profile name first.");
+        return;
+      }
+      if (!window.confirm("Delete profile '" + SK.editingProf + "'?")) return;
+      apiJson("/api/profiles/" + encodeURIComponent(SK.editingProf), "DELETE")
+        .then(function () { resetProfForm(); return loadConfigAndRender(); })
+        .catch(function (err) { window.alert(err.message); });
+    });
+    $("prof-default").addEventListener("click", function () {
+      var name = $("prof-name").value.trim();
+      if (!name) { setFormMsg($("prof-formmsg"), "Fill in the profile name first."); return; }
+      apiJson("/api/settings", "PUT", { defaultProfile: name }).then(loadConfigAndRender).then(function () {
+        setFormMsg($("prof-formmsg"), "Default profile set to '" + name + "'.", true);
+      }).catch(function (err) { setFormMsg($("prof-formmsg"), err.message); });
+    });
+    Array.prototype.forEach.call(document.querySelectorAll("[data-refresh]"), function (btn) {
+      btn.addEventListener("click", function () {
+        var slot = "prof-" + btn.dataset.refresh;
+        var connName = $(slot + "-conn").value;
+        if (!connName) return;
+        var isImage = slot.indexOf("-image") > 0;
+        var cap = isImage && SK.profImageFilter ? "image" : null;
+        delete SK.modelsCache[connName + (cap ? "::image" : "")];
+        populateModelSelect(slot, connName, $(slot + "-model").value, cap);
+      });
+    });
+    $("prof-image-toggle").addEventListener("click", function () {
+      SK.profImageFilter = !SK.profImageFilter;
+      $("prof-image-toggle").textContent = SK.profImageFilter ? "image-capable only" : "show all models";
+      var connName = $("prof-image-conn").value;
+      if (connName) {
+        delete SK.modelsCache[connName + (SK.profImageFilter ? "::image" : "")];
+        populateModelSelect("prof-image", connName, "", SK.profImageFilter ? "image" : null);
+      }
+    });
+    ["content", "other", "image"].forEach(function (slot) {
+      $("prof-" + slot + "-conn").addEventListener("change", function () {
+        populateModelSelect("prof-" + slot, $("prof-" + slot + "-conn").value, "",
+          slot === "image" && SK.profImageFilter ? "image" : null);
+      });
+      $("prof-" + slot + "-model").addEventListener("change", function () {
+        var isCustom = $("prof-" + slot + "-model").value === "__custom__";
+        $("prof-" + slot + "-custom").classList.toggle("hidden", !isCustom);
+        if (isCustom) $("prof-" + slot + "-custom").focus();
+      });
+    });
+    // convenience: picking a content model with an untouched 'other' slot
+    // copies the choice (connection + model, incl. custom ids) over
+    $("prof-content-model").addEventListener("change", function () {
+      var model = $("prof-content-model").value;
+      var otherModel = $("prof-other-model");
+      if (otherModel.value) return; // 'other' already has a choice - leave it
+      var conn = $("prof-content-conn").value;
+      if (!conn || !model) return;
+      $("prof-other-conn").value = conn;
+      populateModelSelect("prof-other", conn, model).then(function () {
+        if (model === "__custom__") {
+          $("prof-other-model").value = "__custom__";
+          $("prof-other-custom").classList.remove("hidden");
+          $("prof-other-custom").value = $("prof-content-custom").value;
+        }
+      });
+    });
+
+    $("settings-save").addEventListener("click", saveApprovals);
+    $("settings-debug-save").addEventListener("click", saveDebugOption);
+    $("req-clear").addEventListener("click", clearRequests);
+    $("req-refresh").addEventListener("click", renderRequests);
+    $("sim-reset").addEventListener("click", function () {
+      window.SimDeck.resetAll();
+      renderSimDeck();
+      updateDeckSummary();
+      setStatus("Simulator email reset.", "");
+    });
+  }
+
+  function bootOffice() {
+    var badge = $("host-badge");
+    if (typeof Office === "undefined") {
+      badge.style.display = "";
+      badge.textContent = "NO OFFICE.JS";
+      setStatus("Office.js failed to load. Check the internet connection, then reopen the pane.", "error");
+      return;
+    }
+    Office.onReady(function (info) {
+      badge.style.display = "";
+      badge.textContent = "MAIL";
+      SK.deck = new MailDeck();
+      applyTheme();
+      watchTheme();
+      finishBoot();
+    });
+  }
+
+  function finishBoot() {
+    wireEvents();
+    bootLoad(0);
+  }
+
+  function bootSuccess(cfg) {
+    updateDeckSummary();
+    renderSimDeck();
+    if (!(cfg.connections || []).length) switchTab("connections");
+    setStatus("Ready. Debug: " + (cfg.debug ? "on" : "off") + ".", "ok");
+  }
+
+  // retries cover the update window: the pane can be opened while the server
+  // is restarting (installer / LaunchAgent)
+  function bootLoad(attempt) {
+    loadConfigAndRender().then(bootSuccess, function (err) { bootFail(err, attempt); });
+  }
+
+  function bootFail(err, attempt) {
+    if (attempt < 3) {
+      setStatus("Server not reachable yet - retrying (" + (attempt + 1) + "/3)…", "busy");
+      setTimeout(function () { bootLoad(attempt + 1); }, 1000);
+      return;
+    }
+    setStatus("Cannot reach the DocKick server: " + err.message + " Is it running? (install.sh / install.ps1 / LaunchAgent)", "error");
+    $("statusbar").textContent = "server unreachable: " + err.message;
+  }
+
+  function boot() {
+    var params = new URLSearchParams(String(window.location.search || ""));
+    SK.sim = window.__MAILKICK_SIM__ === true || window.__SK_SIM__ === true || params.has("sim");
+    if (SK.sim) {
+      $("host-badge").style.display = "";
+      $("host-badge").textContent = "SIM";
+      var simTab = $("sim-panel");
+      simTab.style.display = "";
+      var nav = document.createElement("button");
+      nav.textContent = "Sim email";
+      nav.dataset.tab = "sim";
+      $("tabs").appendChild(nav);
+      nav.addEventListener("click", function () { switchTab("sim"); });
+      SK.deck = new window.SimDeck();
+      applyTheme();
+      finishBoot();
+    } else {
+      bootOffice();
+    }
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", boot);
+  } else {
+    boot();
+  }
+})();
