@@ -179,7 +179,7 @@ opens on the right.
 python3 tests/test_slidekick_server.py       # server + adapter test suite (16 tests)
 python3 tools/mock_provider.py --flavor openai --port 8901   # mock provider for the UI
 open http://127.0.0.1:8765/simulator.html    # full task pane + in-memory deck, no PowerPoint
-python3 tools/make_icons.py                  # regenerate icon assets
+python3 tools/make_icons.py                  # rebuild icons from logo_corelan.png (sips)
 ```
 
 The task pane runs unmodified in the simulator via `sim.js` (same Deck interface the

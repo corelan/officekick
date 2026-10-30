@@ -1,39 +1,66 @@
 #!/usr/bin/env python3
 """
-Generate SlideKick task-pane icons (16/32/80 px) with the standard library only:
-an amber lightning bolt on a dark rounded square, with alpha transparency.
+Generate SlideKick task-pane icons (16/32/80 px).
+
+Primary source: src/static/assets/logo_corelan.png (the Corelan diamond
+badge, 200x200 RGBA). It is resampled with macOS `sips`, which preserves the
+alpha channel.
+
+Fallback (no logo file / non-macOS): regenerates the original amber-bolt
+badge with the standard library only.
 
 Usage: python3 tools/make_icons.py [output_dir]
 """
 
 import struct
+import subprocess
 import sys
 import zlib
 from pathlib import Path
 
-BG = (15, 23, 42)        # slate-900
-BOLT = (245, 158, 11)    # amber-500
+REPO = Path(__file__).resolve().parent.parent
+SIZES = (16, 32, 80)
+LOGO = REPO / "src" / "static" / "assets" / "logo_corelan.png"
 
-# Lightning bolt polygon, normalized to a 0..1 box.
+BG = (15, 23, 42)        # slate-900 (bolt fallback background)
+BOLT = (245, 158, 11)    # amber-500 (bolt fallback foreground)
+
+# Lightning bolt polygon, normalized to a 0..1 box (bolt fallback only).
 BOLT_POLY = [
     (0.50, 0.06), (0.16, 0.56), (0.40, 0.56),
     (0.30, 0.94), (0.84, 0.42), (0.54, 0.42), (0.66, 0.06),
 ]
 
 
+def build_from_logo(outdir):
+    for size in SIZES:
+        out = outdir / ("icon%d.png" % size)
+        r = subprocess.run(
+            ["sips", "-z", str(size), str(size), str(LOGO), "--out", str(out)],
+            capture_output=True, text=True,
+        )
+        if r.returncode != 0:
+            print("sips failed for %d px: %s" % (size, r.stderr.strip()))
+            return False
+        raw = out.read_bytes()
+        w, h = struct.unpack(">II", raw[16:24])
+        if (w, h) != (size, size) or raw[25] != 6:  # color type 6 = RGBA
+            print("unexpected output for %d px" % size)
+            return False
+        print("wrote", out, "(%dx%d, %d bytes)" % (w, h, len(raw)))
+    return True
+
+
 def inside_rounded(px, py, size, radius):
-    """True if (px,py) is inside the rounded square of edge `size`."""
-    x0, y0, x1, y1 = 0, 0, size, size
-    if px < x0 or px > x1 or py < y0 or py > y1:
+    if px < 0 or py < 0 or px > size or py > size:
         return False
-    # corner centers
-    for cx, cy in ((x0 + radius, y0 + radius), (x1 - radius, y0 + radius),
-                   (x0 + radius, y1 - radius), (x1 - radius, y1 - radius)):
+    for cx, cy in ((radius, radius), (size - radius, radius),
+                   (radius, size - radius), (size - radius, size - radius)):
         in_corner_zone = (
-            (px < x0 + radius and py < y0 + radius) or
-            (px > x1 - radius and py < y0 + radius) or
-            (px < x0 + radius and py > y1 - radius) or
-            (px > x1 - radius and py > y1 - radius)
+            (px < radius and py < radius) or
+            (px > size - radius and py < radius) or
+            (px < radius and py > size - radius) or
+            (px > size - radius and py > size - radius)
         )
         if in_corner_zone:
             if (px - cx) ** 2 + (py - cy) ** 2 > radius * radius:
@@ -43,7 +70,6 @@ def inside_rounded(px, py, size, radius):
 
 
 def inside_polygon(px, py, poly):
-    """Even-odd scanline point-in-polygon."""
     inside = False
     n = len(poly)
     j = n - 1
@@ -58,10 +84,8 @@ def inside_polygon(px, py, poly):
     return inside
 
 
-def render(size, ss=4):
-    """Render at supersample factor ss, return 2D array of (r,g,b,a)."""
+def render_bolt(size, ss=4):
     S = size * ss
-    scale = S / 1.0
     margin = S * 0.04
     box_size = S - 2 * margin
     radius = box_size * 0.20
@@ -75,14 +99,11 @@ def render(size, ss=4):
         for x in range(S):
             sx = (x + 0.5) / ss
             if inside_rounded(sx, sy, S, radius):
-                if inside_polygon(sx, sy, poly):
-                    color = BOLT + (255,)
-                else:
-                    color = BG + (255,)
+                color = BOLT if inside_polygon(sx, sy, poly) else BG
                 acc[int(sy)][int(sx)][0] += color[0]
                 acc[int(sy)][int(sx)][1] += color[1]
                 acc[int(sy)][int(sx)][2] += color[2]
-                acc[int(sy)][int(sx)][3] += color[3]
+                acc[int(sy)][int(sx)][3] += 255
                 grid[int(sy)][int(sx)] += 1
 
     out = []
@@ -94,10 +115,8 @@ def render(size, ss=4):
                 row.append((0, 0, 0, 0))
             else:
                 c = acc[y][x]
-                row.append((
-                    round(c[0] / cell), round(c[1] / cell),
-                    round(c[2] / cell), round(c[3] / cell),
-                ))
+                row.append((round(c[0] / cell), round(c[1] / cell),
+                            round(c[2] / cell), round(c[3] / cell)))
         out.append(row)
     return out
 
@@ -107,28 +126,34 @@ def write_png(path, pixels):
     w = len(pixels[0])
     raw = b""
     for row in pixels:
-        raw += b"\x00" + b"".join(
-            struct.pack("4B", *px) for px in row
-        )
-    def chunk(tag, data):
-        c = struct.pack(">I", len(data)) + tag + data
-        return c + struct.pack(">I", zlib.crc32(tag + data) & 0xFFFFFFFF)
+        raw += b"\x00" + b"".join(struct.pack("4B", *px) for px in row)
 
-    png = b"\x89PNG\r\n\x1a\n"
-    png += chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 6, 0, 0, 0))
-    png += chunk(b"IDAT", zlib.compress(raw, 9))
-    png += chunk(b"IEND", b"")
+    def chunk(tag, data):
+        return (struct.pack(">I", len(data)) + tag + data +
+                struct.pack(">I", zlib.crc32(tag + data) & 0xFFFFFFFF))
+
+    png = (b"\x89PNG\r\n\x1a\n"
+           + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 6, 0, 0, 0))
+           + chunk(b"IDAT", zlib.compress(raw, 9))
+           + chunk(b"IEND", b""))
     Path(path).write_bytes(png)
 
 
+def build_fallback(outdir):
+    for size in SIZES:
+        path = outdir / ("icon%d.png" % size)
+        write_png(path, render_bolt(size, ss=4))
+        print("wrote", path)
+
+
 def main():
-    outdir = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(__file__).resolve().parent.parent / "src" / "static" / "assets"
+    outdir = Path(sys.argv[1]) if len(sys.argv) > 1 else REPO / "src" / "static" / "assets"
     outdir.mkdir(parents=True, exist_ok=True)
-    for size in (16, 32, 80):
-        pixels = render(size, ss=4)
-        target = outdir / ("icon%d.png" % size)
-        write_png(target, pixels)
-        print("wrote", target)
+    if LOGO.exists() and sys.platform == "darwin":
+        if build_from_logo(outdir):
+            return
+        print("logo build failed - falling back to bolt badge")
+    build_fallback(outdir)
 
 
 if __name__ == "__main__":
