@@ -414,6 +414,7 @@
         SK.sessionName = name;
         dbg("session.named", { id: sid, name: name });
         updateSessionLabel();
+        if (SK.activeTab === "sessions") renderSessions();
       });
     }).catch(function () { /* derived name stays */ });
   }
@@ -569,7 +570,8 @@
             if (commit && val) {
               apiJson("/api/sessions/rename/" + row.id, "POST", { name: val }).catch(function () {}).then(function () {
                 SK.sessionNames[row.id] = val;
-                if (SK.sessionId === row.id) SK.sessionName = val;
+                SK.sessionName = val;
+                updateSessionLabel();
                 renderSessions();
               });
             } else { renderSessions(); }
