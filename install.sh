@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 #
-# OfficeKick installer for macOS (SlideKick for PowerPoint + DocKick for Word).
+# OfficeKick installer for macOS (SlideKick for PowerPoint + DocKick for Word
+# + MailKick for Outlook).
 #
 #   ./install.sh                 install or update (same script, idempotent)
 #   ./install.sh --port 8765     use a specific port
@@ -133,7 +134,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 usage() {
-  say "OfficeKick installer (SlideKick for PowerPoint + DocKick for Word)"
+  say "OfficeKick installer (SlideKick for PowerPoint + DocKick for Word + MailKick for Outlook)"
   say ""
   say "  install (default)       install or update the add-in + server"
   say "  --port N                port for the local server (default $DEFAULT_PORT)"
@@ -440,7 +441,7 @@ clear_office_caches() {
 # --------------------------------------------------------------------- #
 do_install() {
   say ""
-  say "🚀  OfficeKick $VERSION - install/update (SlideKick + DocKick)"
+  say "🚀  OfficeKick $VERSION - install/update (SlideKick + DocKick + MailKick)"
   say ""
   PP_APP=""; PP_VERSION=""
   if find_powerpoint; then
@@ -496,7 +497,7 @@ do_install() {
       else
         cp -R "$WORDKICK_DIR/." "$INSTALL_DIR/wordkick/"
       fi
-      ok "files deployed: SlideKick + DocKick"
+      ok "files deployed: SlideKick + DocKick + MailKick"
     else
       ok "files deployed: SlideKick (DocKick not built yet)"
     fi
@@ -688,6 +689,17 @@ PYPLIST
       say "     (profiles/connections are shared with SlideKick)"
     fi
   fi
+  if [[ -d "/Applications/Microsoft Outlook.app" && -f "$OUTLOOK_DIR/manifest.template.xml" ]]; then
+    title "👋  First use - Outlook (MailKick):"
+    say "  1. Outlook-Mac has no silent sideload:"
+    say "     Outlook -> Get Add-ins (or the \u2026 overflow in the ribbon)"
+    say "  2. My add-ins -> Custom Addins -> Add a custom add-in -> Add from File"
+    say "  3. pick:  ~/Downloads/mailkick.xml   (a visible copy of
+     ~/Library/Application Support/OfficeKick/manifest/mailkick.xml --
+     reach the hidden folder in any picker with Cmd+Shift+G + paste the path)"
+    say "  4. select a message (or open one to compose) -> the Corelan MailKick icon"
+    say "     (profiles/connections are shared; MailKick never sends mail automatically)"
+  fi
   say ""
   say "✨  All set."
   say ""
@@ -697,7 +709,7 @@ PYPLIST
 # uninstall
 # --------------------------------------------------------------------- #
 do_uninstall() {
-  say "OfficeKick - uninstall (SlideKick + DocKick)"
+  say "OfficeKick - uninstall (SlideKick + DocKick + MailKick)"
   launchctl unload "$PLIST" 2>/dev/null && ok "LaunchAgent unloaded" || warn "no LaunchAgent"
   [[ -f "$PLIST" ]] && rm -f "$PLIST" && ok "LaunchAgent removed"
   # legacy SlideKick-era agent
@@ -713,11 +725,20 @@ do_uninstall() {
     wef="$container/Data/Documents/wef"
     for f in "$wef"/*.xml; do
       [[ -f "$f" ]] || continue
-      if grep -q "$GUID" "$f" 2>/dev/null || grep -q "$WORD_GUID" "$f" 2>/dev/null; then
+      if grep -q "$GUID" "$f" 2>/dev/null || grep -q "$WORD_GUID" "$f" 2>/dev/null || grep -q "$OUTLOOK_GUID" "$f" 2>/dev/null; then
         rm -f "$f"; removed=1
       fi
     done
   done
+  # the Outlook container is not in the owned-set globs; clean its staged copy
+  local outwef="$HOME/Library/Containers/com.microsoft.Outlook/Data/Documents/wef"
+  if [[ -d "$outwef" ]]; then
+    for f in "$outwef"/*.xml; do
+      [[ -f "$f" ]] || continue
+      grep -q "$OUTLOOK_GUID" "$f" 2>/dev/null && rm -f "$f" && removed=1
+    done
+  fi
+  rm -f "$HOME/Downloads/mailkick.xml"
   [[ "$removed" == "1" ]] && ok "manifests removed from Office container(s)"
   if pgrep -f "$INSTALL_DIR/server.py" >/dev/null 2>&1; then
     pkill -f "OfficeKick/server.py" 2>/dev/null && ok "server stopped" || warn "could not stop server process"
