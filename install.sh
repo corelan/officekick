@@ -473,13 +473,11 @@ do_install() {
       -e "s/__SCHEME__/$SCHEME/" \
       -e "s/__PORT__/$PORT/g" \
       "$addin_dir/manifest.template.xml" > "$mtmp" || return 1
-    if [[ "$HTTPS" != "1" ]]; then
-      # ribbon commands require https - drop them in the default http mode so
-      # the add-in stays visible in Home -> Add-ins (commands mode hides it)
-      "${SED:-sed}" -i '' -e '/__COMMANDS_BEGIN__/,/__COMMANDS_END__/d' "$mtmp"
-    else
-      "${SED:-sed}" -i '' -e '/__COMMANDS_BEGIN__/d' -e '/__COMMANDS_END__/d' "$mtmp"
-    fi
+    # ALWAYS ship the list-mode manifest: Office-Mac (16.114 tested) accepts the
+  # add-in + pane via the Add-ins dropdown, but never renders the classic
+  # taskpaneappversionoverrides ribbon - commands mode would REMOVE the list
+  # entry and silently show nothing. The --https ribbon attempt stays opt-in.
+  "${SED:-sed}" -i '' -e '/__COMMANDS_BEGIN__/,/__COMMANDS_END__/d' "$mtmp"
     if command -v xmllint >/dev/null 2>&1; then
       xmllint --noout "$mtmp" || die "generated manifest $mtmp is not valid XML"
       ok "manifest rendered + valid XML: $(basename "$mtmp")"

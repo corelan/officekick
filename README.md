@@ -58,6 +58,9 @@ Config (API keys, profiles, policy) lives in `~/.officekick/config.json`
 - **Word (macOS)**: same route -> **Corelan DocKick**.
 - **PowerPoint/Word (Windows)**: Insert -> My Add-ins -> SHARED FOLDER ->
   Corelan SlideKick / Corelan DocKick -> Add (once).
+- Ribbon buttons (the https/commands mode) are experimental: modern Office-Mac
+  builds register them but do not render the classic commands ribbon (verified on
+  16.114); the Add-ins route always works. The detailed docs cover this.
 
 First run: **Connections** tab - add a provider (type + Base URL + optional API
 key, "Test connection" lists its models); **Profiles** tab - pick the *content
