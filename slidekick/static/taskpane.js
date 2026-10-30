@@ -52,6 +52,7 @@
     move_shape: { label: "move/resize shape", hint: "Sets left/top/width/height (points) of one shape - design passes use this." },
     create_image: { label: "generate + insert image", hint: "Creates an image from a description with the profile's image model (OpenAI-style images API) and inserts it - lands on the slide you have open in Office." },
     apply_layout: { label: "apply layout", hint: "Applies a different slide layout (design change, text kept)." },
+    format_text: { label: "format text", hint: "bold / italic / color / size / underline / allCaps / alignment / bullets on one shape's text (the numbers from the outline)." },
     delete_slide: { label: "delete slide", hint: "Removes a slide from the deck." },
   };
   var OP_TYPES = Object.keys(OPS_META);
@@ -329,6 +330,7 @@
     '- {"type":"move_shape","slide":N,"shape":N,"left":40,"top":150,"width":300,"height":60} (points; only the fields to change; keep shapes inside the slide bounds shown in the outline)',
     '- {"type":"create_image","prompt":"detailed image description","slide":N|null,"width":400} (generate an image from the description and insert it; slide null = the slide the user currently has open; only when the user asks for a picture/image/illustration/logo)',
     '- {"type":"apply_layout","slide":N,"layout":"title_content|title_only|section|blank"} (only when the user asks for layout/design changes)',
+    '- {"type":"format_text","slide":N,"shape":N,"font":{"bold":true},"align":"center","bullet":true} (format ONE shape from the outline: font = {"bold","italic","color","size","name","underline","allCaps"} subset only, colors as HTML hex/red/green/...; align = left|center|right; bullet = true adds bullets; only requested properties)',
     '- {"type":"delete_slide","slide":N}',
     "",
     "Rules:",
@@ -648,7 +650,7 @@
   }
 
   var CONTENT_ROUTE_RE = new RegExp(
-    "\\b(slide|slides|deck|bullet|bullets|reword|rewrite|rephrase|outline|notes?|title|titles|add|create|make|generate|tighten|restructure|expand|insert|append|design|align|balance|spacing|table|tables|chart|image|images|picture|pictures|photo|logo|illustration)\\b", "i"
+    "\\b(slide|slides|deck|bullet|bullets|reword|rewrite|rephrase|outline|notes?|title|titles|add|create|make|generate|tighten|restructure|expand|insert|append|design|align|balance|spacing|table|tables|chart|bold|italic|underline|color|font|highlight|format|formatting|center|caps|image|images|picture|pictures|photo|logo|illustration)\\b", "i"
   );
 
   function assistantHistoryText(parsed) {
@@ -1097,6 +1099,23 @@ OfficeDeck.prototype.addImage = function (payload) {
   });
 };
 
+OfficeDeck.prototype.formatText = function (slideIndex, shapeIndex, font) {
+    return this.run("formatText", function (ctx) {
+      var shape = ctx.presentation.slides.getItemAt(slideIndex).shapes.getItemAt(shapeIndex);
+      var range = shape.textFrame.textRange;
+      if (font.bold != null) range.font.bold = font.bold;
+      if (font.italic != null) range.font.italic = font.italic;
+      if (font.allCaps != null) range.font.allCaps = font.allCaps;
+      if (font.name) range.font.name = font.name;
+      if (font.color) range.font.color = font.color;
+      if (font.size) range.font.size = font.size;
+      if (font.underline != null) range.font.underline = font.underline;
+      if (font.align) range.paragraphFormat.horizontalAlignment = font.align.charAt(0).toUpperCase() + font.align.slice(1);
+      if (font.bullet != null) range.paragraphFormat.bulletFormat.visible = font.bullet;
+      return ctx.sync().then(function () { return { ok: true }; });
+    });
+  };
+
 OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceholderText(i, "title", text); };
   OfficeDeck.prototype.setSlideBody = function (i, lines) { return this._setPlaceholderText(i, "body", lines); };
 
@@ -1380,6 +1399,23 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
           if (typeof op[p2] === "number" && op[p2] >= 0) geoI[p2] = op[p2];
         });
         out.geometry = geoI;
+      } else if (t === "format_text") {
+        if (!slideOk(op.slide)) { bad("bad slide index"); return; }
+        var shapeInCtxF = ctx && ctx.slides[op.slide] &&
+          (ctx.slides[op.slide].shapes || []).some(function (sh) { return sh.idx === op.shape; });
+        if (!shapeInCtxF) { bad("shape " + op.shape + " not in the context list for slide " + op.slide); return; }
+        var fontF = {}, hasAny = false;
+        ["bold", "italic", "allCaps", "underline"].forEach(function (k2) {
+          if (typeof op.font !== "undefined" && typeof op.font[k2] === "boolean") { fontF[k2] = op.font[k2]; hasAny = true; }
+        });
+        if (op.font && typeof op.font.color === "string" && /^[\w#\(\), .%]+$/.test(op.font.color)) { fontF.color = op.font.color; hasAny = true; }
+        if (op.font && typeof op.font.name === "string" && op.font.name) { fontF.name = op.font.name; hasAny = true; }
+        if (op.font && typeof op.font.size === "number" && op.font.size >= 6 && op.font.size <= 400) { fontF.size = op.font.size; hasAny = true; }
+        if (typeof op.align === "string" && /^(left|center|right)$/i.test(op.align)) { fontF.align = op.align.toLowerCase(); hasAny = true; }
+        if (typeof op.bullet === "boolean") { fontF.bullet = op.bullet; hasAny = true; }
+        if (!hasAny) { bad("no format changes requested"); return; }
+        if (op.font && typeof op.font !== "object") { bad("font must be an object"); return; }
+        out.slide = op.slide; out.shape = op.shape; out.font = fontF;
       } else if (t === "apply_layout") {
         if (!slideOk(op.slide)) { bad("bad slide index"); return; }
         out.slide = op.slide; out.layout = normalizeLayout(op.layout);
@@ -1430,6 +1466,14 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
         var pr = op.prompt.length > 60 ? op.prompt.slice(0, 60) + "…" : op.prompt;
         return (op.slide != null ? "Slide " + op.slide + slideTitle(op.slide) : "Slide you have open") +
           ': image "' + pr + '" (profile image model)';
+      }
+      case "format_text": {
+        var fparts = [];
+        Object.keys(op.font).forEach(function (kf) {
+          var v = op.font[kf];
+          fparts.push(kf + "=" + (typeof v === "boolean" ? (v ? "on" : "off") : v));
+        });
+        return "Slide " + op.slide + ", shape " + op.shape + ": " + fparts.join(", ");
       }
       case "apply_layout":
         return "Slide " + op.slide + slideTitle(op.slide) + ": layout -> " + op.layout;
@@ -1513,6 +1557,11 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
           return deck.setNotes(cur, op.notes).then(function (nr) {
             if (nr && nr.manual) manualNotes.push({ slide: cur, text: op.notes, reason: nr.reason });
             else lines.push({ ok: true, text: "set notes on slide " + op.slide });
+          });
+        case "format_text":
+          return deck.formatText(cur, op.shape, op.font).then(function () {
+            lines.push({ ok: true, text: "format slide " + op.slide + " shape " + op.shape + ": " +
+              Object.keys(op.font).join(", ") });
           });
         case "apply_layout":
           return deck.applyLayout(cur, op.layout).then(function () {

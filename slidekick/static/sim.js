@@ -106,6 +106,12 @@ window.__SK_SIM__ = true;
       });
       return { ok: true };
     }
+    async formatText(slideIndex, shapeIndex, font) {
+      const sh = slides[slideIndex] && slides[slideIndex].shapes[shapeIndex];
+      if (!sh) throw new FriendlyError("Shape " + shapeIndex + " on slide " + slideIndex + " does not exist");
+      Object.assign(sh, { font: Object.assign(sh.font || {}, font) });
+      return { ok: true };
+    }
     async addImage({ b64, slide, geometry }) {
       const i = slide;
       if (!slides[i]) throw new FriendlyError("Slide " + i + " does not exist");

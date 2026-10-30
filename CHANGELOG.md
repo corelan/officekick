@@ -1,4 +1,11 @@
 # Changelog
+## [0.2.3] - 2026-10-30
+### Added
+- **Formatting**: a `format_text` op. SlideKick: bold / italic / color / size /
+  name / underline / allCaps + alignment and bullets on a shape's text
+  (PowerPointApi 1.4, `textFrame.textRange.font`). DocKick: the same set +
+  highlight color and justify alignment on a paragraph. The model gets the
+  allowed attributes in the schema and emits only what you asked for.
 ## [0.2.2] - 2026-10-30
 ### UI
 - Chat/Actions: the session name (AI-generated) shows above the Profile/Route

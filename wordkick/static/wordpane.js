@@ -53,7 +53,8 @@
     insert_comment:    { label: "insert comment", hint: "Adds a comment anchored to the matching text (WordApi 1.4)." },
     delete_paragraph:  { label: "delete paragraph", hint: "Removes a paragraph by index." },
     rewrite_doc:       { label: "rewrite document", hint: "Replaces the document body with a new set of paragraphs (destructive - review)." },
-    insert_image:      { label: "insert image", hint: "Generates a picture from a description with the profile's image model and inserts it at the end of the document." },
+    insert_image:      { label: "insert image", hint: "Generates a picture from a description with the profile's image model and inserts it at the end of the document (or at the cursor with the checkbox)." },
+    format_text:      { label: "format text", hint: "bold/italic/color/size/underline/allCaps/highlight + alignment on one paragraph." },
   };
   var OP_TYPES = Object.keys(OPS_META);
 
@@ -331,6 +332,7 @@
     '- {"type":"delete_paragraph","para":N} (zero-based indices from the outline - never invent them)',
     '- {"type":"rewrite_doc","items":[{"text":"...","style":"..."}]} (DESTROYS the current body - only when explicitly asked for a full rewrite)',
     '- {"type":"insert_image","prompt":"detailed image description"} (generate a picture from the description and insert it at the end of the document; only when the user asks for a picture/image/illustration/logo)',
+    '- {"type":"format_text","para":N,"font":{"bold":true},"align":"center"} (format ONE paragraph from the outline: font = {"bold","italic","color","size","name","underline","allCaps","highlightColor"} subset; align = left|center|right|justify; only what is requested)',
     "",
     "Rules:",
     "- Paragraph indices are zero-based and MUST come from the outline below.",
@@ -644,7 +646,7 @@
   }
 
   var CONTENT_ROUTE_RE = new RegExp(
-    "\\b(document|doc|paragraph|paragraphs|text|wording|reword|rewrite|rephrase|outline|comment|comments|table|tables|add|insert|create|make|generate|tighten|restructure|expand|delete|tone|image|images|picture|pictures|photo|illustration|logo)\\b", "i"
+    "\\b(document|doc|paragraph|paragraphs|text|wording|reword|rewrite|rephrase|outline|comment|comments|table|tables|add|insert|create|make|generate|tighten|restructure|expand|delete|tone|image|images|picture|pictures|photo|illustration|logo|bold|italic|underline|color|font|highlight|format|highlight)\\b", "i"
   );
 
   function assistantHistoryText(parsed) {
@@ -854,6 +856,26 @@
     });
   };
 
+  WordDeck.prototype.formatText = function (index, font) {
+    return this.run("formatText", function (ctx) {
+      var para = ctx.document.body.paragraphs.getItemAt(index);
+      var range = para.getAsRange
+        ? para.getAsRange()
+        : para.getRange("Whole");
+      var rf = range.font;
+      if (font.bold != null) rf.bold = font.bold;
+      if (font.italic != null) rf.italic = font.italic;
+      if (font.allCaps != null) rf.allCaps = font.allCaps;
+      if (font.underline != null) rf.underline = font.underline ? "Single" : "None";
+      if (font.color) rf.color = font.color;
+      if (font.name) rf.name = font.name;
+      if (font.size) rf.size = font.size;
+      if (font.highlightColor) rf.highlightColor = font.highlightColor;
+      if (font.align) para.alignment = { left: "Left", center: "Center", right: "Right", justify: "Justified" }[font.align];
+      return ctx.sync().then(function () { return { ok: true }; });
+    });
+  };
+
   WordDeck.prototype.addImage = function (payload) {
     return this.run("addImage", function (ctx) {
       if (payload.atCursor) {
@@ -919,7 +941,10 @@
     return SK.sessionApprovals[opType] || (SK.cfg && SK.cfg.approvals && SK.cfg.approvals[opType]) || "confirm";
   }
 
-  function validateOps(rawOps, ctx) {
+  function slideOkF(idx, ctx) {
+    return typeof idx === "number" && ctx && ctx.paragraphs && ctx.paragraphs[idx];
+  }
+function validateOps(rawOps, ctx) {
     var ops = [], invalid = [];
     (rawOps || []).forEach(function (op, index) {
       if (!op || typeof op !== "object") { invalid.push({ op: op, reason: "not an object" }); return; }
@@ -979,6 +1004,20 @@
           items3.push({ text: (it3 && it3.text != null) ? String(it3.text) : "", style: (it3 && it3.style) || "normal" });
         }
         out.items = items3;
+      } else if (t === "format_text") {
+        var paraOk = slideOkF(op.para, ctx);
+        if (!paraOk) { bad("bad paragraph index"); return; }
+        var fontW = {}, hasAnyW = false;
+        ["bold", "italic", "allCaps", "underline"].forEach(function (k3) {
+          if (op.font && typeof op.font[k3] === "boolean") { fontW[k3] = op.font[k3]; hasAnyW = true; }
+        });
+        if (op.font && typeof op.font.color === "string" && /^[\w#\(\), .%]+$/.test(op.font.color)) { fontW.color = op.font.color; hasAnyW = true; }
+        if (op.font && typeof op.font.highlightColor === "string" && /^[\w#]+$/.test(op.font.highlightColor)) { fontW.highlightColor = op.font.highlightColor; hasAnyW = true; }
+        if (op.font && typeof op.font.name === "string" && op.font.name) { fontW.name = op.font.name; hasAnyW = true; }
+        if (op.font && typeof op.font.size === "number" && op.font.size >= 6 && op.font.size <= 400) { fontW.size = op.font.size; hasAnyW = true; }
+        if (typeof op.align === "string" && /^(left|center|right|justify)$/i.test(op.align)) { fontW.align = op.align.toLowerCase(); hasAnyW = true; }
+        if (!hasAnyW) { bad("no format changes requested"); return; }
+        out.para = op.para; out.font = fontW;
       } else if (t === "insert_image") {
         if (typeof op.prompt !== "string" || op.prompt.trim().length < 3) { bad("missing image prompt"); return; }
         if (op.prompt.length > 4000) { bad("image prompt too long (max 4000 chars)"); return; }
@@ -1011,6 +1050,14 @@
         return "Delete paragraph " + op.para + paraRef(op.para);
       case "rewrite_doc":
         return "REWRITE document: " + op.items.length + " paragraph(s)";
+      case "format_text": {
+        var fp = [];
+        Object.keys(op.font).forEach(function (kf2) {
+          var v2 = op.font[kf2];
+          fp.push(kf2 + "=" + (typeof v2 === "boolean" ? (v2 ? "on" : "off") : v2));
+        });
+        return "Paragraph " + op.para + paraRef(op.para) + ": " + fp.join(", ");
+      }
       case "insert_image": {
         var prI = op.prompt && op.prompt.length > 60 ? op.prompt.slice(0, 60) + "…" : (op.prompt || "");
         return "Image at end of document: '" + prI + "' (profile image model)";
@@ -1065,6 +1112,10 @@ function applyOps(deck, ops, ctx) {
         case "rewrite_doc":
           return deck.rewriteDoc(op).then(function () {
             lines.push({ ok: true, text: "document rewritten: " + op.items.length + " paragraph(s)" });
+          });
+        case "format_text":
+          return deck.formatText(cur, op.font).then(function () {
+            lines.push({ ok: true, text: "format paragraph " + op.para + ": " + Object.keys(op.font).join(", ") });
           });
         case "insert_image": {
           var prof = currentProfile();

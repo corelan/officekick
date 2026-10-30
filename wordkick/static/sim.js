@@ -95,6 +95,11 @@
       paras.splice(index, 1);
       return { ok: true };
     },
+    formatText: async function (index, font) {
+      if (!paras[index]) throw new FriendlyError("Paragraph " + index + " does not exist");
+      paras[index].font = Object.assign(paras[index].font || {}, font);
+      return { ok: true };
+    },
     addImage: async function (payload) {
       // the sim has no caret: 'at cursor' just marks the line
       var img = { text: payload && payload.atCursor ? "[IMAGE at cursor]" : "[IMAGE]", style: images.length % 2 ? "Normal" : "Heading 3", image: true };
