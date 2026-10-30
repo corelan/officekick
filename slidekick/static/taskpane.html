@@ -50,8 +50,6 @@
       <div id="chat-input-title" class="fieldlabel">What should SlideKick do?</div>
       <textarea id="chat-input" rows="3"
         placeholder="e.g. reword the current slide &#10;or: design this deck"></textarea>
-      <div class="row row-wrap chatbottom"><button id="chat-new" class="btn subtle" type="button" title="Clear the conversation history the AI sees">New conversation</button></div>
-
       <div class="chips" id="chat-chips">
         <button class="chip" type="button" data-prompt="Reword the current slide: same meaning, sharper and shorter wording.">Reword current slide</button>
         <button class="chip" type="button" data-prompt="Design pass on this deck: improve layout, alignment, spacing and visual balance using the shape geometry in the outline. Only adjust what genuinely helps.">Design this deck</button>
@@ -67,6 +65,7 @@
 
       <div id="chat-status" class="status hidden"></div>
       <div id="chat-output" class="output" aria-live="polite"></div>
+      <div class="row chatbottom"><button id="chat-new" class="btn subtle" type="button" title="Clear the conversation history the AI sees">New conversation</button>
     </section>
 
     <!-- ========================= SIMULATOR ========================= -->

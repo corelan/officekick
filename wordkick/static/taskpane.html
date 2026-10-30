@@ -51,8 +51,6 @@
       <div id="chat-input-title" class="fieldlabel">What should DocKick do with your document?</div>
       <textarea id="chat-input" rows="3"
         placeholder="e.g. reword the current paragraph &#10;or: add a table of the key findings"></textarea>
-      <div class="row row-wrap chatbottom"><button id="chat-new" class="btn subtle" type="button" title="Clear the conversation history the AI sees">New conversation</button></div>
-
       <div class="chips" id="chat-chips">
         <button class="chip" type="button" data-prompt="Reword the current paragraph: same meaning, sharper and shorter wording.">Reword paragraph</button>
         <button class="chip" type="button" data-prompt="Restructure this document: propose better headings and structure, insert the improved outline as styled paragraphs. Only adjust what genuinely helps.">Restructure document</button>
@@ -68,6 +66,7 @@
 
       <div id="chat-status" class="status hidden"></div>
       <div id="chat-output" class="output" aria-live="polite"></div>
+      <div class="row chatbottom"><button id="chat-new" class="btn subtle" type="button" title="Clear the conversation history the AI sees">New conversation</button>
     </section>
 
     <!-- ========================= SIMULATOR ========================= -->
