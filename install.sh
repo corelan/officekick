@@ -69,7 +69,10 @@ migrate_legacy() {
       ok "migrated config: $OLD_CONFIG_DIR/config.json -> $CONFIG_DIR/config.json"
     fi
     if [[ -d "$OLD_CONFIG_DIR/certs" ]]; then
-      cp -R "$OLD_CONFIG_DIR/certs/." "$CONFIG_DIR/certs/" 2>/dev/null || true
+      mkdir -p "$CONFIG_DIR/certs"
+      if cp -R "$OLD_CONFIG_DIR/certs/." "$CONFIG_DIR/certs/" 2>/dev/null; then
+        ok "migrated certificates -> $CONFIG_DIR/certs"
+      fi
     fi
   fi
   if [[ -f "$OLD_PLIST" ]]; then
@@ -226,11 +229,12 @@ PYEOF
 }
 
 health() { # health PORT -> prints server JSON on success; nonzero rc if unreachable
-  if [[ "$HTTPS" == "1" && -f "$CERT_DIR/slidekick-ca.pem" ]]; then
-    curl -fsS --max-time 2 --cacert "$CERT_DIR/slidekick-ca.pem" "https://127.0.0.1:$1/api/health"
-  else
-    curl -fsS --max-time 2 "http://127.0.0.1:$1/api/health"
+  # tolerate both schemes: a TLS server never answers plain http probes
+  if [[ -f "$CERT_DIR/slidekick-ca.pem" ]]; then
+    curl -fsS --max-time 2 --cacert "$CERT_DIR/slidekick-ca.pem" "https://127.0.0.1:$1/api/health" 2>/dev/null && return 0
+    curl -fsSk --max-time 2 "https://127.0.0.1:$1/api/health" 2>/dev/null && return 0
   fi
+  curl -fsS --max-time 2 "http://127.0.0.1:$1/api/health" 2>/dev/null
 }
 
 pick_port() {
@@ -327,16 +331,27 @@ LEAFEOF
   fi
 
   # trust the CA for this user (login keychain; no admin needed)
+  # - name-only checks are NOT enough: a regenerated CA keeps the name but not
+  #   the keypair, and Office then rejects every https URL (add-in vanishes).
   local LOGIN_KC="$HOME/Library/Keychains/login.keychain-db"
-  if ! security find-certificate -c "SlideKick Local CA" "$LOGIN_KC" >/dev/null 2>&1; then
+  local KC_FP FILE_FP
+  KC_FP="$(security find-certificate -c "SlideKick Local CA" -p "$LOGIN_KC" 2>/dev/null \
+    | openssl x509 -fingerprint -sha256 -noout 2>/dev/null | sed 's/^.*=//')"
+  FILE_FP="$(openssl x509 -fingerprint -sha256 -noout -in "$CA_PEM" 2>/dev/null | sed 's/^.*=//')"
+  if [[ -n "$KC_FP" && "$KC_FP" == "$FILE_FP" ]]; then
+    ok "local CA already trusted (fingerprint match)"
+  else
+    if [[ -n "$KC_FP" && "$KC_FP" != "$FILE_FP" ]]; then
+      warn "stale local CA in the keychain (regenerated on disk) - replacing it"
+      security delete-certificate -c "SlideKick Local CA" "$LOGIN_KC" 2>/dev/null || true
+    fi
+    step "trusting the local CA (login keychain) - approve the mac security prompt"
     if security add-trusted-cert -r trustRoot -k "$LOGIN_KC" "$CA_PEM" 2>/dev/null; then
       ok "local CA trusted (login keychain) - the pane and ribbon can use https://localhost"
     else
       warn "could not auto-trust the local CA. Manual step: open Keychain Access,"
       warn "  import $CA_PEM and set 'Always Trust' for SSL - then reopen the pane"
     fi
-  else
-    ok "local CA already trusted"
   fi
   SCHEME="https"
 }
