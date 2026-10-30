@@ -51,10 +51,12 @@ PURGE=0
 HTTPS=0   # default: plain http://localhost, no keychain changes, no ribbon commands
 SUB="install"
 
-say()  { printf '%s\n' "$*"; }
-ok()   { printf '  [ok]   %s\n' "$*"; }
-warn() { printf '  [warn] %s\n' "$*"; }
-die()  { printf '  [fail] %s\n' "$*" >&2; exit 1; }
+say()   { printf '%s\n' "$*"; }
+ok()    { printf '   ✅ %s\n' "$*"; }
+warn()  { printf '   ⚠️  %s\n' "$*"; }
+die()   { printf '   ❌ %s\n' "$*" >&2; exit 1; }
+step()  { printf '   🔄 %s\n' "$*"; }
+title() { printf '%s\n' ""; printf '%s\n' "$*"; }
 
 migrate_legacy() {
   # SlideKick-only era -> OfficeKick layout: adopt config + certs, remove the
@@ -193,7 +195,7 @@ resolve_containers_for() {
 resolve_containers() {
   CONTAINER_PATHS=()
   all_owned_containers
-  CONTAINER_PATHS=("${ALL_OWNED[@]:-}")
+  CONTAINER_PATHS=(${ALL_OWNED[@]+"${ALL_OWNED[@]}"})
   if [[ ${#CONTAINER_PATHS[@]} -eq 0 ]]; then
     CONTAINER_PATHS=("$HOME/Library/Containers/com.microsoft.Powerpoint")
     warn "Office containers not found; will create PowerPoint container on demand"
@@ -269,8 +271,8 @@ pick_port() {
 ensure_local_certs() {
   SCHEME="http"
   if [[ "$HTTPS" != "1" ]]; then
-    ok "http://localhost mode (default): no certificates, no keychain changes"
-    ok "ribbon button not included in this mode - add it with: ./install.sh --https"
+    ok "transport: plain http://localhost (default: no certificates, no keychain changes)"
+    say "        (no ribbon button in this mode - opt in with: ./install.sh --https 🔐)"
     return 0
   fi
   if ! command -v openssl >/dev/null 2>&1; then
@@ -344,15 +346,16 @@ LEAFEOF
 # Office add-in cache maintenance
 # --------------------------------------------------------------------- #
 clear_office_caches() {
-  # Only safe with PowerPoint closed: the add-in commands registration cache
-  # (and page caches) refresh while the app is not running.
-  if pgrep -f "Microsoft PowerPoint.app" >/dev/null 2>&1; then
-    warn "PowerPoint is running - NOT clearing the Office add-in caches."
-    warn "quit PowerPoint, re-run ./install.sh (it clears them), then reopen"
+  # Only safe with the Office apps closed: the add-in commands registration
+  # cache (and page caches) refresh while the apps are not running.
+  if pgrep -f "Microsoft (PowerPoint|Word).app" >/dev/null 2>&1; then
+    warn "Office apps are running - skipping the add-in cache clear."
+    warn "quit PowerPoint/Word, re-run ./install.sh (it clears them), then reopen"
     return 0
   fi
+  all_owned_containers
   local container cdir
-  for container in "${CONTAINER_PATHS[@]}"; do
+  for container in ${ALL_OWNED[@]+"${ALL_OWNED[@]}"}; do
     cdir="$container/Data/Library/Caches"
     if [[ -d "$cdir" ]]; then
       rm -rf "$cdir/Microsoft" "$cdir/com.microsoft.Powerpoint" \
@@ -374,7 +377,9 @@ clear_office_caches() {
 # install / update
 # --------------------------------------------------------------------- #
 do_install() {
-  say "OfficeKick $VERSION - install/update (SlideKick + DocKick)"
+  say ""
+  say "🚀  OfficeKick $VERSION - install/update (SlideKick + DocKick)"
+  say ""
   PP_APP=""; PP_VERSION=""
   if find_powerpoint; then
     ok "PowerPoint found: $PP_APP (version ${PP_VERSION:-unknown})"
@@ -396,18 +401,19 @@ do_install() {
   migrate_legacy
   all_owned_containers
   # stop previously installed servers first so the canonical port frees up
-  say "  ... stopping previously installed local server (if any)"
+  step "stopping previously installed local server (if any)"
   launchctl unload "$PLIST" 2>/dev/null || true
   launchctl unload "$OLD_PLIST" 2>/dev/null || true
   pick_port
-  ok "port: $PORT"
+  ok "port $PORT is free and reserved for the server"
 
   if [[ "$DEV" == "1" ]]; then
     SERVER_PY="$SERVER_REPO"
     STATIC_DIR="$REPO_DIR"
     ok "dev mode: serving from $REPO_DIR (no copy)"
   else
-    say "  ... copying files to $INSTALL_DIR"
+    title "📦 Deploying files"
+    say "    destination: $INSTALL_DIR"
     rm -rf "$INSTALL_DIR"
     mkdir -p "$INSTALL_DIR" "$CONFIG_DIR" "$LOG_DIR"
     # umbrella layout: the server sits at the root, one folder per add-in
@@ -426,9 +432,9 @@ do_install() {
       else
         cp -R "$WORDKICK_DIR/." "$INSTALL_DIR/wordkick/"
       fi
-      ok "files deployed (slidekick + wordkick)"
+      ok "files deployed: SlideKick + DocKick"
     else
-      ok "files deployed (slidekick - DocKick not built yet)"
+      ok "files deployed: SlideKick (DocKick not built yet)"
     fi
     SERVER_PY="$INSTALL_DIR/server.py"
     STATIC_DIR="$INSTALL_DIR"
@@ -456,7 +462,7 @@ do_install() {
     fi
     if command -v xmllint >/dev/null 2>&1; then
       xmllint --noout "$mtmp" || die "generated manifest $mtmp is not valid XML"
-      ok "manifest valid XML: $(basename "$mtmp")"
+      ok "manifest rendered + valid XML: $(basename "$mtmp")"
     else
       warn "xmllint not available - skipping XML validation"
     fi
@@ -477,7 +483,7 @@ do_install() {
       if grep -q "$GUID" "$f" 2>/dev/null; then rm -f "$f"; fi
     done
     cp "$INSTALL_DIR/manifest/$MANIFEST_NAME" "$wef/$MANIFEST_NAME"
-    ok "manifest sideloaded: $wef/$MANIFEST_NAME"
+    ok "manifest sideloaded (SlideKick): $wef/$MANIFEST_NAME"
     installed_any=1
   done
   [[ "$installed_any" == "1" ]] || die "could not sideload SlideKick manifest into any PowerPoint container"
@@ -497,10 +503,10 @@ do_install() {
           if grep -q "$WORD_GUID" "$f" 2>/dev/null; then rm -f "$f"; fi
         done
         cp "$INSTALL_DIR/manifest/$WORD_MANIFEST_NAME" "$wef/$WORD_MANIFEST_NAME"
-        ok "DocKick manifest sideloaded: $wef/$WORD_MANIFEST_NAME"
+        ok "manifest sideloaded (DocKick): $wef/$WORD_MANIFEST_NAME"
       done
     else
-      warn "DocKick (Word add-in) is not part of this build yet - skipping Word"
+      warn "DocKick (Word add-in) not built yet - skipping Word (it installs automatically once wordkick/manifest.template.xml exists)"
     fi
   fi
 
@@ -519,7 +525,8 @@ do_install() {
       warn "server not running - start it manually:  \"$PY\" \"$SERVER_PY\" --port $PORT"
     fi
   else
-    say "  ... writing LaunchAgent $PLIST"
+    title "🚀 Server autostart"
+    say "    LaunchAgent: $PLIST"
   "$PY" - "$PLIST" "$LAUNCH_LABEL" "$PY" "$SERVER_PY" "$PORT" "$STATIC_DIR" "$CERT_DIR" "$LOG_DIR" "$SCHEME" <<'PYPLIST'
 import os, plistlib, sys
 
@@ -542,7 +549,7 @@ with open(plist_path, "wb") as fh:
 PYPLIST
     launchctl unload "$PLIST" 2>/dev/null || true
     launchctl load -w "$PLIST"
-  say "  ... restarting local server via LaunchAgent (RunAtLoad + KeepAlive)"
+  step "restarting local server via LaunchAgent (RunAtLoad + KeepAlive)"
     ok "LaunchAgent installed (starts at login, restarts on crash)"
   fi
 
@@ -555,21 +562,19 @@ PYPLIST
     tries=$((tries + 1))
   done
   if [[ "$h" == *'"ok": true'* ]]; then
-    ok "server healthy: $SCHEME://127.0.0.1:$PORT - config: $CONFIG_DIR/config.json"
+    title "🩺 Health check"
+    ok "server healthy: $SCHEME://127.0.0.1:$PORT"
+    ok "config (keys, chmod 600): $CONFIG_DIR/config.json"
   else
     die "server did not become healthy on port $PORT - check $LOG_DIR/server.log"
   fi
 
-  say ""
-  say "Installed:"
-  say "  add-in manifest : $INSTALL_DIR/manifest/$MANIFEST_NAME (sideloaded into the PowerPoint"
-  say "                    and Word container WEF folders of every matching container)"
-  say "  app files       : $INSTALL_DIR"
-  say "  config (keys)   : $CONFIG_DIR/config.json   (chmod 600)"
-  say "  server log      : $LOG_DIR/server.log"
-  say "  simulator (PPT) : $SCHEME://127.0.0.1:$PORT/slidekick/static/simulator.html   (test without Office)"
-  say ""
-  say "First use in PowerPoint:"
+  title "📦 Installed"
+  ok "add-in manifests : $INSTALL_DIR/manifest/ (copied into each Office app's WEF folder)"
+  ok "app files        : $INSTALL_DIR"
+  ok "server log       : $LOG_DIR/server.log"
+  ok "simulator (PPT)  : $SCHEME://127.0.0.1:$PORT/slidekick/static/simulator.html  (test without Office)"
+  title "👋  First use - PowerPoint:"
   if [[ "$HTTPS" == "1" ]]; then
     say "  1. quit and reopen PowerPoint (required when it was already running)"
     say "  2. open/create a deck"
@@ -584,8 +589,7 @@ PYPLIST
   fi
   if [[ -n "$W_APP" ]]; then
     if [[ -f "$WORDKICK_DIR/manifest.template.xml" ]]; then
-      say ""
-      say "First use in Word:"
+      title "👋  First use - Word:"
       if [[ "$HTTPS" == "1" ]]; then
         say "  3. the Corelan DocKick button is in the Home tab"
       else
@@ -594,6 +598,9 @@ PYPLIST
       say "     (profiles/connections are shared with SlideKick)"
     fi
   fi
+  say ""
+  say "✨  All set."
+  say ""
 }
 
 # --------------------------------------------------------------------- #
@@ -611,7 +618,7 @@ do_uninstall() {
   fi
   all_owned_containers
   local container wef f removed=0
-  for container in "${ALL_OWNED[@]:-}"; do
+  for container in ${ALL_OWNED[@]+"${ALL_OWNED[@]}"}; do
     [[ -n "$container" && -d "$container/Data/Documents/wef" ]] || continue
     wef="$container/Data/Documents/wef"
     for f in "$wef"/*.xml; do
