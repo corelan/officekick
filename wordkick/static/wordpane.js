@@ -334,6 +334,7 @@
     "- Rewrite/improve requests: keep the meaning and structure; reword only.",
     "- If the request is a question/explanation/brainstorm rather than a document change, use format A.",
     "- Image requests: always return an insert_image op (never generate the picture inline); DocKick fetches it with the user's configured image model. Include a concrete, self-contained prompt in the op.",
+    "- Image refinement ('refine/change the image'): write a FRESH self-contained image prompt describing the FULL desired result. Never embed previous prompts, the conversation, or op JSON into it - only the scene essentials plus the requested change. Prefer 200-600 words.",
     "- Picture placement: 'here / at the cursor / current position' = the image lands at the caret (the pane's 'insert at cursor' checkbox); default = end of document. Keep insert_image minimal (type + prompt only).",
   ].join("\n");
 
@@ -351,6 +352,27 @@
   var CONTENT_ROUTE_RE = new RegExp(
     "\\b(document|doc|paragraph|paragraphs|text|wording|reword|rewrite|rephrase|outline|comment|comments|table|tables|add|insert|create|make|generate|tighten|restructure|expand|delete|tone|image|images|picture|pictures|photo|illustration|logo)\\b", "i"
   );
+
+  function assistantHistoryText(parsed) {
+    // a compact recap for the next round; never the raw ops JSON (it bloats every
+    // later request and pushes the models toward echoing blobs into new prompts)
+    if (!parsed || !parsed.ok) {
+      var rawT = (SK.lastModelText && SK.lastModelText.text) || "";
+      return String(rawT).slice(0, 400);
+    }
+    if (parsed.kind === "reply") return String(parsed.text || "").slice(0, HISTORY_MAX_CHARS);
+    var ops = parsed.ops || [];
+    var parts = ops.slice(0, 3).map(function (op) {
+      var d = fmtOp(op, SK.lastCtx);
+      return d.length > 110 ? d.slice(0, 110) + "…" : d;
+    });
+    var sum = "Applied: " + parts.join("; ") + (ops.length > 3 ? " (+" + (ops.length - 3) + " more)" : "");
+    var imgOp = ops.filter(function (o) { return o.type === "create_image" || o.type === "insert_image"; })[0];
+    if (imgOp && imgOp.prompt) {
+      sum += " [image prompt: " + String(imgOp.prompt).slice(0, 600) + (String(imgOp.prompt).length > 600 ? "…" : "") + "]";
+    }
+    return sum.slice(0, HISTORY_MAX_CHARS);
+  }
 
   function historyCap(text) {
     var s = String(text || "");
@@ -660,7 +682,7 @@
         out.items = items3;
       } else if (t === "insert_image") {
         if (typeof op.prompt !== "string" || op.prompt.trim().length < 3) { bad("missing image prompt"); return; }
-        if (op.prompt.length > 1500) { bad("image prompt too long (max 1500 chars)"); return; }
+        if (op.prompt.length > 4000) { bad("image prompt too long (max 4000 chars)"); return; }
         out.prompt = op.prompt.trim();
       }
       ops.push(out);
@@ -877,7 +899,7 @@ function applyOps(deck, ops, ctx) {
         return parsed;
       }).then(function (parsed) {
         renderParsed(parsed, ctx, instruction);
-        pushHistory(instruction, (SK.lastModelText && SK.lastModelText.text) || parsed.text || "");
+        pushHistory(instruction, assistantHistoryText(parsed));
       });
     }).catch(function (err) {
       var msg = err && err.friendly ? err.message : (err && err.message) || String(err);

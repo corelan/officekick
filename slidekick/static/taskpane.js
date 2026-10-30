@@ -335,6 +335,7 @@
     "- If the request is a question/explanation/brainstorm rather than a deck change, use format A.",
     "- Design passes ('design this deck/slide', improve alignment/balance): emit ops (apply_layout, move_shape, create_table) computed from the geometry in the outline; when the user asks only for advice, use format A.",
     "- Image requests: always return a create_image op (never generate the picture inline); SlideKick fetches it with the user's configured image model. Include a concrete, self-contained prompt in the op.",
+    "- Image refinement ('refine/change the image'): write a FRESH self-contained image prompt describing the FULL desired result. Never embed previous prompts, the conversation, or op JSON into it - only the scene essentials plus the requested change. Prefer 200-600 words.",
   ].join("\n");
 
   var NOTES_OFF_RULE =
@@ -355,6 +356,27 @@
   var CONTENT_ROUTE_RE = new RegExp(
     "\\b(slide|slides|deck|bullet|bullets|reword|rewrite|rephrase|outline|notes?|title|titles|add|create|make|generate|tighten|restructure|expand|insert|append|design|align|balance|spacing|table|tables|chart|image|images|picture|pictures|photo|logo|illustration)\\b", "i"
   );
+
+  function assistantHistoryText(parsed) {
+    // a compact recap for the next round; never the raw ops JSON (it bloats every
+    // later request and pushes the models toward echoing blobs into new prompts)
+    if (!parsed || !parsed.ok) {
+      var rawT = (SK.lastModelText && SK.lastModelText.text) || "";
+      return String(rawT).slice(0, 400);
+    }
+    if (parsed.kind === "reply") return String(parsed.text || "").slice(0, HISTORY_MAX_CHARS);
+    var ops = parsed.ops || [];
+    var parts = ops.slice(0, 3).map(function (op) {
+      var d = fmtOp(op, SK.lastCtx);
+      return d.length > 110 ? d.slice(0, 110) + "…" : d;
+    });
+    var sum = "Applied: " + parts.join("; ") + (ops.length > 3 ? " (+" + (ops.length - 3) + " more)" : "");
+    var imgOp = ops.filter(function (o) { return o.type === "create_image" || o.type === "insert_image"; })[0];
+    if (imgOp && imgOp.prompt) {
+      sum += " [image prompt: " + String(imgOp.prompt).slice(0, 600) + (String(imgOp.prompt).length > 600 ? "…" : "") + "]";
+    }
+    return sum.slice(0, HISTORY_MAX_CHARS);
+  }
 
   function historyCap(text) {
     var s = String(text || "");
@@ -1050,7 +1072,7 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
         out.slide = op.slide; out.shape = op.shape; out.geometry = geoM;
       } else if (t === "create_image") {
         if (typeof op.prompt !== "string" || op.prompt.trim().length < 3) { bad("missing image prompt"); return; }
-        if (op.prompt.length > 1500) { bad("image prompt too long (max 1500 chars)"); return; }
+        if (op.prompt.length > 4000) { bad("image prompt too long (max 4000 chars)"); return; }
         if (op.slide != null && !slideOk(op.slide)) { bad("bad slide index"); return; }
         out.slide = typeof op.slide === "number" ? op.slide : null;
         out.prompt = op.prompt.trim();
@@ -1345,7 +1367,7 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
         return parsed;
       }).then(function (parsed) {
         renderParsed(parsed, ctx, instruction);
-        pushHistory(instruction, (SK.lastModelText && SK.lastModelText.text) || parsed.text || "");
+        pushHistory(instruction, assistantHistoryText(parsed));
       });
     }).catch(function (err) {
       var msg = err && err.friendly ? err.message : (err && err.message) || String(err);

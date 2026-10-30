@@ -5,6 +5,11 @@
   compose_body / set_categories / save_draft ops, read+compose modes, simulator,
   installer manifest render + Mac sideload instructions + the Windows catalog step.
 ### Fixed
+- Image refinement flows: the conversation history no longer stores raw ops JSON -
+  compact per-op summaries (+ the last image prompt, capped) are kept instead, so a
+  "refine the image" round writes a fresh prompt instead of echoing blobs. Image
+  prompt cap raised 1500 -> 4000 chars; system prompt rule: refinements = fresh
+  self-contained prompts (delta only). Verified via the wire payload.
 - SlideKick: OfficeDeck.addImage was missing (real-PowerPoint image runs aborted
   with 'deck.addImage is not a function'); implemented via the Common API
   setSelectedDataAsync(Image) with optional left/top/width/height (points) -
