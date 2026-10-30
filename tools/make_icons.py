@@ -32,22 +32,113 @@ BOLT_POLY = [
 ]
 
 
+def _alpha_bbox(png_path):
+    """Exact bbox of non-transparent pixels via a minimal PNG RGBA8 decoder."""
+    import zlib as _z
+    raw = png_path.read_bytes()
+    pos = 8
+    w = h = 0
+    idat = b""
+    while pos < len(raw):
+        ln = struct.unpack(">I", raw[pos:pos + 4])[0]
+        tag = raw[pos + 4:pos + 8]
+        data = raw[pos + 8:pos + 8 + ln]
+        if tag == b"IHDR":
+            w, h = struct.unpack(">II", data[0:8])
+        elif tag == b"IDAT":
+            idat += data
+        elif tag == b"IEND":
+            break
+        pos += 12 + ln
+    data = _z.decompress(idat)
+    stride = w * 4 + 1
+    rows = []
+    prev = bytearray(w * 4)
+    for i in range(h):
+        f = data[i * stride]
+        line = bytearray(data[i * stride + 1:(i + 1) * stride])
+        if f == 0:
+            pass
+        elif f == 1:
+            for x in range(4, len(line)):
+                line[x] = (line[x] + line[x - 4]) & 0xFF
+        elif f == 2:
+            for x in range(len(line)):
+                line[x] = (line[x] + prev[x]) & 0xFF
+        elif f == 3:
+            for x in range(len(line)):
+                a = line[x - 4] if x >= 4 else 0
+                line[x] = (line[x] + ((a + prev[x]) >> 1)) & 0xFF
+        elif f == 4:
+            for x in range(len(line)):
+                a = line[x - 4] if x >= 4 else 0
+                b = prev[x]
+                c = prev[x - 4] if x >= 4 else 0
+                p = a + b - c
+                pa, pb, pc = abs(p - a), abs(p - b), abs(p - c)
+                pr = a if (pa <= pb and pa <= pc) else (b if pb <= pc else c)
+                line[x] = (line[x] + pr) & 0xFF
+        prev = line
+        rows.append(line)
+    minx, miny, maxx, maxy = w, h, -1, -1
+    for y in range(h):
+        row = rows[y]
+        for x in range(w):
+            if row[x * 4 + 3] > 50:
+                if x < minx: minx = x
+                if x > maxx: maxx = x
+                if y < miny: miny = y
+                if y > maxy: maxy = y
+    if maxx < 0:
+        return None
+    return (minx, miny, maxx, maxy)
+
+
 def build_from_logo(outdir):
+    # App-icon tile style: crop tight to the badge (drop transparent margin and
+    # the micro-text ring), scale to ~80% of the tile, then pad onto a slate
+    # tile. The bright diamond carries the contrast, so the tile reads on both
+    # light and dark Add-ins menus (a transparent-bg logo reads as a black
+    # blob on dark Office surfaces).
+    TILE = (34, 39, 56)  # slate tile (matches the logo's dark ring family)
     for size in SIZES:
         out = outdir / ("icon%d.png" % size)
-        r = subprocess.run(
-            ["sips", "-z", str(size), str(size), str(LOGO), "--out", str(out)],
-            capture_output=True, text=True,
-        )
-        if r.returncode != 0:
-            print("sips failed for %d px: %s" % (size, r.stderr.strip()))
-            return False
-        raw = out.read_bytes()
-        w, h = struct.unpack(">II", raw[16:24])
-        if (w, h) != (size, size) or raw[25] != 6:  # color type 6 = RGBA
-            print("unexpected output for %d px" % size)
-            return False
-        print("wrote", out, "(%dx%d, %d bytes)" % (w, h, len(raw)))
+        inner = max(12, int(size * 0.80))
+        bbox = _alpha_bbox(LOGO)
+        if bbox:
+            x0, y0, x1, y1 = bbox
+            bw, bh = x1 - x0 + 1, y1 - y0 + 1
+            side = max(bw, bh)  # square around the diamond
+            cx, cy = (x0 + x1) // 2, (y0 + y1) // 2
+            off_x = max(0, min(200 - side, cx - side // 2))
+            off_y = max(0, min(200 - side, cy - side // 2))
+        else:
+            side, off_x, off_y = 140, 30, 30
+        tmp = outdir / "_crop_tmp.png"
+        r1 = subprocess.run(["sips", "-c", str(side), str(side),
+                             "--cropOffset", str(off_y), str(off_x), str(LOGO),
+                             "--out", str(tmp)], capture_output=True, text=True)
+        r2 = subprocess.run(["sips", "-z", str(inner), str(inner), str(tmp),
+                             "--out", str(tmp)], capture_output=True, text=True)
+        r3 = subprocess.run(["sips", "--padToHeightWidth", str(size), str(size),
+                             "--padColor", "%02X%02X%02X" % TILE, str(tmp),
+                             "--out", str(out)], capture_output=True, text=True)
+        for r in (r1, r2, r3):
+            if r.returncode != 0:
+                print("sips failed: %s" % r.stderr.strip())
+                return False
+        tmp.unlink()
+        _verify(out, size)
+    return True
+
+
+def _verify(out, size):
+    raw = out.read_bytes()
+    w, h = struct.unpack(">II", raw[16:24])
+    if (w, h) != (size, size) or raw[25] != 6:  # color type 6 = RGBA
+        print("unexpected output for %d px" % size)
+        return False
+    print("wrote", out, "(%dx%d, %d bytes)" % (w, h, len(raw)))
     return True
 
 
