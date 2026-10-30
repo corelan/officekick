@@ -29,4 +29,68 @@
     <SourceLocation DefaultValue="http://localhost:__PORT__/taskpane.html"/>
   </DefaultSettings>
   <Permissions>ReadWriteDocument</Permissions>
+  <VersionOverrides xsi:type="VersionOverridesV1_0">
+    <Hosts>
+      <Host xsi:type="Presentation">
+        <DesktopFormFactor>
+          <GetStarted>
+            <Title resid="GetStarted.Title"/>
+            <Description resid="GetStarted.Description"/>
+            <LearnMoreUrl resid="GetStarted.LearnMoreUrl"/>
+          </GetStarted>
+          <ExtensionPoint xsi:type="PrimaryCommandSurface">
+            <CustomTab id="Corelan.SlideKick.Tab">
+              <Label resid="Tab.Label"/>
+              <Group id="Corelan.SlideKick.Group">
+                <Label resid="Group.Label"/>
+                <Icon>
+                  <bt:Image size="16" resid="Icon.16"/>
+                  <bt:Image size="32" resid="Icon.32"/>
+                  <bt:Image size="80" resid="Icon.80"/>
+                </Icon>
+                <Control xsi:type="Button" id="Corelan.SlideKick.Button">
+                  <Label resid="Button.Label"/>
+                  <Supertip>
+                    <Title resid="Button.SupertipTitle"/>
+                    <Description resid="Button.SupertipDescription"/>
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="Icon.16"/>
+                    <bt:Image size="32" resid="Icon.32"/>
+                    <bt:Image size="80" resid="Icon.80"/>
+                  </Icon>
+                  <Action xsi:type="ShowTaskpane">
+                    <TaskpaneId>Default</TaskpaneId>
+                    <SourceLocation resid="Taskpane.Url"/>
+                  </Action>
+                </Control>
+              </Group>
+            </CustomTab>
+          </ExtensionPoint>
+        </DesktopFormFactor>
+      </Host>
+    </Hosts>
+    <Resources>
+      <bt:Images>
+        <bt:Image id="Icon.16" DefaultValue="http://localhost:__PORT__/assets/icon16.png"/>
+        <bt:Image id="Icon.32" DefaultValue="http://localhost:__PORT__/assets/icon32.png"/>
+        <bt:Image id="Icon.80" DefaultValue="http://localhost:__PORT__/assets/icon80.png"/>
+      </bt:Images>
+      <bt:Urls>
+        <bt:Url id="Taskpane.Url" DefaultValue="http://localhost:__PORT__/taskpane.html"/>
+        <bt:Url id="GetStarted.LearnMoreUrl" DefaultValue="https://github.com/corelan/slidekick"/>
+      </bt:Urls>
+      <bt:ShortStrings>
+        <bt:String id="GetStarted.Title" DefaultValue="Corelan SlideKick"/>
+        <bt:String id="Tab.Label" DefaultValue="SlideKick"/>
+        <bt:String id="Group.Label" DefaultValue="AI actions"/>
+        <bt:String id="Button.Label" DefaultValue="Corelan SlideKick"/>
+      </bt:ShortStrings>
+      <bt:LongStrings>
+        <bt:String id="GetStarted.Description" DefaultValue="AI assistant for your decks: reword slides, generate content, notes and design suggestions, using your own AI providers."/>
+        <bt:String id="Button.SupertipTitle" DefaultValue="Open SlideKick"/>
+        <bt:String id="Button.SupertipDescription" DefaultValue="Open the Corelan SlideKick AI task pane."/>
+      </bt:LongStrings>
+    </Resources>
+  </VersionOverrides>
 </OfficeApp>

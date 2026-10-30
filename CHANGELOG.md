@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.2
+
+- Permanent ribbon presence: the manifest now declares a dedicated "SlideKick" tab
+  with a task-pane button (VersionOverrides / add-in commands) - no more opening
+  Add-ins dropdown every time. The dropdown entry remains as fallback.
+- The task pane follows the Office host theme (OfficeTheme.isDarkTheme, with
+  body-color luminance fallback and an OfficeThemeChanged subscription); the
+  simulator follows the browser (prefers-color-scheme) or `?theme=dark|light`.
+
 ## 0.1.1
 
 - Windows support: `install.ps1` (per-user trusted catalog via HKCU, scheduled task

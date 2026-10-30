@@ -165,3 +165,36 @@ table.kv td:first-child { color: var(--muted); font-weight: 600; }
 }
 .muted { color: var(--muted); font-weight: 400; }
 .small { font-size: 12px; color: var(--muted); }
+
+/* ===== Dark mode: follows the Office host theme; browser scheme in simulator ===== */
+body.dark {
+  --bg: #1a1e26;
+  --panel: #22262f;
+  --ink: #e6e9ef;
+  --muted: #a2a9b4;
+  --line: #3a4150;
+  --accent: #f0b429;
+  --accent-ink: #ffd479;
+  --primary: #3b82f6;
+  --ok: #4ade80;
+  --bad: #f87171;
+  --warn: #f0b429;
+  --chip: #2b303b;
+}
+body.dark h2 { color: var(--muted); }
+body.dark .status.busy { background: #2b2415; border-color: #65501f; color: var(--accent-ink); }
+body.dark .status.error { background: #2e1a1c; border-color: #6b2a2e; color: var(--bad); }
+body.dark .status.ok { background: #14271b; border-color: #245a38; color: var(--ok); }
+body.dark .reply-text, body.dark .opsbox, body.dark table.list,
+body.dark form#conn-form, body.dark form#prof-form, body.dark .sim-deck,
+body.dark .sk-header, body.dark .sk-footer { background: var(--panel); }
+body.dark label input[type="text"], body.dark label input[type="password"],
+body.dark label select, body.dark textarea#chat-input { background: #1f232c; color: var(--ink); }
+body.dark .btn { background: var(--panel); color: var(--ink); }
+body.dark .btn:hover { background: var(--chip); }
+body.dark .btn.danger { color: var(--bad); border-color: #6b2a2e; }
+body.dark .btn.danger:hover { background: #2e1a1c; }
+body.dark select:focus, body.dark input:focus, body.dark textarea:focus { outline-color: #1d4ed8; }
+body.dark .manualbox { background: #2b2415; border-color: #65501f; }
+body.dark .manualbox h4 { color: var(--accent-ink); }
+body.dark .chip:hover { color: var(--ink); border-color: var(--accent); }

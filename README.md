@@ -43,7 +43,13 @@ machine.
   appended file per day (`~/.slidekick/logs/debug-YYYY-MM-DD.log`).
 - **Installer**: detects PowerPoint, deploys the add-in, sideloads/registers the
   manifest (LaunchAgent on macOS, per-user trusted catalog + Scheduled Task on
-  Windows). Re-run either installer to update.
+  Windows) and keeps the server running. Re-run either installer to update.
+- **Always visible in the ribbon**: a dedicated **SlideKick** tab with a task-pane
+  button (add-in commands), so the add-in is one click away - no Add-ins dropdown
+  detour (the dropdown entry still lists it).
+- **Theme-aware UI**: light/dark follows the Office host theme
+  (`OfficeTheme.isDarkTheme`, color-luminance fallback); in the simulator it follows
+  the browser scheme.
 - **Simulator**: the exact task pane runs in a normal browser against an in-memory deck,
   for testing without PowerPoint.
 
@@ -84,8 +90,8 @@ manifest, and reloads the LaunchAgent. Your connections/profiles/policy live in
 `~/.slidekick/config.json` and are preserved. Quit and reopen PowerPoint afterwards so
 it re-reads the manifest.
 
-**In PowerPoint**: open a deck, then **Home tab -> Add-ins -> Corelan SlideKick**. The task pane
-opens on the right.
+**In PowerPoint**: open a deck, then click **SlideKick** in the ribbon (its own tab;
+falls back to Home -> Add-ins -> Corelan SlideKick). The task pane opens on the right.
 
 ## Install on Windows (PowerShell)
 
@@ -116,7 +122,8 @@ Useful flags: `-Port N`, `-Dev`, `-NoScheduledTask`, `-Action status`, `-Action 
 `-Action uninstall [-Purge]`.
 
 **In PowerPoint (Windows)**: quit and reopen PowerPoint, then **Insert -> My Add-ins
-(dropdown) -> SHARED FOLDER -> Corelan SlideKick -> Add**.
+(dropdown) -> SHARED FOLDER -> Corelan SlideKick -> Add** once; from then on the
+dedicated **SlideKick** ribbon tab is always there.
 
 **Windows notes**:
 
@@ -206,7 +213,8 @@ Useful flags: `-Port N`, `-Dev`, `-NoScheduledTask`, `-Action status`, `-Action 
 
 ## Troubleshooting
 
-- **Add-in doesn't show** - quit *all* Office apps and reopen PowerPoint:
+- **Add-in doesn't show** - quit *all* Office apps and reopen PowerPoint; look for
+  the **SlideKick** ribbon tab first, then the Add-ins dropdown:
   - macOS: check `./install.sh status`; confirm
     `~/Library/Containers/com.microsoft.Powerpoint/Data/Documents/wef/slidekick.xml`
     exists; the Office cache can be cleared by quitting Office and removing

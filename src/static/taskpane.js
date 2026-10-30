@@ -70,6 +70,48 @@
     el.textContent = text || "";
   }
 
+  // theme: follow the Office host (isDarkTheme covers Black/Dark Gray; fall
+  // back to body-color luminance; simulator follows the browser or ?theme=)
+  function luminance(hexColor) {
+    var m = /^\s*#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})/i.exec(hexColor || "");
+    if (!m) return 1;
+    return (0.2126 * parseInt(m[1], 16) +
+            0.7152 * parseInt(m[2], 16) +
+            0.0722 * parseInt(m[3], 16)) / 255;
+  }
+
+  function applyTheme() {
+    var dark = false, mode = "none";
+    try {
+      var t = Office && Office.context && Office.context.officeTheme;
+      if (t) {
+        if (typeof t.isDarkTheme === "boolean") { dark = t.isDarkTheme; mode = "host.isDarkTheme"; }
+        else if (t.bodyBackgroundColor) { dark = luminance(t.bodyBackgroundColor) < 0.5; mode = "host.luminance"; }
+      }
+    } catch (e) { /* theme API not available */ }
+    if (mode === "none") {
+      var q = new URLSearchParams(String(window.location.search || ""));
+      var forced = q.get("theme");
+      if (forced) { dark = forced.toLowerCase() === "dark"; mode = "forced"; }
+      else if (window.matchMedia) { dark = window.matchMedia("(prefers-color-scheme: dark)").matches; mode = "browser"; }
+    }
+    document.body.classList.toggle("dark", dark);
+    SK.theme = { dark: dark, via: mode };
+    dbg("theme", SK.theme);
+  }
+
+  function watchTheme() {
+    try {
+      Office.context.addHandlerAsync(Office.EventType.OfficeThemeChanged, function () {
+        applyTheme();
+        setStatus("Switched to " + (SK.theme.dark ? "dark" : "light") + " theme.", "");
+      }, function (asyncResult) { /* subscribed (or unsupported) */ });
+    } catch (e) { /* event not available on this host */ }
+    document.addEventListener("visibilitychange", function () {
+      if (!document.hidden) applyTheme();
+    });
+  }
+
   function setFormMsg(el, text, ok) {
     el.textContent = text || "";
     el.className = "formmsg" + (ok ? " ok" : text ? " bad" : "");
@@ -1726,6 +1768,8 @@
       badge.style.display = "";
       badge.textContent = "PPT";
       SK.deck = new OfficeDeck();
+      applyTheme();
+      watchTheme();
       finishBoot();
     });
   }
@@ -1757,6 +1801,7 @@
       $("tabs").appendChild(nav);
       nav.addEventListener("click", function () { switchTab("sim"); });
       SK.deck = new window.SimDeck();
+      applyTheme();
       finishBoot();
     } else {
       bootOffice();
