@@ -1,4 +1,23 @@
 # Changelog
+## [0.3.0] - 2026-10-30
+### Added (Office.js API exploration wave)
+- **SlideKick**: selection-driven ops - `format_selection` formats the text you
+  have selected right now (PowerPointApi 1.6 getSelectedTextRange); the context
+  now reports your selection (selected slides, shapes and text preview) so the
+  model can target what you have open; `set_background` (AI-generated picture
+  or solid color via 1.10 slide background fills); `add_hyperlink` (1.10
+  shape.setHyperlink); `set_alt_text` (1.10 accessibility alt text).
+- **DocKick**: `create_template` - appends a titled template block with real
+  Word content controls (plain text, dropdown with AI-provided options,
+  checkbox, date picker; WordApi 1.5 + 1.9 with graceful fallbacks); a
+  Settings toggle "AI edits as tracked changes" applies your ops through
+  Word's Track Changes so you can accept/reject them like human edits
+  (changeTrackingMode, feature-detected).
+- **MailKick**: Mailbox 1.13 multi-select awareness - the context now lists the
+  emails you multi-selected (batch triage prompts for the model).
+- New default approvals: format_selection/format_text/set_background/
+  create_template = confirm; add_hyperlink/set_alt_text = auto.
+
 ## [0.2.4] - 2026-10-30
 ### Fixed
 - **MailKick "there was no email"**: the model now always receives at least a

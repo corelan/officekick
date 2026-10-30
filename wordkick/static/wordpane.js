@@ -55,6 +55,7 @@
     rewrite_doc:       { label: "rewrite document", hint: "Replaces the document body with a new set of paragraphs (destructive - review)." },
     insert_image:      { label: "insert image", hint: "Generates a picture from a description with the profile's image model and inserts it at the end of the document (or at the cursor with the checkbox)." },
     format_text:      { label: "format text", hint: "bold/italic/color/size/underline/allCaps/highlight + alignment on one paragraph." },
+    create_template:  { label: "create template block", hint: "appends a titled template block with fillable content controls (text, dropdown, checkbox, date)." },
   };
   var OP_TYPES = Object.keys(OPS_META);
 
@@ -331,6 +332,7 @@
     '- {"type":"insert_comment","find":"exact anchor text","text":"comment"} (comments need WordApi 1.4)',
     '- {"type":"delete_paragraph","para":N} (zero-based indices from the outline - never invent them)',
     '- {"type":"rewrite_doc","items":[{"text":"...","style":"..."}]} (DESTROYS the current body - only when explicitly asked for a full rewrite)',
+    '- {"type":"create_template","title":"Template name","fields":[{"label":"Field label","type":"text|dropdown|checkbox|date","options":["only for dropdown"]}]} (appends a titled template block with fillable controls; use when the user asks for a template/form/template block; dropdown needs an options array)',
     '- {"type":"insert_image","prompt":"detailed image description"} (generate a picture from the description and insert it at the end of the document; only when the user asks for a picture/image/illustration/logo)',
     '- {"type":"format_text","para":N,"font":{"bold":true},"align":"center"} (format ONE paragraph from the outline: font = {"bold","italic","color","size","name","underline","allCaps","highlightColor"} subset; align = left|center|right|justify; only what is requested)',
     "",
@@ -648,7 +650,7 @@
   }
 
   var CONTENT_ROUTE_RE = new RegExp(
-    "\\b(document|doc|paragraph|paragraphs|text|wording|reword|rewrite|rephrase|outline|comment|comments|table|tables|add|insert|create|make|generate|tighten|restructure|expand|delete|tone|image|images|picture|pictures|photo|illustration|logo|bold|italic|underline|color|font|highlight|format|highlight)\\b", "i"
+    "\\b(document|doc|paragraph|paragraphs|text|wording|reword|rewrite|rephrase|outline|comment|comments|table|tables|add|insert|create|make|generate|tighten|restructure|expand|delete|tone|image|images|picture|pictures|photo|illustration|logo|bold|italic|underline|color|font|highlight|format|highlight)\\b|template|form|dropdown|checkbox|date", "i"
   );
 
   function assistantHistoryText(parsed) {
@@ -878,6 +880,52 @@
     });
   };
 
+  WordDeck.prototype.createTemplateBlock = function (title, fields) {
+    return this.run("createTemplateBlock", function (ctx) {
+      if (!Office.context.requirements.isSetSupported("WordApi", "1.5")) {
+        throw new FriendlyError("content controls need WordApi 1.5 - update Word (16.70+ on Mac).");
+      }
+      var body = ctx.document.body;
+      body.insertParagraph(title, "End").styleBuiltIn = "Heading2";
+      var notes = [];
+      fields.forEach(function (f) {
+        var para = body.insertParagraph(f.label + ": ", "End");
+        var cc = para.getRange("Whole").insertContentControl("richText");
+        cc.title = f.label;
+        cc.tag = "officekick-" + f.type;
+        var typed = "";
+        if (f.type === "text") { try { cc.type = "plainText"; typed = "plainText"; } catch (e2) { typed = "richText"; } }
+        else if (f.type === "checkbox") { try { cc.type = "checkBox"; typed = "checkBox"; } catch (e3) { typed = "richText"; notes.push(f.label + ": kept as text (checkbox not supported by this build)"); } }
+        else if (f.type === "date") { try { cc.type = "datePicker"; typed = "datePicker"; } catch (e4) { typed = "richText"; notes.push(f.label + ": kept as text (date picker not supported by this build)"); } }
+        else if (f.type === "dropdown") {
+          try {
+            cc.type = "dropDownList"; typed = "dropDownList";
+            (f.options || []).forEach(function (o) {
+              try {
+                if (cc.dropDownListContentControl && cc.dropDownListContentControl.addListItem) {
+                  cc.dropDownListContentControl.addListItem({ displayText: o, value: o });
+                } else { cc.placeholderText = o; }
+              } catch (e5) { notes.push(f.label + ": option '" + o + "' rejected by Word"); }
+            });
+          } catch (e6) { typed = "richText"; notes.push(f.label + ": kept as text (dropdown not supported by this build)"); }
+        }
+        void typed;
+      });
+      return ctx.sync().then(function () { return { ok: true, notes: notes }; });
+    });
+  };
+
+  WordDeck.prototype.setTrackChanges = function (on) {
+    return this.run("setTrackChanges", function (ctx) {
+      var doc = ctx.document;
+      if (typeof doc.changeTrackingMode === "undefined") {
+        throw new FriendlyError("this Word build does not support change-tracking mode - edits will be applied directly.");
+      }
+      doc.changeTrackingMode = on ? "trackAll" : "off";
+      return ctx.sync().then(function () { return { ok: true }; });
+    });
+  };
+
   WordDeck.prototype.addImage = function (payload) {
     return this.run("addImage", function (ctx) {
       if (payload.atCursor) {
@@ -1006,6 +1054,26 @@ function validateOps(rawOps, ctx) {
           items3.push({ text: (it3 && it3.text != null) ? String(it3.text) : "", style: (it3 && it3.style) || "normal" });
         }
         out.items = items3;
+      } else if (t === "create_template") {
+        if (typeof op.title !== "string" || !op.title.trim()) { bad("template needs a title"); return; }
+        var fields = Array.isArray(op.fields) ? op.fields : null;
+        if (!fields || !fields.length || fields.length > 10) { bad("1-10 fields required"); return; }
+        var clean = [];
+        for (var fi = 0; fi < fields.length; fi++) {
+          var f = fields[fi] || {};
+          if (typeof f.label !== "string" || !f.label.trim()) { bad("field " + (fi + 1) + " needs a label"); return; }
+          var ft = f.type;
+          if (ft !== "text" && ft !== "dropdown" && ft !== "checkbox" && ft !== "date") {
+            bad("field '" + f.label + "': type must be text, dropdown, checkbox or date"); return;
+          }
+          var entry = { label: f.label.trim().slice(0, 100), type: ft };
+          if (ft === "dropdown") {
+            if (!Array.isArray(f.options) || !f.options.length || f.options.length > 20) { bad("dropdown '" + f.label + "' needs 1-20 options"); return; }
+            entry.options = f.options.map(function (o) { return String(o).slice(0, 100); });
+          }
+          clean.push(entry);
+        }
+        out.title = op.title.trim().slice(0, 100); out.fields = clean;
       } else if (t === "format_text") {
         var paraOk = slideOkF(op.para, ctx);
         if (!paraOk) { bad("bad paragraph index"); return; }
@@ -1060,6 +1128,9 @@ function validateOps(rawOps, ctx) {
         });
         return "Paragraph " + op.para + paraRef(op.para) + ": " + fp.join(", ");
       }
+      case "create_template":
+        return "template '" + op.title + "' with " + op.fields.length + " field(s): " +
+          op.fields.map(function (f) { return f.label + " (" + f.type + ")"; }).join(", ");
       case "insert_image": {
         var prI = op.prompt && op.prompt.length > 60 ? op.prompt.slice(0, 60) + "…" : (op.prompt || "");
         return "Image at end of document: '" + prI + "' (profile image model)";
@@ -1071,6 +1142,15 @@ function validateOps(rawOps, ctx) {
 function applyOps(deck, ops, ctx) {
     var lines = [], manualNotes = [];
     var deleted = [];
+    var revNote = null;
+    var revOn = !!(SK.cfg && SK.cfg.trackedChanges);
+    var pre = Promise.resolve();
+    if (revOn && deck.setTrackChanges) {
+      pre = deck.setTrackChanges(true).catch(function (err) {
+        revNote = (err && err.message) || String(err);
+        SK.cfg.trackedChanges = false; // do not retry per-op
+      });
+    }
     var adj = function (i) {
       var d = 0;
       deleted.forEach(function (x) { if (x < i) d++; });
@@ -1119,6 +1199,12 @@ function applyOps(deck, ops, ctx) {
           return deck.formatText(cur, op.font).then(function () {
             lines.push({ ok: true, text: "format paragraph " + op.para + ": " + Object.keys(op.font).join(", ") });
           });
+        case "create_template":
+          return deck.createTemplateBlock(op.title, op.fields).then(function (r) {
+            var extra = (r && r.notes && r.notes.length) ? " (notes: " + r.notes.join("; ") + ")" : "";
+            lines.push({ ok: true, text: "template '" + op.title + "' appended: " +
+              op.fields.map(function (f) { return f.label + " (" + f.type + ")"; }).join(", ") + extra });
+          });
         case "insert_image": {
           var prof = currentProfile();
           var imgRef = prof && prof.image;
@@ -1156,8 +1242,13 @@ function applyOps(deck, ops, ctx) {
         return Promise.resolve();
       });
     });
-    return chain.then(function () {
-      return { lines: lines, manualNotes: manualNotes };
+    return pre.then(function () { return chain; }).then(function () {
+      var res = { lines: lines, manualNotes: manualNotes };
+      if (revNote) lines.push({ ok: false, text: "revisions: " + revNote });
+      var off = (SK.cfg && SK.cfg.trackedChanges && deck.setTrackChanges)
+        ? deck.setTrackChanges(false).catch(function () { return null; })
+        : Promise.resolve(null);
+      return off.then(function () { return res; });
     });
   }
 
@@ -1886,6 +1977,7 @@ function applyOps(deck, ops, ctx) {
     });
     table.innerHTML = rows.join("");
     $("settings-debug").checked = !!SK.cfg.debug;
+    $("settings-trackedchanges").checked = !!SK.cfg.trackedChanges;
         $("debug-path").textContent = SK.cfg.configPath.replace(/config\.json$/, "logs") + "/debug-YYYY-MM-DD.log";
   }
 
@@ -1902,6 +1994,12 @@ function applyOps(deck, ops, ctx) {
   }
 
   function saveDebugOption() {
+    apiJson("/api/settings", "PUT", { trackedChanges: $("settings-trackedchanges").checked }).then(function () {
+      SK.cfg.trackedChanges = $("settings-trackedchanges").checked;
+      setFormMsg($("settings-tc-msg"), $("settings-trackedchanges").checked
+        ? "ON - AI edits will land as tracked changes."
+        : "OFF - AI edits apply directly.", true);
+    }).catch(function (err) { setFormMsg($("settings-tc-msg"), err.message); });
     apiJson("/api/settings", "PUT", { debug: $("settings-debug").checked }).then(function () {
       return loadConfigAndRender();
     }).then(function () {
@@ -2085,6 +2183,12 @@ function applyOps(deck, ops, ctx) {
 
     $("settings-save").addEventListener("click", saveApprovals);
     $("settings-debug-save").addEventListener("click", saveDebugOption);
+    $("settings-tc-save").addEventListener("click", function () {
+      apiJson("/api/settings", "PUT", { trackedChanges: $("settings-trackedchanges").checked }).then(function () {
+        SK.cfg.trackedChanges = $("settings-trackedchanges").checked;
+        setFormMsg($("settings-tc-msg"), "Revision setting saved.", true);
+      }).catch(function (err) { setFormMsg($("settings-tc-msg"), err.message); });
+    });
     updateSessionLabel();
     wireSessions();
     $("req-clear").addEventListener("click", clearRequests);

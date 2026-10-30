@@ -53,6 +53,10 @@
     create_image: { label: "generate + insert image", hint: "Creates an image from a description with the profile's image model (OpenAI-style images API) and inserts it - lands on the slide you have open in Office." },
     apply_layout: { label: "apply layout", hint: "Applies a different slide layout (design change, text kept)." },
     format_text: { label: "format text", hint: "bold / italic / color / size / underline / allCaps / alignment / bullets on one shape's text (the numbers from the outline)." },
+    format_selection: { label: "format selected text", hint: "the same font changes applied to the TEXT YOU SELECTED right now." },
+    set_background: { label: "slide background", hint: "AI-generated picture or a solid color as the slide background." },
+    add_hyperlink: { label: "add hyperlink", hint: "links one shape (from the outline) to a URL." },
+    set_alt_text: { label: "alt text", hint: "sets the accessibility alt text of one shape." },
     delete_slide: { label: "delete slide", hint: "Removes a slide from the deck." },
   };
   var OP_TYPES = Object.keys(OPS_META);
@@ -331,6 +335,10 @@
     '- {"type":"create_image","prompt":"detailed image description","slide":N|null,"width":400} (generate an image from the description and insert it; slide null = the slide the user currently has open; only when the user asks for a picture/image/illustration/logo)',
     '- {"type":"apply_layout","slide":N,"layout":"title_content|title_only|section|blank"} (only when the user asks for layout/design changes)',
     '- {"type":"format_text","slide":N,"shape":N,"font":{"bold":true},"align":"center","bullet":true} (format ONE shape from the outline: font = {"bold","italic","color","size","name","underline","allCaps"} subset only, colors as HTML hex/red/green/...; align = left|center|right; bullet = true adds bullets; only requested properties)',
+    '- {"type":"format_selection","font":{"bold":true}} (format ONLY the text the user has selected right now; same font subset; no slide/shape fields)',
+    '- {"type":"set_background","slide":N,"kind":"image","prompt":"description"} (use an AI-generated picture as the slide background) or {"type":"set_background","slide":N,"kind":"solid","color":"#RRGGBB"} (a solid background color)',
+    '- {"type":"add_hyperlink","slide":N,"shape":N,"url":"https://...","tip":"tooltip text"} (link the shape to the URL; url must be http(s) or mailto:)',
+    '- {"type":"set_alt_text","slide":N,"shape":N,"description":"alt text","title":"optional title"} (accessibility alt text for the shape)',
     '- {"type":"delete_slide","slide":N}',
     "",
     "Rules:",
@@ -1101,7 +1109,151 @@ OfficeDeck.prototype.addImage = function (payload) {
   });
 };
 
-OfficeDeck.prototype.formatText = function (slideIndex, shapeIndex, font) {
+OfficeDeck.prototype.formatSelection = function (font) {
+    return this.run("formatSelection", function (ctx) {
+      if (!ctx.presentation.getSelectedTextRange) {
+        throw new FriendlyError("this PowerPoint build cannot read the text you selected (needs PowerPointApi 1.6).");
+      }
+      var range = ctx.presentation.getSelectedTextRange();
+      return range.load("isNullObject").then(function () { return ctx.sync(); }).then(function () {
+        if (range.isNullObject) {
+          throw new FriendlyError("Select some text in the presentation first, then run this again.");
+        }
+        if (font.bold != null) range.font.bold = font.bold;
+        if (font.italic != null) range.font.italic = font.italic;
+        if (font.allCaps != null) range.font.allCaps = font.allCaps;
+        if (font.underline != null) range.font.underline = font.underline;
+        if (font.color) range.font.color = font.color;
+        if (font.name) range.font.name = font.name;
+        if (font.size) range.font.size = font.size;
+        return ctx.sync().then(function () { return { ok: true }; });
+      });
+    });
+  };
+
+OfficeDeck.prototype.setBackground = function (slideIndex, payload) {
+    return this.run("setBackground", function (ctx) {
+      if (!Office.context.requirements.isSetSupported("PowerPointApi", "1.10")) {
+        throw new FriendlyError("slide backgrounds need PowerPointApi 1.10 - update PowerPoint (16.105+ on Mac) or use a solid design instead.");
+      }
+      var bg = ctx.presentation.slides.getItemAt(slideIndex).background;
+      var fill = bg.fill;
+      if (payload.kind === "image") {
+        var opts = { imageBase64: String(payload.b64) };
+        if (payload.transparency != null) opts.transparency = payload.transparency;
+        fill.setPictureOrTextureFill(opts);
+      } else if (payload.kind === "solid") {
+        var sopts = { color: payload.color };
+        if (payload.transparency != null) sopts.transparency = payload.transparency;
+        fill.setSolidFill(sopts);
+      } else {
+        fill.setGradientFill({});
+      }
+      return ctx.sync().then(function () { return { ok: true }; });
+    });
+  };
+
+OfficeDeck.prototype.addHyperlink = function (slideIndex, shapeIndex, url, tip) {
+    return this.run("addHyperlink", function (ctx) {
+      if (!Office.context.requirements.isSetSupported("PowerPointApi", "1.10")) {
+        throw new FriendlyError("hyperlinks need PowerPointApi 1.10 - update PowerPoint (16.105+ on Mac).");
+      }
+      var shape = ctx.presentation.slides.getItemAt(slideIndex).shapes.getItemAt(shapeIndex);
+      var opts = { address: url };
+      if (tip) opts.screenTip = tip;
+      shape.setHyperlink(opts);
+      return ctx.sync().then(function () { return { ok: true }; });
+    });
+  };
+
+OfficeDeck.prototype.setAltText = function (slideIndex, shapeIndex, description, title) {
+    return this.run("setAltText", function (ctx) {
+      if (!Office.context.requirements.isSetSupported("PowerPointApi", "1.10")) {
+        throw new FriendlyError("alt text needs PowerPointApi 1.10 - update PowerPoint (16.105+ on Mac).");
+      }
+      var shape = ctx.presentation.slides.getItemAt(slideIndex).shapes.getItemAt(shapeIndex);
+      shape.altTextDescription = description;
+      if (title) shape.altTextTitle = title;
+      return ctx.sync().then(function () { return { ok: true }; });
+    });
+  };
+
+OfficeDeck.prototype.getSelectionInfo = function () {
+    // selection -> { slides: [idx], shapes: [{slide,shape}], textPreview? } or null on any failure
+    return this.run("getSelectionInfo", function (ctx) {
+      var p = ctx.presentation;
+      if (!p.getSelectedSlides || !p.getSelectedShapes) return Promise.resolve(null);
+      var slidesColl, shapesColl, textRange = null;
+      try {
+        slidesColl = p.getSelectedSlides();
+        shapesColl = p.getSelectedShapes();
+        try { textRange = p.getSelectedTextRange(); } catch (e) { textRange = null; }
+      } catch (e) { return Promise.resolve(null); }
+      var allSlides = ctx.presentation.slides;
+      slidesColl.load("id"); shapesColl.load("id"); allSlides.load("items/id");
+      return ctx.sync().then(function () {
+        var slideIdxOf = {};
+        (allSlides.items || []).forEach(function (sl, idx) { slideIdxOf[sl.id] = idx; });
+        var out = { slides: [], shapes: [], textPreview: "" };
+        var selShapes = shapesColl.items;
+        if (!selShapes.length) {
+          out.slides = slidesColl.items
+            .map(function (x) { return slideIdxOf[x.id]; })
+            .filter(function (v) { return v != null; });
+          if (!textRange) return out;
+          return textRange.load("isNullObject,text").then(function () { return ctx.sync(); }).then(function () {
+            if (!textRange.isNullObject) out.textPreview = String(textRange.text || "").slice(0, 200);
+            return out;
+          });
+        }
+        // map each selected shape to its slide index + shape index (by ids)
+        selShapes.forEach(function (sh) { sh.slide.load("id"); });
+        return ctx.sync().then(function () {
+          var bySlide = {};   // slideObjId -> array of selected shapeIds
+          selShapes.forEach(function (sh) {
+            var sid = sh.slide.id;
+            (bySlide[sid] = bySlide[sid] || []).push(sh.id);
+          });
+          var slideObjs = {};
+          selShapes.forEach(function (sh) {
+            if (!slideObjs[sh.slide.id]) {
+              slideObjs[sh.slide.id] = sh.slide.shapes;
+              sh.slide.shapes.load("items/id");
+            }
+          });
+          return ctx.sync().then(function () {
+            Object.keys(slideObjs).forEach(function (sid) {
+              var sIdx = slideIdxOf[sid];
+              var items = slideObjs[sid].items || [];
+              var idToIdx = {};
+              items.forEach(function (x, k) { idToIdx[x.id] = k; });
+              (bySlide[sid] || []).forEach(function (shapeId) {
+                if (sIdx != null && idToIdx[shapeId] != null) out.shapes.push({ slide: sIdx, shape: idToIdx[shapeId] });
+              });
+            });
+            uniqueSorted(out.slides, slideIdxOf, slideObjs, out);
+            if (!textRange) return out;
+            return textRange.load("isNullObject,text").then(function () { return ctx.sync(); }).then(function () {
+              if (!textRange.isNullObject) out.textPreview = String(textRange.text || "").slice(0, 200);
+              return out;
+            });
+          });
+        });
+      }).catch(function () { return null; });
+    });
+  };
+
+  function uniqueSorted(slidesOut, slideIdxOf, slideObjs, out) {
+    var set = {};
+    Object.keys(slideObjs).forEach(function (sid) {
+      var v = slideIdxOf[sid];
+      if (v != null) set[v] = true;
+    });
+    (out.slides = []).length = 0;
+    out.slides = Object.keys(set).map(Number).sort(function (a, b) { return a - b; });
+  }
+
+OfficeDeck.prototype.formatText =OfficeDeck.prototype.formatText = function (slideIndex, shapeIndex, font) {
     return this.run("formatText", function (ctx) {
       var shape = ctx.presentation.slides.getItemAt(slideIndex).shapes.getItemAt(shapeIndex);
       var range = shape.textFrame.textRange;
@@ -1418,6 +1570,44 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
         if (!hasAny) { bad("no format changes requested"); return; }
         if (op.font && typeof op.font !== "object") { bad("font must be an object"); return; }
         out.slide = op.slide; out.shape = op.shape; out.font = fontF;
+      } else if (t === "format_selection") {
+        var fontS = {}, hasAnyS = false;
+        ["bold", "italic", "allCaps", "underline"].forEach(function (k4) {
+          if (typeof op.font !== "undefined" && typeof op.font[k4] === "boolean") { fontS[k4] = op.font[k4]; hasAnyS = true; }
+        });
+        if (op.font && typeof op.font.color === "string" && /^[\w#\(\), .%]+$/.test(op.font.color)) { fontS.color = op.font.color; hasAnyS = true; }
+        if (op.font && typeof op.font.name === "string" && op.font.name) { fontS.name = op.font.name; hasAnyS = true; }
+        if (op.font && typeof op.font.size === "number" && op.font.size >= 6 && op.font.size <= 400) { fontS.size = op.font.size; hasAnyS = true; }
+        if (!hasAnyS) { bad("no format changes requested"); return; }
+        out.font = fontS;
+      } else if (t === "set_background") {
+        if (!slideOk(op.slide)) { bad("bad slide index"); return; }
+        if (op.kind !== "image" && op.kind !== "solid" && op.kind !== "gradient") { bad("kind must be image, solid or gradient"); return; }
+        if (op.kind === "image") {
+          if (typeof op.prompt !== "string" || !op.prompt.trim()) { bad("image background needs a prompt"); return; }
+          out.prompt = op.prompt.trim().slice(0, 600);
+        } else if (op.kind === "solid") {
+          if (typeof op.color !== "string" || !/^[\w#]+$/.test(op.color)) { bad("solid background needs a color"); return; }
+          out.color = op.color;
+        }
+        if (typeof op.transparency === "number" && op.transparency >= 0 && op.transparency <= 1) out.transparency = op.transparency;
+        out.slide = op.slide; out.kind = op.kind;
+      } else if (t === "add_hyperlink") {
+        if (!slideOk(op.slide)) { bad("bad slide index"); return; }
+        var shapeInCtxH = ctx && ctx.slides[op.slide] &&
+          (ctx.slides[op.slide].shapes || []).some(function (sh) { return sh.idx === op.shape; });
+        if (!shapeInCtxH) { bad("shape " + op.shape + " not in the context list for slide " + op.slide); return; }
+        if (typeof op.url !== "string" || !/^(https?:\/\/\S+|mailto:\S+)$/.test(op.url.trim())) { bad("url must be http(s)://... or mailto:..."); return; }
+        out.slide = op.slide; out.shape = op.shape; out.url = op.url.trim();
+        if (typeof op.tip === "string" && op.tip.trim()) out.tip = op.tip.trim().slice(0, 200);
+      } else if (t === "set_alt_text") {
+        if (!slideOk(op.slide)) { bad("bad slide index"); return; }
+        var shapeInCtxA = ctx && ctx.slides[op.slide] &&
+          (ctx.slides[op.slide].shapes || []).some(function (sh) { return sh.idx === op.shape; });
+        if (!shapeInCtxA) { bad("shape " + op.shape + " not in the context list for slide " + op.slide); return; }
+        if (typeof op.description !== "string" || !op.description.trim()) { bad("alt text needs a description"); return; }
+        out.slide = op.slide; out.shape = op.shape; out.description = op.description.trim().slice(0, 500);
+        if (typeof op.title === "string" && op.title.trim()) out.title = op.title.trim().slice(0, 200);
       } else if (t === "apply_layout") {
         if (!slideOk(op.slide)) { bad("bad slide index"); return; }
         out.slide = op.slide; out.layout = normalizeLayout(op.layout);
@@ -1469,6 +1659,15 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
         return (op.slide != null ? "Slide " + op.slide + slideTitle(op.slide) : "Slide you have open") +
           ': image "' + pr + '" (profile image model)';
       }
+      case "format_selection":
+        return "the text you selected: " + Object.keys(op.font).join(", ");
+      case "set_background":
+        return "Slide " + op.slide + " background: " + op.kind +
+          (op.kind === "image" ? " (picture: " + op.prompt.slice(0, 50) + "…)" : op.kind === "solid" ? " (" + op.color + ")" : "");
+      case "add_hyperlink":
+        return "Slide " + op.slide + ", shape " + op.shape + " -> " + op.url;
+      case "set_alt_text":
+        return "Slide " + op.slide + ", shape " + op.shape + " alt text";
       case "format_text": {
         var fparts = [];
         Object.keys(op.font).forEach(function (kf) {
@@ -1560,6 +1759,48 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
             if (nr && nr.manual) manualNotes.push({ slide: cur, text: op.notes, reason: nr.reason });
             else lines.push({ ok: true, text: "set notes on slide " + op.slide });
           });
+        case "format_selection":
+          return deck.formatSelection(op.font).then(function () {
+            lines.push({ ok: true, text: "formatted your selection: " + Object.keys(op.font).join(", ") });
+          });
+        case "set_background": {
+          if (op.kind === "image") {
+            var profB = currentProfile();
+            var imgRefB = profB && profB.image;
+            if (!imgRefB || !imgRefB.connection || !imgRefB.model) {
+              throw new FriendlyError(
+                "No image model on profile '" + (profB ? profB.name : "?") +
+                "' - set one in Profiles (connection + model with an images API).");
+            }
+            setStatus("Generating background… (often 30-90 s depending on the model)", "busy");
+            return Promise.race([
+              apiJson("/api/image", "POST", {
+                connection: imgRefB.connection, model: imgRefB.model, prompt: op.prompt,
+              }),
+              new Promise(function (_, rej) {
+                setTimeout(function () {
+                  rej(new FriendlyError("image generation timed out after 300 s (no answer from '" + imgRefB.model + "')"));
+                }, 300000);
+              }),
+            ]).then(function (img) {
+              if (!img || !img.b64) throw new FriendlyError("server returned no image data");
+              return deck.setBackground(cur, { kind: "image", b64: img.b64, transparency: op.transparency }).then(function () {
+                lines.push({ ok: true, text: "slide " + op.slide + " background set (AI picture, " + imgRefB.connection + ":" + imgRefB.model + ")" });
+              });
+            });
+          }
+          return deck.setBackground(cur, op).then(function () {
+            lines.push({ ok: true, text: "slide " + op.slide + " background set (" + op.kind + (op.kind === "solid" ? " " + op.color : "") + ")" });
+          });
+        }
+        case "add_hyperlink":
+          return deck.addHyperlink(cur, op.shape, op.url, op.tip).then(function () {
+            lines.push({ ok: true, text: "hyperlink added on slide " + op.slide + ", shape " + op.shape });
+          });
+        case "set_alt_text":
+          return deck.setAltText(cur, op.shape, op.description, op.title).then(function () {
+            lines.push({ ok: true, text: "alt text set on slide " + op.slide + ", shape " + op.shape });
+          });
         case "format_text":
           return deck.formatText(cur, op.shape, op.font).then(function () {
             lines.push({ ok: true, text: "format slide " + op.slide + " shape " + op.shape + ": " +
@@ -1633,6 +1874,14 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
     var lines = [];
     var sel = ctx.selected && ctx.selected.length ? " (zero-based, * = selected: " + ctx.selected.join(",") + ")" : "";
     lines.push("DECK OUTLINE: " + ctx.slideCount + " slides" + sel + (ctx.truncated ? " (only the first slides are listed)" : "") + ", host: " + ctx.host);
+    if (ctx.selection && (ctx.selection.shapes.length || ctx.selection.textPreview || ctx.selection.slides.length)) {
+      var selBits = [];
+      if (ctx.selection.slides.length) selBits.push("slides " + ctx.selection.slides.join(","));
+      if (ctx.selection.shapes.length)
+        selBits.push("shapes " + ctx.selection.shapes.map(function (x) { return x.slide + "." + x.shape; }).join(","));
+      if (ctx.selection.textPreview) selBits.push("selected text: \"" + ctx.selection.textPreview + "\"");
+      if (selBits.length) lines.push("SELECTION: " + selBits.join(" | "));
+    }
     ctx.slides.forEach(function (s) {
       var star = ctx.selected && ctx.selected.indexOf(s.idx) >= 0 ? "*" : "";
       var title = (s.shapes || []).filter(function (sh) { return sh.isTitle || (sh.text && /title/i.test(sh.name)); })[0];
@@ -1681,10 +1930,18 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
     setRunEnabled(false);
     var wantCtx = $("chat-context").checked;
     setStatus("Collecting deck context…", "busy");
-    var ctxPromise = wantCtx ? SK.deck.getContext({}).catch(function (err) {
+    var ctxPromise = (wantCtx ? SK.deck.getContext({}) : Promise.resolve(null)).then(function (ctx) {
+      if (ctx && SK.deck.getSelectionInfo) {
+        return SK.deck.getSelectionInfo().then(function (sel) {
+          if (sel) ctx.selection = sel;
+          return ctx;
+        }).catch(function () { return ctx; });
+      }
+      return ctx;
+    }).catch(function (err) {
       setStatus("Could not read the deck (" + err.message + ") - continuing without context.", "error");
       return null;
-    }) : Promise.resolve(null);
+    });
 
     ctxPromise.then(function (ctx) {
       SK.lastCtx = ctx;

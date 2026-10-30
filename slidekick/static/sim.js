@@ -11,6 +11,8 @@ window.__SK_SIM__ = true;
 (function () {
   "use strict";
 
+  const fakeSelectedText = "AI agents are reshaping security work";
+  const fakeSelectedFont = {};
   const INITIAL = [
     {
       layout: "title_content",
@@ -111,6 +113,35 @@ window.__SK_SIM__ = true;
       if (!sh) throw new FriendlyError("Shape " + shapeIndex + " on slide " + slideIndex + " does not exist");
       Object.assign(sh, { font: Object.assign(sh.font || {}, font) });
       return { ok: true };
+    }
+    async formatSelection(font) {
+      if (!fakeSelectedText) throw new FriendlyError("Select some text in the presentation first, then run this again.");
+      Object.assign(fakeSelectedFont, font);
+      return { ok: true, text: fakeSelectedText };
+    }
+    async setBackground(slideIndex, payload) {
+      const sl = slides[slideIndex];
+      if (!sl) throw new FriendlyError("Slide " + slideIndex + " does not exist");
+      sl.background = payload.kind === "image"
+        ? { kind: "image", b64len: (payload.b64 || "").length, transparency: payload.transparency }
+        : { kind: payload.kind, color: payload.color, transparency: payload.transparency };
+      return { ok: true };
+    }
+    async addHyperlink(slideIndex, shapeIndex, url, tip) {
+      const sh = slides[slideIndex] && slides[slideIndex].shapes[shapeIndex];
+      if (!sh) throw new FriendlyError("Shape " + shapeIndex + " on slide " + slideIndex + " does not exist");
+      sh.hyperlink = { address: url, screenTip: tip || "" };
+      return { ok: true };
+    }
+    async setAltText(slideIndex, shapeIndex, description, title) {
+      const sh = slides[slideIndex] && slides[slideIndex].shapes[shapeIndex];
+      if (!sh) throw new FriendlyError("Shape " + shapeIndex + " on slide " + slideIndex + " does not exist");
+      sh.altTextDescription = description;
+      if (title) sh.altTextTitle = title;
+      return { ok: true };
+    }
+    getSelectionInfo() {
+      return Promise.resolve({ slides: [0], shapes: [], textPreview: fakeSelectedText });
     }
     async addImage({ b64, slide, geometry }) {
       const i = slide;

@@ -312,6 +312,7 @@
   // (in SYSTEM_PROMPT: explicit newline rule)
   var SYSTEM_PROMPT = [
     "You are MailKick, an AI assistant inside a Microsoft Outlook task pane.",
+    "When the context lists MULTI-SELECTED ITEMS, treat them as the batch the user wants processed (e.g. suggest or set categories per item).",
     "You get the current email context and a user request. In text fields use real line breaks, never literal backslash-n. Reply with ONLY one JSON",
     "object - never commentary, never code fences, never reasoning. Format A",
     "(conversational):",
@@ -884,6 +885,36 @@
   }
 
   MailDeck.prototype.getContext = function (opts) {
+    var self = this;
+    return MailDeck.prototype._getContextCore.call(self, opts).then(function (ctx) {
+      // Mailbox 1.13: enrich with the items the user multi-selected (batch triage)
+      return new Promise(function (resMulti) {
+        try {
+          if (Office.context.requirements.isSetSupported("Mailbox", "1.13") &&
+              Office.context.mailbox && Office.context.mailbox.getSelectedItemsAsync) {
+            Office.context.mailbox.getSelectedItemsAsync(function (mr) {
+              try {
+                if (!mr || mr.status !== "succeeded" || !Array.isArray(mr.value) || !mr.value.length) return resMulti(null);
+                resMulti(mr.value.slice(0, 30).map(function (it) {
+                  var d = it.itemData || it || {};
+                  var frm = d.from || {};
+                  return {
+                    subject: String((d.subject != null ? d.subject : "") || ""),
+                    sender: String((frm && (frm.displayName || frm.emailAddress)) || ""),
+                  };
+                }));
+              } catch (e2) { resMulti(null); }
+            });
+          } else { resMulti(null); }
+        } catch (e3) { resMulti(null); }
+      }).then(function (multi) {
+        if (multi) ctx.selectedItems = multi;
+        return ctx;
+      });
+    });
+  };
+
+  MailDeck.prototype._getContextCore = function (opts) {
     var minimal = !!(opts && opts.minimal);
     return promisify(function (resolve, reject) {
       try {
@@ -1162,6 +1193,13 @@ function applyOps(deck, ops, ctx) {
     lines.push("BODY:\n" + body);
     if (ctx.warnings && ctx.warnings.length) lines.push("(warnings: " + ctx.warnings.join("; ") + ")");
     if (ctx.minimal) lines.push("(minimal context: the full email body was not included - the 'include email context' box was unticked)");
+    if (ctx.selectedItems && ctx.selectedItems.length) {
+      lines.push("MULTI-SELECTED ITEMS (" + ctx.selectedItems.length + "):");
+      ctx.selectedItems.forEach(function (si, k) {
+        lines.push("  " + (k + 1) + ". " + (si.subject || "(no subject)") + (si.sender ? " - " + si.sender : ""));
+      });
+      lines.push("(for triage requests, work through these items one by one)");
+    }
     return lines.join("\n");
   }
 

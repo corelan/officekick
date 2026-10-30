@@ -31,7 +31,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 APP = "OfficeKick"
-VERSION = "0.2.4"
+VERSION = "0.3.0"
 
 CONNECTION_TYPES = (
     "openai",
@@ -76,6 +76,12 @@ DEFAULT_APPROVALS = {
     "save_draft": "auto",
     "delete_slide": "confirm",
     "create_image": "confirm",
+    "format_text": "confirm",
+    "format_selection": "confirm",
+    "set_background": "confirm",
+    "add_hyperlink": "auto",
+    "set_alt_text": "auto",
+    "create_template": "confirm",
 }
 APPROVAL_MODES = ("auto", "confirm", "deny")
 OP_TYPES = tuple(DEFAULT_APPROVALS.keys())
@@ -307,6 +313,8 @@ class Store:
         self.data.setdefault("debug", False)
         # speaker-notes generation is opt-in (off by default)
         self.data.setdefault("generateNotes", False)
+        # AI edits as tracked changes (Word; opt-in)
+        self.data.setdefault("trackedChanges", False)
         self.save()
 
     def save(self):
@@ -1442,6 +1450,9 @@ class SlideKickHandler(BaseHTTPRequestHandler):
                     changed = True
                 if "generateNotes" in body and body["generateNotes"] is not None:
                     self.store.data["generateNotes"] = bool(body["generateNotes"])
+                    changed = True
+                if "trackedChanges" in body and body["trackedChanges"] is not None:
+                    self.store.data["trackedChanges"] = bool(body["trackedChanges"])
                     changed = True
                 if changed:
                     self.store.save()

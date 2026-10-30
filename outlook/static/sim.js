@@ -26,12 +26,17 @@
     capabilities: function () { return { text: true, host: "Outlook" }; },
     getContext: async function (opts) {
       var minimal = !!(opts && opts.minimal);
+      var multi = [
+        { subject: "Phishing report - credential harvesting page", sender: "alerts@corelan.example" },
+        { subject: "Quarterly QA review schedule", sender: "qa@corelan.example" },
+        { subject: "Lunch orders for Friday", sender: "office@corelan.example" },
+      ];
       if (compose) {
         return { host: "Outlook", mode: "compose", sender: email.from, to: "you@corelan.example",
-                 subject: compose.subject, bodyText: minimal ? "" : compose.bodyText, categories: [], warnings: [], minimal: minimal };
+                 subject: compose.subject, bodyText: minimal ? "" : compose.bodyText, categories: [], warnings: [], minimal: minimal, selectedItems: multi };
       }
       return { host: "Outlook", mode: "read", sender: email.from, to: email.to,
-               subject: email.subject, bodyText: minimal ? "" : email.body, categories: email.categories.slice(), warnings: [], minimal: minimal };
+               subject: email.subject, bodyText: minimal ? "" : email.body, categories: email.categories.slice(), warnings: [], minimal: minimal, selectedItems: multi };
     },
     draftReply: async function (html) {
       log.push("reply window opened with " + String(html).length + " chars");

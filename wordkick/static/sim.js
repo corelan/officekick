@@ -17,12 +17,16 @@
   var paras = [];
   var tables = [];
   var comments = [];
+  var templateBlocks = [];
+  var trackChanges = false;
 
   function reset() {
     paras = initial();
     tables = [];
     comments = [];
     images = [];
+    templateBlocks = [];
+    trackChanges = false;
   }
   reset();
 
@@ -93,6 +97,17 @@
     deleteParagraph: async function (index) {
       if (!paras[index]) throw new FriendlyError("Paragraph " + index + " does not exist");
       paras.splice(index, 1);
+      return { ok: true };
+    },
+    createTemplateBlock: async function (title, fields) {
+      templateBlocks.push({ title: title, fields: fields.map(function (f) { return f.label + ":" + f.type; }) });
+      paras.push({ text: "[" + title + " template] " + fields.map(function (f) {
+          return f.label + ": " + (f.options ? "{" + f.options.join("/") + "}" : "");
+        }).join(" | "), style: "Normal" });
+      return { ok: true, notes: [] };
+    },
+    setTrackChanges: async function (on) {
+      trackChanges = !!on;
       return { ok: true };
     },
     formatText: async function (index, font) {
