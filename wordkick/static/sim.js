@@ -110,6 +110,21 @@
       trackChanges = !!on;
       return { ok: true };
     },
+    formatTextFind: async function (index, findText, font) {
+      const para = paras[index];
+      if (!para) throw new FriendlyError("Paragraph " + index + " does not exist");
+      const t = String(para.text || "");
+      const lower = t.toLowerCase();
+      const needle = String(findText).toLowerCase();
+      let hits = 0, pos = 0;
+      while ((pos = lower.indexOf(needle, pos)) !== -1) {
+        para.fontRuns = para.fontRuns || [];
+        para.fontRuns.push({ from: pos, len: findText.length, font: Object.assign({}, font) });
+        hits++; pos += needle.length;
+      }
+      if (!hits) throw new FriendlyError('"' + findText + '" not found in that paragraph.');
+      return { ok: true, count: hits };
+    },
     formatText: async function (index, font) {
       if (!paras[index]) throw new FriendlyError("Paragraph " + index + " does not exist");
       paras[index].font = Object.assign(paras[index].font || {}, font);

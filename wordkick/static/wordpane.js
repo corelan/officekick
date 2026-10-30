@@ -335,6 +335,7 @@
     '- {"type":"create_template","title":"Template name","fields":[{"label":"Field label","type":"text|dropdown|checkbox|date","options":["only for dropdown"]}]} (appends a titled template block with fillable controls; use when the user asks for a template/form/template block; dropdown needs an options array)',
     '- {"type":"insert_image","prompt":"detailed image description"} (generate a picture from the description and insert it at the end of the document; only when the user asks for a picture/image/illustration/logo)',
     '- {"type":"format_text","para":N,"font":{"bold":true},"align":"center"} (format ONE paragraph from the outline: font = {"bold","italic","color","size","name","underline","allCaps","highlightColor"} subset; align = left|center|right|justify; only what is requested)',
+    '- to format only PART of a paragraph, add "find":"exact words appearing in that paragraph" (all matches within the paragraph are formatted; e.g. {"type":"format_text","para":N,"find":"AI","font":{"bold":true}})',
     "",
     "Rules:",
     "- Paragraph indices are zero-based and MUST come from the outline below.",
@@ -926,6 +927,30 @@
     });
   };
 
+  function q34() { return String.fromCharCode(34); }
+  WordDeck.prototype.formatTextFind = function (index, findText, font) {
+    return this.run("formatTextFind", function (ctx) {
+      var para = ctx.document.body.paragraphs.getItemAt(index);
+      var found = para.search(String(findText), {});
+      found.load("items/font");
+      return ctx.sync().then(function () {
+        var items = found.items || [];
+        if (!items.length) throw new FriendlyError(q34() + findText + q34() + " not found in that paragraph.");
+        items.forEach(function (rng) {
+          if (font.bold != null) rng.font.bold = font.bold;
+          if (font.italic != null) rng.font.italic = font.italic;
+          if (font.allCaps != null) rng.font.allCaps = font.allCaps;
+          if (font.underline != null) rng.font.underline = font.underline;
+          if (font.color) rng.font.color = font.color;
+          if (font.name) rng.font.name = font.name;
+          if (font.size) rng.font.size = font.size;
+          if (font.highlightColor) rng.font.highlightColor = font.highlightColor;
+        });
+        return ctx.sync().then(function () { return { ok: true, count: items.length }; });
+      });
+    });
+  };
+
   WordDeck.prototype.addImage = function (payload) {
     return this.run("addImage", function (ctx) {
       if (payload.atCursor) {
@@ -1088,6 +1113,12 @@ function validateOps(rawOps, ctx) {
         if (typeof op.align === "string" && /^(left|center|right|justify)$/i.test(op.align)) { fontW.align = op.align.toLowerCase(); hasAnyW = true; }
         if (!hasAnyW) { bad("no format changes requested"); return; }
         out.para = op.para; out.font = fontW;
+        if (typeof op.find === "string" && op.find.trim()) {
+          var findW = op.find.trim().slice(0, 200);
+          var paraTxtW = (ctx.paragraphs[op.para] || {}).text || "";
+          if (paraTxtW.toLowerCase().indexOf(findW.toLowerCase()) === -1) { bad("find text not found in that paragraph"); return; }
+          out.find = findW;
+        }
       } else if (t === "insert_image") {
         if (typeof op.prompt !== "string" || op.prompt.trim().length < 3) { bad("missing image prompt"); return; }
         if (op.prompt.length > 4000) { bad("image prompt too long (max 4000 chars)"); return; }
@@ -1126,7 +1157,8 @@ function validateOps(rawOps, ctx) {
           var v2 = op.font[kf2];
           fp.push(kf2 + "=" + (typeof v2 === "boolean" ? (v2 ? "on" : "off") : v2));
         });
-        return "Paragraph " + op.para + paraRef(op.para) + ": " + fp.join(", ");
+        return "Paragraph " + op.para + paraRef(op.para) + ": " + fp.join(", ") +
+          (op.find ? " (in " + q34() + op.find + q34() + ")" : "");
       }
       case "create_template":
         return "template '" + op.title + "' with " + op.fields.length + " field(s): " +
@@ -1195,10 +1227,17 @@ function applyOps(deck, ops, ctx) {
           return deck.rewriteDoc(op).then(function () {
             lines.push({ ok: true, text: "document rewritten: " + op.items.length + " paragraph(s)" });
           });
-        case "format_text":
-          return deck.formatText(cur, op.font).then(function () {
+        case "format_text": {
+          if (op.find) {
+            return deck.formatTextFind(adj(op.para), op.find, op.font).then(function () {
+              lines.push({ ok: true, text: "format paragraph " + op.para + " (" + op.find + "): " +
+                Object.keys(op.font).join(", ") });
+            });
+          }
+          return deck.formatText(adj(op.para), op.font).then(function () {
             lines.push({ ok: true, text: "format paragraph " + op.para + ": " + Object.keys(op.font).join(", ") });
           });
+        }
         case "create_template":
           return deck.createTemplateBlock(op.title, op.fields).then(function (r) {
             var extra = (r && r.notes && r.notes.length) ? " (notes: " + r.notes.join("; ") + ")" : "";

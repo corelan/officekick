@@ -335,6 +335,7 @@
     '- {"type":"create_image","prompt":"detailed image description","slide":N|null,"width":400} (generate an image from the description and insert it; slide null = the slide the user currently has open; only when the user asks for a picture/image/illustration/logo)',
     '- {"type":"apply_layout","slide":N,"layout":"title_content|title_only|section|blank"} (only when the user asks for layout/design changes)',
     '- {"type":"format_text","slide":N,"shape":N,"font":{"bold":true},"align":"center","bullet":true} (format ONE shape from the outline: font = {"bold","italic","color","size","name","underline","allCaps"} subset only, colors as HTML hex/red/green/...; align = left|center|right; bullet = true adds bullets; only requested properties)',
+    '- to format only PART of a shape\'s text, add "find":"exact words appearing in that shape\'s text" (case-insensitive substring; e.g. {"type":"format_text","slide":N,"shape":N,"find":"security","font":{"bold":true}})',,
     '- {"type":"format_selection","font":{"bold":true}} (format ONLY the text the user has selected right now; same font subset; no slide/shape fields)',
     '- {"type":"set_background","slide":N,"kind":"image","prompt":"description"} (use an AI-generated picture as the slide background) or {"type":"set_background","slide":N,"kind":"solid","color":"#RRGGBB"} (a solid background color)',
     '- {"type":"add_hyperlink","slide":N,"shape":N,"url":"https://...","tip":"tooltip text"} (link the shape to the URL; url must be http(s) or mailto:)',
@@ -1131,6 +1132,26 @@ OfficeDeck.prototype.formatSelection = function (font) {
     });
   };
 
+OfficeDeck.prototype.formatTextSubstring = function (slideIndex, shapeIndex, findText, font) {
+    return this.run("formatTextSubstring", function (ctx) {
+      var shape = ctx.presentation.slides.getItemAt(slideIndex).shapes.getItemAt(shapeIndex);
+      var range = shape.textFrame.textRange;
+      return range.load("text").then(function () { return ctx.sync(); }).then(function () {
+        var idx = String(range.text || "").toLowerCase().indexOf(String(findText).toLowerCase());
+        if (idx < 0) throw new FriendlyError("\"" + findText + "\" not found in that shape\'s current text.");
+        var sub = range.getSubstring(idx, String(findText).length);
+        if ((findText, font.bold) != null) sub.font.bold = font.bold;
+        if (font.italic != null) sub.font.italic = font.italic;
+        if (font.allCaps != null) sub.font.allCaps = font.allCaps;
+        if (font.underline != null) sub.font.underline = font.underline;
+        if (font.color) sub.font.color = font.color;
+        if (font.name) sub.font.name = font.name;
+        if (font.size) sub.font.size = font.size;
+        return ctx.sync().then(function () { return { ok: true }; });
+      });
+    });
+  };
+
 OfficeDeck.prototype.setBackground = function (slideIndex, payload) {
     return this.run("setBackground", function (ctx) {
       if (!Office.context.requirements.isSetSupported("PowerPointApi", "1.10")) {
@@ -1570,6 +1591,15 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
         if (!hasAny) { bad("no format changes requested"); return; }
         if (op.font && typeof op.font !== "object") { bad("font must be an object"); return; }
         out.slide = op.slide; out.shape = op.shape; out.font = fontF;
+        if (typeof op.find === "string" && op.find.trim()) {
+          var findS = op.find.trim();
+          if (findS.length > 200) { bad("find text too long (200 chars max)"); return; }
+          var shapeTxtF = (ctx.slides[op.slide].shapes.find(function (sh) { return sh.idx === op.shape; }) || {}).text || "";
+          if (shapeTxtF.toLowerCase().indexOf(findS.toLowerCase()) === -1) {
+            bad("find text not found in that shape's current text"); return;
+          }
+          out.find = findS;
+        }
       } else if (t === "format_selection") {
         var fontS = {}, hasAnyS = false;
         ["bold", "italic", "allCaps", "underline"].forEach(function (k4) {
@@ -1674,7 +1704,8 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
           var v = op.font[kf];
           fparts.push(kf + "=" + (typeof v === "boolean" ? (v ? "on" : "off") : v));
         });
-        return "Slide " + op.slide + ", shape " + op.shape + ": " + fparts.join(", ");
+        return "Slide " + op.slide + ", shape " + op.shape + ": " + fparts.join(", ") +
+          (op.find ? " (in \"" + op.find + "\")" : "");
       }
       case "apply_layout":
         return "Slide " + op.slide + slideTitle(op.slide) + ": layout -> " + op.layout;
@@ -1801,11 +1832,18 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
           return deck.setAltText(cur, op.shape, op.description, op.title).then(function () {
             lines.push({ ok: true, text: "alt text set on slide " + op.slide + ", shape " + op.shape });
           });
-        case "format_text":
+        case "format_text": {
+          if (op.find) {
+            return deck.formatTextSubstring(cur, op.shape, op.find, op.font).then(function () {
+              lines.push({ ok: true, text: "format slide " + op.slide + " shape " + op.shape +
+                " (" + op.find + "): " + Object.keys(op.font).join(", ") });
+            });
+          }
           return deck.formatText(cur, op.shape, op.font).then(function () {
             lines.push({ ok: true, text: "format slide " + op.slide + " shape " + op.shape + ": " +
               Object.keys(op.font).join(", ") });
           });
+        }
         case "apply_layout":
           return deck.applyLayout(cur, op.layout).then(function () {
             lines.push({ ok: true, text: "apply layout '" + op.layout + "' to slide " + op.slide });

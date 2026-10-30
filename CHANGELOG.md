@@ -1,4 +1,15 @@
 # Changelog
+## [0.3.1] - 2026-10-30
+### Added
+- **Sub-range formatting** for both `format_text` ops: the model can now
+  format only PART of a shape/paragraph by including `"find":"exact words"`.
+  Powered by PowerPoint `TextRange.getSubstring` (1.4, the deck code locates
+  the phrase at runtime) and Word `paragraph.search` (1.1, all matches in the
+  paragraph). Selection stays the fastest path for "what I have selected";
+  find covers everything else.
+- Verified separately: PowerPoint `TextRange.setSelected()` (1.8+) exists, so
+  the add-in CAN programmatically move the selection on your build.
+
 ## [0.3.0] - 2026-10-30
 ### Added (Office.js API exploration wave)
 - **SlideKick**: selection-driven ops - `format_selection` formats the text you

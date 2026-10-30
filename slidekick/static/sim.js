@@ -114,6 +114,16 @@ window.__SK_SIM__ = true;
       Object.assign(sh, { font: Object.assign(sh.font || {}, font) });
       return { ok: true };
     }
+    async formatTextSubstring(slideIndex, shapeIndex, findText, font) {
+      const sh = slides[slideIndex] && slides[slideIndex].shapes[shapeIndex];
+      if (!sh) throw new FriendlyError("Shape " + shapeIndex + " on slide " + slideIndex + " does not exist");
+      const t = String(sh.text || "");
+      const i = t.toLowerCase().indexOf(String(findText).toLowerCase());
+      if (i < 0) throw new FriendlyError('"' + findText + '" not found in the current text of that shape.');
+      sh.fontRuns = sh.fontRuns || [];
+      sh.fontRuns.push({ from: i, len: findText.length, font: font });
+      return { ok: true };
+    }
     async formatSelection(font) {
       if (!fakeSelectedText) throw new FriendlyError("Select some text in the presentation first, then run this again.");
       Object.assign(fakeSelectedFont, font);
