@@ -1116,7 +1116,8 @@ OfficeDeck.prototype.formatSelection = function (font) {
         throw new FriendlyError("this PowerPoint build cannot read the text you selected (needs PowerPointApi 1.6).");
       }
       var range = ctx.presentation.getSelectedTextRange();
-      return range.load("isNullObject").then(function () { return ctx.sync(); }).then(function () {
+      range.load("isNullObject");
+      return ctx.sync().then(function () {
         if (range.isNullObject) {
           throw new FriendlyError("Select some text in the presentation first, then run this again.");
         }
@@ -1136,7 +1137,8 @@ OfficeDeck.prototype.formatTextSubstring = function (slideIndex, shapeIndex, fin
     return this.run("formatTextSubstring", function (ctx) {
       var shape = ctx.presentation.slides.getItemAt(slideIndex).shapes.getItemAt(shapeIndex);
       var range = shape.textFrame.textRange;
-      return range.load("text").then(function () { return ctx.sync(); }).then(function () {
+      range.load("text");
+      return ctx.sync().then(function () {
         var idx = String(range.text || "").toLowerCase().indexOf(String(findText).toLowerCase());
         if (idx < 0) throw new FriendlyError("\"" + findText + "\" not found in that shape\'s current text.");
         var sub = range.getSubstring(idx, String(findText).length);
@@ -1222,7 +1224,8 @@ OfficeDeck.prototype.getSelectionInfo = function () {
             .map(function (x) { return slideIdxOf[x.id]; })
             .filter(function (v) { return v != null; });
           if (!textRange) return out;
-          return textRange.load("isNullObject,text").then(function () { return ctx.sync(); }).then(function () {
+          return textRange.load("isNullObject,text");
+          return ctx.sync().then(function () {
             if (!textRange.isNullObject) out.textPreview = String(textRange.text || "").slice(0, 200);
             return out;
           });
@@ -1254,7 +1257,8 @@ OfficeDeck.prototype.getSelectionInfo = function () {
             });
             uniqueSorted(out.slides, slideIdxOf, slideObjs, out);
             if (!textRange) return out;
-            return textRange.load("isNullObject,text").then(function () { return ctx.sync(); }).then(function () {
+            return textRange.load("isNullObject,text");
+          return ctx.sync().then(function () {
               if (!textRange.isNullObject) out.textPreview = String(textRange.text || "").slice(0, 200);
               return out;
             });

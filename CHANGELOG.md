@@ -1,4 +1,11 @@
 # Changelog
+## [0.3.2] - 2026-10-30
+### Fixed (live-report from PowerPoint)
+- Office.js load() is not a promise - chaining .then() on it breaks on real
+  hosts (the simulator could not catch this). Rewritten to the canonical
+  load(...) + ctx.sync() pattern in formatTextSubstring (find-based
+  formatting), formatSelection and the selection context probe.
+
 ## [0.3.1] - 2026-10-30
 ### Added
 - **Sub-range formatting** for both `format_text` ops: the model can now
