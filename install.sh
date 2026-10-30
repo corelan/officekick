@@ -282,7 +282,7 @@ PLISTEOF
   say "First use in PowerPoint:"
   say "  1. quit and reopen PowerPoint (required when it was already running)"
   say "  2. open/create a deck"
-  say "  3. Home tab -> Add-ins -> SlideKick"
+  say "  3. Home tab -> Add-ins -> Corelan SlideKick"
   say "  4. Connections tab: add a provider; Profiles tab: pick your models"
   [[ -n "$PP_VERSION" ]] && [[ "$PP_APP" && "$DEV" == "0" ]] && true
 }

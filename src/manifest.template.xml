@@ -8,7 +8,7 @@
   <Version>__VERSION__</Version>
   <ProviderName>Corelan Consulting bv</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>
-  <DisplayName DefaultValue="SlideKick"/>
+  <DisplayName DefaultValue="Corelan SlideKick"/>
   <Description DefaultValue="AI assistant for PowerPoint: reword slides, generate new slides, write speaker notes and get design suggestions using your own AI providers (OpenAI, Anthropic, OpenRouter, OpenAI-compatible, Ollama, llama.cpp)."/>
   <IconUrl DefaultValue="http://localhost:__PORT__/assets/icon32.png"/>
   <HighResolutionIconUrl DefaultValue="http://localhost:__PORT__/assets/icon80.png"/>

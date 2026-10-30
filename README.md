@@ -79,7 +79,7 @@ manifest, and reloads the LaunchAgent. Your connections/profiles/policy live in
 `~/.slidekick/config.json` and are preserved. Quit and reopen PowerPoint afterwards so
 it re-reads the manifest.
 
-**In PowerPoint**: open a deck, then **Home tab -> Add-ins -> SlideKick**. The task pane
+**In PowerPoint**: open a deck, then **Home tab -> Add-ins -> Corelan SlideKick**. The task pane
 opens on the right.
 
 ## First run
