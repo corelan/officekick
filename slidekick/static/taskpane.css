@@ -200,3 +200,7 @@ body.dark select:focus, body.dark input:focus, body.dark textarea:focus { outlin
 body.dark .manualbox { background: #2b2415; border-color: #65501f; }
 body.dark .manualbox h4 { color: var(--accent-ink); }
 body.dark .chip:hover { color: var(--ink); border-color: var(--accent); }
+/* About footer */
+.aboutfoot { border-top: 1px solid var(--border); margin-top: 16px; padding-top: 10px; }
+.aboutfoot p { margin: 2px 0; font-size: 12px; }
+.aboutfoot a { color: var(--primary); text-decoration: underline; }
