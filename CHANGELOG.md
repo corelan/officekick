@@ -1,4 +1,20 @@
 # Changelog
+## [0.4.3] - 2026-10-30
+### Fixed
+- move_slide shipped without its OPS_META whitelist entry ("unknown op type
+  'move_slide'" in the gate); the entry is in and the op is E2E-verified in
+  the simulator (move last slide -> position 2 reorders correctly).
+
+## [0.4.2] - 2026-10-30
+### Added
+- **move_slide** op (SlideKick): reorders a slide to any position. PowerPoint
+  exposes no reorder primitive, so the deck composes it: export the slide
+  (exportAsBase64Presentation, 1.10), delete it, then insertSlidesFromBase64
+  at the final position (1.2 - after a target slide, or at the beginning when
+  no target). Confirm-approve by default and it must run alone in a batch
+  (it reindexes the deck). New slides still land at the end (no positional
+  addSlide API) - the prompt tells the model to create-then-move.
+
 ## [0.4.1] - 2026-10-30
 ### Changed
 - Sessions persist on every request/response pair: the autosave runs

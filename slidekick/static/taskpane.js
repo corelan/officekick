@@ -56,6 +56,7 @@
     format_text: { label: "format text", hint: "bold / italic / color / size / underline / allCaps / alignment / bullets on one shape's text (the numbers from the outline)." },
     format_selection: { label: "format selected text", hint: "the same font changes applied to the TEXT YOU SELECTED right now." },
     create_shape: { label: "insert shape", hint: "textbox (with text) or geometric shapes (rectangle/ellipse/roundedRectangle/hexagon/diamond/triangle) and straight lines at a position." },
+    move_slide: { label: "move slide", hint: "moves a slide so it becomes slide M (numbers as in the outline); runs alone in a batch." },
     set_background: { label: "slide background", hint: "AI-generated picture or a solid color as the slide background." },
     add_hyperlink: { label: "add hyperlink", hint: "links one shape (from the outline) to a URL." },
     set_alt_text: { label: "alt text", hint: "sets the accessibility alt text of one shape." },
@@ -344,6 +345,7 @@
     '- {"type":"set_background","slide":N,"kind":"image","prompt":"description"} (use an AI-generated picture as the slide background) or {"type":"set_background","slide":N,"kind":"solid","color":"#RRGGBB"} (a solid background color)',
     '- {"type":"add_hyperlink","slide":N,"shape":N,"url":"https://...","tip":"tooltip text"} (link the shape to the URL; url must be http(s) or mailto:)',
     '- {"type":"set_alt_text","slide":N,"shape":N,"description":"alt text","title":"optional title"} (accessibility alt text for the shape)',
+    '- {"type":"move_slide","slide":N,"to":M} (move slide N so it becomes slide M; numbers as in the outline 1..N; run it ALONE in its own reply - do not combine with other ops. PowerPoint cannot place a brand-new slide at a position: create it first (it lands last) and move_slide it in a following step)',
     '- {"type":"delete_slide","slide":N}',
     "",
     "Rules:",
@@ -1117,6 +1119,44 @@ OfficeDeck.prototype.addImage = function (payload) {
   });
 };
 
+OfficeDeck.prototype.moveSlide = function (from, to) {
+    // PowerPoint has no reorder primitive: export the slide (1.10), delete it,
+    // then insertSlidesFromBase64 at the final position (after target / at the
+    // beginning when no target).
+    return this.run("moveSlide", function (ctx) {
+      if (!Office.context.requirements.isSetSupported("PowerPointApi", "1.10")) {
+        throw new FriendlyError("moving slides needs PowerPointApi 1.10 - update PowerPoint (16.105+ on Mac).");
+      }
+      if (from === to) return Promise.resolve({ ok: true });
+      var slides = ctx.presentation.slides;
+      slides.load("items/id");
+      return ctx.sync().then(function () {
+        var count0 = slides.items.length;
+        if (from < 0 || from >= count0) throw new FriendlyError("Slide " + (from + 1) + " does not exist");
+        return slides.exportAsBase64Presentation([slides.getItemAt(from)]).then(function (b64) {
+          slides.getItemAt(from).delete();
+          return ctx.sync().then(function () {
+            if (to <= 0) {
+              ctx.presentation.insertSlidesFromBase64(String(b64), { formatting: "KeepSourceFormatting" });
+              return ctx.sync().then(function () { return { ok: true }; });
+            }
+            slides.load("items/id");
+            return ctx.sync().then(function () {
+              var ids2 = slides.items.map(function (x) { return x.id; });
+              var targetIdx = Math.min(to - 1, ids2.length - 1);
+              if (targetIdx < 0) {
+                ctx.presentation.insertSlidesFromBase64(String(b64), { formatting: "KeepSourceFormatting" });
+              } else {
+                ctx.presentation.insertSlidesFromBase64(String(b64), { formatting: "KeepSourceFormatting", targetSlideId: ids2[targetIdx] });
+              }
+              return ctx.sync().then(function () { return { ok: true }; });
+            });
+          });
+        });
+      });
+    });
+  };
+
 OfficeDeck.prototype.createShape = function (slideIndex, op) {
     return this.run("createShape", function (ctx) {
       if (!Office.context.requirements.isSetSupported("PowerPointApi", "1.4")) {
@@ -1687,6 +1727,10 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
         }
         out.slide = op.slide; out.kind = kindS; out.geometry = geom;
         if (txtS) out.text = txtS;
+      } else if (t === "move_slide") {
+        if (!slideOk(op.slide)) { bad("bad slide index"); return; }
+        if (typeof op.to !== "number" || Math.floor(op.to) !== op.to || op.to < 1 || op.to > ctx.slideCount) { bad("to must be a slide number 1.." + ctx.slideCount); return; }
+        out.slide = op.slide; out.to = Math.round(op.to);
       } else if (t === "apply_layout") {
         if (!slideOk(op.slide)) { bad("bad slide index"); return; }
         out.slide = op.slide; out.layout = normalizeLayout(op.layout);
@@ -1696,6 +1740,19 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
       }
       ops.push(out);
     });
+    // move_slide reindexes the deck - it must run alone in a batch
+    var hasMove = ops.some(function (op) { return op.type === "move_slide"; });
+    if (hasMove && ops.length > 1) {
+      var moved = ops.filter(function (op) { return op.type === "move_slide"; });
+      moved.forEach(function (op) {
+        invalid.push({ op: op, reason: "move_slide cannot be combined with other ops - run it alone" });
+      });
+      ops = ops.filter(function (op) { return op.type !== "move_slide"; });
+      if (!ops.length) {
+        // keep the move(s) alone if nothing else was validated
+        moved.forEach(function (op) { invalid.pop(); ops.push(op); });
+      }
+    }
     return { ops: ops, invalid: invalid, notesDropped: notesDropped };
   }
 
@@ -1748,6 +1805,8 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
         return "Slide " + op.slide + ": " + op.kind + (op.text ? " \"" + op.text + "\"" : "") +
           (gc.length ? " (" + gc.join(", ") + ")" : "");
       }
+      case "move_slide":
+        return "Move slide " + op.slide + " -> slide " + op.to;
       case "set_background":
         return "Slide " + op.slide + " background: " + op.kind +
           (op.kind === "image" ? " (picture: " + op.prompt.slice(0, 50) + "…)" : op.kind === "solid" ? " (" + op.color + ")" : "");
@@ -1851,6 +1910,15 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
           return deck.createShape(cur, op).then(function () {
             lines.push({ ok: true, text: fmtOp(op, ctx) });
           });
+        case "move_slide": {
+          if (op.slide === op.to) {
+            lines.push({ ok: true, text: "slide " + op.slide + " is already in place" });
+            return Promise.resolve();
+          }
+          return deck.moveSlide(op.slide - 1, op.to - 1).then(function () {
+            lines.push({ ok: true, text: "moved slide " + op.slide + " -> now slide " + op.to });
+          });
+        }
         case "format_selection":
           return deck.formatSelection(op.font).then(function () {
             lines.push({ ok: true, text: "formatted your selection: " + Object.keys(op.font).join(", ") });

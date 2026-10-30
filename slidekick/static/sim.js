@@ -129,6 +129,12 @@ window.__SK_SIM__ = true;
       Object.assign(fakeSelectedFont, font);
       return { ok: true, text: fakeSelectedText };
     }
+    async moveSlide(from, to) {
+      if (from === to) return { ok: true };
+      if (from < 0 || from >= slides.length) throw new FriendlyError("Slide " + (from + 1) + " does not exist");
+      slides.splice(to, 0, slides.splice(from, 1)[0]);
+      return { ok: true };
+    }
     async createShape(slideIndex, op) {
       const sl = slides[slideIndex];
       if (!sl) throw new FriendlyError("Slide " + slideIndex + " does not exist");
