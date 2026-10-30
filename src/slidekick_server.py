@@ -16,6 +16,7 @@ import argparse
 import json
 import os
 import socket
+import ssl
 import sys
 import threading
 import time
@@ -1043,11 +1044,23 @@ def _make_handler(store, static_dir, verbose=False, port=0):
     })
 
 
-def build_server(host, port, store, static_dir, verbose=False):
-    return ThreadingHTTPServer((host, port), _make_handler(store, static_dir, verbose, port))
+def _tls_wrap(server, tls):
+    """tls = (certfile, keyfile) or None. Uses TLS 1.2+ server defaults."""
+    if not tls:
+        return
+    ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    ctx.minimum_version = ssl.TLSVersion.TLSv1_2
+    ctx.load_cert_chain(tls[0], tls[1])
+    server.socket = ctx.wrap_socket(server.socket, server_side=True)
 
 
-def build_dual_servers(port, store, static_dir, verbose=False):
+def build_server(host, port, store, static_dir, verbose=False, tls=None):
+    server = ThreadingHTTPServer((host, port), _make_handler(store, static_dir, verbose, port))
+    _tls_wrap(server, tls)
+    return server
+
+
+def build_dual_servers(port, store, static_dir, verbose=False, tls=None):
     """Both loopback stacks on one port: IPv4 (127.0.0.1) + IPv6 (::1).
 
     macOS resolves 'localhost' to ::1 first, and WKWebView treats the immediate
@@ -1068,12 +1081,15 @@ def build_dual_servers(port, store, static_dir, verbose=False):
             v6.socket.setsockopt(socket_mod.IPPROTO_IPV6, socket_mod.IPV6_V6ONLY, 1)
         except OSError:
             pass
+        _tls_wrap(v6, tls)
         servers.append(v6)
         port = v6.server_address[1]  # learn the bound (possibly ephemeral) port
     except OSError:
         pass
     try:
-        servers.append(ThreadingHTTPServer(("127.0.0.1", port), handler))
+        v4 = ThreadingHTTPServer(("127.0.0.1", port), handler)
+        _tls_wrap(v4, tls)
+        servers.append(v4)
     except OSError:
         pass
     return servers
@@ -1107,15 +1123,19 @@ def main(argv=None):
         "--debug", action="store_true",
         help="force debug logging on (AI interactions, provider payloads)",
     )
+    parser.add_argument("--cert", default="", help="TLS certificate (PEM) - enables https")
+    parser.add_argument("--key", default="", help="TLS private key (PEM)")
     args = parser.parse_args(argv)
 
     store = Store(args.config)
     store.load()
     store.force_debug = args.debug
+    tls = (args.cert, args.key) if (args.cert and args.key) else None
 
     if args.host:
         try:
-            servers = [build_server(args.host, args.port, store, args.static_dir, args.verbose)]
+            servers = [build_server(args.host, args.port, store, args.static_dir,
+                                    args.verbose, tls)]
         except OSError as exc:
             print("Cannot bind %s:%s (%s)" % (args.host, args.port, exc), file=sys.stderr)
             alt = find_free_port(args.port)
@@ -1123,7 +1143,7 @@ def main(argv=None):
                 print("Port %s busy; suggest --port %s" % (args.port, alt), file=sys.stderr)
             sys.exit(2)
     else:
-        servers = build_dual_servers(args.port, store, args.static_dir, args.verbose)
+        servers = build_dual_servers(args.port, store, args.static_dir, args.verbose, tls)
         if not servers:
             print("Cannot bind port %s on any loopback stack" % args.port, file=sys.stderr)
             alt = find_free_port(args.port)
@@ -1132,16 +1152,17 @@ def main(argv=None):
             sys.exit(2)
 
     port = servers[0].server_address[1]
+    scheme = "https" if tls else "http"
     for s in servers:
         host = s.server_address[0]
         shown = "[%s]" % host if ":" in str(host) else str(host)
         print(
-            "%s server v%s  |  http://%s:%d/taskpane.html  |  config: %s"
-            % (APP, VERSION, shown, port, store.path),
+            "%s server v%s  |  %s://%s:%d/taskpane.html  |  config: %s"
+            % (APP, VERSION, scheme, shown, port, store.path),
             flush=True,
         )
     print(
-        "Simulator: http://127.0.0.1:%d/simulator.html  |  Ctrl+C to stop" % port,
+        "Simulator: %s://127.0.0.1:%d/simulator.html  |  Ctrl+C to stop" % (scheme, port),
         flush=True,
     )
     if store.debug_enabled():

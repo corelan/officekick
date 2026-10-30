@@ -75,10 +75,14 @@ SlideKick ships in two parts:
 - **Per-action approval policy** (Settings): `auto`, `confirm` (must be ticked before
   Apply) or `deny` per action type. Deleting slides and layout changes require approval
   by default.
-- **Reasoning-model friendly**: chain-of-thought output (`<think>`, `<think>`, `<thinking>`,
-  `<reason>`, `<reasoning>`, Ollama `thinking` fields, OpenAI-style
-  `reasoning_content`) is stripped; unclear output triggers a hidden
+- **Reasoning-model friendly**: chain-of-thought output (the think / thinking /
+  reason / reasoning tag pairs, balanced or truncated; Ollama `thinking` fields;
+  OpenAI-style `reasoning_content`) is stripped; unclear output triggers a hidden
   "answer in clean JSON" retry that is never shown.
+- **HTTPS by default**: the local server serves a machine-generated certificate for
+  `localhost` / `127.0.0.1` / `::1` (loopback-only CA, trusted in your login
+  keychain by the installer - no admin needed). Required for the ribbon button;
+  `--http` remains a developer fallback.
 - **Debug logging** (opt-in): appends AI interactions and deck-edit traces to one
   appended file per day (`~/.slidekick/logs/debug-YYYY-MM-DD.log`).
 - **Installer**: detects PowerPoint, deploys the add-in, sideloads/registers the
@@ -171,6 +175,9 @@ dedicated **SlideKick** ribbon tab is always there.
 
 - Needs a current Microsoft 365 build (WebView2 add-in runtime). Old perpetual builds
   whose add-in runtime is IE11-based cannot load the pane.
+- The Windows server currently serves plain HTTP: the task pane and the Add-ins
+  route work, but HTTPS (and so the ribbon button) requires the same local-CA flow
+  the macOS installer uses - in progress; the pane remains fully usable.
 - Perpetual/LTSC editions cap below PowerPointApi 1.8: the pane runs read-only there
   (reading and advice work, edits are refused with a clear message).
 - Title/body placeholders are detected via `placeholderFormat` on modern builds
@@ -276,6 +283,10 @@ dedicated **SlideKick** ribbon tab is always there.
 - **Model answers arrive as plain text** - the model ignored the JSON contract; with
   debug logging on, the daily debug log (`<userhome>/.slidekick/logs/debug-YYYY-MM-DD.log`)
   shows exactly what it sent. Reasoning-wrapped output is cleaned automatically.
+- The pane asks for certificates? The installer trusts a machine-generated loopback
+  CA in your login keychain (approve the macOS prompt when it appears once). To
+  reset TLS: delete `~/.slidekick/certs/`, then re-run the installer.
+
 - **Wrong port** - re-run the installer with `-Port`/`--port`; it re-renders the
   manifest and restarts.
 
@@ -292,11 +303,13 @@ open http://127.0.0.1:8765/simulator.html    # full task pane + in-memory deck, 
 python3 tools/make_icons.py                  # rebuild icons from logo_corelan.png (sips)
 ```
 
-Note on the validator: it hard-requires HTTPS and has no localhost exception, so it
-reports 3 "insecure URL" errors for the `http://localhost:...` panel/icon URLs.
-Office itself accepts `http://localhost` for sideloaded/Uploaded dev add-ins (see
-the Microsoft sideloading docs), which is what SlideKick uses; an optional HTTPS
-mode with a trusted localhost certificate is planned.
+Note on the validator: the official `office-addin-manifest` validator passes fully -
+the local server serves **HTTPS** by default (a machine-generated certificate for
+`localhost`/`127.0.0.1`/`::1`, issued by a loopback-only local CA that the installer
+trusts in your login keychain). Microsoft's add-in-commands/ribbon UI only registers
+with https URLs, which is why this is default. `--http` on `install.sh` is a
+developer fallback: the pane still works over the Add-ins dropdown, but the ribbon
+button will not appear.
 
 The task pane runs unmodified in the simulator via `sim.js` (same Deck interface the
 Office.js adapter implements), so prompt -> JSON ops -> validation -> approvals ->

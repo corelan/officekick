@@ -10,12 +10,12 @@
   <DefaultLocale>en-US</DefaultLocale>
   <DisplayName DefaultValue="Corelan SlideKick"/>
   <Description DefaultValue="AI assistant for PowerPoint: reword slides, generate new slides, write speaker notes and get design suggestions using your own AI providers (OpenAI, Anthropic, OpenRouter, OpenAI-compatible, Ollama, llama.cpp)."/>
-  <IconUrl DefaultValue="http://localhost:__PORT__/assets/icon32.png"/>
-  <HighResolutionIconUrl DefaultValue="http://localhost:__PORT__/assets/icon80.png"/>
+  <IconUrl DefaultValue="__SCHEME__://localhost:__PORT__/assets/icon32.png"/>
+  <HighResolutionIconUrl DefaultValue="__SCHEME__://localhost:__PORT__/assets/icon80.png"/>
   <SupportUrl DefaultValue="https://github.com/corelan/slidekick"/>
   <AppDomains>
-    <AppDomain>http://localhost:__PORT__</AppDomain>
-    <AppDomain>http://127.0.0.1:__PORT__</AppDomain>
+    <AppDomain>__SCHEME__://localhost:__PORT__</AppDomain>
+    <AppDomain>__SCHEME__://127.0.0.1:__PORT__</AppDomain>
   </AppDomains>
   <Hosts>
     <Host Name="Presentation"/>
@@ -26,7 +26,7 @@
     </Sets>
   </Requirements>
   <DefaultSettings>
-    <SourceLocation DefaultValue="http://localhost:__PORT__/taskpane.html"/>
+    <SourceLocation DefaultValue="__SCHEME__://localhost:__PORT__/taskpane.html"/>
   </DefaultSettings>
   <Permissions>ReadWriteDocument</Permissions>
   <VersionOverrides xmlns="http://schemas.microsoft.com/office/taskpaneappversionoverrides"
@@ -75,13 +75,13 @@
     </Hosts>
     <Resources>
       <bt:Images>
-        <bt:Image id="Icon.16" DefaultValue="http://localhost:__PORT__/assets/icon16.png"/>
-        <bt:Image id="Icon.32" DefaultValue="http://localhost:__PORT__/assets/icon32.png"/>
-        <bt:Image id="Icon.80" DefaultValue="http://localhost:__PORT__/assets/icon80.png"/>
+        <bt:Image id="Icon.16" DefaultValue="__SCHEME__://localhost:__PORT__/assets/icon16.png"/>
+        <bt:Image id="Icon.32" DefaultValue="__SCHEME__://localhost:__PORT__/assets/icon32.png"/>
+        <bt:Image id="Icon.80" DefaultValue="__SCHEME__://localhost:__PORT__/assets/icon80.png"/>
       </bt:Images>
       <bt:Urls>
-        <bt:Url id="Taskpane.Url" DefaultValue="http://localhost:__PORT__/taskpane.html"/>
-        <bt:Url id="Commands.Url" DefaultValue="http://localhost:__PORT__/commands.html"/>
+        <bt:Url id="Taskpane.Url" DefaultValue="__SCHEME__://localhost:__PORT__/taskpane.html"/>
+        <bt:Url id="Commands.Url" DefaultValue="__SCHEME__://localhost:__PORT__/commands.html"/>
         <bt:Url id="GetStarted.LearnMoreUrl" DefaultValue="https://github.com/corelan/slidekick"/>
       </bt:Urls>
       <bt:ShortStrings>

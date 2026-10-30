@@ -10,6 +10,7 @@ Runs the real server in-process against an in-process mock AI provider
 
 import json
 import os
+import shutil
 import sys
 import tempfile
 import threading
@@ -285,6 +286,49 @@ class TestSlideKickServer(unittest.TestCase):
             for s in servers:
                 s.shutdown()
                 s.server_close()
+
+    def test_https_tls(self):
+        openssl = shutil.which("openssl")
+        if not openssl:
+            self.skipTest("openssl not available")
+        import subprocess as sp
+        d = os.path.join(tempfile.mkdtemp(prefix="sk-tls-"), "certs")
+        os.makedirs(d)
+        cnf = os.path.join(d, "leaf.cnf")
+        open(cnf, "w").write(
+            "[req]\ndistinguished_name=dn\nreq_extensions=v3_req\nprompt=no\n"
+            "[dn]\nCN=localhost\n[v3_req]\n"
+            "basicConstraints=critical,CA:FALSE\n"
+            "keyUsage=critical,digitalSignature,keyEncipherment\n"
+            "extendedKeyUsage=serverAuth\n"
+            "subjectAltName=DNS:localhost,IP:127.0.0.1,IP:::1\n")
+        LT, GT = chr(60), chr(62)  # not needed here, keep ascii
+        sp.run([openssl, "req", "-x509", "-newkey", "rsa:2048", "-nodes",
+                "-keyout", d + "/k.pem", "-out", d + "/c.pem", "-days", "30",
+                "-subj", "/CN=localhost", "-config", cnf, "-extensions", "v3_req"],
+               check=True, capture_output=True)
+        servers = sk.build_dual_servers(0, self.S.store, str(REPO / "src" / "static"),
+                                        tls=(d + "/c.pem", d + "/k.pem"))
+        threads = []
+        for s in servers:
+            th = threading.Thread(target=s.serve_forever, daemon=True)
+            th.start()
+            threads.append(th)
+        try:
+            import ssl as _ssl
+            import urllib.request as ur
+
+            ctx = _ssl.create_default_context(cafile=d + "/c.pem")
+            for host in ("127.0.0.1", "[::1]"):
+                port = servers[0].server_address[1]
+                with ur.urlopen("https://%s:%d/api/health" % (host, port),
+                                timeout=10, context=ctx) as resp:
+                    self.assertTrue(json.loads(resp.read().decode())["ok"], host)
+        finally:
+            for s in servers:
+                s.shutdown()
+                s.server_close()
+
 
     def test_models_openai_compatible_with_key(self):
         m = self.mock("openai")

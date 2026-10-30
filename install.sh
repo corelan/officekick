@@ -31,12 +31,14 @@ PLIST="$HOME/Library/LaunchAgents/$LAUNCH_LABEL.plist"
 MANIFEST_NAME="slidekick.xml"
 GUID="c7b1f2a9-86d3-4e58-9a4b-2f6d5e0c3b81"
 DEFAULT_PORT=8765
-VERSION="$(cat "$REPO_DIR/VERSION" 2>/dev/null || echo 0.1.0)"
+VERSION="$(cat "$REPO_DIR/VERSION" 2>/dev/null || echo 0.1.2)"
+CERT_DIR="$CONFIG_DIR/certs"
 
 PORT=""
 DEV=0
 NO_AGENT=0
 PURGE=0
+HTTPS=1
 SUB="install"
 
 say()  { printf '%s\n' "$*"; }
@@ -49,6 +51,7 @@ while [[ $# -gt 0 ]]; do
     --port) PORT="${2:-}"; shift 2 ;;
     --dev) DEV=1; shift ;;
     --no-launchagent) NO_AGENT=1; shift ;;
+    --http) HTTPS=0; shift ;;
     --purge) PURGE=1; shift ;;
     install|update|uninstall|status|run|help) SUB="$1"; shift ;;
     -h|--help) SUB="help"; shift ;;
@@ -63,6 +66,7 @@ usage() {
   say "  --port N                port for the local server (default $DEFAULT_PORT)"
   say "  --dev                   serve files directly from this repo (developer mode)"
   say "  --no-launchagent        do not install the login auto-start"
+  say "  --http                  plain HTTP (dev only - ribbon commands need HTTPS)"
   say "  status                  show current install status"
   say "  run                     run the server in the foreground"
   say "  uninstall [--purge]     remove everything (config too with --purge)"
@@ -133,7 +137,11 @@ PYEOF
 }
 
 health() { # health PORT -> prints server JSON on success; nonzero rc if unreachable
-  curl -fsS --max-time 2 "http://127.0.0.1:$1/api/health"
+  if [[ "$HTTPS" == "1" && -f "$CERT_DIR/slidekick-ca.pem" ]]; then
+    curl -fsS --max-time 2 --cacert "$CERT_DIR/slidekick-ca.pem" "https://127.0.0.1:$1/api/health"
+  else
+    curl -fsS --max-time 2 "http://127.0.0.1:$1/api/health"
+  fi
 }
 
 pick_port() {
@@ -150,6 +158,82 @@ pick_port() {
   done
   die "no free port found in range $DEFAULT_PORT..$((DEFAULT_PORT + 19))"
 }
+
+# --------------------------------------------------------------------- #
+# local TLS certificate (loopback CA + localhost leaf, user-keychain trust)
+# --------------------------------------------------------------------- #
+ensure_local_certs() {
+  SCHEME="http"
+  if [[ "$HTTPS" != "1" ]]; then
+    warn "--http given: plain HTTP (the PowerPoint ribbon button needs HTTPS)"
+    return 0
+  fi
+  if ! command -v openssl >/dev/null 2>&1; then
+    warn "openssl not found - falling back to plain HTTP (ribbon button will not appear)"
+    HTTPS=0
+    return 0
+  fi
+
+  local CA_PEM="$CERT_DIR/slidekick-ca.pem" CA_KEY="$CERT_DIR/slidekick-ca.key"
+  local LEAF_PEM="$CERT_DIR/localhost.pem" LEAF_KEY="$CERT_DIR/localhost.key"
+
+  mkdir -p "$CERT_DIR"
+  chmod 700 "$CERT_DIR" 2>/dev/null || true
+
+  if [[ ! -f "$CA_PEM" || ! -f "$CA_KEY" || ! -f "$LEAF_PEM" || ! -f "$LEAF_KEY" ]]; then
+    say "  ... generating local loopback TLS certificates"
+    cat > "$CERT_DIR/ca.cnf" <<CAEOF
+[req]
+distinguished_name = dn
+x509_extensions = v3_ca
+prompt = no
+[dn]
+CN = SlideKick Local CA (localhost-only, machine-generated)
+[v3_ca]
+basicConstraints = critical, CA:TRUE
+keyUsage = critical, keyCertSign, cRLSign
+subjectKeyIdentifier = hash
+CAEOF
+    cat > "$CERT_DIR/leaf.cnf" <<LEAFEOF
+[req]
+distinguished_name = dn
+req_extensions = v3_req
+prompt = no
+[dn]
+CN = localhost
+[v3_req]
+basicConstraints = critical, CA:FALSE
+keyUsage = critical, digitalSignature, keyEncipherment
+extendedKeyUsage = serverAuth
+subjectAltName = DNS:localhost, IP:127.0.0.1, IP:::1
+LEAFEOF
+    openssl req -x509 -newkey rsa:2048 -nodes -sha256 -days 3650 \
+      -keyout "$CA_KEY" -out "$CA_PEM" -config "$CERT_DIR/ca.cnf"
+    openssl req -new -newkey rsa:2048 -nodes -sha256 \
+      -keyout "$LEAF_KEY" -out "$CERT_DIR/localhost.csr" -config "$CERT_DIR/leaf.cnf"
+    openssl x509 -req -sha256 -days 825 \
+      -in "$CERT_DIR/localhost.csr" -CA "$CA_PEM" -CAkey "$CA_KEY" -CAcreateserial \
+      -out "$LEAF_PEM" -extfile "$CERT_DIR/leaf.cnf" -extensions v3_req
+    rm -f "$CERT_DIR/localhost.csr"
+    chmod 600 "$CA_KEY" "$LEAF_KEY"
+    ok "certificates generated in $CERT_DIR"
+  fi
+
+  # trust the CA for this user (login keychain; no admin needed)
+  local LOGIN_KC="$HOME/Library/Keychains/login.keychain-db"
+  if ! security find-certificate -c "SlideKick Local CA" "$LOGIN_KC" >/dev/null 2>&1; then
+    if security add-trusted-cert -r trustRoot -k "$LOGIN_KC" "$CA_PEM" 2>/dev/null; then
+      ok "local CA trusted (login keychain) - the pane and ribbon can use https://localhost"
+    else
+      warn "could not auto-trust the local CA. Manual step: open Keychain Access,"
+      warn "  import $CA_PEM and set 'Always Trust' for SSL - then reopen the pane"
+    fi
+  else
+    ok "local CA already trusted"
+  fi
+  SCHEME="https"
+}
+
 
 # --------------------------------------------------------------------- #
 # Office add-in cache maintenance
@@ -185,6 +269,8 @@ do_install() {
   fi
 
   resolve_containers
+  # stop a previously installed server first so the canonical port frees up
+  launchctl unload "$PLIST" 2>/dev/null || true
   pick_port
   ok "port: $PORT"
 
@@ -209,12 +295,14 @@ do_install() {
   fi
 
   "$PY" -m py_compile "$SERVER_PY" || die "server source failed to compile"
+  ensure_local_certs
 
   # ---- manifest ----
   mkdir -p "$INSTALL_DIR/manifest"
   local mtmp
   mtmp="$INSTALL_DIR/manifest/$MANIFEST_NAME"
   "${SED:-sed}" \
+    -e "s/__SCHEME__/$SCHEME/" \
     -e "s/__PORT__/$PORT/g" \
     -e "s/__VERSION__/${VERSION}.0/" \
     "$SRC_DIR/manifest.template.xml" > "$mtmp"
@@ -253,28 +341,24 @@ do_install() {
     fi
   else
     say "  ... writing LaunchAgent $PLIST"
-    cat > "$PLIST" <<PLISTEOF
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>Label</key><string>$LAUNCH_LABEL</string>
-  <key>ProgramArguments</key>
-  <array>
-    <string>$PY</string>
-    <string>$SERVER_PY</string>
-    <string>--port</string>
-    <string>$PORT</string>
-    <string>--static-dir</string>
-    <string>$STATIC_DIR</string>
-  </array>
-  <key>RunAtLoad</key><true/>
-  <key>KeepAlive</key><true/>
-  <key>StandardOutPath</key><string>$LOG_DIR/server.log</string>
-  <key>StandardErrorPath</key><string>$LOG_DIR/server.log</string>
-</dict>
-</plist>
-PLISTEOF
+  "$PY" - "$PLIST" "$LAUNCH_LABEL" "$PY" "$SERVER_PY" "$PORT" "$STATIC_DIR" "$CERT_DIR" "$LOG_DIR" <<'PYPLIST'
+import os, plistlib, sys
+
+plist_path, label, py_bin, server_py, port, static_dir, cert_dir, log_dir = sys.argv[1:9]
+args = [py_bin, server_py, "--port", port, "--static-dir", static_dir]
+if os.path.isfile(os.path.join(cert_dir, "localhost.pem")):
+    args += ["--cert", os.path.join(cert_dir, "localhost.pem"),
+             "--key", os.path.join(cert_dir, "localhost.key")]
+with open(plist_path, "wb") as fh:
+    plistlib.dump({
+        "Label": label,
+        "ProgramArguments": args,
+        "RunAtLoad": True,
+        "KeepAlive": True,
+        "StandardOutPath": os.path.join(log_dir, "server.log"),
+        "StandardErrorPath": os.path.join(log_dir, "server.log"),
+    }, fh)
+PYPLIST
     launchctl unload "$PLIST" 2>/dev/null || true
     launchctl load -w "$PLIST"
     ok "LaunchAgent installed (starts at login, restarts on crash)"
@@ -289,7 +373,7 @@ PLISTEOF
     tries=$((tries + 1))
   done
   if [[ "$h" == *'"ok": true'* ]]; then
-    ok "server healthy: http://127.0.0.1:$PORT  (config: $CONFIG_DIR/config.json)"
+    ok "server healthy: $SCHEME://127.0.0.1:$PORT - config: $CONFIG_DIR/config.json"
   else
     die "server did not become healthy on port $PORT - check $LOG_DIR/server.log"
   fi
