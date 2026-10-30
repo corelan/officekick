@@ -12,6 +12,7 @@
   var $ = function (id) { return document.getElementById(id); };
 
   var SK = {
+    app: "slidekick",
     sessionId: null,
     sessionName: "",
     sessionSaveTimer: null,
@@ -395,7 +396,7 @@
 
   function saveSessionNow() {
     if (!SK.history.length) return;
-    var payload = { exchanges: SK.history.slice() };
+    var payload = { exchanges: SK.history.slice(), app: SK.app };
     var createPromise;
     if (!SK.sessionId) {
       payload.name = derivedSessionName();
@@ -545,7 +546,7 @@
 
   SK.sessionNames = {};
   function renderSessions() {
-    apiJson("/api/sessions", "GET").then(function (res) {
+    apiJson("/api/sessions?app=" + encodeURIComponent(SK.app), "GET").then(function (res) {
       var rows = (res.sessions || []);
       var list = $("sess-list");
       if (!list) return;

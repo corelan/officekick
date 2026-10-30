@@ -31,7 +31,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 APP = "OfficeKick"
-VERSION = "0.3.2"
+VERSION = "0.3.3"
 
 CONNECTION_TYPES = (
     "openai",
@@ -131,16 +131,22 @@ class SessionStore:
     def _valid(self, sid):
         return bool(SESSION_ID_RE.match(sid or ""))
 
-    def list(self):
+    def list(self, app=None):
         items = []
         for f in self.dir.glob("*.json"):
             try:
                 data = json.loads(f.read_text(encoding="utf-8"))
+                doc_app = data.get("app")
+                # sessions are scoped per application; rows without an app are
+                # legacy/shared and stay visible in every pane
+                if app and doc_app and doc_app != app:
+                    continue
                 items.append({
                     "id": data.get("id", f.stem),
                     "name": data.get("name") or "session",
                     "updated": data.get("updated") or f.stat().st_mtime,
                     "messages": len(data.get("exchanges") or []),
+                    "app": doc_app,
                 })
             except Exception:
                 continue
@@ -158,11 +164,11 @@ class SessionStore:
         except Exception:
             raise ApiError(500, "Session file unreadable")
 
-    def create(self, name, exchanges):
+    def create(self, name, exchanges, app=None):
         sid = uuid.uuid4().hex
-        return self.upsert(sid, name, exchanges)
+        return self.upsert(sid, name, exchanges, app=app)
 
-    def upsert(self, sid, name, exchanges, existing=None):
+    def upsert(self, sid, name, exchanges, existing=None, app=None):
         if not self._valid(sid):
             raise ApiError(400, "Invalid session id")
         ex = self._clean_exchanges(exchanges)
@@ -171,6 +177,8 @@ class SessionStore:
             "name": (name or (existing or {}).get("name") or "session")[:80],
             "updated": time.time(),
             "exchanges": ex,
+            "app": app if app in ("slidekick", "wordkick", "mailkick")
+                   else (existing or {}).get("app"),
         }
         f = self.dir / (sid + ".json")
         f.write_text(json.dumps(doc, indent=1), encoding="utf-8")
@@ -1298,7 +1306,7 @@ class SlideKickHandler(BaseHTTPRequestHandler):
                     resp["models"] = filter_image_models(self.store, conn)
                 self._send_json(resp)
             elif path == "/api/sessions":
-                self._send_json({"sessions": self.store.sessions.list()})
+                self._send_json({"sessions": self.store.sessions.list(query.get("app", [None])[0])})
             elif path.startswith("/api/sessions/"):
                 sid = path[len("/api/sessions/"):]
                 self._send_json(self.store.sessions.get(sid))
@@ -1343,7 +1351,8 @@ class SlideKickHandler(BaseHTTPRequestHandler):
                 self._send_json({"ok": True, "name": body.get("to")})
             elif path == "/api/sessions":
                 doc = self.store.sessions.create(body.get("name") or "session",
-                                                 body.get("exchanges") or [])
+                                                 body.get("exchanges") or [],
+                                                 body.get("app"))
                 self._send_json({"ok": True, "session": doc})
             elif path == "/api/templates":
                 doc = self.store.templates.create(body.get("name"), body.get("body"))
@@ -1460,7 +1469,8 @@ class SlideKickHandler(BaseHTTPRequestHandler):
             elif path.startswith("/api/sessions/"):
                 sid = urllib.parse.unquote(path[len("/api/sessions/"):])
                 doc = self.store.sessions.upsert(
-                    sid, body.get("name"), body.get("exchanges") or [])
+                    sid, body.get("name"), body.get("exchanges") or [],
+                    app=body.get("app"))
                 self._send_json({"ok": True, "session": doc})
             elif path.startswith("/api/templates/"):
                 tid = urllib.parse.unquote(path[len("/api/templates/"):])

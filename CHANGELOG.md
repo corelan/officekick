@@ -1,4 +1,13 @@
 # Changelog
+## [0.3.3] - 2026-10-30
+### Changed
+- **Sessions are scoped per application** (reversing the earlier shared
+  design, by request). Each pane tags its autosaves with its app and lists
+  only its own sessions: SlideKick / DocKick / MailKick. Sessions created
+  before this change have no tag and remain visible in all three panes so
+  nothing disappears; resuming one in a pane re-tags it to that app.
+- GET /api/sessions?app=... filter + app field on session records; new test.
+
 ## [0.3.2] - 2026-10-30
 ### Fixed (live-report from PowerPoint)
 - Office.js load() is not a promise - chaining .then() on it breaks on real
