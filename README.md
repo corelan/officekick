@@ -1,24 +1,25 @@
 # SlideKick
 
-An AI assistant add-in for **Microsoft PowerPoint on macOS**. Type what you want -
-`reword the current slide`, `make 4 slides about threat hunting`, `add speaker notes to
-this deck` - and SlideKick reads your deck, routes the request to the model you chose,
-and applies the changes in PowerPoint **after** the per-action approval policy allows it.
+An AI assistant add-in for **Microsoft PowerPoint** on macOS and Windows. Type what
+you want - `reword the current slide`, `make 4 slides about threat hunting`, `add
+speaker notes to this deck` - and SlideKick reads your deck, routes the request to the
+model you chose, and applies the changes in PowerPoint **after** the per-action
+approval policy allows it.
 
 You pick your own AI provider and models. Nothing goes through a third-party service:
 SlideKick talks to the providers *you* configure, from a small local server on your own
 machine.
 
 ```
-+------------------+        +---------------------------+      +--------------------+
-| PowerPoint (Mac) |        | SlideKick local server    |      | Your AI providers  |
-| add-in (Office.js| -----> | 127.0.0.1:8765            | ---> | OpenAI / Anthropic |
-| task pane)       |        | - serves the task pane UI |      | OpenRouter         |
++--------------------------+        +---------------------------+      +--------------------+
+| PowerPoint (Mac/Windows) |        | SlideKick local server    |      | Your AI providers  |
+| add-in (Office.js        | -----> | 127.0.0.1:8765            | ---> | OpenAI / Anthropic |
+| task pane)               |        | - serves the task pane UI |      | OpenRouter         |
 |                  |        | - stores connections,     |      | OpenAI-compatible  |
 | applies slide    |        |   profiles, approval      |      | (LM Studio, vLLM,  |
 | operations via   |        |   policy, debug logs      |      |  llama-server, ...)|
 | Office.js        |        | - proxies AI calls        |      | Ollama             |
-+------------------+        +---------------------------+      +--------------------+
++--------------------------+        +---------------------------+      +--------------------+
 ```
 
 ## Features
@@ -40,8 +41,9 @@ machine.
   "answer in clean JSON" retry that is never shown.
 - **Debug logging** (opt-in): appends AI interactions and deck-edit traces to one
   appended file per day (`~/.slidekick/logs/debug-YYYY-MM-DD.log`).
-- **Installer**: detects PowerPoint, deploys the add-in, sideloads the manifest and
-  keeps the local server running via LaunchAgent. Re-run to update.
+- **Installer**: detects PowerPoint, deploys the add-in, sideloads/registers the
+  manifest (LaunchAgent on macOS, per-user trusted catalog + Scheduled Task on
+  Windows). Re-run either installer to update.
 - **Simulator**: the exact task pane runs in a normal browser against an in-memory deck,
   for testing without PowerPoint.
 
@@ -146,8 +148,8 @@ Useful flags: `-Port N`, `-Dev`, `-NoScheduledTask`, `-Action status`, `-Action 
    *other-actions model* pick a connection -> pick a model from the live list (or type a
    custom model id). Mark one profile as default.
 
-3. **Chat / Actions** tab: type an instruction and press Run (Cmd+Enter). Quick chips
-   prefill common requests for you.
+3. **Chat / Actions** tab: type an instruction and press Run (Cmd/Ctrl+Enter). Quick
+   chips prefill common requests for you.
 
 ## Typed instructions, routes and approvals
 
@@ -201,26 +203,36 @@ Useful flags: `-Port N`, `-Dev`, `-NoScheduledTask`, `-Action status`, `-Action 
 
 ## Troubleshooting
 
-- **Add-in doesn't show in the ribbon** - quit *all* Office apps and reopen PowerPoint;
-  check `install.sh status`; confirm
-  `~/Library/Containers/com.microsoft.Powerpoint/Data/Documents/wef/slidekick.xml`
-  exists; the Office cache can be cleared by quitting Office and removing
-  `~/Library/Containers/com.microsoft.Powerpoint/Data/Library/Caches/*` with care.
-- **"Cannot reach the SlideKick server" in the pane** - `launchctl list | grep slidekick`,
-  then `tail -50 ~/Library/Logs/SlideKick/server.log`, or just re-run `./install.sh`.
+- **Add-in doesn't show** - quit *all* Office apps and reopen PowerPoint:
+  - macOS: check `./install.sh status`; confirm
+    `~/Library/Containers/com.microsoft.Powerpoint/Data/Documents/wef/slidekick.xml`
+    exists; the Office cache can be cleared by quitting Office and removing
+    `~/Library/Containers/com.microsoft.Powerpoint/Data/Library/Caches/*` with care.
+  - Windows: check `.\install.ps1 -Action status`; confirm the trusted-catalog
+    registry key exists (`HKCU:\Software\Microsoft\Office\16.0\Wef\TrustedCatalogs\C7B1F2A9-...`)
+    and that `Insert -> My Add-ins` shows the SHARED FOLDER section.
+- **"Cannot reach the SlideKick server" in the pane**:
+  - macOS: `launchctl list | grep slidekick`, then `tail -50 ~/Library/Logs/SlideKick/server.log`,
+    or just re-run `./install.sh`.
+  - Windows: `Get-ScheduledTask SlideKickServer`, then re-run `.\install.ps1`
+    (server log: `%LOCALAPPDATA%\SlideKick\logs\server.log`).
 - **401/403 from a provider** - fix the key on the Connections tab (blank key field
   keeps the stored key).
-- **"lacks the text-editing APIs"** - update Microsoft 365 (need PowerPoint 16.96+).
+- **"lacks the text-editing APIs"** - update Microsoft 365 (need PowerPointApi 1.8:
+  Mac 16.96+, Windows M365 2504+).
 - **Model answers arrive as plain text** - the model ignored the JSON contract; with
-  debug logging on, `~/.slidekick/logs/debug-YYYY-MM-DD.log` shows exactly what it sent.
-  Reasoning-wrapped output is cleaned automatically.
-- **Wrong port** - `./install.sh --port 8999` re-renders the manifest and restarts.
+  debug logging on, the daily debug log (`<userhome>/.slidekick/logs/debug-YYYY-MM-DD.log`)
+  shows exactly what it sent. Reasoning-wrapped output is cleaned automatically.
+- **Wrong port** - re-run the installer with `-Port`/`--port`; it re-renders the
+  manifest and restarts.
 
 ## Development
 
 ```bash
-./install.sh --dev              # serve straight from the repo (edit + reopen pane)
-python3 tests/test_slidekick_server.py       # server + adapter test suite (16 tests)
+macOS:  ./install.sh --dev         # serve straight from the repo (edit + reopen pane)
+Win:    .\install.ps1 -Dev
+
+python3 tests/test_slidekick_server.py       # server + adapter test suite (17 tests)
 python3 tools/mock_provider.py --flavor openai --port 8901   # mock provider for the UI
 open http://127.0.0.1:8765/simulator.html    # full task pane + in-memory deck, no PowerPoint
 python3 tools/make_icons.py                  # rebuild icons from logo_corelan.png (sips)
@@ -233,8 +245,13 @@ apply is fully testable in a browser.
 ## Uninstall
 
 ```bash
-./install.sh uninstall           # keeps ~/.slidekick config
-./install.sh uninstall --purge   # also wipes config + debug logs
+macOS:  ./install.sh uninstall           # keeps ~/.slidekick config
+        ./install.sh uninstall --purge   # also wipes config + debug logs
+```
+
+```powershell
+Windows: .\install.ps1 -Action uninstall           # keeps config
+         .\install.ps1 -Action uninstall -Purge     # also wipes config
 ```
 
 Then quit and reopen PowerPoint.
