@@ -1,4 +1,13 @@
 # Changelog
+## [0.2.0] - 2026-10-30
+### Added
+- **Sessions** (all three add-ins): conversations persist locally in
+  `~/.officekick/sessions/` (0600 files) and are auto-saved after every exchange.
+  A new **Sessions tab** lists them with the AI-generated name, message count and
+  the last-updated time, with Resume / Delete (+ click-to-rename). Resume loads
+  the stored history into the Chat/Actions tab (last 6 exchanges stay in context).
+  Names come from a tiny AI call through the profile's other model; a failed
+  naming call falls back to the first user message.
 ## [0.1.8] - 2026-10-30
 ### Added
 - **MailKick** - the Outlook add-in (docs/outlook.md): email context, draft_reply /

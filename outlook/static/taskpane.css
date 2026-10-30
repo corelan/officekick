@@ -217,3 +217,13 @@ body.dark .chip:hover { color: var(--ink); border-color: var(--accent); }
 .reqerr { color: var(--danger, #b00020); font-weight: 600; margin-top: 3px; white-space: pre-wrap; word-break: break-word; }
 .reqrow details { margin-top: 4px; }
 .reqrow pre { margin: 4px 0 0; white-space: pre-wrap; word-break: break-word; font-size: 11px; max-height: 220px; overflow: auto; }
+
+
+/* Sessions */
+.sess-list { display: flex; flex-direction: column; gap: 6px; }
+.sessrow { display: flex; align-items: baseline; gap: 8px; border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; font-size: 12px; flex-wrap: wrap; }
+.sessrow.current { border-color: var(--primary, #4a7dff); background: rgba(74,125,255,.07); }
+.sessname { font-weight: 700; cursor: pointer; }
+.sessrow .danger { margin-left: auto; }
+.sessrow button { font-size: 11px; padding: 2px 8px; }
+.sess-rename { font-size: 12px; width: 240px; }

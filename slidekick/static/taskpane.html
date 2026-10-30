@@ -21,6 +21,7 @@
       <button data-tab="profiles">Profiles</button>
       <button data-tab="settings">Settings</button>
       <button data-tab="about">About</button>
+      <button data-tab="sessions">Sessions</button>
       <button data-tab="requests">Inspector</button>
     </nav>
   </header>
@@ -201,7 +202,20 @@
         See the <a href="https://github.com/corelan/officekick/blob/main/LICENSE" target="_blank">LICENSE</a>.
       </div>
     </section>
-      <!-- ============================ REQUESTS ============================ -->
+      <!-- ============================ SESSIONS ============================ -->
+    <section id="tab-sessions" class="tab">
+      <div class="row row-wrap">
+        <button id="sess-new" class="btn subtle" type="button">+ New session</button>
+        <button id="sess-refresh" class="btn subtle" type="button">Refresh</button>
+        <span class="opnote" id="sess-current-label"></span>
+      </div>
+      <div class="opnote">Conversations are saved locally (in ~/.officekick/sessions) after the
+        first exchange, and named by the AI. Resume one to continue chatting with the same history;
+        the last 6 exchanges are kept in context.</div>
+      <div id="sess-list" class="sess-list"></div>
+    </section>
+
+    <!-- ============================ REQUESTS ============================ -->
     <section id="tab-requests" class="tab">
       <div class="row row-wrap">
         <button id="req-clear" class="btn subtle" type="button">Clear log</button>

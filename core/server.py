@@ -22,14 +22,16 @@ import ssl
 import sys
 import threading
 import time
+import re
 import urllib.error
 import urllib.parse
 import urllib.request
+import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 APP = "OfficeKick"
-VERSION = "0.1.8"
+VERSION = "0.2.0"
 
 CONNECTION_TYPES = (
     "openai",
@@ -98,6 +100,104 @@ class ApiError(Exception):
 # --------------------------------------------------------------------------- #
 # Config store
 # --------------------------------------------------------------------------- #
+# --------------------------------------------------------------------------- #
+# Conversation sessions (local files, resumable from any pane)
+# --------------------------------------------------------------------------- #
+
+SESSION_ID_RE = re.compile(r"^[a-f0-9-]{8,64}$")
+
+
+class SessionStore:
+    def __init__(self, base_dir):
+        self.dir = Path(base_dir) / "sessions"
+        try:
+            self.dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+            os.chmod(self.dir, 0o700)
+        except OSError:
+            pass
+        for f in self.dir.glob("*.json"):
+            try:
+                os.chmod(f, 0o600)
+            except OSError:
+                pass
+
+    def _valid(self, sid):
+        return bool(SESSION_ID_RE.match(sid or ""))
+
+    def list(self):
+        items = []
+        for f in self.dir.glob("*.json"):
+            try:
+                data = json.loads(f.read_text(encoding="utf-8"))
+                items.append({
+                    "id": data.get("id", f.stem),
+                    "name": data.get("name") or "session",
+                    "updated": data.get("updated") or f.stat().st_mtime,
+                    "messages": len(data.get("exchanges") or []),
+                })
+            except Exception:
+                continue
+        items.sort(key=lambda x: x["updated"], reverse=True)
+        return items
+
+    def get(self, sid):
+        if not self._valid(sid):
+            raise ApiError(400, "Invalid session id")
+        f = self.dir / (sid + ".json")
+        if not f.is_file():
+            raise ApiError(404, "Unknown session: %s" % sid)
+        try:
+            return json.loads(f.read_text(encoding="utf-8"))
+        except Exception:
+            raise ApiError(500, "Session file unreadable")
+
+    def create(self, name, exchanges):
+        sid = uuid.uuid4().hex
+        return self.upsert(sid, name, exchanges)
+
+    def upsert(self, sid, name, exchanges, existing=None):
+        if not self._valid(sid):
+            raise ApiError(400, "Invalid session id")
+        ex = self._clean_exchanges(exchanges)
+        doc = {
+            "id": sid,
+            "name": (name or (existing or {}).get("name") or "session")[:80],
+            "updated": time.time(),
+            "exchanges": ex,
+        }
+        f = self.dir / (sid + ".json")
+        f.write_text(json.dumps(doc, indent=1), encoding="utf-8")
+        os.chmod(f, 0o600)
+        return {"id": sid, "name": doc["name"], "updated": doc["updated"], "messages": len(ex)}
+
+    def rename(self, sid, name):
+        doc = self.get(sid)
+        return self.upsert(sid, (name or "")[:80] or doc.get("name") or "session",
+                           doc.get("exchanges"), doc)
+
+    def delete(self, sid):
+        if not self._valid(sid):
+            raise ApiError(400, "Invalid session id")
+        f = self.dir / (sid + ".json")
+        if not f.is_file():
+            raise ApiError(404, "Unknown session: %s" % sid)
+        f.unlink()
+        return {"ok": True}
+
+    @staticmethod
+    def _clean_exchanges(exchanges):
+        """Keep role/content only, cap volume (last 40 messages)."""
+        out = []
+        for m in exchanges or []:
+            if not isinstance(m, dict):
+                continue
+            role = m.get("role")
+            content = m.get("content")
+            if role in ("user", "assistant") and isinstance(content, str):
+                out.append({"role": role, "content": content[:8000]})
+        return out[-40:]
+
+
 class Store:
     def __init__(self, path):
         self.path = Path(path).expanduser()
@@ -109,6 +209,7 @@ class Store:
         self._lock = threading.Lock()
         self.data = None
         self.force_debug = False  # CLI --debug override
+        self.sessions = SessionStore(self.path.parent)
 
     def load(self):
         if self.path.exists():
@@ -1112,6 +1213,11 @@ class SlideKickHandler(BaseHTTPRequestHandler):
                     resp = dict(resp)
                     resp["models"] = filter_image_models(self.store, conn)
                 self._send_json(resp)
+            elif path == "/api/sessions":
+                self._send_json({"sessions": self.store.sessions.list()})
+            elif path.startswith("/api/sessions/"):
+                sid = path[len("/api/sessions/"):]
+                self._send_json(self.store.sessions.get(sid))
             elif path.startswith("/api/"):
                 self._error(404, "Unknown API endpoint: %s" % path)
             else:
@@ -1146,6 +1252,14 @@ class SlideKickHandler(BaseHTTPRequestHandler):
                 self.store.rename_profile(
                     str(body.get("from") or ""), str(body.get("to") or ""), body)
                 self._send_json({"ok": True, "name": body.get("to")})
+            elif path == "/api/sessions":
+                doc = self.store.sessions.create(body.get("name") or "session",
+                                                 body.get("exchanges") or [])
+                self._send_json({"ok": True, "session": doc})
+            elif path.startswith("/api/sessions/rename/"):
+                sid = path[len("/api/sessions/rename/"):]
+                doc = self.store.sessions.rename(sid, body.get("name"))
+                self._send_json({"ok": True, "session": doc})
             elif path == "/api/chat":
                 conn = body.get("connection")
                 if not self.store.find_connection(conn or ""):
@@ -1248,6 +1362,11 @@ class SlideKickHandler(BaseHTTPRequestHandler):
                 if changed:
                     self.store.save()
                 self._send_json({"ok": True, "approvals": self.store.data["approvals"]})
+            elif path.startswith("/api/sessions/"):
+                sid = urllib.parse.unquote(path[len("/api/sessions/"):])
+                doc = self.store.sessions.upsert(
+                    sid, body.get("name"), body.get("exchanges") or [])
+                self._send_json({"ok": True, "session": doc})
             else:
                 self._error(404, "Unknown API endpoint: %s" % path)
         except ApiError as exc:
@@ -1271,6 +1390,9 @@ class SlideKickHandler(BaseHTTPRequestHandler):
                 if not self.store.delete_profile(name):
                     raise ApiError(404, "Unknown profile: %s" % name)
                 self._send_json({"ok": True})
+            elif path.startswith("/api/sessions/"):
+                sid = urllib.parse.unquote(path[len("/api/sessions/"):])
+                self._send_json(self.store.sessions.delete(sid))
             else:
                 self._error(404, "Unknown API endpoint: %s" % path)
         except ApiError as exc:

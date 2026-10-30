@@ -12,6 +12,9 @@
   var $ = function (id) { return document.getElementById(id); };
 
   var SK = {
+    sessionId: null,
+    sessionName: "",
+    sessionSaveTimer: null,
     profImageFilter: true,
     sim: false,
     deck: null,
@@ -353,6 +356,202 @@
   var HISTORY_MAX_EXCHANGES = 6; // oldest turns are dropped, newest kept
   var HISTORY_MAX_CHARS = 2000;  // per stored message
 
+  // ------------------------- local sessions ------------------------- //
+  function derivedSessionName() {
+    var first = "";
+    for (var i = 0; i < SK.history.length; i++) {
+      if (SK.history[i].role === "user") { first = SK.history[i].content; break; }
+    }
+    return String(first).replace(/\s+/g, " ").trim().slice(0, 40) || "new session";
+  }
+
+  function scheduleSaveSession() {
+    if (SK.sessionSaveTimer) clearTimeout(SK.sessionSaveTimer);
+    SK.sessionSaveTimer = setTimeout(saveSessionNow, 600);
+  }
+
+  function saveSessionNow() {
+    if (!SK.history.length) return;
+    var payload = { exchanges: SK.history.slice() };
+    var createPromise;
+    if (!SK.sessionId) {
+      payload.name = derivedSessionName();
+      createPromise = apiJson("/api/sessions", "POST", payload).then(function (res) {
+        if (res && res.session) {
+          SK.sessionId = res.session.id;
+          SK.sessionName = res.session.name;
+          aiNameSession(SK.sessionId);
+        }
+        return res;
+      });
+    } else {
+      createPromise = apiJson("/api/sessions/" + SK.sessionId, "PUT", payload);
+    }
+    return createPromise.then(function () {
+      dbg("session.saved", { id: SK.sessionId, name: SK.sessionName, messages: SK.history.length });
+    }).catch(function (err) {
+      dbg("session.saveFailed", { msg: (err && err.message) || String(err) });
+    });
+  }
+
+  function aiNameSession(sid) {
+    // one tiny call through the profile's other slot; on failure the derived name stays
+    var prof = currentProfile();
+    if (!prof || !prof.other || !prof.other.connection || !prof.other.model) return;
+    var first = derivedSessionName();
+    apiJson("/api/chat", "POST", {
+      connection: prof.other.connection, model: prof.other.model,
+      temperature: 0.2, max_tokens: 24,
+      messages: [
+        { role: "system", content: "You generate very short chat-session titles. Reply with ONLY the title: 2-4 words, no quotes, no punctuation at the end." },
+        { role: "user", content: "Session start: " + first.slice(0, 120) },
+      ],
+    }).then(function (resp) {
+      var name = stripReasoning(resp.text || "").replace(/"/g, "").replace(/^[:\- ]+/, "").trim().slice(0, 48);
+      // reject non-title junk (models that ignore the instruction and echo ops/json)
+      var junk = /^[{\[]/.test(name) || /"(kind|ops|type)"/.test(name) || name.length < 2 || name.length > 60;
+      if (junk) return;
+      return apiJson("/api/sessions/rename/" + sid, "POST", { name: name }).then(function () {
+        SK.sessionName = name;
+        dbg("session.named", { id: sid, name: name });
+      });
+    }).catch(function () { /* derived name stays */ });
+  }
+
+  function resumeSession(sessId) {
+    apiJson("/api/sessions/" + sessId, "GET").then(function (doc) {
+      SK.history = (doc.exchanges || []).slice(-HISTORY_MAX_EXCHANGES * 2);
+      SK.sessionId = doc.id;
+      SK.sessionName = doc.name || "";
+      switchTab("chat");
+      setStatus("Session resumed: \u201C" + SK.sessionName + "\u201D (" + SK.history.length + " message(s) loaded).", "ok");
+      pushHistoryStubRender();
+    }).catch(function (err) {
+      setStatus("Could not load session: " + ((err && err.message) || err), "error");
+    });
+  }
+
+  function pushHistoryStubRender() {
+    var el = $("chat-output");
+    if (!el) return;
+    el.innerHTML = "";
+    var box = document.createElement("div");
+    box.className = "opnote";
+    box.textContent = "Resumed session \u201C" + SK.sessionName + "\u201D - the AI sees the last " +
+      Math.min(HISTORY_MAX_EXCHANGES, SK.history.length / 2) + " exchange(s). Continue typing below.";
+    el.appendChild(box);
+    renderSessions();  // refresh the "current" label
+  }
+
+  function deleteSession(sessId) {
+    apiJson("/api/sessions/" + sessId, "DELETE").then(function () {
+      if (SK.sessionId === sessId) { SK.sessionId = null; SK.sessionName = ""; }
+      renderSessions();
+      setStatus("Session deleted.", "ok");
+    }).catch(function (err) {
+      setStatus("Could not delete session: " + ((err && err.message) || err), "error");
+    });
+  }
+
+  function renameSessionInline(sessId, nameEl) {
+    var input = document.createElement("input");
+    input.type = "text";
+    input.maxLength = 48;
+    input.value = SK.sessionNames[sessId] || "";
+    input.className = "sess-rename";
+    nameEl.textContent = "";
+    nameEl.appendChild(input);
+    input.focus();
+    input.select();
+    var done = function (commit) {
+      var val = input.value.trim();
+      if (commit && val) {
+        apiJson("/api/sessions/rename/" + sessId, "POST", { name: val }).catch(function () {}).then(function () {
+          SK.sessionNames[sessId] = val;
+          if (SK.sessionId === sessId) SK.sessionName = val;
+          renderSessions();
+        });
+      } else {
+        renderSessions();
+      }
+    };
+    input.addEventListener("keydown", function (e) {
+      if (e.key === "Enter") done(true);
+      else if (e.key === "Escape") done(false);
+      else if (e.key === "Tab") { e.preventDefault(); done(true); }
+    });
+    input.addEventListener("blur", function () { done(false); });
+  }
+
+  SK.sessionNames = {};
+  function renderSessions() {
+    apiJson("/api/sessions", "GET").then(function (res) {
+      var rows = (res.sessions || []);
+      var list = $("sess-list");
+      if (!list) return;
+      var frag = document.createDocumentFragment();
+      if (!rows.length) {
+        var empty = document.createElement("div");
+        empty.className = "opnote";
+        empty.textContent = "No sessions yet. Every conversation is saved locally after the first exchange; come back and resume it anytime.";
+        frag.appendChild(empty);
+      }
+      rows.forEach(function (row) {
+        SK.sessionNames[row.id] = row.name;
+        var d = document.createElement("div");
+        d.className = "sessrow" + (row.id === SK.sessionId ? " current" : "");
+        var name = document.createElement("span");
+        name.className = "sessname namebtn";
+        name.title = "Click to rename";
+        name.textContent = row.name;
+        var when = new Date(row.updated * 1000);
+        var whenStr = ("0" + when.getHours()).slice(-2) + ":" + ("0" + when.getMinutes()).slice(-2) + " " +
+          (when.toLocaleDateString ? when.toLocaleDateString() : when.toDateString());
+        var meta = document.createElement("span");
+        meta.className = "opnote";
+        meta.textContent = " - " + row.messages + " msg(s) - " + whenStr + (row.id === SK.sessionId ? " (current)" : "");
+        d.appendChild(name);
+        d.appendChild(meta);
+        var actions = document.createElement("span");
+        ["Resume", "Delete"].forEach(function (label) {
+          var b = document.createElement("button");
+          b.className = "btn subtle" + (label === "Delete" ? " danger" : "");
+          b.textContent = label;
+          b.addEventListener("click", function () {
+            if (label === "Resume") resumeSession(row.id);
+            else deleteSession(row.id);
+          });
+          actions.appendChild(b);
+        });
+        d.appendChild(actions);
+        frag.appendChild(d);
+      });
+      list.innerHTML = "";
+      list.appendChild(frag);
+      var cur = $("sess-current-label");
+      if (cur) cur.textContent = SK.sessionId ? ("current: " + (SK.sessionName || SK.sessionId)) : "current: (new / unsaved)";
+    }).catch(function (err) {
+      var list = $("sess-list");
+      if (list) list.innerHTML = '<div class="opnote">Cannot reach the sessions store: ' + esc((err && err.message) || String(err)) + "</div>";
+    });
+  }
+
+  // wire the sessions tab buttons (called from wireEvents)
+  function wireSessions() {
+    var nw = $("sess-new");
+    if (nw) nw.addEventListener("click", function () {
+      SK.history = [];
+      SK.sessionId = null;
+      SK.sessionName = "";
+      switchTab("chat");
+      setStatus("New session - the current one stays saved.", "");
+      var el = $("chat-output");
+      if (el) el.innerHTML = "";
+    });
+    var rf = $("sess-refresh");
+    if (rf) rf.addEventListener("click", renderSessions);
+  }
+
   var CONTENT_ROUTE_RE = new RegExp(
     "\\b(slide|slides|deck|bullet|bullets|reword|rewrite|rephrase|outline|notes?|title|titles|add|create|make|generate|tighten|restructure|expand|insert|append|design|align|balance|spacing|table|tables|chart|image|images|picture|pictures|photo|logo|illustration)\\b", "i"
   );
@@ -386,6 +585,7 @@
   function pushHistory(userText, assistantText) {
     SK.history.push({ role: "user", content: historyCap(userText) });
     SK.history.push({ role: "assistant", content: historyCap(assistantText) });
+    scheduleSaveSession();
     while (SK.history.length > HISTORY_MAX_EXCHANGES * 2) SK.history.shift();
     updateChatMeta();
     dbg("history.push", { exchanges: Math.floor(SK.history.length / 2) });
@@ -393,7 +593,10 @@
 
   function resetHistory() {
     SK.history = [];
+    SK.sessionId = null;      // the next exchange saves as a NEW session
+    SK.sessionName = "";
     updateChatMeta();
+    renderSessions();
     dbg("history.reset", {});
   }
 
@@ -1702,6 +1905,7 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
   function switchTab(id) {
     SK.activeTab = id;
     if (id === "requests") renderRequests();
+    if (id === "sessions") renderSessions();
     Array.prototype.forEach.call(document.querySelectorAll("#tabs button"), function (b) {
       b.classList.toggle("active", b.dataset.tab === id);
     });
@@ -2208,6 +2412,7 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
 
     $("settings-save").addEventListener("click", saveApprovals);
     $("settings-debug-save").addEventListener("click", saveDebugOption);
+    wireSessions();
     $("req-clear").addEventListener("click", clearRequests);
     $("req-refresh").addEventListener("click", renderRequests);
     $("sim-reset").addEventListener("click", function () {
