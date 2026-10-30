@@ -568,6 +568,12 @@ do_install() {
     else
       warn "Microsoft Outlook not found - MailKick manifest rendered anyway (it sideloads via the Outlook dialog anytime)"
     fi
+    # best-effort: some Outlook-Mac builds pick up the wef folder like the
+    # other apps; if it does not show up (or vanishes), use the dialog below.
+    local o_container="$HOME/Library/Containers/com.microsoft.Outlook/Data/Documents/wef"
+    mkdir -p "$o_container" 2>/dev/null && \
+      cp "$INSTALL_DIR/manifest/$OUTLOOK_MANIFEST_NAME" "$o_container/$OUTLOOK_MANIFEST_NAME" 2>/dev/null && \
+      ok "manifest staged into the Outlook container (may or may not be honored): $o_container/"
     say "MailKick sideload step (Outlook-Mac has no wef-folder sideload):"
     say "   1) open https://aka.ms/olksideload (Outlook on the web Add-Ins dialog)"
     say "   2) My add-ins -> Custom Addins -> Add a custom add-in -> Add from File"
