@@ -49,16 +49,8 @@
       </div>
 
       <div id="chat-input-title" class="fieldlabel">What should DocKick do with your document?</div>
-      <textarea id="chat-input" rows="3"
+      <textarea id="chat-input" rows="6"
         placeholder="e.g. reword the current paragraph &#10;or: add a table of the key findings"></textarea>
-      <div class="chips" id="chat-chips">
-        <button class="chip" type="button" data-prompt="Reword the current paragraph: same meaning, sharper and shorter wording.">Reword paragraph</button>
-        <button class="chip" type="button" data-prompt="Restructure this document: propose better headings and structure, insert the improved outline as styled paragraphs. Only adjust what genuinely helps.">Restructure document</button>
-        <button class="chip" type="button" data-prompt="Tighten the wording of the selected paragraph: shorter, punchier, no filler.">Tighten wording</button>
-        <button class="chip" type="button" data-prompt="Add a review comment on the selected text suggesting how to improve it.">Review comment</button>
-        <button class="chip" type="button" data-prompt="Suggest 3 concrete improvements for this document (structure, tone, clarity).">Improve suggestions</button>
-      </div>
-
       <div class="row">
         <button id="chat-run" class="btn primary" type="button">Run</button>
         <span id="deck-summary" class="muted"></span>

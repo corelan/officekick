@@ -1985,12 +1985,6 @@ function applyOps(deck, ops, ctx) {
       setStatus("Conversation history cleared.", "ok");
     });
     $("chat-refresh-deck").addEventListener("click", function () { updateDeckSummary(); setStatus("Document refreshed.", ""); });
-    Array.prototype.forEach.call(document.querySelectorAll("#chat-chips .chip"), function (chip) {
-      chip.addEventListener("click", function () {
-        $("chat-input").value = chip.dataset.prompt;
-        $("chat-input").focus();
-      });
-    });
 
     $("conn-new").addEventListener("click", resetConnForm);
     $("conn-save").addEventListener("click", saveConnection);
