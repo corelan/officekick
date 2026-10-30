@@ -59,6 +59,13 @@ Config (API keys, profiles, policy) lives in `~/.officekick/config.json`
 - **Word (macOS)**: same route -> **Corelan DocKick**.
 - **PowerPoint/Word (Windows)**: Insert -> My Add-ins -> SHARED FOLDER ->
   Corelan SlideKick / Corelan DocKick -> Add (once).
+- **Outlook (MailKick)**: Outlook-Mac has no silent sideload - Outlook -> Get
+  Add-ins -> **My add-ins -> Custom Addins -> Add a custom add-in -> Add from
+  File**, and pick **`~/Downloads/mailkick.xml`** (the installer keeps this
+  visible copy). The original lives in the hidden
+  `~/Library/Application Support/OfficeKick/manifest/` - to reach it in any file
+  picker press **Cmd+Shift+G** and paste the full path. Windows: same trusted
+  catalog as the other two add-ins. See [docs/outlook.md](docs/outlook.md).
 - Ribbon buttons (the https/commands mode) are experimental: modern Office-Mac
   builds register them but do not render the classic commands ribbon (verified on
   16.114); the Add-ins route always works. The detailed docs cover this.

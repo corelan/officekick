@@ -483,6 +483,40 @@
     input.addEventListener("blur", function () { done(false); });
   }
 
+  function showSessionChat(sessId, card) {
+    var box = card.querySelector(".sesschat");
+    if (!box.classList.contains("hidden")) { box.classList.add("hidden"); box.innerHTML = ""; return; }
+    apiJson("/api/sessions/" + sessId, "GET").then(function (doc) {
+      var msgs = (doc.exchanges || []);
+      var shown = msgs.slice(-12);
+      var frag = document.createDocumentFragment();
+      if (msgs.length > shown.length) {
+        var more = document.createElement("div");
+        more.className = "opnote";
+        more.textContent = "(showing the last " + shown.length + " of " + msgs.length + " messages)";
+        frag.appendChild(more);
+      }
+      shown.forEach(function (m) {
+        var b = document.createElement("div");
+        b.className = "bubble " + (m.role === "user" ? "user" : "assistant");
+        var who = document.createElement("b");
+        who.textContent = (m.role === "user" ? "You" : "AI") + ": ";
+        var c = String(m.content || "");
+        if (c.length > 400) c = c.slice(0, 400) + "…";
+        var txt = document.createElement("span");
+        txt.textContent = c;
+        b.appendChild(who); b.appendChild(txt);
+        frag.appendChild(b);
+      });
+      box.innerHTML = "";
+      box.appendChild(frag);
+      box.classList.remove("hidden");
+    }).catch(function (err) {
+      box.innerHTML = '<div class="opnote">Could not load: ' + esc((err && err.message) || String(err)) + "</div>";
+      box.classList.remove("hidden");
+    });
+  }
+
   SK.sessionNames = {};
   function renderSessions() {
     apiJson("/api/sessions", "GET").then(function (res) {
@@ -498,33 +532,70 @@
       }
       rows.forEach(function (row) {
         SK.sessionNames[row.id] = row.name;
-        var d = document.createElement("div");
-        d.className = "sessrow" + (row.id === SK.sessionId ? " current" : "");
+        var card = document.createElement("div");
+        card.className = "sesscard" + (row.id === SK.sessionId ? " current" : "");
+        var head = document.createElement("div");
+        head.className = "sesshead";
         var name = document.createElement("span");
-        name.className = "sessname namebtn";
-        name.title = "Click to rename";
+        name.className = "sessname";
+        name.title = "Click to show the last interactions";
         name.textContent = row.name;
+        name.addEventListener("click", function () { showSessionChat(row.id, card); });
+        head.appendChild(name);
         var when = new Date(row.updated * 1000);
-        var whenStr = ("0" + when.getHours()).slice(-2) + ":" + ("0" + when.getMinutes()).slice(-2) + " " +
-          (when.toLocaleDateString ? when.toLocaleDateString() : when.toDateString());
+        var whenStr = ("0" + when.getHours()).slice(-2) + ":" + ("0" + when.getMinutes()).slice(-2) + " · " +
+          when.toLocaleDateString();
         var meta = document.createElement("span");
-        meta.className = "opnote";
-        meta.textContent = " - " + row.messages + " msg(s) - " + whenStr + (row.id === SK.sessionId ? " (current)" : "");
-        d.appendChild(name);
-        d.appendChild(meta);
+        meta.className = "sessmeta";
+        meta.textContent = row.messages + " msg" + (row.messages === 1 ? "" : "s") + " · " + whenStr +
+          (row.id === SK.sessionId ? " · current session" : "");
+        head.appendChild(meta);
         var actions = document.createElement("span");
-        ["Resume", "Delete"].forEach(function (label) {
+        actions.className = "sessactions";
+        var renameBtn = document.createElement("button");
+        renameBtn.className = "btn subtle";
+        renameBtn.textContent = "Rename";
+        renameBtn.title = "Rename this session";
+        renameBtn.addEventListener("click", function () {
+          var input = document.createElement("input");
+          input.type = "text"; input.maxLength = 48;
+          input.value = SK.sessionNames[row.id] || row.name;
+          input.className = "sess-rename";
+          name.textContent = ""; name.appendChild(input);
+          input.focus(); input.select();
+          var done = function (commit) {
+            var val = input.value.trim();
+            if (commit && val) {
+              apiJson("/api/sessions/rename/" + row.id, "POST", { name: val }).catch(function () {}).then(function () {
+                SK.sessionNames[row.id] = val;
+                if (SK.sessionId === row.id) SK.sessionName = val;
+                renderSessions();
+              });
+            } else { renderSessions(); }
+          };
+          input.addEventListener("keydown", function (e) {
+            if (e.key === "Enter") done(true);
+            else if (e.key === "Escape") done(false);
+            else if (e.key === "Tab") { e.preventDefault(); done(true); }
+          });
+          input.addEventListener("blur", function () { done(false); });
+        });
+        actions.appendChild(renameBtn);
+        [["Resume", false], ["Delete", true]].forEach(function (pair) {
           var b = document.createElement("button");
-          b.className = "btn subtle" + (label === "Delete" ? " danger" : "");
-          b.textContent = label;
+          b.className = "btn subtle" + (pair[1] ? " danger" : "");
+          b.textContent = pair[0];
           b.addEventListener("click", function () {
-            if (label === "Resume") resumeSession(row.id);
-            else deleteSession(row.id);
+            if (pair[1]) deleteSession(row.id); else resumeSession(row.id);
           });
           actions.appendChild(b);
         });
-        d.appendChild(actions);
-        frag.appendChild(d);
+        head.appendChild(actions);
+        card.appendChild(head);
+        var chat = document.createElement("div");
+        chat.className = "sesschat hidden";
+        card.appendChild(chat);
+        frag.appendChild(card);
       });
       list.innerHTML = "";
       list.appendChild(frag);

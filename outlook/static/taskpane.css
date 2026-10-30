@@ -227,3 +227,29 @@ body.dark .chip:hover { color: var(--ink); border-color: var(--accent); }
 .sessrow .danger { margin-left: auto; }
 .sessrow button { font-size: 11px; padding: 2px 8px; }
 .sess-rename { font-size: 12px; width: 240px; }
+
+
+/* Sessions: cards + chat peek + distinguishable instructions */
+.sess-instructions {
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  background: var(--panel-alt, rgba(127,127,127,.08));
+  padding: 8px 10px;
+  margin: 6px 0 12px;
+  font-size: 12px;
+}
+.sess-instructions b { font-weight: 700; }
+.sess-list { display: flex; flex-direction: column; gap: 12px; }
+.sesscard { border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px; background: var(--panel, transparent); }
+.sesscard.current { border-color: var(--primary, #4a7dff); box-shadow: 0 0 0 1px var(--primary, #4a7dff) inset; }
+.sesshead { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.sessname { font-weight: 700; font-size: 13px; cursor: pointer; text-decoration: underline dotted; }
+.sessname:hover { text-decoration: underline solid; }
+.sessmeta { color: var(--muted, #98989d); font-size: 11px; }
+.sessactions { margin-left: auto; display: flex; gap: 6px; }
+.sessactions button { font-size: 11px; padding: 2px 8px; }
+.sesschat { margin-top: 8px; border-top: 1px solid var(--border); padding-top: 8px; display: flex; flex-direction: column; gap: 6px; max-height: 260px; overflow: auto; }
+.sesschat .bubble { border-radius: 8px; padding: 5px 8px; font-size: 12px; white-space: pre-wrap; word-break: break-word; }
+.sesschat .bubble.user { background: rgba(74,125,255,.12); }
+.sesschat .bubble.assistant { background: rgba(127,127,127,.14); }
+.sess-rename { font-size: 12px; width: 240px; }
