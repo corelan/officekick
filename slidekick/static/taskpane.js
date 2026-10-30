@@ -347,7 +347,7 @@
     '- {"type":"delete_slide","slide":N}',
     "",
     "Rules:",
-    "- Slide and shape indices are zero-based and MUST come from the outline below. Never invent them.",
+    "- Slide numbers are 1-based (slide 1 = the first slide in the filmstrip) and MUST come from the outline below. When the user says \"slide 2\", use \"slide\":2. Never invent them. Shape indexes keep the numbers shown in the outline.",
     "- One body element = one bullet/paragraph; keep bullets short unless told otherwise.",
     "- Reword/tighten requests: only rewrite wording, keep the meaning and slide count.",
     "- If the request is a question/explanation/brainstorm rather than a deck change, use format A.",
@@ -1523,10 +1523,10 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
         return;
       }
       var bad = function (reason) { invalid.push({ op: op, reason: reason }); };
-      var slideOk = function (v) { return typeof v === "number" && Math.floor(v) === v && v >= 0 && (!ctx || v < ctx.slideCount); };
+      var slideOk = function (v) { return typeof v === "number" && Math.floor(v) === v && v >= 1 && (!ctx || v <= ctx.slideCount); };
       var shapeOk = function (sl, sh) {
-        if (!ctx || !ctx.slides[sl]) return false;
-        return (ctx.slides[sl].shapes || []).some(function (s) { return s.idx === sh && s.text != null; });
+        if (!ctx || !ctx.slides[sl - 1]) return false;
+        return (ctx.slides[sl - 1].shapes || []).some(function (s) { return s.idx === sh - 1 && s.text != null; });
       };
       var out = { type: t };
       if (t === "create_slide") {
@@ -1584,8 +1584,8 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
         out.geometry = geoT;
       } else if (t === "move_shape") {
         if (!slideOk(op.slide)) { bad("bad slide index"); return; }
-        var shapeInCtx = ctx && ctx.slides[op.slide] &&
-          (ctx.slides[op.slide].shapes || []).some(function (s) { return s.idx === op.shape; });
+        var shapeInCtx = ctx && ctx.slides[op.slide - 1] &&
+          (ctx.slides[op.slide - 1].shapes || []).some(function (s) { return s.idx === op.shape - 1; });
         if (!shapeInCtx) { bad("shape " + op.shape + " not in the context list for slide " + op.slide); return; }
         var anyM = false, geoM = {};
         ["left", "top", "width", "height"].forEach(function (p3) {
@@ -1606,8 +1606,8 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
         out.geometry = geoI;
       } else if (t === "format_text") {
         if (!slideOk(op.slide)) { bad("bad slide index"); return; }
-        var shapeInCtxF = ctx && ctx.slides[op.slide] &&
-          (ctx.slides[op.slide].shapes || []).some(function (sh) { return sh.idx === op.shape; });
+        var shapeInCtxF = ctx && ctx.slides[op.slide - 1] &&
+          (ctx.slides[op.slide - 1].shapes || []).some(function (sh) { return sh.idx === op.shape - 1; });
         if (!shapeInCtxF) { bad("shape " + op.shape + " not in the context list for slide " + op.slide); return; }
         var fontF = {}, hasAny = false;
         ["bold", "italic", "allCaps", "underline"].forEach(function (k2) {
@@ -1624,7 +1624,7 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
         if (typeof op.find === "string" && op.find.trim()) {
           var findS = op.find.trim();
           if (findS.length > 200) { bad("find text too long (200 chars max)"); return; }
-          var shapeTxtF = (ctx.slides[op.slide].shapes.find(function (sh) { return sh.idx === op.shape; }) || {}).text || "";
+          var shapeTxtF = (ctx.slides[op.slide - 1].shapes.find(function (sh) { return sh.idx === op.shape - 1; }) || {}).text || "";
           if (shapeTxtF.toLowerCase().indexOf(findS.toLowerCase()) === -1) {
             bad("find text not found in that shape's current text"); return;
           }
@@ -1654,16 +1654,16 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
         out.slide = op.slide; out.kind = op.kind;
       } else if (t === "add_hyperlink") {
         if (!slideOk(op.slide)) { bad("bad slide index"); return; }
-        var shapeInCtxH = ctx && ctx.slides[op.slide] &&
-          (ctx.slides[op.slide].shapes || []).some(function (sh) { return sh.idx === op.shape; });
+        var shapeInCtxH = ctx && ctx.slides[op.slide - 1] &&
+          (ctx.slides[op.slide - 1].shapes || []).some(function (sh) { return sh.idx === op.shape - 1; });
         if (!shapeInCtxH) { bad("shape " + op.shape + " not in the context list for slide " + op.slide); return; }
         if (typeof op.url !== "string" || !/^(https?:\/\/\S+|mailto:\S+)$/.test(op.url.trim())) { bad("url must be http(s)://... or mailto:..."); return; }
         out.slide = op.slide; out.shape = op.shape; out.url = op.url.trim();
         if (typeof op.tip === "string" && op.tip.trim()) out.tip = op.tip.trim().slice(0, 200);
       } else if (t === "set_alt_text") {
         if (!slideOk(op.slide)) { bad("bad slide index"); return; }
-        var shapeInCtxA = ctx && ctx.slides[op.slide] &&
-          (ctx.slides[op.slide].shapes || []).some(function (sh) { return sh.idx === op.shape; });
+        var shapeInCtxA = ctx && ctx.slides[op.slide - 1] &&
+          (ctx.slides[op.slide - 1].shapes || []).some(function (sh) { return sh.idx === op.shape - 1; });
         if (!shapeInCtxA) { bad("shape " + op.shape + " not in the context list for slide " + op.slide); return; }
         if (typeof op.description !== "string" || !op.description.trim()) { bad("alt text needs a description"); return; }
         out.slide = op.slide; out.shape = op.shape; out.description = op.description.trim().slice(0, 500);
@@ -1703,8 +1703,8 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
 
   function fmtOp(op, ctx) {
     var slideTitle = function (sl) {
-      if (!ctx || !ctx.slides[sl]) return "";
-      var t = ctx.slides[sl].title;
+      if (!ctx || !ctx.slides[sl - 1]) return "";
+      var t = ctx.slides[sl - 1].title;
       return t ? ' "' + t + '"' : "";
     };
     switch (op.type) {
@@ -1776,12 +1776,12 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
   function applyOps(deck, ops, ctx) {
     var lines = [], manualNotes = [], shift = 0;
     var runOne = function (op) {
-      var cur = op.slide !== undefined ? op.slide - shift : undefined;
+      var cur = op.slide !== undefined ? op.slide - 1 - shift : undefined;
       switch (op.type) {
         case "create_slide":
           return deck.addSlide({ layout: op.layout, title: op.title, body: op.body }).then(function (r) {
             var note = "";
-            if (!SK.sim && ctx && op.after != null && op.after < ctx.slideCount - 1) {
+            if (!SK.sim && ctx && op.after != null && op.after <= ctx.slideCount - 1) {
               note = " (requested position not supported - appended at end)";
             }
             lines.push({ ok: true, text: "create slide -> appended at index " + r.index + note });
@@ -1819,7 +1819,7 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
           return chain;
         }
         case "replace_text":
-          return deck.setShapeText(cur, op.shape, op.text).then(function () {
+          return deck.setShapeText(cur, op.shape - 1, op.text).then(function () {
             lines.push({ ok: true, text: "replace text on slide " + op.slide + " shape " + op.shape });
           });
         case "create_table": {
@@ -1836,7 +1836,7 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
           });
         }
         case "move_shape":
-          return deck.moveShape(cur, op.shape, op.geometry || {}).then(function () {
+          return deck.moveShape(cur, op.shape - 1, op.geometry || {}).then(function () {
             lines.push({ ok: true, text: "move shape " + op.shape + " on slide " + op.slide + ": " +
               Object.keys(op.geometry || {}).map(function (p) { return p + "->" + Math.round(op.geometry[p]); }).join(" ") });
           });
@@ -1884,21 +1884,21 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
           });
         }
         case "add_hyperlink":
-          return deck.addHyperlink(cur, op.shape, op.url, op.tip).then(function () {
+          return deck.addHyperlink(cur, op.shape - 1, op.url, op.tip).then(function () {
             lines.push({ ok: true, text: "hyperlink added on slide " + op.slide + ", shape " + op.shape });
           });
         case "set_alt_text":
-          return deck.setAltText(cur, op.shape, op.description, op.title).then(function () {
+          return deck.setAltText(cur, op.shape - 1, op.description, op.title).then(function () {
             lines.push({ ok: true, text: "alt text set on slide " + op.slide + ", shape " + op.shape });
           });
         case "format_text": {
           if (op.find) {
-            return deck.formatTextSubstring(cur, op.shape, op.find, op.font).then(function () {
+            return deck.formatTextSubstring(cur, op.shape - 1, op.find, op.font).then(function () {
               lines.push({ ok: true, text: "format slide " + op.slide + " shape " + op.shape +
                 " (" + op.find + "): " + Object.keys(op.font).join(", ") });
             });
           }
-          return deck.formatText(cur, op.shape, op.font).then(function () {
+          return deck.formatText(cur, op.shape - 1, op.font).then(function () {
             lines.push({ ok: true, text: "format slide " + op.slide + " shape " + op.shape + ": " +
               Object.keys(op.font).join(", ") });
           });
@@ -1928,7 +1928,7 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
           ]).then(function (img) {
             if (!img || !img.b64) throw new FriendlyError("server returned no image data");
             return deck.addImage({ b64: img.b64, slide: cur, geometry: op.geometry }).then(function (ri) {
-              var note = !SK.sim && op.slide != null && ctx && op.slide !== ctx.activeSlide
+              var note = !SK.sim && op.slide != null && ctx && op.slide - 1 !== ctx.activeSlide
                 ? " (targeting the slide you have open in PowerPoint; requested slide " + op.slide + ")" : "";
               lines.push({ ok: true, text: "image inserted (" + imgRef.connection + ":" + imgRef.model + ")" + note });
             });
@@ -1969,27 +1969,29 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
   // ------------------------------------------------------------------ //
   function formatContext(ctx) {
     var lines = [];
-    var sel = ctx.selected && ctx.selected.length ? " (zero-based, * = selected: " + ctx.selected.join(",") + ")" : "";
+    var sel = ctx.selected && ctx.selected.length ? " (slides are numbered 1..N; * = selected: " +
+      ctx.selected.map(function (x) { return x + 1; }).join(",") + ")" : "";
     lines.push("DECK OUTLINE: " + ctx.slideCount + " slides" + sel + (ctx.truncated ? " (only the first slides are listed)" : "") + ", host: " + ctx.host);
     if (ctx.selection && (ctx.selection.shapes.length || ctx.selection.textPreview || ctx.selection.slides.length)) {
       var selBits = [];
-      if (ctx.selection.slides.length) selBits.push("slides " + ctx.selection.slides.join(","));
+      if (ctx.selection.slides.length) selBits.push("slides " + ctx.selection.slides.map(function (x) { return x + 1; }).join(","));
       if (ctx.selection.shapes.length)
-        selBits.push("shapes " + ctx.selection.shapes.map(function (x) { return x.slide + "." + x.shape; }).join(","));
+        selBits.push("shapes " + ctx.selection.shapes.map(function (x) { return (x.slide + 1) + "." + (x.shape + 1); }).join(","));
       if (ctx.selection.textPreview) selBits.push("selected text: \"" + ctx.selection.textPreview + "\"");
       if (selBits.length) lines.push("SELECTION: " + selBits.join(" | "));
     }
     ctx.slides.forEach(function (s) {
       var star = ctx.selected && ctx.selected.indexOf(s.idx) >= 0 ? "*" : "";
       var title = (s.shapes || []).filter(function (sh) { return sh.isTitle || (sh.text && /title/i.test(sh.name)); })[0];
-      lines.push("[" + s.idx + star + "] " + (title && title.text ? 'TITLE: "' + title.text + '"' : "(no title)"));
+      lines.push("[" + (s.idx + 1) + star + "] " + (title && title.text ? 'TITLE: "' + title.text + '"' : "(no title)"));
       (s.shapes || []).forEach(function (sh) {
         if (sh.text == null) return;
+        // shapes are numbered from 1 in the outline listing below
         var role = sh.isTitle || (title && sh.idx === title.idx) ? "title" : sh.isBody ? "body" : "text";
         var txt = String(sh.text).replace(/\r|\n/g, " | ");
         if (txt.length > 220) txt = txt.slice(0, 220) + "…";
         if (!txt.trim()) return;
-        lines.push("    shape " + sh.idx + " (" + role + ", " + sh.name + '): "' + txt + '"');
+        lines.push("    shape " + (sh.idx + 1) + " (" + role + ", " + sh.name + '): "' + txt + '"');
       });
     });
     var total = lines.join("\n");

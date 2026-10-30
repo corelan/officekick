@@ -216,10 +216,12 @@ window.__SK_SIM__ = true;
     async setSlideTitle(i, text) {
       const sh = this._shapeByRole(i, true);
       sh.text = String(text);
+      slides[i].title = String(text);   // keep the convenience field in sync for the view
     }
     async setSlideBody(i, lines) {
       const sh = this._shapeByRole(i, false);
       sh.text = Array.isArray(lines) ? lines.join("\n") : String(lines);
+      slides[i].body = Array.isArray(lines) ? lines : String(lines).split("\n");
     }
     async setShapeText(i, shapeIdx, text) {
       if (!slides[i]) throw new FriendlyError("Slide " + i + " does not exist");
@@ -262,7 +264,7 @@ window.__SK_SIM__ = true;
             .join("");
           return (
             '<div class="sim-slide"><span class="lay">' + esc(s.layout) + "</span>" +
-            '<span class="idx">[' + i + ']</span><span class="t">' + esc(s.title) + "</span>" +
+            '<span class="idx">[' + (i + 1) + ']</span><span class="t">' + esc(s.title) + "</span>" +
             (bullets ? "<ul>" + bullets + "</ul>" : "") +
             (s.notes ? '<div class="notes">notes: ' + esc(s.notes) + "</div>" : "") +
             "</div>"

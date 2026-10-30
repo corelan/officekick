@@ -331,7 +331,7 @@
     '- {"type":"replace_text","find":"exact text","replace":"new text","all":true} (all matches by default)',
     '- {"type":"create_table","values":[["h1","h2"],["a","b"]]} (inserted at the end of the document)',
     '- {"type":"insert_comment","find":"exact anchor text","text":"comment"} (comments need WordApi 1.4)',
-    '- {"type":"delete_paragraph","para":N} (zero-based indices from the outline - never invent them)',
+    '- {"type":"delete_paragraph","para":N} (para = the paragraph number shown in the outline; 1 = the first paragraph - never invent them)',
     '- {"type":"rewrite_doc","items":[{"text":"...","style":"..."}]} (DESTROYS the current body - only when explicitly asked for a full rewrite)',
     '- {"type":"create_template","title":"Template name","fields":[{"label":"Field label","type":"text|dropdown|checkbox|date","options":["only for dropdown"]}]} (appends a titled template block with fillable controls; use when the user asks for a template/form/template block; dropdown needs an options array)',
     '- {"type":"insert_image","prompt":"detailed image description"} (generate a picture from the description and insert it at the end of the document; only when the user asks for a picture/image/illustration/logo)',
@@ -339,7 +339,7 @@
     '- to format only PART of a paragraph, add "find":"exact words appearing in that paragraph" (all matches within the paragraph are formatted; e.g. {"type":"format_text","para":N,"find":"AI","font":{"bold":true}})',
     "",
     "Rules:",
-    "- Paragraph indices are zero-based and MUST come from the outline below.",
+    "- Paragraph numbers are 1-based (para 1 = the first paragraph) and MUST come from the outline below. If the user says \"the 3rd paragraph\", that is para 3. Never invent them.",
     "- Rewrite/improve requests: keep the meaning and structure; reword only.",
     "- If the request is a question/explanation/brainstorm rather than a document change, use format A.",
     "- Image requests: always return an insert_image op (never generate the picture inline); DocKick fetches it with the user's configured image model. Include a concrete, self-contained prompt in the op.",
@@ -1019,7 +1019,7 @@
   }
 
   function slideOkF(idx, ctx) {
-    return typeof idx === "number" && ctx && ctx.paragraphs && ctx.paragraphs[idx];
+    return typeof idx === "number" && ctx && ctx.paragraphs && ctx.paragraphs[idx - 1];
   }
 function validateOps(rawOps, ctx) {
     var ops = [], invalid = [];
@@ -1032,7 +1032,7 @@ function validateOps(rawOps, ctx) {
         return;
       }
       var bad = function (reason) { invalid.push({ op: op, reason: reason }); };
-      var paraOk = function (v) { return typeof v === "number" && Math.floor(v) === v && v >= 0 && (!ctx || v < ctx.paragraphCount); };
+      var paraOk = function (v) { return typeof v === "number" && Math.floor(v) === v && v >= 1 && (!ctx || v <= ctx.paragraphCount); };
       var out = { type: t };
       if (t === "insert_paragraphs") {
         var items = Array.isArray(op.items) ? op.items : null;
@@ -1117,7 +1117,7 @@ function validateOps(rawOps, ctx) {
         out.para = op.para; out.font = fontW;
         if (typeof op.find === "string" && op.find.trim()) {
           var findW = op.find.trim().slice(0, 200);
-          var paraTxtW = (ctx.paragraphs[op.para] || {}).text || "";
+          var paraTxtW = (ctx.paragraphs[op.para - 1] || {}).text || "";
           if (paraTxtW.toLowerCase().indexOf(findW.toLowerCase()) === -1) { bad("find text not found in that paragraph"); return; }
           out.find = findW;
         }
@@ -1133,7 +1133,7 @@ function validateOps(rawOps, ctx) {
 
   function fmtOp(op, ctx) {
     var paraRef = function (i) {
-      if (!ctx || !ctx.paragraphs || !ctx.paragraphs[i]) return "";
+      if (!ctx || !ctx.paragraphs || !ctx.paragraphs[i - 1]) return "";
       var t = ctx.paragraphs[i].text;
       return t ? ' "' + String(t).slice(0, 60) + '"' : "";
     };
@@ -1197,7 +1197,7 @@ function applyOps(deck, ops, ctx) {
             lines.push({ ok: true, text: "insert " + op.items.length + " paragraph(s) -> end of document" });
           });
         case "edit_paragraph":
-          return deck.editParagraph(adj(op.para), op.text).then(function () {
+          return deck.editParagraph(adj(op.para - 1), op.text).then(function () {
             lines.push({ ok: true, text: "paragraph " + op.para + " edited" });
           });
         case "replace_text":
@@ -1220,9 +1220,9 @@ function applyOps(deck, ops, ctx) {
             }
           });
         case "delete_paragraph":
-          var i2 = adj(op.para);
+          var i2 = adj(op.para - 1);
           return deck.deleteParagraph(i2).then(function () {
-            deleted.push(op.para);
+            deleted.push(op.para - 1);
             lines.push({ ok: true, text: "paragraph " + op.para + " deleted" });
           });
         case "rewrite_doc":
@@ -1231,12 +1231,12 @@ function applyOps(deck, ops, ctx) {
           });
         case "format_text": {
           if (op.find) {
-            return deck.formatTextFind(adj(op.para), op.find, op.font).then(function () {
+            return deck.formatTextFind(adj(op.para - 1), op.find, op.font).then(function () {
               lines.push({ ok: true, text: "format paragraph " + op.para + " (" + op.find + "): " +
                 Object.keys(op.font).join(", ") });
             });
           }
-          return deck.formatText(adj(op.para), op.font).then(function () {
+          return deck.formatText(adj(op.para - 1), op.font).then(function () {
             lines.push({ ok: true, text: "format paragraph " + op.para + ": " + Object.keys(op.font).join(", ") });
           });
         }
@@ -1307,7 +1307,7 @@ function applyOps(deck, ops, ctx) {
       var t = String(p.text || "").replace(/\r|\n/g, " ");
       if (t.length > 180) t = t.slice(0, 180) + "…";
       if (!t.trim()) return;
-      lines.push("    para " + p.idx + " (" + p.style + '): "' + t + '"');
+      lines.push("    para " + (p.idx + 1) + " (" + p.style + '): "' + t + '"');
     });
     (ctx.tables || []).forEach(function (t) {
       lines.push("    table " + (t.idx + 1) + ": " +

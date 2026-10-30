@@ -1,4 +1,17 @@
 # Changelog
+## [0.4.0] - 2026-10-30
+### Changed (protocol: human numbering)
+- **Slide and shape numbers in SlideKick ops are now 1-based** ("slide 2" and
+  "shape 2" = the second slide/shape, exactly what a human means; previously
+  they were zero-based - the model passed your number through and "slide 2"
+  edited the third slide). The deck outline, the selection report and the
+  simulator view number everything 1..N; the deck-adapter boundary converts
+  back to zero-based internally.
+- **Paragraph numbers in DocKick ops are now 1-based** for the same reason
+  (previously zero-based; tables were already 1-based - inconsistent).
+- Word tables and the MailKick batch list were already human-numbered; no
+  indexed ops exist in MailKick.
+
 ## [0.3.6] - 2026-10-30
 ### Fixed / added
 - Sessions tab: clicking a session name expands/collapses a preview of the

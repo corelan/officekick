@@ -151,8 +151,14 @@
       rows.push('<div class="opnote">' + paras.length + " paragraphs - " + tables.length +
         " table(s) - " + comments.length + " comment(s)</div>");
       paras.forEach(function (p, i) {
-        rows.push('<div class="simrow"><b>[' + i + "]</b> <i>" + esc(p.style) + "</i> " +
-          esc(String(p.text).slice(0, 120)) + "</div>");
+        var fontMark = "";
+        if (p.font && Object.keys(p.font).length) {
+          fontMark = " <u>[font: " + Object.keys(p.font).map(function (k2) { return k2 + "=" + p.font[k2]; }).join(", ") + "]";
+          if (p.fontRuns && p.fontRuns.length) fontMark += " runs:" + p.fontRuns.length;
+          fontMark += "</u>";
+        }
+        rows.push('<div class="simrow"><b>[' + (i + 1) + "]</b> <i>" + esc(p.style) + "</i> " +
+          esc(String(p.text).slice(0, 120)) + fontMark + "</div>");
       });
       tables.forEach(function (t, i) {
         rows.push('<div class="simrow"><b>table ' + (i + 1) + "</b>: " +
@@ -167,6 +173,7 @@
   // constructor that returns the singleton (boot does `new window.SimDeck()`)
   window.SimDeck = function () { return SimAPI; };
   window.SimAPI = SimAPI;
+  window.__DK_GET = function () { return paras; };
   window.__DOCKICK_SIM__ = true;
   window.__SK_SIM__ = true;  // the shared pane boot checks this flag
   window.__SimData = { paras: function () { return paras; }, tables: function () { return tables; }, comments: function () { return comments; } };
