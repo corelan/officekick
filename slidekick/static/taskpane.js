@@ -12,6 +12,7 @@
   var $ = function (id) { return document.getElementById(id); };
 
   var SK = {
+    profImageFilter: true,
     sim: false,
     deck: null,
     cfg: null,
@@ -1725,19 +1726,22 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
     sel.innerHTML = opts.join("");
   }
 
-  function modelsCacheGet(connName, force) {
-    var cached = SK.modelsCache[connName];
+  function modelsCacheGet(connName, force, capability) {
+    var key = connName + (capability ? "::" + capability : "");
+    var cached = SK.modelsCache[key];
     if (cached && !force && Date.now() - cached.at < 5 * 60 * 1000 && cached.list.length) {
       return Promise.resolve(cached.list);
     }
-    return apiJson("/api/models?connection=" + encodeURIComponent(connName), "GET").then(function (res) {
+    var url = "/api/models?connection=" + encodeURIComponent(connName) +
+      (capability ? "&capability=" + encodeURIComponent(capability) : "");
+    return apiJson(url, "GET").then(function (res) {
       var list = (res.models || []).map(String);
-      SK.modelsCache[connName] = { list: list, at: Date.now(), source: res.source };
+      SK.modelsCache[key] = { list: list, at: Date.now(), source: res.source };
       return list;
     });
   }
 
-  function populateModelSelect(slot, connName, prefer) {
+  function populateModelSelect(slot, connName, prefer, capability) {
     var sel = $(slot + "-conn") && $(slot + "-model");
     var modelSel = $(slot + "-model");
     var custom = $(slot + "-custom");
@@ -1747,7 +1751,7 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
       modelSel.innerHTML = '<option value="">(choose a connection first)</option>';
       return Promise.resolve();
     }
-    return modelsCacheGet(connName).then(function (list) {
+    return modelsCacheGet(connName, false, capability).then(function (list) {
       modelSel.innerHTML = "";
       var sorted = list.slice().sort(function (a, b) {
         var la = String(a || "").toLowerCase(), lb = String(b || "").toLowerCase();
@@ -1784,7 +1788,7 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
     populateModelSelect("prof-other", p.other && p.other.connection, p.other && p.other.model);
     SK.editingProfImage = p.image || null;
     fillConnSelect($("prof-image-conn"), p.image && p.image.connection);
-    populateModelSelect("prof-image", p.image && p.image.connection, p.image && p.image.model);
+    populateModelSelect("prof-image", p.image && p.image.connection, p.image && p.image.model, SK.profImageFilter ? "image" : null);
     setFormMsg($("prof-formmsg"), "", true);
   }
 
@@ -2022,13 +2026,25 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
         var slot = "prof-" + btn.dataset.refresh;
         var connName = $(slot + "-conn").value;
         if (!connName) return;
-        delete SK.modelsCache[connName];
-        populateModelSelect(slot, connName, $(slot + "-model").value);
+        var isImage = slot.indexOf("-image") > 0;
+        var cap = isImage && SK.profImageFilter ? "image" : null;
+        delete SK.modelsCache[connName + (cap ? "::image" : "")];
+        populateModelSelect(slot, connName, $(slot + "-model").value, cap);
       });
+    });
+    $("prof-image-toggle").addEventListener("click", function () {
+      SK.profImageFilter = !SK.profImageFilter;
+      $("prof-image-toggle").textContent = SK.profImageFilter ? "image-capable only" : "show all models";
+      var connName = $("prof-image-conn").value;
+      if (connName) {
+        delete SK.modelsCache[connName + (SK.profImageFilter ? "::image" : "")];
+        populateModelSelect("prof-image", connName, "", SK.profImageFilter ? "image" : null);
+      }
     });
     ["content", "other", "image"].forEach(function (slot) {
       $("prof-" + slot + "-conn").addEventListener("change", function () {
-        populateModelSelect("prof-" + slot, $("prof-" + slot + "-conn").value, "");
+        populateModelSelect("prof-" + slot, $("prof-" + slot + "-conn").value, "",
+          slot === "image" && SK.profImageFilter ? "image" : null);
       });
       $("prof-" + slot + "-model").addEventListener("change", function () {
         var isCustom = $("prof-" + slot + "-model").value === "__custom__";

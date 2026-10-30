@@ -109,6 +109,9 @@ actual pixels from a provider with an OpenAI-style images API, and inserts them
 
 - Image models live in the profile: the optional third slot **Image model**
   (connection + model - e.g. OpenAI with `gpt-image-1`).
+- The Image model list shows **image-capable only** (via the provider's own
+  metadata on OpenRouter; name heuristics elsewhere). Toggle "show all models"
+  if your image model isn't detected; a custom model id is always available.
 - Generation support: openai and generic-openai servers that implement the
   images route; openrouter works only if the endpoint implements it;
   anthropic / ollama / llama.cpp cannot generate images.

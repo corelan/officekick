@@ -96,6 +96,19 @@ def make_handler(flavor):
                 self._json({"data": [{"id": m} for m in DEFAULT_MODELS]})
             elif flavor == "ollama" and self.path == "/api/tags":
                 self._json({"models": [{"name": m} for m in DEFAULT_MODELS]})
+            elif flavor == "openrouter" and self.path.rstrip("/") == "/v1/models":
+                # realistic openrouter shapes: metadata-driven image filtering
+                self._json({"data": [
+                    {"id": "openai/gpt-x", "architecture": {"output_modalities": ["text"]}},
+                    {"id": "openai/gpt-image-x", "architecture": {"output_modalities": ["image", "text"]}},
+                    {"id": "bytedance-seed/seedream-4.5", "architecture": {"output_modalities": ["image"]}},
+                    {"id": "textonly/model"},
+                ]})
+            elif flavor == "openrouter" and (self.path.rstrip("/").endswith("/v1/images")
+                                              or self.path.rstrip("/").endswith("/images")):
+                self._json({"created": 0, "data": [{
+                    "b64_json": TINY_PNG, "media_type": "image/png",
+                    "revised_prompt": str((STATE.last_request or {}).get("prompt", ""))[:120]}]})
             else:
                 self._json({"error": {"message": "not found: %s" % self.path}}, 404)
 
@@ -114,7 +127,7 @@ def make_handler(flavor):
                 reply = json.dumps(req)
             else:
                 reply = STATE.reply
-            if flavor in ("openai", "llamacpp") and self.path in ("/v1/chat/completions", "/chat/completions"):
+            if flavor in ("openai", "llamacpp", "openrouter") and self.path in ("/v1/chat/completions", "/chat/completions"):
                 self._json({"choices": [{"message": {"role": "assistant", "content": reply}}]})
             elif flavor == "anthropic" and self.path == "/v1/messages":
                 self._json({"content": [{"type": "text", "text": reply}]})
@@ -136,7 +149,7 @@ def main():
     parser = argparse.ArgumentParser(description="Mock AI provider for SlideKick tests")
     parser.add_argument("--port", type=int, default=8901)
     parser.add_argument("--flavor", default="openai",
-                        choices=["openai", "anthropic", "ollama"])
+                        choices=["openai", "anthropic", "ollama", "openrouter"])
     parser.add_argument("--reply-file")
     parser.add_argument("--echo-request", action="store_true")
     parser.add_argument("--fail-models", action="store_true")

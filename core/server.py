@@ -400,7 +400,10 @@ def provider_generate_image(conn, model, prompt, size=None):
     # openrouter's dedicated image API lives at {base}/images (response shape is
     # the OpenAI-style {"data":[{"b64_json"...}]}) - try it first there.
     if conn["type"] == "openrouter":
-        urls = [base + "/images", base + "/images/generations"]
+        urls = [base + "/images"]
+        if not base.endswith("/v1"):
+            urls.append(base + "/v1/images")
+        urls.append(base + "/images/generations")
     elif "/v1" in base:
         urls = [base + "/images/generations"]
     else:
@@ -538,17 +541,36 @@ def conn_headers(conn):
     return h
 
 
-def _parse_openai_models(data):
-    models = []
+IMAGE_MODEL_NAME_HINTS = (
+    "image", "imagen", "seedream", "dall", "flux", "banana", "recraft",
+    "ideogram", "kolors", "stable-diffusion", "sdxl", "sd3", "playground",
+)
+
+
+def _model_is_image_capable(entry):
+    """True for text->image models; prefers provider metadata (openrouter's
+    architecture.output_modalities), falls back to id heuristics."""
+    if not isinstance(entry, dict):
+        return False
+    ident = str(entry.get("id") or entry.get("name") or "")
+    arch = entry.get("architecture") or {}
+    outs = arch.get("output_modalities") or []
+    if outs:
+        return "image" in [str(x).lower() for x in outs]
+    return any(h in ident.lower() for h in IMAGE_MODEL_NAME_HINTS)
+
+
+def _parse_openai_models_raw(data):
+    """OpenAI-style /models entries kept whole (metadata needed for filtering)."""
     if isinstance(data, dict) and isinstance(data.get("data"), list):
-        for m in data["data"]:
-            if isinstance(m, dict) and m.get("id"):
-                models.append(str(m["id"]))
-    elif isinstance(data, list):
-        for m in data:
-            if isinstance(m, dict) and m.get("id"):
-                models.append(str(m["id"]))
-    return models
+        return [m for m in data["data"] if isinstance(m, dict) and m.get("id")]
+    if isinstance(data, list):
+        return [m for m in data if isinstance(m, dict) and m.get("id")]
+    return []
+
+
+def _parse_openai_models(data):
+    return [str(m["id"]) for m in _parse_openai_models_raw(data)]
 
 
 def _dedupe(seq):
@@ -559,6 +581,51 @@ def _dedupe(seq):
             seen.add(item)
             out.append(item)
     return out
+
+
+def filter_image_models(store, conn_name):
+    conn = store.find_connection(conn_name)
+    if conn is None:
+        raise ApiError(404, "Unknown connection: %r" % (conn_name,))
+    t, base, headers = conn["type"], normalize_base(conn), conn_headers(conn)
+    try:
+        if t == "openrouter":
+            raw = []
+            for murl in (base + "/models", base + "/v1/models"):
+                try:
+                    raw = _parse_openai_models_raw(
+                        http_request(murl, headers=headers, timeout=30))
+                    if raw:
+                        break
+                except ApiError:
+                    continue
+            out = [m["id"] for m in raw if _model_is_image_capable(m)]
+            if out:
+                return out
+            # metadata missing -> same list but by-name
+            ids = _parse_openai_models({"data": raw})
+            return [i for i in ids if any(h in i.lower() for h in IMAGE_MODEL_NAME_HINTS)]
+        if t == "ollama":
+            data = http_request(base + "/api/tags", headers=headers, timeout=30)
+            out = [str(m.get("name") or m.get("model") or "")
+                   for m in (data.get("models") or []) if isinstance(m, dict)]
+        elif t == "anthropic":
+            out = []  # anthropic cannot generate images
+        else:
+            raw = []
+            for url in (base + "/v1/models", base + "/models"):
+                try:
+                    raw = _parse_openai_models_raw(http_request(url, headers=headers, timeout=30))
+                    if raw:
+                        break
+                except ApiError:
+                    continue
+            out = [str(m["id"]) for m in raw if _model_is_image_capable(m)]
+        return [i for i in out if i and any(h in i.lower() for h in IMAGE_MODEL_NAME_HINTS)]
+    except ApiError:
+        raise
+    except Exception as exc:
+        raise ApiError(502, "could not list models: %s" % exc)
 
 
 def provider_list_models(store, conn_name, store_for_log=True):
@@ -611,7 +678,7 @@ def provider_list_models_conn(conn, store=None):
                 pass
     else:  # openai / generic-openai / openrouter
         urls = [base + "/models"]
-        if t == "generic-openai" and not base.endswith("/v1"):
+        if t in ("generic-openai", "openrouter") and not base.endswith("/v1"):
             urls.append(base + "/v1/models")
         last_error = None
         for url in urls:
@@ -998,7 +1065,12 @@ class SlideKickHandler(BaseHTTPRequestHandler):
                 self._send_json(pub)
             elif path == "/api/models":
                 conn = (query.get("connection") or [""])[0]
-                self._send_json(provider_list_models(self.store, conn))
+                caps = (query.get("capability") or [""])[0]
+                resp = provider_list_models(self.store, conn)
+                if caps == "image":
+                    resp = dict(resp)
+                    resp["models"] = filter_image_models(self.store, conn)
+                self._send_json(resp)
             elif path.startswith("/api/"):
                 self._error(404, "Unknown API endpoint: %s" % path)
             else:
