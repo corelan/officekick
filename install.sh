@@ -583,20 +583,16 @@ do_install() {
     else
       warn "Microsoft Outlook not found - MailKick manifest rendered anyway (it sideloads via the Outlook dialog anytime)"
     fi
-    # best-effort: some Outlook-Mac builds pick up the wef folder like the
-    # other apps; if it does not show up (or vanishes), use the dialog below.
+    # the right folder for Outlook-Mac add-ins: its container wef documents folder
     local o_container="$HOME/Library/Containers/com.microsoft.Outlook/Data/Documents/wef"
     mkdir -p "$o_container" 2>/dev/null && \
       cp "$INSTALL_DIR/manifest/$OUTLOOK_MANIFEST_NAME" "$o_container/$OUTLOOK_MANIFEST_NAME" 2>/dev/null && \
-      ok "manifest staged into the Outlook container (may or may not be honored): $o_container/"
-    say "MailKick sideload step (Outlook-Mac has no wef-folder sideload):"
-    say "   1) open https://aka.ms/olksideload (Outlook on the web Add-Ins dialog)"
-    say "   2) My add-ins -> Custom Addins -> Add a custom add-in -> Add from File"
-    cp "$INSTALL_DIR/manifest/$OUTLOOK_MANIFEST_NAME" "$HOME/Downloads/$OUTLOOK_MANIFEST_NAME" 2>/dev/null
-    say "   3) choose: $HOME/Downloads/$OUTLOOK_MANIFEST_NAME (a visible copy of the hidden one:
-       $INSTALL_DIR/manifest/$OUTLOOK_MANIFEST_NAME - ~/Library is invisible in file pickers;
-       use Cmd+Shift+G and paste the full path if you prefer the original)"
-    say "   (Windows: the same trusted catalog as SlideKick/DocKick installs it automatically)"
+      ok "MailKick manifest placed in Outlook's add-in folder: $o_container/"
+    say "  if Outlook does not show the add-in after a restart, sideload it once via the dialog:"
+    say "     Outlook -> Get Add-ins (or the ellipsis overflow) -> My add-ins ->"
+    say "     Custom Addins -> Add a custom add-in -> Add from File, then press"
+    say "     Cmd+Shift+G and paste: $o_container/$OUTLOOK_MANIFEST_NAME"
+    say "  (Windows: the same trusted catalog as SlideKick/DocKick installs it automatically)"
   else
     warn "MailKick not built yet - skipping Outlook"
   fi
@@ -694,9 +690,9 @@ PYPLIST
     say "  1. Outlook-Mac has no silent sideload:"
     say "     Outlook -> Get Add-ins (or the \u2026 overflow in the ribbon)"
     say "  2. My add-ins -> Custom Addins -> Add a custom add-in -> Add from File"
-    say "  3. pick:  ~/Downloads/mailkick.xml   (a visible copy of
-     ~/Library/Application Support/OfficeKick/manifest/mailkick.xml --
-     reach the hidden folder in any picker with Cmd+Shift+G + paste the path)"
+    say "  3. if it is not listed: Add a custom add-in -> Add from File, then
+         press Cmd+Shift+G and paste:
+         ~/Library/Containers/com.microsoft.Outlook/Data/Documents/wef/mailkick.xml"
     say "  4. select a message (or open one to compose) -> the Corelan MailKick icon"
     say "     (profiles/connections are shared; MailKick never sends mail automatically)"
   fi
@@ -738,7 +734,6 @@ do_uninstall() {
       grep -q "$OUTLOOK_GUID" "$f" 2>/dev/null && rm -f "$f" && removed=1
     done
   fi
-  rm -f "$HOME/Downloads/mailkick.xml"
   [[ "$removed" == "1" ]] && ok "manifests removed from Office container(s)"
   if pgrep -f "$INSTALL_DIR/server.py" >/dev/null 2>&1; then
     pkill -f "OfficeKick/server.py" 2>/dev/null && ok "server stopped" || warn "could not stop server process"

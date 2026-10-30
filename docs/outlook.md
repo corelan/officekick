@@ -23,11 +23,13 @@ rejected up front (e.g. `compose_body` on a received message).
 ## Install (macOS)
 `./install.sh` renders the manifest; Outlook-Mac cannot be sideloaded from the
 wef folder, so one manual step: open **https://aka.ms/olksideload**, go to
-**My add-ins -> Custom Addins -> Add a custom add-in -> Add from File**, and pick
-`~/Downloads/mailkick.xml` (the installer keeps a visible copy there; the original
-lives in the hidden `~/Library/Application Support/OfficeKick/manifest/` - use
-Cmd+Shift+G to reach it in a picker). The add-in then
-appears on message windows (desktop + mobile via the mailbox sync).
+The installer places the manifest in Outlook's add-in folder:
+`~/Library/Containers/com.microsoft.Outlook/Data/Documents/wef/mailkick.xml`.
+Quit and reopen Outlook; the **Corelan MailKick** icon appears on messages.
+If your build does not read the folder, sideload once via the dialog:
+**Get Add-ins -> My add-ins -> Custom Addins -> Add a custom add-in -> Add from
+File**, press **Cmd+Shift+G** and paste the path above. The add-in then appears
+on message windows (desktop + mobile via the mailbox sync).
 **Windows**: `install.ps1` writes it into the same trusted catalog as the other
 add-ins - no manual step.
 
