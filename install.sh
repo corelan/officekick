@@ -110,11 +110,18 @@ PYEOF
 
 resolve_containers() {
   CONTAINER_PATHS=()
-  local base="$HOME/Library/Containers" d
+  local base="$HOME/Library/Containers" d ino seen="|"
   if [[ -d "$base" ]]; then
     for d in "$base""/com.microsoft.Powerpoint" "$base""/com.microsoft.powerpoint" \
              "$base""/com.microsoft.PowerPoint"; do
-      [[ -d "$d" ]] && CONTAINER_PATHS+=("$d")
+      [[ -d "$d" ]] || continue
+      # APFS is case-insensitive: all case spellings resolve to the SAME folder -
+      # dedupe by inode so each real container is handled exactly once
+      ino="$(stat -f '%i' "$d" 2>/dev/null)" || continue
+      case "$seen" in
+        *"|$ino|"*) ;;               # already collected (same dir, other casing)
+        *) seen="$seen$ino|"; CONTAINER_PATHS+=("$d") ;;
+      esac
     done
   fi
   if [[ ${#CONTAINER_PATHS[@]} -eq 0 ]]; then
