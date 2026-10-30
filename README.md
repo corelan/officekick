@@ -1,0 +1,209 @@
+# SlideKick
+
+An AI assistant add-in for **Microsoft PowerPoint on macOS**. Type what you want -
+`reword the current slide`, `make 4 slides about threat hunting`, `add speaker notes to
+this deck` - and SlideKick reads your deck, routes the request to the model you chose,
+and applies the changes in PowerPoint **after** the per-action approval policy allows it.
+
+You pick your own AI provider and models. Nothing goes through a third-party service:
+SlideKick talks to the providers *you* configure, from a small local server on your own
+machine.
+
+```
++------------------+        +---------------------------+      +--------------------+
+| PowerPoint (Mac) |        | SlideKick local server    |      | Your AI providers  |
+| add-in (Office.js| -----> | 127.0.0.1:8765            | ---> | OpenAI / Anthropic |
+| task pane)       |        | - serves the task pane UI |      | OpenRouter         |
+|                  |        | - stores connections,     |      | OpenAI-compatible  |
+| applies slide    |        |   profiles, approval      |      | (LM Studio, vLLM,  |
+| operations via   |        |   policy, debug logs      |      |  llama-server, ...)|
+| Office.js        |        | - proxies AI calls        |      | Ollama             |
++------------------+        +---------------------------+      +--------------------+
+```
+
+## Features
+
+- **Free-text instructions** for deck work: reword, restructure, tighten bullets,
+  generate new slides from a topic, write speaker notes, design/layout suggestions.
+- **Your providers, your models**: six connection types - `openai`, `anthropic`,
+  `openrouter`, `generic-openai` (any OpenAI-compatible server), `ollama`, `llamacpp`
+  (llama-server) - each with Name / Base URL / optional API key.
+- **Profiles** pair a *content model* (slide edits & generation) with an
+  *other-actions model* (chat, brainstorming, advice). Model lists are fetched live from
+  each provider.
+- **Per-action approval policy** (Settings): `auto`, `confirm` (must be ticked before
+  Apply) or `deny` per action type. Deleting slides and layout changes require approval
+  by default.
+- **Reasoning-model friendly**: chain-of-thought output (`<think>`, `<think>`, `<thinking>`,
+  `<reason>`, `<reasoning>`, Ollama `thinking` fields, OpenAI-style
+  `reasoning_content`) is stripped; unclear output triggers a hidden
+  "answer in clean JSON" retry that is never shown.
+- **Debug logging** (opt-in): appends AI interactions and deck-edit traces to one
+  appended file per day (`~/.slidekick/logs/debug-YYYY-MM-DD.log`).
+- **Installer**: detects PowerPoint, deploys the add-in, sideloads the manifest and
+  keeps the local server running via LaunchAgent. Re-run to update.
+- **Simulator**: the exact task pane runs in a normal browser against an in-memory deck,
+  for testing without PowerPoint.
+
+## Requirements
+
+- macOS with Microsoft PowerPoint for Mac (Microsoft 365). Slide editing needs
+  PowerPointApi ~1.8 (PowerPoint 16.96 / 2504 or newer - current 365 builds are fine).
+- python3 >= 3.8 (Apple Command Line Tools or Homebrew).
+- An AI provider reachable from your Mac (cloud API or local Ollama/llama-server).
+
+## Install / update
+
+```bash
+git clone https://github.com/corelan/slidekick.git
+cd slidekick
+./install.sh
+```
+
+The installer:
+
+1. checks python3, finds `/Applications/Microsoft PowerPoint.app`,
+2. deploys files to `~/Library/Application Support/SlideKick/`,
+3. renders `src/manifest.template.xml` with the chosen port and copies it to
+   `~/Library/Containers/com.microsoft.Powerpoint/Data/Documents/wef/slidekick.xml`
+   (the documented manual-sideload location; `wef` is created if missing),
+4. installs `~/Library/LaunchAgents/com.corelan.slidekick.plist` (starts the server at
+   login, restarts it on crash) and starts it now,
+5. health-checks `http://127.0.0.1:<port>/api/health`.
+
+Useful flags: `--port N`, `--dev` (serve straight from the repo), `--no-launchagent`,
+`status`, `run` (foreground server), `uninstall [--purge]`.
+
+**Updating**: re-run `./install.sh`. It overwrites the deployed files, replaces the
+manifest, and reloads the LaunchAgent. Your connections/profiles/policy live in
+`~/.slidekick/config.json` and are preserved. Quit and reopen PowerPoint afterwards so
+it re-reads the manifest.
+
+**In PowerPoint**: open a deck, then **Home tab -> Add-ins -> SlideKick**. The task pane
+opens on the right.
+
+## First run
+
+1. **Connections** tab: add a connection.
+
+   | Type | Default Base URL | API key |
+   |---|---|---|
+   | OpenAI (native) | `https://api.openai.com/v1` | required |
+   | Anthropic (native) | `https://api.anthropic.com` | required |
+   | OpenRouter | `https://openrouter.ai/api/v1` | required |
+   | OpenAI-compatible (generic) | *your server* (`http://localhost:1234/v1`, vLLM, LM Studio...) | optional |
+   | Ollama | `http://localhost:11434` | usually empty |
+   | llama.cpp (llama-server) | `http://localhost:8080` | usually empty |
+
+   The Base URL is editable for every type (proxies, Azure-style gateways, ...).
+   "Test connection" lists the models the provider reports.
+
+2. **Profiles** tab: name a profile, then for the *content model* and the
+   *other-actions model* pick a connection -> pick a model from the live list (or type a
+   custom model id). Mark one profile as default.
+
+3. **Chat / Actions** tab: type an instruction and press Run (Cmd+Enter). Quick chips
+   prefill common requests for you.
+
+## Typed instructions, routes and approvals
+
+- The **route** decides which model runs: `auto` sends slide-related requests
+  (reword / create / make slides / notes / bullets...) to the **content model** and
+  everything else to the **other-actions model**; force one with the Route dropdown.
+- With *include deck context* checked, the pane sends a compact outline (slides,
+  shape indices, texts, selection) with your request, so instructions like
+  "reword the current slide" work without naming slide numbers.
+- The model returns a structured action list. SlideKick **validates** every action
+  against the outline (indices, shape references), shows the proposal, and applies it
+  only after the approval policy is satisfied:
+
+  | Action | What it does | Default policy |
+  |---|---|---|
+  | create slide | append a new slide (title + bullets + notes) | auto |
+  | edit slide | replace title / body / notes of an existing slide | auto |
+  | replace text | reword one shape in place (the "reword" path) | auto |
+  | set notes | write speaker notes | auto |
+  | apply layout | switch a slide's layout (design change, text kept) | confirm |
+  | delete slide | remove a slide | confirm |
+  | reply | conversational answer - never touches the deck | n/a |
+
+  Change any of these in **Settings**. `confirm` shows a checkbox per action (unchecked
+  by default), with a *don't ask again this session* option. `deny` blocks the action
+  with a visible notice. The auto-apply checkbox only shortcuts the extra Apply click -
+  it never bypasses the policy.
+
+- Notes that cannot be written automatically on older Office builds fall back to a
+  copy-paste box in the pane.
+
+## Supported requests in real life
+
+- `reword the current slide` - replaces wording, keeps meaning and slide count
+- `make 4 slides about threat hunting` - appends 4 new slides (Office.js can only
+  append; drag them into place if needed)
+- `tighten the bullets on this slide`, `turn this text into a table suggestion` (reply)
+- `add speaker notes to slides 2-5`
+- `suggest 3 design improvements for the current slide` - answer via the other model
+- `set the layout of slide 3 to title only`
+
+## Security & privacy
+
+- The server binds to **127.0.0.1** only. API keys are stored in
+  `~/.slidekick/config.json` (chmod 600) and are never returned by the API nor sent to
+  the pane; they are only attached server-side to outbound provider calls.
+- Slide texts and prompts leave your machine **only** to the provider(s) you configured,
+  directly from the local server.
+- Debug logging (off by default) writes slide content and provider payloads to local
+  disk - keep it off for sensitive decks.
+
+## Troubleshooting
+
+- **Add-in doesn't show in the ribbon** - quit *all* Office apps and reopen PowerPoint;
+  check `install.sh status`; confirm
+  `~/Library/Containers/com.microsoft.Powerpoint/Data/Documents/wef/slidekick.xml`
+  exists; the Office cache can be cleared by quitting Office and removing
+  `~/Library/Containers/com.microsoft.Powerpoint/Data/Library/Caches/*` with care.
+- **"Cannot reach the SlideKick server" in the pane** - `launchctl list | grep slidekick`,
+  then `tail -50 ~/Library/Logs/SlideKick/server.log`, or just re-run `./install.sh`.
+- **401/403 from a provider** - fix the key on the Connections tab (blank key field
+  keeps the stored key).
+- **"lacks the text-editing APIs"** - update Microsoft 365 (need PowerPoint 16.96+).
+- **Model answers arrive as plain text** - the model ignored the JSON contract; with
+  debug logging on, `~/.slidekick/logs/debug-YYYY-MM-DD.log` shows exactly what it sent.
+  Reasoning-wrapped output is cleaned automatically.
+- **Wrong port** - `./install.sh --port 8999` re-renders the manifest and restarts.
+
+## Development
+
+```bash
+./install.sh --dev              # serve straight from the repo (edit + reopen pane)
+python3 tests/test_slidekick_server.py       # server + adapter test suite (16 tests)
+python3 tools/mock_provider.py --flavor openai --port 8901   # mock provider for the UI
+open http://127.0.0.1:8765/simulator.html    # full task pane + in-memory deck, no PowerPoint
+python3 tools/make_icons.py                  # regenerate icon assets
+```
+
+The task pane runs unmodified in the simulator via `sim.js` (same Deck interface the
+Office.js adapter implements), so prompt -> JSON ops -> validation -> approvals ->
+apply is fully testable in a browser.
+
+## Uninstall
+
+```bash
+./install.sh uninstall           # keeps ~/.slidekick config
+./install.sh uninstall --purge   # also wipes config + debug logs
+```
+
+Then quit and reopen PowerPoint.
+
+## Roadmap
+
+- Insert slides at an arbitrary position (blocked on Office.js support; currently append-only)
+- Streaming responses, deck thumbnail preview in the pane
+- Theme/style application, image generation via providers that support it
+- Optional HTTPS for the local server
+
+## License
+
+Licensed by **Corelan Consulting bv** - free to use with attribution, use at your own
+risk, may not be sold or commercialized, modifications must reference the original
+author. See [LICENSE](LICENSE).

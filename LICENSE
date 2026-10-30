@@ -1,0 +1,48 @@
+SlideKick - AI task pane add-in for Microsoft PowerPoint
+Copyright (c) Corelan Consulting bv. All rights reserved.
+
+LICENSE TERMS ("LicenseRef-Corelan-SlideKick-1.0")
+
+1. Free to use, with attribution.
+   You may download, run and use SlideKick free of charge for any lawful purpose,
+   including personal and internal business use and classroom/lab teaching. Any use or
+   redistribution must retain attribution to the original author: Corelan Consulting bv,
+   including the copyright notice above and a link to the original project repository.
+
+2. No warranty: use at your own risk.
+   The software is provided "as is", without warranty of any kind, express or implied,
+   including merchantability, fitness for a particular purpose and non-infringement.
+   The entire risk as to quality and performance of the software is with you. The
+   original author is not liable for any damages arising from use of the software - in
+   particular not for automated modifications to documents or presentations, or for
+   data sent to third-party AI providers under your own configuration.
+
+3. Not for sale / no commercialization.
+   You may not sell, rent, lease, sublicense, bundle into a paid product or service,
+   paywall, or otherwise commercialize SlideKick, in whole or in part. Charging for
+   access to the software itself, or including it in any paid offering, is prohibited.
+   Teaching or training sessions remain allowed only when the software itself is
+   provided to participants free of charge with this license intact.
+
+4. Modifications must reference the original author.
+   You may modify SlideKick and redistribute your modifications free of charge, under
+   the following conditions: (a) the original copyright notice and this license are
+   retained; (b) your distribution explicitly states that the original author is
+   Corelan Consulting bv and links to the original project repository; (c) your changes
+   are clearly described; (d) you may NOT charge for your modified version (see 3);
+   (e) your modified version is licensed under the same terms.
+
+5. Trademarks.
+   No right is granted to use the names "SlideKick", "Corelan", or the marks of
+   Corelan Consulting bv for promotion or endorsement.
+
+6. Third-party components.
+   This software runs against Microsoft Office / Office.js and AI provider APIs that
+   remain governed by their own terms. Nothing in this license transfers any right to
+   those components.
+
+7. Severability & governing law.
+   If any clause is unenforceable in your jurisdiction, the remainder stays in force.
+   This license is governed by Belgian law.
+
+SPDX-License-Identifier: LicenseRef-Corelan-SlideKick-1.0
