@@ -1,4 +1,11 @@
 # Changelog
+## [0.4.1] - 2026-10-30
+### Changed
+- Sessions persist on every request/response pair: the autosave runs
+  immediately when an exchange completes (no 600 ms debounce), and failed
+  requests are kept too as "(failed: <reason>)", so resuming shows what was
+  asked and what went wrong. Verified with a dead provider endpoint.
+
 ## [0.4.0] - 2026-10-30
 ### Changed (protocol: human numbering)
 - **Slide and shape numbers in SlideKick ops are now 1-based** ("slide 2" and

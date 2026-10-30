@@ -698,7 +698,9 @@
   function pushHistory(userText, assistantText) {
     SK.history.push({ role: "user", content: historyCap(userText) });
     SK.history.push({ role: "assistant", content: historyCap(assistantText) });
-    scheduleSaveSession();
+    // persist every request/response immediately - a pane closing right after
+    // an exchange must never lose it (no debounce here)
+    saveSessionNow();
     while (SK.history.length > HISTORY_MAX_EXCHANGES * 2) SK.history.shift();
     updateChatMeta();
     dbg("history.push", { exchanges: Math.floor(SK.history.length / 2) });
@@ -2078,6 +2080,8 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
     }).catch(function (err) {
       var msg = err && err.friendly ? err.message : (err && err.message) || String(err);
       setStatus(msg, "error");
+      // the request left the pane but failed - keep it in the session too
+      pushHistory(instruction, "(failed: " + msg + ")");
     }).then(function () {
       SK.busy = false;
       setRunEnabled(true);
