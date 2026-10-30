@@ -129,6 +129,19 @@ window.__SK_SIM__ = true;
       Object.assign(fakeSelectedFont, font);
       return { ok: true, text: fakeSelectedText };
     }
+    async createShape(slideIndex, op) {
+      const sl = slides[slideIndex];
+      if (!sl) throw new FriendlyError("Slide " + slideIndex + " does not exist");
+      const g = op.geometry || {};
+      sl.shapes.push({
+        idx: sl.shapes.length,
+        name: op.kind,
+        type: op.kind,
+        text: op.kind === "textbox" ? (op.text || "") : undefined,
+        left: g.left, top: g.top, width: g.width, height: g.height,
+      });
+      return { ok: true };
+    }
     async setBackground(slideIndex, payload) {
       const sl = slides[slideIndex];
       if (!sl) throw new FriendlyError("Slide " + slideIndex + " does not exist");

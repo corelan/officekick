@@ -1,4 +1,21 @@
 # Changelog
+## [0.3.5] - 2026-10-30
+### Added / clarified
+- Honest-capability rule in the SlideKick prompt: SmartArt, stock icons and
+  3D models cannot be created through Office.js (no authoring API exists).
+  Existing SmartArt/model3D shapes are still detected in the deck context
+  (ShapeType enum, PowerPointApi 1.4); the model now explains this and offers
+  shape-based alternatives instead of inventing actions.
+
+## [0.3.4] - 2026-10-30
+### Added
+- **create_shape** op (SlideKick): the model can insert text boxes (with text)
+  and geometric shapes (rectangle/ellipse/roundedRectangle/hexagon/diamond/
+  triangle) plus straight lines at a slide-local position. PowerPointApi 1.4
+  (addTextBox/addGeometricShape/addLine) - far more available than the earlier
+  roadmap note assumed. Auto-approve default; position/format ops can target
+  the new shape afterwards from the refreshed context.
+
 ## [0.3.3] - 2026-10-30
 ### Changed
 - **Sessions are scoped per application** (reversing the earlier shared

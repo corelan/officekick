@@ -55,6 +55,7 @@
     apply_layout: { label: "apply layout", hint: "Applies a different slide layout (design change, text kept)." },
     format_text: { label: "format text", hint: "bold / italic / color / size / underline / allCaps / alignment / bullets on one shape's text (the numbers from the outline)." },
     format_selection: { label: "format selected text", hint: "the same font changes applied to the TEXT YOU SELECTED right now." },
+    create_shape: { label: "insert shape", hint: "textbox (with text) or geometric shapes (rectangle/ellipse/roundedRectangle/hexagon/diamond/triangle) and straight lines at a position." },
     set_background: { label: "slide background", hint: "AI-generated picture or a solid color as the slide background." },
     add_hyperlink: { label: "add hyperlink", hint: "links one shape (from the outline) to a URL." },
     set_alt_text: { label: "alt text", hint: "sets the accessibility alt text of one shape." },
@@ -336,6 +337,8 @@
     '- {"type":"create_image","prompt":"detailed image description","slide":N|null,"width":400} (generate an image from the description and insert it; slide null = the slide the user currently has open; only when the user asks for a picture/image/illustration/logo)',
     '- {"type":"apply_layout","slide":N,"layout":"title_content|title_only|section|blank"} (only when the user asks for layout/design changes)',
     '- {"type":"format_text","slide":N,"shape":N,"font":{"bold":true},"align":"center","bullet":true} (format ONE shape from the outline: font = {"bold","italic","color","size","name","underline","allCaps"} subset only, colors as HTML hex/red/green/...; align = left|center|right; bullet = true adds bullets; only requested properties)',
+    '- Office.js cannot CREATE SmartArt, stock icons or 3D models. If the user asks for those, say so and offer shape/textbox-based alternatives (create_shape) or an AI-generated picture (create_image) instead. The outline marks existing SmartArt/model3D shapes so you can reference them.',
+    '- {"type":"create_shape","slide":N,"kind":"textbox|rectangle|ellipse|roundedRectangle|hexagon|diamond|triangle|line","text":"only for textbox","left":120,"top":200,"width":240,"height":80} (points, slide-local; line = start point left/top + width/height = endpoint offsets; other shapes: no text)',
     '- to format only PART of a shape\'s text, add "find":"exact words appearing in that shape\'s text" (case-insensitive substring; e.g. {"type":"format_text","slide":N,"shape":N,"find":"security","font":{"bold":true}})',,
     '- {"type":"format_selection","font":{"bold":true}} (format ONLY the text the user has selected right now; same font subset; no slide/shape fields)',
     '- {"type":"set_background","slide":N,"kind":"image","prompt":"description"} (use an AI-generated picture as the slide background) or {"type":"set_background","slide":N,"kind":"solid","color":"#RRGGBB"} (a solid background color)',
@@ -1111,6 +1114,27 @@ OfficeDeck.prototype.addImage = function (payload) {
   });
 };
 
+OfficeDeck.prototype.createShape = function (slideIndex, op) {
+    return this.run("createShape", function (ctx) {
+      if (!Office.context.requirements.isSetSupported("PowerPointApi", "1.4")) {
+        throw new FriendlyError("shape creation needs PowerPointApi 1.4 - update PowerPoint (16.62+ on Mac).");
+      }
+      var shapes = ctx.presentation.slides.getItemAt(slideIndex).shapes;
+      var opts = {};
+      ["left", "top", "width", "height"].forEach(function (gk) {
+        if (op.geometry && op.geometry[gk] != null) opts[gk] = op.geometry[gk];
+      });
+      if (op.kind === "textbox") {
+        shapes.addTextBox(String(op.text || ""), opts);
+      } else if (op.kind === "line") {
+        shapes.addLine("Straight", opts);
+      } else {
+        shapes.addGeometricShape(op.kind, opts);
+      }
+      return ctx.sync().then(function () { return { ok: true }; });
+    });
+  };
+
 OfficeDeck.prototype.formatSelection = function (font) {
     return this.run("formatSelection", function (ctx) {
       if (!ctx.presentation.getSelectedTextRange) {
@@ -1643,6 +1667,23 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
         if (typeof op.description !== "string" || !op.description.trim()) { bad("alt text needs a description"); return; }
         out.slide = op.slide; out.shape = op.shape; out.description = op.description.trim().slice(0, 500);
         if (typeof op.title === "string" && op.title.trim()) out.title = op.title.trim().slice(0, 200);
+      } else if (t === "create_shape") {
+        if (!slideOk(op.slide)) { bad("bad slide index"); return; }
+        var KINDS = { textbox: 1, rectangle: 1, ellipse: 1, roundedRectangle: 1, hexagon: 1, diamond: 1, triangle: 1, line: 1 };
+        var kindS = String(op.kind || "");
+        kindS = Object.keys(KINDS).find(function (kk) { return kk.toLowerCase() === kindS.toLowerCase(); });
+        if (!kindS) { bad("kind must be textbox, rectangle, ellipse, roundedRectangle, hexagon, diamond, triangle or line"); return; }
+        var geom = {};
+        ["left", "top", "width", "height"].forEach(function (gk) {
+          if (typeof op[gk] === "number" && op[gk] >= -2000 && op[gk] <= 4000) geom[gk] = Math.round(op[gk]);
+        });
+        var txtS = "";
+        if (typeof op.text === "string" && op.text.trim()) {
+          if (kindS !== "textbox") { bad("text applies only to the textbox kind"); return; }
+          txtS = op.text.trim().slice(0, 400);
+        }
+        out.slide = op.slide; out.kind = kindS; out.geometry = geom;
+        if (txtS) out.text = txtS;
       } else if (t === "apply_layout") {
         if (!slideOk(op.slide)) { bad("bad slide index"); return; }
         out.slide = op.slide; out.layout = normalizeLayout(op.layout);
@@ -1696,6 +1737,14 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
       }
       case "format_selection":
         return "the text you selected: " + Object.keys(op.font).join(", ");
+      case "create_shape": {
+        var gc = [];
+        ["left", "top", "width", "height"].forEach(function (gk2) {
+          if (op.geometry[gk2] != null) gc.push(gk2 + "=" + op.geometry[gk2]);
+        });
+        return "Slide " + op.slide + ": " + op.kind + (op.text ? " \"" + op.text + "\"" : "") +
+          (gc.length ? " (" + gc.join(", ") + ")" : "");
+      }
       case "set_background":
         return "Slide " + op.slide + " background: " + op.kind +
           (op.kind === "image" ? " (picture: " + op.prompt.slice(0, 50) + "…)" : op.kind === "solid" ? " (" + op.color + ")" : "");
@@ -1794,6 +1843,10 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
           return deck.setNotes(cur, op.notes).then(function (nr) {
             if (nr && nr.manual) manualNotes.push({ slide: cur, text: op.notes, reason: nr.reason });
             else lines.push({ ok: true, text: "set notes on slide " + op.slide });
+          });
+        case "create_shape":
+          return deck.createShape(cur, op).then(function () {
+            lines.push({ ok: true, text: fmtOp(op, ctx) });
           });
         case "format_selection":
           return deck.formatSelection(op.font).then(function () {
