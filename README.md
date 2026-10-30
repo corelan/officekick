@@ -143,6 +143,9 @@ Useful flags: `-Port N`, `-Dev`, `-NoScheduledTask`, `-Action status`, `-Action 
    The Base URL is editable for every type (proxies, Azure-style gateways, ...).
    "Test connection" lists the models the provider reports. A connection that is
    referenced by a profile cannot be deleted until the profile stops using it.
+   Editing is move-based: renaming a connection re-points the profiles using it;
+   renaming a profile keeps the default star with it. Model lists in the profile
+   editors are sorted alphabetically.
 
 2. **Profiles** tab: name a profile, then for the *content model* and the
    *other-actions model* pick a connection -> pick a model from the live list (or type a

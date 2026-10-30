@@ -1334,11 +1334,21 @@
     var v = connFormValues();
     if (!v.name) { setFormMsg($("conn-formmsg"), "Name is required."); return; }
     if (!v.baseUrl) { setFormMsg($("conn-formmsg"), "Base URL is required (type " + v.type + " has no default)."); return; }
-    var body = { name: v.name, type: v.type, baseUrl: v.baseUrl };
-    if (v.apiKey) body.apiKey = v.apiKey;
-    apiJson("/api/connections", "POST", body).then(function () {
+    var req;
+    if (SK.editingConn && SK.editingConn !== v.name) {
+      // rename: moves the connection and re-points profile references
+      var rb = { from: SK.editingConn, to: v.name, type: v.type, baseUrl: v.baseUrl };
+      if (v.apiKey) rb.apiKey = v.apiKey;
+      req = apiJson("/api/connections/rename", "POST", rb);
+    } else {
+      var body = { name: v.name, type: v.type, baseUrl: v.baseUrl };
+      if (v.apiKey) body.apiKey = v.apiKey;
+      req = apiJson("/api/connections", "POST", body);
+    }
+    req.then(function () {
       setFormMsg($("conn-formmsg"), "Saved connection '" + v.name + "'.", true);
       SK.editingConn = v.name;
+      SK.connBaseDirty = false;
       return loadConfigAndRender();
     }).catch(function (err) { setFormMsg($("conn-formmsg"), err.message); });
   }
@@ -1430,8 +1440,12 @@
     }
     return modelsCacheGet(connName).then(function (list) {
       modelSel.innerHTML = "";
+      var sorted = list.slice().sort(function (a, b) {
+        var la = String(a || "").toLowerCase(), lb = String(b || "").toLowerCase();
+        return la === lb ? String(a).localeCompare(String(b)) : (la < lb ? -1 : 1);
+      });
       var opts = ['<option value="">(select model)</option>'];
-      list.forEach(function (m) {
+      sorted.forEach(function (m) {
         opts.push('<option value="' + esc(m) + '"' + (m === prefer ? " selected" : "") + ">" + esc(m) + "</option>");
       });
       opts.push('<option value="__custom__">custom model id…</option>');
@@ -1496,7 +1510,16 @@
     if (!p.name) { setFormMsg($("prof-formmsg"), "Profile name is required."); return; }
     if (!p.content.connection || !p.content.model) { setFormMsg($("prof-formmsg"), "Pick connection + model for the content model."); return; }
     if (!p.other.connection || !p.other.model) { setFormMsg($("prof-formmsg"), "Pick connection + model for the other-actions model."); return; }
-    apiJson("/api/profiles", "POST", p).then(function () {
+    var req;
+    if (SK.editingProf && SK.editingProf !== p.name) {
+      // rename: moves the profile; the default-profile pointer follows
+      req = apiJson("/api/profiles/rename", "POST", {
+        from: SK.editingProf, to: p.name, content: p.content, other: p.other,
+      });
+    } else {
+      req = apiJson("/api/profiles", "POST", p);
+    }
+    req.then(function () {
       setFormMsg($("prof-formmsg"), "Saved profile '" + p.name + "'.", true);
       SK.editingProf = p.name;
       return loadConfigAndRender();
@@ -1661,6 +1684,23 @@
         var isCustom = $("prof-" + slot + "-model").value === "__custom__";
         $("prof-" + slot + "-custom").classList.toggle("hidden", !isCustom);
         if (isCustom) $("prof-" + slot + "-custom").focus();
+      });
+    });
+    // convenience: picking a content model with an untouched 'other' slot
+    // copies the choice (connection + model, incl. custom ids) over
+    $("prof-content-model").addEventListener("change", function () {
+      var model = $("prof-content-model").value;
+      var otherModel = $("prof-other-model");
+      if (otherModel.value) return; // 'other' already has a choice - leave it
+      var conn = $("prof-content-conn").value;
+      if (!conn || !model) return;
+      $("prof-other-conn").value = conn;
+      populateModelSelect("prof-other", conn, model).then(function () {
+        if (model === "__custom__") {
+          $("prof-other-model").value = "__custom__";
+          $("prof-other-custom").classList.remove("hidden");
+          $("prof-other-custom").value = $("prof-content-custom").value;
+        }
       });
     });
 

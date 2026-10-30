@@ -12,6 +12,9 @@
   trademark of Corelan Consulting bv.
 - Profiles tab now repopulates connection dropdowns on config load; connections
   referenced by profiles cannot be deleted (409 + UI hint); delete errors surfaced.
+- Full edit semantics: renaming connections re-points profile references, renaming
+  profiles moves the default star along; type/key/models editable in the same call;
+  model lists in the profile editors are sorted alphabetically.
 
 ## 0.1.0 - initial release
 

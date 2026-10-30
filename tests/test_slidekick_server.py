@@ -224,6 +224,44 @@ class TestSlideKickServer(unittest.TestCase):
         st, _ = self.S.req("/api/connections/used-conn", "DELETE")
         self.assertEqual(st, 200)
 
+    def test_rename_connection_and_profile(self):
+        self.S.req("/api/connections", "POST", {
+            "name": "rc", "type": "openai", "baseUrl": "https://api.openai.com/v1"})
+        self.S.req("/api/profiles", "POST", {
+            "name": "rp", "content": {"connection": "rc", "model": "m1"},
+            "other": {"connection": "rc", "model": "m2"}})
+        self.S.req("/api/settings", "PUT", {"defaultProfile": "rp"})
+        # rename connection -> profile refs re-pointed, old entry gone
+        st, _ = self.S.req("/api/connections/rename", "POST", {"from": "rc", "to": "rc2"})
+        self.assertEqual(st, 200)
+        st, cfg = self.S.req("/api/config")
+        self.assertEqual([c["name"] for c in cfg["connections"]], ["rc2"])
+        self.assertEqual(cfg["profiles"][0]["content"]["connection"], "rc2")
+        self.assertEqual(cfg["profiles"][0]["other"]["connection"], "rc2")
+        # rename onto an existing name -> 409
+        self.S.req("/api/connections", "POST", {
+            "name": "other", "type": "openai", "baseUrl": "https://api.openai.com/v1"})
+        st, _ = self.S.req("/api/connections/rename", "POST", {"from": "rc2", "to": "other"}, True)
+        self.assertEqual(st, 409)
+        # rename missing -> 404
+        st, _ = self.S.req("/api/connections/rename", "POST", {"from": "ghost", "to": "x"}, True)
+        self.assertEqual(st, 404)
+        # profile rename follows the default pointer + applies model changes
+        st, _ = self.S.req("/api/profiles/rename", "POST", {
+            "from": "rp", "to": "rp2", "other": {"connection": "rc2", "model": "m3"}})
+        self.assertEqual(st, 200)
+        st, cfg = self.S.req("/api/config")
+        self.assertEqual(cfg["defaultProfile"], "rp2")
+        self.assertEqual([p["name"] for p in cfg["profiles"]], ["rp2"])
+        self.assertEqual(cfg["profiles"][0]["other"]["model"], "m3")
+        self.assertEqual(cfg["profiles"][0]["content"]["model"], "m1")  # untouched
+        # profile rename collide check needs an existing PROFILE name
+        self.S.req("/api/profiles", "POST", {
+            "name": "pexists", "content": {"connection": "rc2", "model": "m"},
+            "other": {"connection": "rc2", "model": "m"}})
+        st, _ = self.S.req("/api/profiles/rename", "POST", {"from": "rp2", "to": "pexists"}, True)
+        self.assertEqual(st, 409)
+
     def test_models_openai_compatible_with_key(self):
         m = self.mock("openai")
         mp.STATE.require_key = "test-key"

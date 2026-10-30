@@ -212,6 +212,63 @@ class Store:
                 return True
         return False
 
+    def rename_connection(self, src, dst, updates=None):
+        """Rename a connection (type/base/key editable in the same call);
+        profile references are re-pointed so nothing orphans."""
+        updates = updates or {}
+        conn = self.find_connection(src)
+        if conn is None:
+            raise ApiError(404, "Unknown connection: %s" % src)
+        if src != dst and self.find_connection(dst):
+            raise ApiError(409, "Connection '%s' already exists" % dst)
+        if not valid_name(dst):
+            raise ApiError(400, "New connection name must be 1-64 chars, no leading/trailing spaces or '/'")
+        t = updates.get("type") or conn["type"]
+        if t not in CONNECTION_TYPES:
+            raise ApiError(400, "Unknown connection type: %r" % (t,))
+        base = (updates.get("baseUrl") or "").strip() or conn["baseUrl"]
+        if not base:
+            raise ApiError(400, "Base URL is required for connection type %s" % t)
+        key = updates.get("apiKey")
+        if key:
+            conn["apiKey"] = key
+        conn["type"] = t
+        conn["baseUrl"] = base.rstrip("/")
+        conn["name"] = dst
+        for prof in self.data["profiles"]:
+            for slot in ("content", "other"):
+                ref = prof.get(slot) or {}
+                if ref.get("connection") == src:
+                    ref["connection"] = dst
+        self.save()
+        return conn
+
+    def rename_profile(self, src, dst, updates=None):
+        """Rename a profile (models editable in the same call);
+        the default-profile pointer follows the rename."""
+        updates = updates or {}
+        prof = self.find_profile(src)
+        if prof is None:
+            raise ApiError(404, "Unknown profile: %s" % src)
+        if not valid_name(dst):
+            raise ApiError(400, "New profile name must be 1-64 chars")
+        if src != dst and self.find_profile(dst):
+            raise ApiError(409, "Profile '%s' already exists" % dst)
+        prof["name"] = dst
+        if self.data.get("defaultProfile") == src:
+            self.data["defaultProfile"] = dst
+        for slot in ("content", "other"):
+            ref = updates.get(slot) or {}
+            if ref.get("connection") is not None:
+                if not self.find_connection(ref["connection"]):
+                    raise ApiError(400, "Profile %s references unknown connection: %r" % (slot, ref["connection"]))
+                model = ref.get("model")
+                if not isinstance(model, str) or not model.strip():
+                    raise ApiError(400, "Profile %s has no model selected" % slot)
+                prof[slot] = {"connection": ref["connection"], "model": model.strip()}
+        self.save()
+        return prof
+
     def set_approvals(self, approvals):
         clean = dict(self.data.get("approvals") or DEFAULT_APPROVALS)
         for op, mode in (approvals or {}).items():
@@ -848,6 +905,14 @@ class SlideKickHandler(BaseHTTPRequestHandler):
                 name, content, other = validate_profile_body(self.store, body)
                 self.store.upsert_profile(name, content, other)
                 self._send_json({"ok": True, "name": name})
+            elif path == "/api/connections/rename":
+                self.store.rename_connection(
+                    str(body.get("from") or ""), str(body.get("to") or ""), body)
+                self._send_json({"ok": True, "name": body.get("to")})
+            elif path == "/api/profiles/rename":
+                self.store.rename_profile(
+                    str(body.get("from") or ""), str(body.get("to") or ""), body)
+                self._send_json({"ok": True, "name": body.get("to")})
             elif path == "/api/chat":
                 conn = body.get("connection")
                 if not self.store.find_connection(conn or ""):
