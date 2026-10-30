@@ -11,32 +11,56 @@ SlideKick talks to the providers *you* configure, from a small local server on y
 machine.
 
 ```mermaid
-flowchart LR
+flowchart TD
     subgraph PPT["Microsoft PowerPoint - macOS and Windows"]
-        PANE["SlideKick task pane<br/>Office.js add-in<br/>WKWebView / WebView2"]
-        DECK["your deck<br/>slides - shapes - notes"]
-        PANE <-->|"apply validated ops:<br/>create / edit slide - replace text<br/>set notes - apply layout - delete slide<br/>gated by the approval policy"| DECK
+        PANE["SlideKick task pane<br/>Office.js add-in"]
+        DECK["your deck"]
     end
 
-    subgraph SRV["SlideKick local server - python stdlib - loopback only"]
-        UI["task pane files<br/>config store<br/>approval policy"]
-        PROXY["AI proxy<br/>/api/chat - /api/models"]
-        DBG["opt-in daily debug log<br/>userhome/.slidekick/logs"]
+    UI["task pane files<br/>config store - approval policy<br/>~/.slidekick/config.json"]
+    PROXY["AI proxy<br/>/api/chat - /api/models"]
+    DBG["opt-in daily debug log<br/>~/.slidekick/logs"]
+
+    subgraph SLK["SlideKick local server - python stdlib - loopback only"]
         UI --- PROXY
-        PROXY -.-> DBG
     end
 
-    subgraph AI["your AI providers"]
-        OAI["OpenAI / Anthropic / OpenRouter"]
-        GEN["OpenAI-compatible<br/>llama-server - vLLM - LM Studio"]
-        OLL["Ollama"]
-    end
-
-    PANE -->|"http://localhost:8765<br/>same origin"| SRV
-    PROXY --> OAI
-    PROXY --> GEN
-    PROXY --> OLL
+    PANE <-->|"apply validated ops<br/>gated by the approval policy"| DECK
+    PANE -->|"http://localhost:8765<br/>same origin"| UI
+    PROXY -.-> DBG
+    PROXY --> OAI["OpenAI / Anthropic / OpenRouter"]
+    PROXY --> GEN["OpenAI-compatible<br/>llama-server - vLLM - LM Studio"]
+    PROXY --> OLL["Ollama"]
 ```
+
+## What the SlideKick server component does
+
+SlideKick ships in two parts:
+
+1. **The task pane** - an Office.js add-in that runs inside PowerPoint's sandbox
+   (WKWebView on macOS, WebView2 on Windows). It is the UI you see: chat box,
+   connections, profiles, settings. It is also the only component that touches your
+   deck - every slide operation is applied by the pane through Office.js, gated by
+   the approval policy.
+2. **The local server** (`slidekick_server.py` - Python 3 standard library only,
+   installed as an auto-start service). Several things are deliberately outside the
+   pane, and the server exists for them:
+
+   | The server exists to... | Why the pane can't do it alone |
+   |---|---|
+   | **Serve the task-pane UI** | The sideloaded add-in loads its HTML/CSS/JS from `http://localhost:<port>` - no external hosting needed and no third-party in the middle. |
+   | **Proxy AI calls** | The pane is sandboxed: calling api.openai.com, OpenRouter or a local Ollama from inside it runs into CORS/ATS walls. The server calls the provider you configured and hands the answer back over the same origin. |
+   | **Keep API keys safe** | Keys live in `~/.slidekick/config.json` (chmod 600) and are attached to outbound provider calls server-side only. They are never returned by the API, never shown in the pane, never logged. |
+   | **Store durable configuration** | Connections, profiles and the per-action approval policy live in one JSON file that outlives PowerPoint restarts and pane reloads - inspectable, editable, back-up-able. |
+   | **Clean output & keep logs** | Reasoning wrappers are stripped server-side (and again in the pane); the opt-in daily debug log (`~/.slidekick/logs/debug-YYYY-MM-DD.log`) records AI interactions and deck-edit traces. |
+
+   What the server does **not** do: no telemetry, no cloud components, no
+   phone-home. It binds to loopback only (`127.0.0.1` + `::1`) so nothing on your
+   network can reach it, and it never touches PowerPoint itself. The installers
+   register it as a login service (LaunchAgent on macOS, Scheduled Task on Windows)
+   and restart it on crash; you can also run it manually (`./install.sh run` /
+   `.\install.ps1 -Action run`) or remove it with `uninstall` (your config survives
+   unless you pass `--purge`/`-Purge`).
 
 ## Features
 
