@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  SlideKick installer for Windows - Microsoft PowerPoint (Microsoft 365).
+  OfficeKick installer for Windows - SlideKick (PowerPoint) and DocKick (Word).
   The add-in code, task pane and local server are identical to macOS; only
   registration differs: a per-user trusted catalog (registry) instead of the
   Mac Wef folder, and a Scheduled Task instead of a LaunchAgent.
@@ -30,14 +30,14 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$App           = "SlideKick"
-$TaskName      = "SlideKickServer"
-$StartupBat    = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\Startup\slidekick-server.cmd"
+$App           = "OfficeKick"
+$TaskName      = "OfficeKickServer"
+$StartupBat    = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\Startup\officekick-server.cmd"
 $RepoDir       = $PSScriptRoot
-$SrcDir        = Join-Path $RepoDir "src"
+$SrcDir = Join-Path $RepoDir "slidekick"
 $InstallDir    = Join-Path $env:LOCALAPPDATA $App
 $ManifestDir   = Join-Path $InstallDir "manifest"
-$ConfigDir     = Join-Path $env:USERPROFILE ".slidekick"
+$ConfigDir     = Join-Path $env:USERPROFILE ".officekick"
 $LogDir        = Join-Path $InstallDir "logs"
 $ManifestName  = "slidekick.xml"
 $CatalogGUID   = "C7B1F2A9-86D3-4E58-9A4B-2F6D5E0C3B81"
@@ -110,7 +110,7 @@ function HealthCheck([int]$p, [int]$tries) {
     for ($i = 0; $i -lt $tries; $i++) {
         try {
             $r = Invoke-WebRequest -Uri "http://127.0.0.1:$p/api/health" -UseBasicParsing -TimeoutSec 2
-            if ($r.Content -like "*SlideKick*") { return $r.Content }
+            if ($r.Content -like "*OfficeKick*") { return $r.Content }
         } catch {
             Start-Sleep -Milliseconds 500
         }
@@ -131,7 +131,7 @@ function Pick-Port {
 
 function Stop-Server {
     $procs = Get-CimInstance Win32_Process -Filter "Name like 'py%'" -ErrorAction SilentlyContinue |
-        Where-Object { $_.CommandLine -and $_.CommandLine -match "slidekick_server\.py" }
+        Where-Object { $_.CommandLine -and $_.CommandLine -match "[Oo]fficeKick\\server\.py|[Ss]lideKick\\slidekick_server\.py" }
     foreach ($proc in $procs) {
         try { Stop-Process -Id $proc.ProcessId -Force -ErrorAction Stop } catch {}
     }
@@ -148,7 +148,7 @@ function Register-Autostart([string]$py, [string]$serverPy, [int]$p) {
             -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1) `
             -ExecutionTimeLimit (New-TimeSpan -Days 3650)
         Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger `
-            -Settings $settings -Description "SlideKick local AI server" -ErrorAction Stop | Out-Null
+            -Settings $settings -Description "OfficeKick local AI server" -ErrorAction Stop | Out-Null
         Ok "scheduled task '$TaskName' registered (starts at logon, restarts on crash)"
     } catch {
         # fallback: Startup folder (no restart-on-crash, but always permitted)
@@ -159,7 +159,7 @@ function Register-Autostart([string]$py, [string]$serverPy, [int]$p) {
 }
 
 if ($Action -eq "help") {
-    Say "SlideKick Windows installer:"
+    Say "OfficeKick Windows installer:"
     Say ""
     Say "  install (default)       install or update the add-in + server"
     Say "  -Port N                 port for the local server (default $DefaultPort)"
@@ -172,7 +172,7 @@ if ($Action -eq "help") {
 }
 
 if ($Action -eq "uninstall") {
-    Say "SlideKick - uninstall"
+    Say "OfficeKick - uninstall (SlideKick + DocKick)"
     try { Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction Stop; Ok "scheduled task removed" } catch { Warn "no scheduled task" }
     if (Test-Path $StartupBat) { Remove-Item $StartupBat -Force; Ok "Startup .cmd removed" }
     if (Test-Path "$CatalogBase\$CatalogGUID") { Remove-Item "$CatalogBase\$CatalogGUID" -Recurse -Force; Ok "trusted catalog removed" }
@@ -198,9 +198,9 @@ if ($Action -eq "status") {
 
 if ($Action -eq "run") {
     $py = Find-Python
-    if ($Dev) { $serverPy = Join-Path $SrcDir "slidekick_server.py" }
+    if ($Dev) { $serverPy = Join-Path $SrcDir "server.py" }
     else {
-        $serverPy = Join-Path $InstallDir "slidekick_server.py"
+        $serverPy = Join-Path $InstallDir "server.py"
         if (-not (Test-Path $serverPy)) { Die "not installed yet (run .\install.ps1 first)" }
     }
     $p = Pick-Port
@@ -209,7 +209,7 @@ if ($Action -eq "run") {
 }
 
 # ------------------------------------------------------------------ install
-Say "SlideKick $Version - install/update (Windows)"
+Say "OfficeKick $Version - install/update (Windows): SlideKick + DocKick"
 Stop-Server   # stop a previously installed server so updates take effect
 $py = Find-Python
 Ok "python: $py (& $py --version)"
@@ -226,17 +226,22 @@ $Port = Pick-Port
 Ok "port: $Port"
 
 if ($Dev) {
-    $serverPy  = Join-Path $SrcDir "slidekick_server.py"
+    $serverPy  = Join-Path $SrcDir "server.py"
     $staticDir = Join-Path $SrcDir "static"
     Ok "dev mode: serving from $SrcDir (no copy)"
 } else {
     foreach ($d in @($InstallDir, $ConfigDir, $LogDir, $ManifestDir)) {
         if (-not (Test-Path $d)) { New-Item -ItemType Directory -Path $d -Force | Out-Null }
     }
-    robocopy $SrcDir $InstallDir /MIR /XD "__pycache__" ".DS_Store" /NFL /NDL /NJH /NJS | Out-Null
+    robocopy $SrcDir "$InstallDir\slidekick" /MIR /XD "__pycache__" ".DS_Store" /NFL /NDL /NJH /NJS | Out-Null
     if ($LASTEXITCODE -gt 7) { Die "robocopy failed with exit code $LASTEXITCODE" }
-    $serverPy  = Join-Path $InstallDir "slidekick_server.py"
-    $staticDir = Join-Path $InstallDir "static"
+    Copy-Item (Join-Path $RepoDir "core\server.py") (Join-Path $InstallDir "server.py") -Force
+    # DocKick (Word) subtree: deployed when its manifest template exists
+    if (Test-Path (Join-Path $RepoDir "wordkick\manifest.template.xml")) {
+      robocopy (Join-Path $RepoDir "wordkick") "$InstallDir\wordkick" /MIR /XD "__pycache__" ".DS_Store" /NFL /NDL /NJH /NJS | Out-Null
+    }
+    $serverPy  = Join-Path $InstallDir "server.py"
+    $staticDir = $InstallDir
     Ok "files deployed to $InstallDir"
 }
 

@@ -1,14 +1,30 @@
-# SlideKick
+# OfficeKick
 
-An AI assistant add-in for **Microsoft PowerPoint** on macOS and Windows. Type what
-you want - `reword the current slide`, `make 4 slides about threat hunting`, `add
-speaker notes to this deck` - and SlideKick reads your deck, routes the request to the
-model you chose, and applies the changes in PowerPoint **after** the per-action
-approval policy allows it.
+AI assistant add-ins for **Microsoft Office** on macOS and Windows, sharing one
+technology stack:
 
-You pick your own AI provider and models. Nothing goes through a third-party service:
-SlideKick talks to the providers *you* configure, from a small local server on your own
-machine.
+- **SlideKick** for PowerPoint (`slidekick/`) - shipped. Type what you want -
+  `reword the current slide`, `make slides about threat hunting`, `design this
+  deck`, `add a table of the findings` - and SlideKick reads your deck, routes
+  the request to the model you chose, and applies the changes **after** the
+  per-action approval policy allows it.
+- **DocKick** for Word (`wordkick/`) - planned; same connections, profiles and
+  approval model, with a Word-specific ops engine.
+
+You pick your own AI provider and models. Nothing goes through a third-party
+service: the add-ins talk to the providers *you* configure, from one small
+local server (`core/server.py`) on your own machine. Both add-ins share the
+same config (`~/.officekick/config.json`), so providers and models are set up
+once and available in every Office app.
+
+```
+officekick/
+  core/       the local companion server (python stdlib) + shared config
+  slidekick/  PowerPoint add-in (manifest template + task pane + commands)
+  wordkick/   Word add-in (DocKick - planned skeleton)
+  tools/      mock AI provider + icon generator
+  tests/      server test suite
+```
 
 ```mermaid
 flowchart TD
@@ -17,7 +33,7 @@ flowchart TD
         DECK["your deck"]
     end
 
-    UI["task pane files<br/>config store - approval policy<br/>~/.slidekick/config.json"]
+    UI["task pane files<br/>config store - approval policy<br/>~/.officekick/config.json"]
     PROXY["AI proxy<br/>/api/chat - /api/models"]
     DBG["opt-in daily debug log<br/>~/.slidekick/logs"]
 
@@ -50,7 +66,7 @@ SlideKick ships in two parts:
    |---|---|
    | **Serve the task-pane UI** | The sideloaded add-in loads its HTML/CSS/JS from `http://localhost:<port>` - no external hosting needed and no third-party in the middle. |
    | **Proxy AI calls** | The pane is sandboxed: calling api.openai.com, OpenRouter or a local Ollama from inside it runs into CORS/ATS walls. The server calls the provider you configured and hands the answer back over the same origin. |
-   | **Keep API keys safe** | Keys live in `~/.slidekick/config.json` (chmod 600) and are attached to outbound provider calls server-side only. They are never returned by the API, never shown in the pane, never logged. |
+   | **Keep API keys safe** | Keys live in `~/.officekick/config.json` (chmod 600) and are attached to outbound provider calls server-side only. They are never returned by the API, never shown in the pane, never logged. |
    | **Store durable configuration** | Connections, profiles and the per-action approval policy live in one JSON file that outlives PowerPoint restarts and pane reloads - inspectable, editable, back-up-able. |
    | **Clean output & keep logs** | Reasoning wrappers are stripped server-side (and again in the pane); the opt-in daily debug log (`~/.slidekick/logs/debug-YYYY-MM-DD.log`) records AI interactions and deck-edit traces. |
 
@@ -125,7 +141,7 @@ SlideKick ships in two parts:
 ## Install / update (macOS)
 
 ```bash
-git clone https://github.com/corelan/slidekick.git
+git clone https://github.com/corelan/officekick.git
 cd slidekick
 ./install.sh
 ```
@@ -148,7 +164,7 @@ Useful flags: `--port N`, `--dev` (serve straight from the repo), `--no-launchag
 manifest, and reloads the LaunchAgent; it also clears Office's add-in caches
 (only while PowerPoint is closed - with PowerPoint running it prints a notice
 telling you to quit, re-run, reopen). Your connections/profiles/policy live in
-`~/.slidekick/config.json` and are preserved. Quit PowerPoint first for the
+`~/.officekick/config.json` and are preserved. Quit PowerPoint first for the
 cache-clear + ribbon refresh to take effect, then reopen.
 
 
@@ -173,7 +189,7 @@ layer differs (per-user trusted catalog + Scheduled Task instead of Wef folder +
 LaunchAgent). No administrator rights required.
 
 ```powershell
-git clone https://github.com/corelan/slidekick.git
+git clone https://github.com/corelan/officekick.git
 cd slidekick
 .\install.ps1
 ```
@@ -297,7 +313,7 @@ Notes that cannot be written automatically on older Office builds fall back to a
 ## Security & privacy
 
 - The server binds to **127.0.0.1** only. API keys are stored in
-  `~/.slidekick/config.json` (chmod 600) and are never returned by the API nor sent to
+  `~/.officekick/config.json` (chmod 600) and are never returned by the API nor sent to
   the pane; they are only attached server-side to outbound provider calls.
 - Slide texts and prompts leave your machine **only** to the provider(s) you configured,
   directly from the local server.
@@ -343,7 +359,7 @@ Win:    .\install.ps1 -Dev
 npx -y office-addin-manifest validate "<install-dir>/manifest/slidekick.xml"  # official manifest validator
 python3 tests/test_slidekick_server.py       # server + adapter test suite (19 tests)
 python3 tools/mock_provider.py --flavor openai --port 8901   # mock provider for the UI
-open http://127.0.0.1:8765/simulator.html    # full task pane + in-memory deck, no PowerPoint
+open http://127.0.0.1:8765/slidekick/simulator.html    # full task pane + in-memory deck, no PowerPoint
 python3 tools/make_icons.py                  # rebuild icons from logo_corelan.png (sips)
 ```
 

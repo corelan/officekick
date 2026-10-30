@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-SlideKick - local companion server for the SlideKick PowerPoint add-in.
+OfficeKick - local companion server for the Corelan Office add-ins
+(SlideKick for PowerPoint, DocKick for Word).
 
 Responsibilities:
   * Serve the task-pane UI (static files, no-cache).
@@ -26,7 +27,7 @@ import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-APP = "SlideKick"
+APP = "OfficeKick"
 VERSION = "0.1.3"
 
 CONNECTION_TYPES = (
@@ -837,7 +838,7 @@ class SlideKickHandler(BaseHTTPRequestHandler):
         if target.name == "simulator.html":
             # simulator = taskpane markup with sim.js instead of Office.js CDN;
             # generated from taskpane.html so the two never drift apart
-            src = (sdir / "taskpane.html").read_text(encoding="utf-8")
+            src = (target.parent / "taskpane.html").read_text(encoding="utf-8")
             src = src.replace(
                 '<script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>',
                 '<script src="sim.js"></script>',
@@ -1116,15 +1117,28 @@ def find_free_port(start, tries=20):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=APP + " local server")
+    # adopt a legacy SlideKick-era config when the default path is empty
+    _legacy_cfg = Path.home() / ".slidekick" / "config.json"
+    _default_cfg = Path.home() / ".officekick" / "config.json"
+    try:
+        if not _default_cfg.exists() and _legacy_cfg.exists():
+            _default_cfg.parent.mkdir(parents=True, exist_ok=True)
+            import shutil
+            shutil.copy2(_legacy_cfg, _default_cfg)
+            os.chmod(_default_cfg, 0o600)
+            print("migrated legacy config:", _legacy_cfg, "->", _default_cfg)
+    except OSError:
+        pass
+
     parser.add_argument("--host", default="",
                         help="bind a single explicit host instead of both loopbacks (127.0.0.1 + ::1)")
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument(
-        "--config", default=str(Path.home() / ".slidekick" / "config.json")
+        "--config", default=str(Path.home() / ".officekick" / "config.json")
     )
     parser.add_argument(
         "--static-dir",
-        default=str(Path(__file__).resolve().parent / "static"),
+        default=str(Path(__file__).resolve().parent / "slidekick" / "static"),
     )
     parser.add_argument("--verbose", action="store_true")
     parser.add_argument(
@@ -1165,7 +1179,7 @@ def main(argv=None):
         host = s.server_address[0]
         shown = "[%s]" % host if ":" in str(host) else str(host)
         print(
-            "%s server v%s  |  %s://%s:%d/taskpane.html  |  config: %s"
+            "%s server v%s  |  %s://%s:%d/slidekick/static/taskpane.html  |  config: %s"
             % (APP, VERSION, scheme, shown, port, store.path),
             flush=True,
         )

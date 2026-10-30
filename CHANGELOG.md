@@ -1,6 +1,13 @@
 # Changelog
 
 ## 0.1.3
+- Repository renamed to **officekick** (umbrella): `core/` holds the shared server,
+  `slidekick/` the PowerPoint add-in, `wordkick/` the planned Word sibling (**DocKick**,
+  same connections/profiles/approval model). Both installers now handle Word: the
+  installer detects the Office apps, deploys per-add-in manifests (DocKick installs
+  automatically once its manifest template lands in `wordkick/`), installs/updates the
+  officekick LaunchAgent / scheduled task, and migrates the old SlideKick-era config
+  (`~/.slidekick`), install dir and LaunchAgent label on the first run.
 
 - New ops: `create_table` (PowerPointApi 1.8 addTable; new title slide when slide is
   omitted; position/size in points) and `move_shape` (left/top/width/height in points).

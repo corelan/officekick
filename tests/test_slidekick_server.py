@@ -5,7 +5,7 @@ End-to-end tests for the SlideKick local server.
 Runs the real server in-process against an in-process mock AI provider
 (tools/mock_provider.py). Standard library only:
 
-    python3 tests/test_slidekick_server.py
+    python3 tests/test_slidekick_server.py (imports core/server.py)
 """
 
 import json
@@ -19,10 +19,10 @@ import urllib.request
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(REPO / "src"))
+sys.path.insert(0, str(REPO / "core"))
 sys.path.insert(0, str(REPO / "tools"))
 
-import slidekick_server as sk  # noqa: E402
+import server as sk  # noqa: E402
 import mock_provider as mp  # noqa: E402
 from http.server import ThreadingHTTPServer  # noqa: E402
 
@@ -41,7 +41,7 @@ class ServerHarness:
         self.store = sk.Store(cfg)
         self.store.load()
         self.server = sk.build_server(
-            "127.0.0.1", 0, self.store, str(REPO / "src" / "static")
+            "127.0.0.1", 0, self.store, str(REPO / "slidekick" / "static")
         )
         self.port = self.server.server_address[1]
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
@@ -193,7 +193,7 @@ class TestSlideKickServer(unittest.TestCase):
         st, cfg = self.S.req("/api/config")
         self.assertTrue(cfg["generateNotes"])
         # persists across a cold reload of the same config file
-        from slidekick_server import Store
+        from server import Store
         store2 = Store(self.S.store.path)
         store2.load()
         self.assertTrue(store2.data.get("generateNotes"))
@@ -280,7 +280,7 @@ class TestSlideKickServer(unittest.TestCase):
 
     def test_dual_stack_loopback(self):
         # 'localhost' may resolve to ::1 - both loopback stacks must answer
-        servers = sk.build_dual_servers(0, self.S.store, str(REPO / "src" / "static"))
+        servers = sk.build_dual_servers(0, self.S.store, str(REPO / "slidekick" / "static"))
         self.assertGreaterEqual(len(servers), 1)
         ports = {s.server_address[1] for s in servers}
         self.assertEqual(len(ports), 1)
@@ -322,7 +322,7 @@ class TestSlideKickServer(unittest.TestCase):
                 "-keyout", d + "/k.pem", "-out", d + "/c.pem", "-days", "30",
                 "-subj", "/CN=localhost", "-config", cnf, "-extensions", "v3_req"],
                check=True, capture_output=True)
-        servers = sk.build_dual_servers(0, self.S.store, str(REPO / "src" / "static"),
+        servers = sk.build_dual_servers(0, self.S.store, str(REPO / "slidekick" / "static"),
                                         tls=(d + "/c.pem", d + "/k.pem"))
         threads = []
         for s in servers:

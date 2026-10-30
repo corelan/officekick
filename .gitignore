@@ -7,3 +7,5 @@ build/
 dist/
 *.log
 node_modules/
+*.code-workspace
+tests/

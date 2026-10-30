@@ -20,7 +20,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 SIZES = (16, 32, 80)
-LOGO = REPO / "src" / "static" / "assets" / "logo_corelan.png"
+LOGO = REPO / "slidekick" / "static" / "assets" / "logo_corelan.png"
 
 BG = (15, 23, 42)        # slate-900 (bolt fallback background)
 BOLT = (245, 158, 11)    # amber-500 (bolt fallback foreground)
