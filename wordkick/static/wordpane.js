@@ -370,9 +370,15 @@
 
   WordDeck.prototype.editParagraph = function (index, text) {
     return this.run("editParagraph", function (ctx) {
-      var p = ctx.document.body.paragraphs.getItemAt(index);
-      p.insertText(String(text), "Replace");
-      return ctx.sync().then(function () { return { ok: true }; });
+      // Word.js collections: use .items after load+sync (no getItemAt here)
+      var paras = ctx.document.body.paragraphs;
+      paras.load("text, style");
+      return ctx.sync().then(function () {
+        var p = paras.items[index];
+        if (!p) throw new FriendlyError("Paragraph " + index + " does not exist");
+        p.insertText(String(text), "Replace");
+        return ctx.sync().then(function () { return { ok: true }; });
+      });
     });
   };
 
@@ -417,8 +423,14 @@
 
   WordDeck.prototype.deleteParagraph = function (index) {
     return this.run("deleteParagraph", function (ctx) {
-      ctx.document.body.paragraphs.getItemAt(index).delete();
-      return ctx.sync().then(function () { return { ok: true }; });
+      var paras = ctx.document.body.paragraphs;
+      paras.load("text");
+      return ctx.sync().then(function () {
+        var p = paras.items[index];
+        if (!p) throw new FriendlyError("Paragraph " + index + " does not exist");
+        p.delete();
+        return ctx.sync().then(function () { return { ok: true }; });
+      });
     });
   };
 

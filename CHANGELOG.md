@@ -1,6 +1,8 @@
 # Changelog
 
 ## 0.1.4
+- Fix (real Word): Word.js collections have no getItemAt - edit/delete paragraph
+  ops now use the items-after-load pattern (the same one the outline uses).
 
 - **DocKick** - the Word add-in - is real: own manifest template (Host
   "Document", own add-in Id) and a Word ops engine with the same pipeline,
