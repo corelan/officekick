@@ -5,6 +5,7 @@ technology stack, from Corelan:
 
 - **Corelan SlideKick** - the PowerPoint add-in (details: [docs/slidekick.md](docs/slidekick.md))
 - **Corelan DocKick** - the Word add-in (details: [docs/dockick.md](docs/dockick.md))
+- **Corelan MailKick** - the Outlook add-in: summarize/translate, draft replies (you send), categories ([docs/outlook.md](docs/outlook.md))
 
 Type what you want, in plain language: `reword the current slide`,
 `make slides about threat hunting`, `add a table of the key findings`, `leave a
