@@ -10,16 +10,32 @@ You pick your own AI provider and models. Nothing goes through a third-party ser
 SlideKick talks to the providers *you* configure, from a small local server on your own
 machine.
 
-```
-+--------------------------+        +---------------------------+      +--------------------+
-| PowerPoint (Mac/Windows) |        | SlideKick local server    |      | Your AI providers  |
-| add-in (Office.js        | -----> | 127.0.0.1:8765            | ---> | OpenAI / Anthropic |
-| task pane)               |        | - serves the task pane UI |      | OpenRouter         |
-|                  |        | - stores connections,     |      | OpenAI-compatible  |
-| applies slide    |        |   profiles, approval      |      | (LM Studio, vLLM,  |
-| operations via   |        |   policy, debug logs      |      |  llama-server, ...)|
-| Office.js        |        | - proxies AI calls        |      | Ollama             |
-+--------------------------+        +---------------------------+      +--------------------+
+```mermaid
+flowchart LR
+    subgraph PPT["Microsoft PowerPoint - macOS and Windows"]
+        PANE["SlideKick task pane<br/>Office.js add-in<br/>WKWebView / WebView2"]
+        DECK["your deck<br/>slides - shapes - notes"]
+        PANE <-->|"apply validated ops:<br/>create / edit slide - replace text<br/>set notes - apply layout - delete slide<br/>gated by the approval policy"| DECK
+    end
+
+    subgraph SRV["SlideKick local server - python stdlib - loopback only"]
+        UI["task pane files<br/>config store<br/>approval policy"]
+        PROXY["AI proxy<br/>/api/chat - /api/models"]
+        DBG["opt-in daily debug log<br/>userhome/.slidekick/logs"]
+        UI --- PROXY
+        PROXY -.-> DBG
+    end
+
+    subgraph AI["your AI providers"]
+        OAI["OpenAI / Anthropic / OpenRouter"]
+        GEN["OpenAI-compatible<br/>llama-server - vLLM - LM Studio"]
+        OLL["Ollama"]
+    end
+
+    PANE -->|"http://localhost:8765<br/>same origin"| SRV
+    PROXY --> OAI
+    PROXY --> GEN
+    PROXY --> OLL
 ```
 
 ## Features
