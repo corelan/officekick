@@ -1776,15 +1776,30 @@
 
   function finishBoot() {
     wireEvents();
-    loadConfigAndRender().then(function (cfg) {
-      updateDeckSummary();
-      renderSimDeck();
-      if (!(cfg.connections || []).length) switchTab("connections");
-      setStatus("Ready. Debug: " + (cfg.debug ? "on" : "off") + ".", "ok");
-    }).catch(function (err) {
-      setStatus("Cannot reach the SlideKick server: " + err.message + " Is it running? (install.sh / LaunchAgent)", "error");
-      $("statusbar").textContent = "server unreachable: " + err.message;
-    });
+    bootLoad(0);
+  }
+
+  function bootSuccess(cfg) {
+    updateDeckSummary();
+    renderSimDeck();
+    if (!(cfg.connections || []).length) switchTab("connections");
+    setStatus("Ready. Debug: " + (cfg.debug ? "on" : "off") + ".", "ok");
+  }
+
+  // retries cover the update window: the pane can be opened while the server
+  // is restarting (installer / LaunchAgent)
+  function bootLoad(attempt) {
+    loadConfigAndRender().then(bootSuccess, function (err) { bootFail(err, attempt); });
+  }
+
+  function bootFail(err, attempt) {
+    if (attempt < 3) {
+      setStatus("Server not reachable yet - retrying (" + (attempt + 1) + "/3)…", "busy");
+      setTimeout(function () { bootLoad(attempt + 1); }, 1000);
+      return;
+    }
+    setStatus("Cannot reach the SlideKick server: " + err.message + " Is it running? (install.sh / install.ps1 / LaunchAgent)", "error");
+    $("statusbar").textContent = "server unreachable: " + err.message;
   }
 
   function boot() {

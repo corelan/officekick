@@ -262,6 +262,30 @@ class TestSlideKickServer(unittest.TestCase):
         st, _ = self.S.req("/api/profiles/rename", "POST", {"from": "rp2", "to": "pexists"}, True)
         self.assertEqual(st, 409)
 
+    def test_dual_stack_loopback(self):
+        # 'localhost' may resolve to ::1 - both loopback stacks must answer
+        servers = sk.build_dual_servers(0, self.S.store, str(REPO / "src" / "static"))
+        self.assertGreaterEqual(len(servers), 1)
+        ports = {s.server_address[1] for s in servers}
+        self.assertEqual(len(ports), 1)
+        port = ports.pop()
+        threads = []
+        for s in servers:
+            t = threading.Thread(target=s.serve_forever, daemon=True)
+            t.start()
+            threads.append(t)
+        try:
+            import urllib.request as ur
+
+            for host in ("127.0.0.1", "[::1]"):
+                with ur.urlopen("http://%s:%d/api/health" % (host, port), timeout=10) as resp:
+                    body = json.loads(resp.read().decode())
+                    self.assertTrue(body["ok"], host)
+        finally:
+            for s in servers:
+                s.shutdown()
+                s.server_close()
+
     def test_models_openai_compatible_with_key(self):
         m = self.mock("openai")
         mp.STATE.require_key = "test-key"

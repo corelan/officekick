@@ -8,6 +8,11 @@
 - The task pane follows the Office host theme (OfficeTheme.isDarkTheme, with
   body-color luminance fallback and an OfficeThemeChanged subscription); the
   simulator follows the browser (prefers-color-scheme) or `?theme=dark|light`.
+- Dual-stack loopback listener (127.0.0.1 + ::1): macOS resolves 'localhost' to
+  ::1 first and WKWebView does not fall back to IPv4 on a refusal, which made
+  the pane fail with "Load failed" while everything else worked.
+- The pane retries the initial config fetch (3x/1s) to survive opening during
+  an installer-run server restart.
 
 ## 0.1.1
 

@@ -1034,14 +1034,49 @@ class SlideKickHandler(BaseHTTPRequestHandler):
             self._error(500, "Internal error: %s" % exc)
 
 
-def build_server(host, port, store, static_dir, verbose=False):
-    handler = type("Handler", (SlideKickHandler,), {
+def _make_handler(store, static_dir, verbose=False, port=0):
+    return type("Handler", (SlideKickHandler,), {
         "store": store,
         "static_dir": str(static_dir),
         "verbose": verbose,
         "serving_port": port,
     })
-    return ThreadingHTTPServer((host, port), handler)
+
+
+def build_server(host, port, store, static_dir, verbose=False):
+    return ThreadingHTTPServer((host, port), _make_handler(store, static_dir, verbose, port))
+
+
+def build_dual_servers(port, store, static_dir, verbose=False):
+    """Both loopback stacks on one port: IPv4 (127.0.0.1) + IPv6 (::1).
+
+    macOS resolves 'localhost' to ::1 first, and WKWebView treats the immediate
+    ECONNREFUSED as final without falling back to IPv4 ('Load failed') - a
+    server listening on 127.0.0.1 only therefore breaks the pane. Listening on
+    both loopback stacks keeps 'localhost', 127.0.0.1 and [::1] working.
+    Falls back to IPv4-only on hosts without IPv6. Loopback addresses only."""
+    import socket as socket_mod
+
+    servers = []
+    handler = _make_handler(store, static_dir, verbose, port)
+    try:
+        class V6Server(ThreadingHTTPServer):
+            address_family = socket_mod.AF_INET6
+
+        v6 = V6Server(("::1", port), handler)
+        try:
+            v6.socket.setsockopt(socket_mod.IPPROTO_IPV6, socket_mod.IPV6_V6ONLY, 1)
+        except OSError:
+            pass
+        servers.append(v6)
+        port = v6.server_address[1]  # learn the bound (possibly ephemeral) port
+    except OSError:
+        pass
+    try:
+        servers.append(ThreadingHTTPServer(("127.0.0.1", port), handler))
+    except OSError:
+        pass
+    return servers
 
 
 def find_free_port(start, tries=20):
@@ -1057,7 +1092,8 @@ def find_free_port(start, tries=20):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=APP + " local server")
-    parser.add_argument("--host", default="127.0.0.1")
+    parser.add_argument("--host", default="",
+                        help="bind a single explicit host instead of both loopbacks (127.0.0.1 + ::1)")
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument(
         "--config", default=str(Path.home() / ".slidekick" / "config.json")
@@ -1077,25 +1113,35 @@ def main(argv=None):
     store.load()
     store.force_debug = args.debug
 
-    try:
-        server = build_server(
-            args.host, args.port, store, args.static_dir, args.verbose
-        )
-    except OSError as exc:
-        print("Cannot bind %s:%s (%s)" % (args.host, args.port, exc), file=sys.stderr)
-        alt = find_free_port(args.port)
-        if alt:
-            print("Port %s busy; suggest --port %s" % (args.port, alt), file=sys.stderr)
-        sys.exit(2)
+    if args.host:
+        try:
+            servers = [build_server(args.host, args.port, store, args.static_dir, args.verbose)]
+        except OSError as exc:
+            print("Cannot bind %s:%s (%s)" % (args.host, args.port, exc), file=sys.stderr)
+            alt = find_free_port(args.port)
+            if alt:
+                print("Port %s busy; suggest --port %s" % (args.port, alt), file=sys.stderr)
+            sys.exit(2)
+    else:
+        servers = build_dual_servers(args.port, store, args.static_dir, args.verbose)
+        if not servers:
+            print("Cannot bind port %s on any loopback stack" % args.port, file=sys.stderr)
+            alt = find_free_port(args.port)
+            if alt:
+                print("Port %s busy; suggest --port %s" % (args.port, alt), file=sys.stderr)
+            sys.exit(2)
 
-    port = server.server_address[1]
+    port = servers[0].server_address[1]
+    for s in servers:
+        host = s.server_address[0]
+        shown = "[%s]" % host if ":" in str(host) else str(host)
+        print(
+            "%s server v%s  |  http://%s:%d/taskpane.html  |  config: %s"
+            % (APP, VERSION, shown, port, store.path),
+            flush=True,
+        )
     print(
-        "%s server v%s  |  http://%s:%d/taskpane.html  |  taskpane: %s  |  config: %s"
-        % (APP, VERSION, args.host, port, args.static_dir, store.path),
-        flush=True,
-    )
-    print(
-        "Simulator: http://%s:%d/simulator.html  |  Ctrl+C to stop" % (args.host, port),
+        "Simulator: http://127.0.0.1:%d/simulator.html  |  Ctrl+C to stop" % port,
         flush=True,
     )
     if store.debug_enabled():
@@ -1103,12 +1149,16 @@ def main(argv=None):
             "DEBUG logging ON -> %s/logs/debug-<YYYY-MM-DD>.log" % store.path.parent,
             flush=True,
         )
+    # serve the first stack in the main thread, the others as daemons
+    for s in servers[1:]:
+        threading.Thread(target=s.serve_forever, daemon=True).start()
     try:
-        server.serve_forever()
+        servers[0].serve_forever()
     except KeyboardInterrupt:
         pass
     finally:
-        server.server_close()
+        for s in servers:
+            s.server_close()
 
 
 if __name__ == "__main__":
