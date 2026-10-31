@@ -458,7 +458,18 @@
         return res;
       });
     } else {
-      createPromise = apiJson("/api/sessions/" + SK.sessionId, "PUT", payload);
+      createPromise = apiJson("/api/sessions/" + SK.sessionId, "PUT", payload).then(function (up) {
+        var doc2 = up && up.session;
+        if (doc2 && doc2.exchanges && doc2.exchanges.length >= 2 && doc2.exchanges.length < SK.history.length) {
+          // the store did not keep the history (old-server edge): forget the
+          // dead id, the next save starts a fresh session with the full history
+          SK.sessionId = null;
+          delete payload.name;
+        } else if (doc2 && doc2.name) {
+          SK.sessionName = doc2.name;
+        }
+        return up;
+      });
     }
     return createPromise.then(function () {
       dbg("session.saved", { id: SK.sessionId, name: SK.sessionName, messages: SK.history.length });

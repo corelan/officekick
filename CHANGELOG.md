@@ -21,6 +21,22 @@
 ### Added
 - Every busy status (Asking ..., collecting context, generating image, applying, model-output repair) now shows a rotating indicator character so it reads as still-working.
 
+## [0.7.6] - 2026-10-31
+### Fixed - session-history loss (user-reported: a 4-request session with a
+title was "gone" after reopening the add-in)
+- The session PUT route overwrote the AI/derived title with the generic
+  "session" (the name was not carried over), replacing what the History tab
+  showed, and the store wrote the caller's exchange list over the stored one
+  without reading the file first, so a shorter payload (e.g. a capped
+  history after a resume) shrank a stored session.
+- Now the stored file is the source of truth for titles and volume: the PUT
+  keeps the existing name and keeps the longer of the stored/received
+  exchange lists; the panes also verify an update actually stuck (a store
+  that returns a suspiciously small session releases the dead id and saves
+  as a fresh one next time).
+- Reproduced before the fix (4 runs -> 2 msgs, title lost) and after the fix
+  (4 runs -> 8 msgs, title kept, resume loads all 4 turns).
+
 ## [0.7.5] - 2026-10-31
 ### Changed
 - Request history: each stored exchange carries a local timestamp; the

@@ -31,7 +31,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 APP = "OfficeKick"
-VERSION = "0.7.5"
+VERSION = "0.7.6"
 
 CONNECTION_TYPES = (
     "openai",
@@ -173,14 +173,26 @@ class SessionStore:
     def upsert(self, sid, name, exchanges, existing=None, app=None):
         if not self._valid(sid):
             raise ApiError(400, "Invalid session id")
-        ex = self._clean_exchanges(exchanges)
+        # the stored file is the source of truth: if the caller does not
+        # pass the current exchanges (or passes a shorter history), keep
+        # the longer stored list instead of shrinking the session
+        f = self.dir / (sid + ".json")
+        base = existing
+        if base is None and f.is_file():
+            try:
+                base = json.loads(f.read_text(encoding="utf-8"))
+            except Exception:
+                base = None
+        stored_ex = (base or {}).get("exchanges") or []
+        new_ex = self._clean_exchanges(exchanges)
+        ex = new_ex if len(new_ex) >= len(stored_ex) else stored_ex
         doc = {
             "id": sid,
-            "name": (name or (existing or {}).get("name") or "session")[:80],
+            "name": (name or (base or {}).get("name") or "session")[:80],
             "updated": time.time(),
             "exchanges": ex,
             "app": app if app in ("slidekick", "wordkick", "mailkick")
-                   else (existing or {}).get("app"),
+                   else (base or {}).get("app"),
         }
         f = self.dir / (sid + ".json")
         f.write_text(json.dumps(doc, indent=1), encoding="utf-8")
@@ -1559,9 +1571,16 @@ class SlideKickHandler(BaseHTTPRequestHandler):
                 self._send_json({"ok": True, "approvals": self.store.data["approvals"]})
             elif path.startswith("/api/sessions/"):
                 sid = urllib.parse.unquote(path[len("/api/sessions/"):])
+                try:
+                    existing = self.store.sessions.get(sid)
+                except ApiError:
+                    existing = None
+                new_name = body.get("name")
+                if new_name is None and existing:
+                    new_name = existing.get("name")   # keep the stored title
                 doc = self.store.sessions.upsert(
-                    sid, body.get("name"), body.get("exchanges") or [],
-                    app=body.get("app"))
+                    sid, new_name, body.get("exchanges") or [],
+                    existing=existing, app=body.get("app"))
                 self._send_json({"ok": True, "session": doc})
             elif path.startswith("/api/templates/"):
                 tid = urllib.parse.unquote(path[len("/api/templates/"):])
