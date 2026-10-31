@@ -21,6 +21,28 @@
 ### Added
 - Every busy status (Asking ..., collecting context, generating image, applying, model-output repair) now shows a rotating indicator character so it reads as still-working.
 
+## [0.9.4] - 2026-10-31
+### Changed - narrow-pane settings layout
+- Connections view: instead of a wide table (Name | Type | Base URL | Key),
+  each connection is now a stacked block - name + Test button on the first
+  line, then type / url / key / "in use" below one another. Applied to all
+  three add-ins.
+- Approval policy table: the three policy options (auto / confirm / deny) now
+  render BELOW the action name and its "what it does" description in a block
+  per action, instead of a cramped third column. Radios keep their
+  save/restore behaviour (verified round-trip).
+- Containers changed from tables to stacked div blocks; word-break discipline
+  kept; no horizontal overflow at pane width.
+
+### Fixed - MailKick Connections/Profiles panels were dead
+- The MailKick pane carried duplicate legacy sections (tab-connections +
+  tab-profiles) whose element ids collided with the live Settings sub-tab
+  panels: every id lookup bound to the hidden copies, so the Connections and
+  Profiles views under Settings rendered empty and none of their buttons
+  responded. The dead sections are removed; the live panels now populate and
+  their edit forms fill on click (verified: connections list, edit form fill,
+  profiles list, profile edit fill, approval policy radio round-trip).
+
 ## [0.9.3] - 2026-10-31
 ### Fixed - DocKick format_text on real Word
 - Applying format actions in real Word failed with "ctx.document.body.paragraphs

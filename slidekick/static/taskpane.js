@@ -3012,26 +3012,29 @@ OfficeDeck.prototype.setNotes = function (i, text) {
         return '<option value="' + t.id + '">' + esc(t.label) + "</option>";
       }).join("");
     }
+    // narrow pane: one block per connection, info stacked below each other
     var list = $("conn-list");
-    var rows = [ "<tr><th>Name</th><th>Type</th><th>Base URL</th><th>Key</th></tr>" ];
+    var blocks = [];
     (SK.cfg.connections || []).forEach(function (c) {
       var used = (SK.cfg.profiles || []).filter(function (p) {
         return (p.content && p.content.connection === c.name) ||
                (p.other && p.other.connection === c.name);
       }).map(function (p) { return p.name; });
       // click the name to edit; deletion lives in the edit form (with confirm)
-      var nameCell =
-        '<button class="namebtn" data-edit="' + esc(c.name) + '" title="edit">' +
-        esc(c.name) + "</button>" +
-        (used.length ? '<br /><span class="opnote">in use: ' + esc(used.join(", ")) + "</span>" : "");
-      rows.push(
-        "<tr><td>" + nameCell + "</td><td>" + esc(c.type) + "</td><td>" + esc(c.baseUrl || "-") + "</td>" +
-        "<td>" + (c.hasKey ? "set" : "—") + '</td><td>' +
-        '<button class="btn" data-test="' + esc(c.name) + '">Test</button>' +
-        '<span class="opnote" data-testmsg="' + esc(c.name) + '"></span></td></tr>'
-      );
+      blocks.push(
+        '<div class="connblock">' +
+          '<div class="connline">' +
+            '<button class="namebtn" data-edit="' + esc(c.name) + '" title="edit">' + esc(c.name) + "</button>" +
+            '<button class="btn" data-test="' + esc(c.name) + '">Test</button>' +
+            '<span class="opnote" data-testmsg="' + esc(c.name) + '"></span>' +
+          "</div>" +
+          '<div class="connfield"><span class="connlabel">type</span>' + esc(c.type) + "</div>" +
+          '<div class="connfield"><span class="connlabel">url</span>' + esc(c.baseUrl || "-") + "</div>" +
+          '<div class="connfield"><span class="connlabel">key</span>' + (c.hasKey ? "set" : "not set") + "</div>" +
+          (used.length ? '<div class="connfield"><span class="connlabel">in use</span><span class="opnote">' + esc(used.join(", ")) + "</span></div>" : "") +
+        "</div>");
     });
-    list.innerHTML = rows.join("") || "<tr><td>No connections yet - add one below.</td></tr>";
+    list.innerHTML = blocks.join("") || '<div class="opnote">No connections yet - add one below.</div>';
     Array.prototype.forEach.call(list.querySelectorAll("[data-edit]"), function (b) {
       b.addEventListener("click", function () { editConnection(b.dataset.edit); });
     });
@@ -3290,17 +3293,25 @@ OfficeDeck.prototype.setNotes = function (i, text) {
   // Settings tab (approvals + debug)
   // ------------------------------------------------------------------ //
   function renderSettings() {
+    // narrow pane: one block per action - action + description on top,
+    // the three policy options below them
     var table = $("approvals-table");
-    var rows = ['<tr><th>Action</th><th>What it does</th><th>Policy</th></tr>'];
+    var blocks = [];
     OP_TYPES.forEach(function (t) {
       var mode = (SK.cfg.approvals || {})[t] || "confirm";
       var radios = ["auto", "confirm", "deny"].map(function (m) {
-        return '<label style="font-weight:400;margin:0 6px 0 0"><input type="radio" name="appr-' + esc(t) + '" value="' + m + '"' +
+        return '<label class="apvopt"><input type="radio" name="appr-' + esc(t) + '" value="' + m + '"' +
           (m === mode ? " checked" : "") + " /> " + m + "</label>";
       }).join("");
-      rows.push("<tr><td><b>" + esc(OPS_META[t].label) + "</b></td><td class='muted'>" + esc(OPS_META[t].hint) + "</td><td>" + radios + "</td></tr>");
+      blocks.push(
+        '<div class="apvblock">' +
+          '<div class="apvhead"><b>' + esc(OPS_META[t].label) + "</b>" +
+            '<span class="muted">' + esc(OPS_META[t].hint) + "</span>" +
+          "</div>" +
+          '<div class="apvopts">' + radios + "</div>" +
+        "</div>");
     });
-    table.innerHTML = rows.join("");
+    table.innerHTML = blocks.join("");
     $("settings-debug").checked = !!SK.cfg.debug;
     $("settings-notes").checked = !!SK.cfg.generateNotes;
     $("debug-path").textContent = SK.cfg.configPath.replace(/config\.json$/, "logs") + "/debug-YYYY-MM-DD.log";

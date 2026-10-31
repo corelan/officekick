@@ -680,3 +680,21 @@ body.dark .btn.replyneg { color: #f85149; border-color: rgba(248,81,73,.55); }
   color: var(--primary); background: #eef5ff; }
 .simwin-body { padding: 8px 12px; font-size: 12px; line-height: 1.45; white-space: normal; }
 .simwin-body p { margin: 4px 0; }
+
+/* connections list: one stacked block per connection (narrow pane) */
+.connlist { display: block; }
+.connblock { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px;
+  margin: 0 0 8px 0; background: var(--panel); word-break: break-word; }
+.connline { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 5px 0; }
+.connfield { font-size: 12px; line-height: 1.45; margin: 1px 0; }
+.connlabel { color: var(--muted); display: inline-block; min-width: 40px; margin-right: 6px; }
+
+/* approval policy: one block per action, policy options below the info */
+.apvlist { display: block; }
+.apvblock { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px;
+  margin: 0 0 8px 0; background: var(--panel); word-break: break-word; }
+.apvhead { margin: 0 0 6px 0; line-height: 1.45; }
+.apvhead .muted { display: block; margin-top: 2px; }
+.apvopts { display: flex; flex-wrap: wrap; gap: 4px 16px; }
+.apvopts label { font-weight: 400; margin: 0; white-space: nowrap;
+  display: inline-flex; align-items: center; gap: 4px; }

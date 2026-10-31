@@ -647,3 +647,21 @@ table.list .muted, .setgroup .muted, .setgroup label { word-break: break-word; w
   background: none; color: #ef4444; border-radius: 5px; cursor: pointer; font-weight: 700; font-size: 12px; }
 .op-x.armed { background: #ef4444; color: #fff; }
 .op-x:hover { background: rgba(239,68,68,.12); }
+
+/* connections list: one stacked block per connection (narrow pane) */
+.connlist { display: block; }
+.connblock { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px;
+  margin: 0 0 8px 0; background: var(--panel); word-break: break-word; }
+.connline { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 5px 0; }
+.connfield { font-size: 12px; line-height: 1.45; margin: 1px 0; }
+.connlabel { color: var(--muted); display: inline-block; min-width: 40px; margin-right: 6px; }
+
+/* approval policy: one block per action, policy options below the info */
+.apvlist { display: block; }
+.apvblock { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px;
+  margin: 0 0 8px 0; background: var(--panel); word-break: break-word; }
+.apvhead { margin: 0 0 6px 0; line-height: 1.45; }
+.apvhead .muted { display: block; margin-top: 2px; }
+.apvopts { display: flex; flex-wrap: wrap; gap: 4px 16px; }
+.apvopts label { font-weight: 400; margin: 0; white-space: nowrap;
+  display: inline-flex; align-items: center; gap: 4px; }
