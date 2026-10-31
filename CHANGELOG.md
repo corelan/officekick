@@ -21,6 +21,21 @@
 ### Added
 - Every busy status (Asking ..., collecting context, generating image, applying, model-output repair) now shows a rotating indicator character so it reads as still-working.
 
+## [0.9.3] - 2026-10-31
+### Fixed - DocKick format_text on real Word
+- Applying format actions in real Word failed with "ctx.document.body.paragraphs
+  .getItemAt is not a function": Word.js collections have no `getItemAt`. The
+  two format paths (whole paragraph and `find` fragment) now load the paragraph
+  collection, sync, and index `.items` - the same pattern the existing
+  edit/delete paragraph actions already use - with a clear error when the
+  paragraph number is out of range.
+- Gate descriptions for paragraph actions read the paragraph one position
+  AFTER the requested one (off-by-one: guarded `paragraphs[i-1]`, read
+  `paragraphs[i]`), which showed the wrong text and crashed the run when the
+  target was the last paragraph of the document.
+- E2E in the DocKick simulator: index-based + find-based format actions
+  approved and applied together.
+
 ## [0.9.2] - 2026-10-31
 ### Fixed - reply +/- / forward "window" visibility
 - In the simulator, draft replies and forwards now open a REAL visible

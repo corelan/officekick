@@ -1058,11 +1058,18 @@
 
   WordDeck.prototype.formatText = function (index, font) {
     return this.run("formatText", function (ctx) {
-      var para = ctx.document.body.paragraphs.getItemAt(index);
-      var range = para.getAsRange
-        ? para.getAsRange()
-        : para.getRange("Whole");
-      var rf = range.font;
+      // Word.js collections have no getItemAt: load + sync, then index .items
+      var paras = ctx.document.body.paragraphs;
+      paras.load("text");
+      return ctx.sync().then(function () {
+        var para = paras.items[index];
+        if (!para) {
+          throw new FriendlyError("Paragraph " + (index + 1) + " not found (document has " + paras.items.length + " paragraphs).");
+        }
+        var range = para.getAsRange
+          ? para.getAsRange()
+          : para.getRange("Whole");
+        var rf = range.font;
       if (font.bold != null) rf.bold = font.bold;
       if (font.italic != null) rf.italic = font.italic;
       if (font.allCaps != null) rf.allCaps = font.allCaps;
@@ -1071,8 +1078,9 @@
       if (font.name) rf.name = font.name;
       if (font.size) rf.size = font.size;
       if (font.highlightColor) rf.highlightColor = font.highlightColor;
-      if (font.align) para.alignment = { left: "Left", center: "Center", right: "Right", justify: "Justified" }[font.align];
-      return ctx.sync().then(function () { return { ok: true }; });
+        if (font.align) para.alignment = { left: "Left", center: "Center", right: "Right", justify: "Justified" }[font.align];
+        return ctx.sync().then(function () { return { ok: true }; });
+      });
     });
   };
 
@@ -1125,11 +1133,18 @@
   function q34() { return String.fromCharCode(34); }
   WordDeck.prototype.formatTextFind = function (index, findText, font) {
     return this.run("formatTextFind", function (ctx) {
-      var para = ctx.document.body.paragraphs.getItemAt(index);
-      var found = para.search(String(findText), {});
-      found.load("items/font");
+      // Word.js collections have no getItemAt: load + sync, then index .items
+      var paras = ctx.document.body.paragraphs;
+      paras.load("text");
       return ctx.sync().then(function () {
-        var items = found.items || [];
+        var para = paras.items[index];
+        if (!para) {
+          throw new FriendlyError("Paragraph " + (index + 1) + " not found (document has " + paras.items.length + " paragraphs).");
+        }
+        var found = para.search(String(findText), {});
+        found.load("items/font");
+        return ctx.sync().then(function () {
+          var items = found.items || [];
         if (!items.length) throw new FriendlyError(q34() + findText + q34() + " not found in that paragraph.");
         items.forEach(function (rng) {
           if (font.bold != null) rng.font.bold = font.bold;
@@ -1141,7 +1156,8 @@
           if (font.size) rng.font.size = font.size;
           if (font.highlightColor) rng.font.highlightColor = font.highlightColor;
         });
-        return ctx.sync().then(function () { return { ok: true, count: items.length }; });
+          return ctx.sync().then(function () { return { ok: true, count: items.length }; });
+        });
       });
     });
   };
@@ -1336,8 +1352,9 @@ function validateOps(rawOps, ctx) {
 
   function fmtOp(op, ctx) {
     var paraRef = function (i) {
+      // op.para is 1-based; guard and read the SAME (0-based: i-1) paragraph
       if (!ctx || !ctx.paragraphs || !ctx.paragraphs[i - 1]) return "";
-      var t = ctx.paragraphs[i].text;
+      var t = ctx.paragraphs[i - 1].text;
       return t ? ' "' + String(t).slice(0, 60) + '"' : "";
     };
     switch (op.type) {
