@@ -235,6 +235,16 @@ window.__SK_SIM__ = true;
       if (!sh) throw new FriendlyError("Shape " + shapeIdx + " does not exist on slide " + i);
       sh.text = String(text);
     }
+    async setShapeTextFind(i, shapeIdx, findText, replText) {
+      if (!slides[i]) throw new FriendlyError("Slide " + i + " does not exist");
+      const sh = slides[i].shapes[shapeIdx];
+      if (!sh) throw new FriendlyError("Shape " + shapeIdx + " does not exist on slide " + i);
+      const full = String(sh.text || "");
+      const idx = full.toLowerCase().indexOf(String(findText).toLowerCase());
+      if (idx < 0) throw new FriendlyError('"' + findText + '" not found in that shape\'s current text.');
+      sh.text = full.slice(0, idx) + String(replText == null ? "" : replText) + full.slice(idx + String(findText).length);
+      return { ok: true, mode: "fragment" };
+    }
     async setNotes(i, text) {
       if (!slides[i]) throw new FriendlyError("Slide " + i + " does not exist");
       slides[i].notes = String(text);

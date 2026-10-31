@@ -49,7 +49,7 @@ is about how SlideKick works.
   |---|---|---|
   | create slide | append a new slide (title + bullets + notes when enabled) | auto |
   | edit slide | replace title / body / notes of an existing slide | auto |
-  | replace text | reword one shape in place (the "reword" path) | auto |
+  | replace text | reword one shape in place (the "reword" path); with a `find` fragment only that fragment is replaced - the rest of the shape's text (and its bullet list) stays untouched. For long lists always use `find` (the item's current words) rather than rewriting the whole shape | auto |
   | set notes | write speaker notes | auto |
   | create table | adds a table (optionally on a new title slide; position/size in points) | auto |
   | move/resize shape | sets left/top/width/height (points) of one shape | auto |

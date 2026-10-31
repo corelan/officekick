@@ -47,7 +47,7 @@
   var OPS_META = {
     create_slide: { label: "create slide", hint: "Appends a new slide (Office.js can only append; drag into place if needed)." },
     edit_slide: { label: "edit slide", hint: "Replaces title / body / speaker notes of an existing slide." },
-    replace_text: { label: "replace text", hint: "Rewrites the text of one shape in place." },
+    replace_text: { label: "replace text", hint: "Rewrites the text of one shape in place; with a find fragment, only that fragment is replaced (rest of the list untouched)." },
     set_notes: { label: "set notes", hint: "Writes speaker notes on a slide." },
     create_table: { label: "create table", hint: "Adds a table (new slide when slide is empty; position/size in points)." },
     move_shape: { label: "move/resize shape", hint: "Sets left/top/width/height (points) of one shape - design passes use this." },
@@ -451,7 +451,7 @@
     "Allowed op types:",
     '- {"type":"create_slide","layout":"title_content|title_only|section|blank","title":"...","body":["bullet",...],"notes":"..."} (body/notes optional; new slides are appended at the end of the deck)',
     '- {"type":"edit_slide","slide":N,"title":"..."|null,"body":[...]|null,"notes":"..."|null} (null means: leave unchanged)',
-    '- {"type":"replace_text","slide":N,"shape":N,"text":"..."} (reword one shape; N refers to the shape numbers listed for that slide)',
+    '- {"type":"replace_text","slide":N,"shape":N,"text":"..."} (reword one shape; N refers to the shape numbers listed for that slide). PREFERRED for a bullet/list item edit: add "find":"<the exact current text of that one bullet/fragment from the outline>" and make "text" the REPLACEMENT for only that fragment - the rest of the shape\'s text is preserved. Without "find" the op replaces the shape\'s WHOLE text, so only do that when the outline shows the entire text (no …[text continues]) or you really want to rewrite it all',
     '- {"type":"set_notes","slide":N,"notes":"..."}',
     '- {"type":"create_table","slide":N|null,"values":[["h1","h2"],["x","y"]],"left":40,"top":150,"width":640} (all cells strings, rows rectangular; slide null = new title slide first; left/top/width optional points)',
     '- {"type":"move_shape","slide":N,"shape":N,"left":40,"top":150,"width":300,"height":60} (points; only the fields to change; keep shapes inside the slide bounds shown in the outline)',
@@ -471,6 +471,7 @@
     "Rules:",
     "- Slide numbers are 1-based (slide 1 = the first slide in the filmstrip) and MUST come from the outline below. When the user says \"slide 2\", use \"slide\":2. Never invent them. Shape indexes keep the numbers shown in the outline.",
     "- One body element = one bullet/paragraph; keep bullets short unless told otherwise.",
+    "- When a shape's text ends with \"…[text continues]\" the outline shows only a preview: NEVER rebuild the whole shape from a preview (you would erase the hidden part of the list). Edit list items with replace_text + \"find\" (fragment replace) instead.",
     "- Reword/tighten requests: only rewrite wording, keep the meaning and slide count.",
     "- LARGE DECKS: the outline lists every slide. If you cannot address all of them in one reply, work in batches of at most 20 ops and end each reply with a short note of exactly what remains.",
     "- If the request is a question/explanation/brainstorm rather than a deck change, use format A.",
@@ -1630,7 +1631,48 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
     });
   };
 
-  OfficeDeck.prototype.setNotes = function (i, text) {
+  OfficeDeck.prototype.setShapeTextFind = function (slideIndex, shapeIndex, findText, replText) {
+    return this.run("setShapeTextFind", function (ctx) {
+      var shape = ctx.presentation.slides.getItemAt(slideIndex).shapes.getItemAt(shapeIndex);
+      var tf = shape.getTextFrameOrNullObject();
+      tf.load("isNullObject,hasText");
+      return ctx.sync().then(function () {
+        if (tf.isNullObject || !tf.hasText) {
+          throw new FriendlyError("Shape " + shapeIndex + " on slide " + slideIndex + " has no text");
+        }
+        var range = tf.textRange;
+        range.load("text");
+        return ctx.sync().then(function () {
+          var full = String(range.text || "");
+          var needle = String(findText);
+          var idx = full.toLowerCase().indexOf(needle.toLowerCase());
+          if (idx < 0) {
+            throw new FriendlyError("\"" + findText + "\" not found in that shape's current text.");
+          }
+          var repl = String(replText == null ? "" : replText);
+          try {
+            var sub = range.getSubstring(idx, needle.length);
+            sub.text = repl;
+          } catch (eSub) { /* older host without getSubstring set - fall back below */ }
+          return ctx.sync().then(function () {
+            range.load("text");
+            return ctx.sync().then(function () {
+              var now = String(range.text || "");
+              if (now.toLowerCase().indexOf(repl.toLowerCase()) >= 0) {
+                return { ok: true, mode: "fragment" };
+              }
+              // host ignored the subrange write -> rewrite the full text ourselves
+              var rebuilt = full.slice(0, idx) + repl + full.slice(idx + needle.length);
+              range.text = rebuilt;
+              return ctx.sync().then(function () { return { ok: true, mode: "full" }; });
+            });
+          });
+        });
+      });
+    });
+  };
+
+OfficeDeck.prototype.setNotes = function (i, text) {
     var self = this;
     return this.run("setNotes", function (ctx) {
       var slide = ctx.presentation.slides.getItemAt(i);
@@ -1788,8 +1830,17 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
       } else if (t === "replace_text") {
         if (!slideOk(op.slide)) { bad("bad slide index"); return; }
         if (!shapeOk(op.slide, op.shape)) { bad("shape " + op.shape + " not in the context list for slide " + op.slide); return; }
-        if (typeof op.text !== "string") { bad("missing text"); return; }
+        if (typeof op.text !== "string" || !op.text.length) { bad("missing text"); return; }
         out.slide = op.slide; out.shape = op.shape; out.text = op.text;
+        if (typeof op.find === "string" && op.find.trim()) {
+          var findR = op.find.trim();
+          if (findR.length > 200) { bad("find text too long (200 chars max)"); return; }
+          var shapeTxtR = ((ctx.slides[op.slide - 1].shapes || []).find(function (sh) { return sh.idx === op.shape - 1; }) || {}).text || "";
+          if (shapeTxtR.toLowerCase().indexOf(findR.toLowerCase()) === -1) {
+            bad("find text not found in that shape's current text"); return;
+          }
+          out.find = findR;
+        }
       } else if (t === "set_notes") {
         if (notesOff) { notesDropped++; return; } // speaker-notes generation disabled
         if (!slideOk(op.slide)) { bad("bad slide index"); return; }
@@ -1982,7 +2033,7 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
           (op.title != null ? ' -> "' + op.title + '"' : "");
       }
       case "replace_text":
-        return "Slide " + op.slide + ", shape " + op.shape + ": -> " + op.text;
+        return "Slide " + op.slide + ", shape " + op.shape + (op.find ? ": \"" + op.find + "\" -> " : ": -> ") + op.text;
       case "set_notes":
         return "Slide " + op.slide + slideTitle(op.slide) + ": speaker notes (" + op.notes.length + " chars)";
       case "create_table":
@@ -2081,10 +2132,16 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
           }
           return chain;
         }
-        case "replace_text":
+        case "replace_text": {
+          if (op.find) {
+            return deck.setShapeTextFind(cur, op.shape - 1, op.find, op.text).then(function () {
+              lines.push({ ok: true, text: "replace \"" + op.find + "\" -> \"" + op.text + "\" on slide " + op.slide + " shape " + op.shape });
+            });
+          }
           return deck.setShapeText(cur, op.shape - 1, op.text).then(function () {
             lines.push({ ok: true, text: "replace text on slide " + op.slide + " shape " + op.shape });
           });
+        }
         case "create_table": {
           var runTable = function (slideIndex) {
             return deck.addTable({ values: op.values, slide: slideIndex, geometry: op.geometry }).then(function (r) {
@@ -2278,7 +2335,7 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
         // shapes are numbered from 1 in the outline listing below
         var role = sh.isTitle || (title && sh.idx === title.idx) ? "title" : sh.isBody ? "body" : "text";
         var txt = String(sh.text).replace(/\r|\n/g, " | ");
-        if (txt.length > 220) txt = txt.slice(0, 220) + "…";
+        if (txt.length > 400) txt = txt.slice(0, 400) + "…[text continues]";
         if (!txt.trim()) return;
         lines.push("    shape " + (sh.idx + 1) + " (" + role + ", " + sh.name + '): "' + txt + '"');
       });

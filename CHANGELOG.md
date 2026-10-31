@@ -21,6 +21,22 @@
 ### Added
 - Every busy status (Asking ..., collecting context, generating image, applying, model-output repair) now shows a rotating indicator character so it reads as still-working.
 
+## [0.9.1] - 2026-10-31
+### Added - editing one item of a list (SlideKick)
+- `replace_text` now supports a `find` fragment: with `{"find":"<the exact
+  current words of that one bullet>"}` the pane replaces only that fragment and
+  leaves the rest of the shape's text (and the bullet list) untouched. The
+  fragment write is verified after applying; if a host ignores the sub-range
+  write, the pane falls back to a full-shape rewrite of the same result.
+  Without `find`, behaviour is unchanged (whole shape text).
+- Deck outline sent to the model now carries up to 400 characters of each
+  shape's text (was 220), and adds the rule: never rebuild a whole shape from a
+  preview (outline previews end with `…[text continues]`) - edit list items
+  with `replace_text` + `find` instead. This is the fix for "SlideKick claimed
+  not to have access to the list" on larger slides/decks: the list text is
+  included, and when only a preview fits, single items can still be edited
+  safely in place.
+
 ## [0.9.0] - 2026-10-31
 ### Added - per-add-in auto-apply
 - "Auto apply approved actions" is now a per-add-in setting: one value for
