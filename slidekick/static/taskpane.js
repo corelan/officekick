@@ -1674,6 +1674,25 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
     });
   };
 
+  OfficeDeck.prototype.mergeDeck = function (b64) {
+    // PowerPointApi 1.2: insert ALL slides of a .pptx after the current last slide
+    return this.run("mergeDeck", function (ctx) {
+      if (!Office.context.requirements.isSetSupported("PowerPointApi", "1.2")) {
+        throw new FriendlyError("merging decks needs PowerPointApi 1.2 - update PowerPoint.");
+      }
+      var slides = ctx.presentation.slides;
+      slides.load("items/id");
+      return ctx.sync().then(function () {
+        var opts = { formatting: "KeepSourceFormatting" };
+        if (slides.items.length) {
+          opts.targetSlideId = slides.items[slides.items.length - 1].id;  // append at the end
+        }
+        ctx.presentation.insertSlidesFromBase64(String(b64), opts);
+        return ctx.sync().then(function () { return { ok: true }; });
+      });
+    });
+  };
+
   OfficeDeck.prototype.styleShape = function (slideIndex, shapeIndex, fill, line) {
     return this.run("styleShape", function (ctx) {
       // PowerPointApi 1.4: ShapeFill.setSolidColor + ShapeLineFormat
@@ -3457,6 +3476,37 @@ OfficeDeck.prototype.setNotes = function (i, text) {
       setStatus("Conversation history cleared.", "ok");
     });
     $("chat-refresh-deck").addEventListener("click", function () { updateDeckSummary(); setStatus("Deck refreshed.", ""); });
+    // merge another deck: file picker -> base64 -> insert all its slides at the end
+    $("merge-deck").addEventListener("click", function () {
+      var fi = $("merge-file");
+      if (fi) fi.click();
+    });
+    $("merge-file").addEventListener("change", function () {
+      var fi = $("merge-file");
+      var f = fi.files && fi.files[0];
+      if (!f) return;
+      var name = f.name;
+      if (!/\.pptx$/i.test(name)) { setStatus("Only .pptx files can be merged.", "error"); fi.value = ""; return; }
+      if (!window.confirm("Merge ALL slides of '" + name + "' into this deck (appended at the end)?")) { fi.value = ""; return; }
+      var reader = new FileReader();
+      reader.onerror = function () { setStatus("Could not read '" + name + "'.", "error"); fi.value = ""; };
+      reader.onload = function () {
+        var b64 = String(reader.result || "");
+        b64 = b64.slice(b64.indexOf(",") + 1);   // strip data: URI prefix
+        setStatus("Merging slides from '" + name + "'…", "busy");
+        SK.deck.mergeDeck(b64).then(function (res) {
+          var cnt = res && res.count ? res.count : null;
+          setStatus(cnt ? ("Merged " + cnt + " slide(s) from '" + name + "'.")
+                        : "Merged slides from '" + name + "' appended to the deck.", "ok");
+          return updateDeckSummary();
+        }).then(function () { renderSimDeck(); fi.value = ""; })
+          .catch(function (err) {
+            setStatus("Merge failed: " + ((err && err.message) || err), "error");
+            fi.value = "";
+          });
+      };
+      reader.readAsDataURL(f);
+    });
 
     $("conn-new").addEventListener("click", resetConnForm);
     $("conn-save").addEventListener("click", saveConnection);

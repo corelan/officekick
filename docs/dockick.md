@@ -42,6 +42,8 @@ text and re-enable the input.
 | insert paragraphs | adds styled paragraphs at the end (Title / Heading 1-3 / Quote / List Paragraph / Normal) | auto |
 | edit paragraph | replaces one paragraph's text, keeping its style | auto |
 | accept tracked changes | accepts ALL tracked changes in the document (`body.getTrackedChanges().acceptAll()`) - finalize the AI edits made with revisions on; confirm by default | confirm |
+| reject tracked changes | rejects ALL tracked changes in the document (`rejectAll()`) - discard the AI edits made with revisions on | confirm |
+| set header / set footer | writes text into the page header / footer of section 1 (`section.getHeader/getFooter`, WordApi 1.1) | confirm |
 | set track changes | turns the document's own Track Changes mode on/off (the Review-tab toggle; `document.changeTrackingMode`) - does not touch existing revisions; confirm by default | confirm |
 | add hyperlink | links the FIRST occurrence of a text to a URL (`Range.hyperlink`, WordApi 1.3) | confirm |
 | format selected text | format changes applied to the text you selected right now | confirm |

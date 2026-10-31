@@ -162,6 +162,23 @@ window.__SK_SIM__ = true;
       sh.hyperlink = { address: url, screenTip: tip || "" };
       return { ok: true };
     }
+    async mergeDeck(b64) {
+      // the sim cannot parse a .pptx: appends two placeholder slides to show
+      // the merge flow
+      const n = slides.length;
+      for (let k = 1; k <= 2; k++) {
+        slides.push({
+          layout: "title_content",
+          title: "Imported slide " + k + " (from source deck)",
+          notes: "",
+          shapes: [
+            { name: "Title 1", type: "placeholder", text: "Imported slide " + k, isTitle: true, isBody: false },
+            { name: "Content Placeholder 2", type: "placeholder", text: "imported from ~" + Math.round((b64 || "").length * 3 / 4 / 1024) + " kB source deck", isTitle: false, isBody: true },
+          ],
+        });
+      }
+      return { ok: true, count: 2, at: n + 1 };
+    }
     async styleShape(slideIndex, shapeIndex, fill, line) {
       const sh = slides[slideIndex] && slides[slideIndex].shapes[shapeIndex];
       if (!sh) throw new FriendlyError("Shape " + shapeIndex + " on slide " + slideIndex + " does not exist");

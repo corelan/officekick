@@ -16,6 +16,8 @@
 
   var paras = [];
   var tables = [];
+  var header = '';
+  var footer = '';
   var links = [];
   var comments = [];
   var templateBlocks = [];
@@ -25,6 +27,8 @@
     paras = initial();
     tables = [];
     comments = [];
+    header = '';
+    footer = '';
     images = [];
     templateBlocks = [];
     trackChanges = false;
@@ -117,6 +121,15 @@
       trackChanges = false;
       return { ok: true, count: accepted, simulated: true };
     },
+    rejectChanges: async function () {
+      var rejected = trackChanges ? 1 : 0;
+      trackChanges = false;
+      return { ok: true, count: rejected, simulated: true };
+    },
+    setHeaderFooter: async function (text, isFooter) {
+      if (isFooter) footer = String(text); else header = String(text);
+      return { ok: true };
+    },
     formatTextFind: async function (index, findText, font) {
       const para = paras[index];
       if (!para) throw new FriendlyError("Paragraph " + index + " does not exist");
@@ -174,6 +187,9 @@
     renderDebug: function (el) {
       var rows = [];
       rows.push("<h3>Simulator document</h3>");
+      if (header || footer) {
+        rows.push('<div class="simrow"><b>HEADER</b> ' + esc(header || "(none)") + ' - <b>FOOTER</b> ' + esc(footer || "(none)") + "</div>");
+      }
       rows.push('<div class="opnote">' + paras.length + " paragraphs - " + tables.length +
         " table(s) - " + comments.length + " comment(s)</div>");
       paras.forEach(function (p, i) {

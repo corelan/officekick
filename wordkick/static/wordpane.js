@@ -61,6 +61,9 @@
     set_track_changes: { label: "set track changes", hint: "Turns the document's own Track Changes mode on or off (the Review-tab toggle). Does not touch existing revisions." },
     add_hyperlink:    { label: "add hyperlink", hint: "Links the FIRST occurrence of the given text to a URL (WordApi 1.3)." },
     format_selection: { label: "format selected text", hint: "Applies the same font changes to the text YOU selected right now." },
+    reject_changes:   { label: "reject tracked changes", hint: "Rejects ALL tracked changes currently in the document (undo of the AI edits made with revisions on)." },
+    set_header:       { label: "set header", hint: "Writes text into the page header of the document (section 1)." },
+    set_footer:       { label: "set footer", hint: "Writes text into the page footer of the document (section 1)." },
   };
   var OP_TYPES = Object.keys(OPS_META);
 
@@ -465,6 +468,8 @@
     '- {"type":"format_selection","font":{...same font subset}} (formats the TEXT THE USER HAS SELECTED right now; no para field)',
     '- format_text may also carry "style":"Heading 2|Heading 3|Title|Subtitle|List Bullet|List Number|Quote|Normal" (re-styles the whole paragraph, e.g. make para 4 a bullet list; then format props still apply on top)',
     '- {"type":"accept_changes"} (accepts ALL tracked changes in the document; use ONLY when the user asks to accept/approve/finalize the changes or revisions; list it AFTER the edits that produced them)',
+    '- {"type":"reject_changes"} (rejects ALL tracked changes in the document; only when the user explicitly asks to reject/discard the revisions)',
+    '- {"type":"set_header","text":"..."} / {"type":"set_footer","text":"..."} (writes text into the page header / footer of section 1; use when the user asks for a header/footer, e.g. a draft marker)',
     '- {"type":"set_track_changes","on":true|false} (turns the DOCUMENT\'s Track Changes mode on/off - the Review-tab toggle; use when the user asks to start/stop tracking; turning it off does NOT remove existing revisions - offer accept_changes for those; the pane\'s separate "AI edits as tracked changes" lives in Settings)',
     "",
     "Rules:",
@@ -1197,6 +1202,35 @@
     });
   };
 
+  WordDeck.prototype.rejectChanges = function () {
+    return this.run("rejectChanges", function (ctx) {
+      // TrackedChangeCollection.rejectAll() - WordApi 1.6 (mirror of acceptAll)
+      if (!Office.context.requirements.isSetSupported("WordApi", "1.6")) {
+        throw new FriendlyError("rejecting tracked changes needs WordApi 1.6 - update Word.");
+      }
+      var tcs = ctx.document.body.getTrackedChanges();
+      tcs.rejectAll();
+      return ctx.sync().then(function () { return { ok: true }; });
+    });
+  };
+
+  WordDeck.prototype.setHeaderFooter = function (text, isFooter) {
+    return this.run("setHeaderFooter", function (ctx) {
+      // sections -> getHeader/getFooter exist since WordApi 1.1
+      if (!Office.context.requirements.isSetSupported("WordApi", "1.1")) {
+        throw new FriendlyError("headers/footers need WordApi 1.1 - unsupported host.");
+      }
+      var section = ctx.document.sections.getItemAt(0);
+      var hf = isFooter ? section.getFooter("primary") : section.getHeader("primary");
+      if (typeof hf.insertText !== "function" || typeof hf.clear !== "function") {
+        throw new FriendlyError("this Word build does not allow editing the " + (isFooter ? "footer" : "header") + " here.");
+      }
+      hf.clear();
+      hf.insertText(String(text), "End");
+      return ctx.sync().then(function () { return { ok: true }; });
+    });
+  };
+
   function q34() { return String.fromCharCode(34); }
   WordDeck.prototype.formatTextFind = function (index, findText, font) {
     return this.run("formatTextFind", function (ctx) {
@@ -1317,7 +1351,7 @@ function normalizeWordStyle(v) {
       if (!op || typeof op !== "object") { invalid.push({ op: op, reason: "not an object" }); return; }
       var t = op.type;
       if (OP_TYPES.indexOf(t) < 0) { invalid.push({ op: op, reason: "unknown op type '" + t + "'" }); return; }
-      if (!ctx && t !== "insert_paragraphs" && t !== "create_table" && t !== "accept_changes" && t !== "set_track_changes") {
+      if (!ctx && t !== "insert_paragraphs" && t !== "create_table" && t !== "accept_changes" && t !== "set_track_changes" && t !== "reject_changes" && t !== "set_header" && t !== "set_footer") {
         invalid.push({ op: op, reason: "needs document context (enable 'include document context')" });
         return;
       }
@@ -1394,6 +1428,9 @@ function normalizeWordStyle(v) {
       } else if (t === "set_track_changes") {
         if (typeof op.on !== "boolean") { bad("missing on:true|false"); return; }
         out.on = op.on;
+      } else if (t === "set_header" || t === "set_footer") {
+        if (typeof op.text !== "string" || !op.text.trim()) { bad("missing header/footer text"); return; }
+        out.text = op.text.trim().slice(0, 600);
       } else if (t === "add_hyperlink") {
         if (typeof op.find !== "string" || !op.find.trim()) { bad("missing find text"); return; }
         var linkF = op.find.trim();
@@ -1455,7 +1492,7 @@ function normalizeWordStyle(v) {
     set_alt_text: "edit", set_categories: "edit", draft_reply: "add", new_message: "add",
     compose_body: "edit", save_draft: "add", create_template: "add", web_lookup: "edit",
     delete_slide: "del", delete_shape: "del", accept_changes: "edit", set_track_changes: "edit",
-    add_hyperlink: "edit", format_selection: "edit"
+    add_hyperlink: "edit", format_selection: "edit", reject_changes: "edit", set_header: "edit", set_footer: "edit"
   };
 
   function fmtOp(op, ctx) {
@@ -1483,6 +1520,12 @@ function normalizeWordStyle(v) {
         return "REWRITE document: " + op.items.length + " paragraph(s)";
       case "accept_changes":
         return "Accept ALL tracked changes in the document";
+      case "reject_changes":
+        return "Reject ALL tracked changes in the document";
+      case "set_header":
+        return "Page header: " + op.text.slice(0, 60);
+      case "set_footer":
+        return "Page footer: " + op.text.slice(0, 60);
       case "add_hyperlink":
         return "Hyperlink '" + op.find.slice(0, 60) + "' -> " + op.url;
       case "format_selection":
@@ -1574,6 +1617,18 @@ function applyOps(deck, ops, ctx) {
         case "format_selection":
           return deck.formatSelection(op.font).then(function () {
             lines.push({ ok: true, text: "formatted the selected text: " + Object.keys(op.font).join(", ") });
+          });
+        case "reject_changes":
+          return deck.rejectChanges().then(function () {
+            lines.push({ ok: true, text: "all tracked changes rejected" });
+          });
+        case "set_header":
+          return deck.setHeaderFooter(op.text, false).then(function () {
+            lines.push({ ok: true, text: "page header set: " + op.text.slice(0, 60) });
+          });
+        case "set_footer":
+          return deck.setHeaderFooter(op.text, true).then(function () {
+            lines.push({ ok: true, text: "page footer set: " + op.text.slice(0, 60) });
           });
         case "set_track_changes":
           return deck.setTrackChanges(op.on).then(function () {

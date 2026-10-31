@@ -21,6 +21,24 @@
 ### Added
 - Every busy status (Asking ..., collecting context, generating image, applying, model-output repair) now shows a rotating indicator character so it reads as still-working.
 
+## [0.9.9] - 2026-10-31
+### Added - API sweep round two
+- SlideKick: "Merge deck…" button next to Refresh deck - pick a .pptx and
+  all of its slides are appended after the last slide
+  (`presentation.insertSlidesFromBase64`, PowerPointApi 1.2, source
+  formatting kept).
+- DocKick: `reject_changes` op - rejects ALL tracked changes
+  (`TrackedChangeCollection.rejectAll()`, WordApi 1.6) - counterpart of
+  accept_changes.
+- DocKick: `set_header` / `set_footer` ops - write text into the page header /
+  footer of section 1 (`section.getHeader/getFooter`, WordApi 1.1).
+### Investigation result - slide comments NOT implementable
+- PowerPoint slide comments are NOT available to Office.js add-ins in any
+  released PowerPointApi requirement set (the only "comments" API on the
+  PowerPoint side is the DocumentProperties metadata field, which Microsoft
+  documents as having "no connection to comments made in slides"). There is
+  no op for slide comments until Microsoft ships a released API for them.
+
 ## [0.9.8] - 2026-10-31
 ### Added - proactive API sweep (Outlook / Word / PowerPoint)
 - MailKick: `new_meeting` op - opens the Outlook MEETING form (subject,

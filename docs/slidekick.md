@@ -86,6 +86,13 @@ is about how SlideKick works.
 - Notes that cannot be written automatically on older builds fall back to a
   copy-paste box in the pane.
 
+### Merging another deck
+
+The "Merge deck…" button (next to Refresh deck) appends ALL slides of another
+.pptx to the end of the current deck (PowerPointApi 1.2,
+`presentation.insertSlidesFromBase64`, source formatting kept). The slides
+land after the last slide; the deck then refreshes automatically.
+
 ### Styling shapes
 
 `style_shape` gives the model a direct lever over existing shapes (PowerPointApi
