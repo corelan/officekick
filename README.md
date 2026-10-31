@@ -132,6 +132,9 @@ Then quit and reopen the Office apps.
   approvals, design passes, simulator, troubleshooting.
 - [docs/dockick.md](docs/dockick.md) - the Word add-in: document actions,
   comments fallback, simulator.
+- [docs/mailkick.md](docs/mailkick.md) - the Outlook add-in: summarize /
+  translate, draft replies + forwards (you send), categories, templates,
+  simulator, troubleshooting.
 - [docs/architecture.md](docs/architecture.md) - how the stack works.
 - [CHANGELOG.md](CHANGELOG.md) | [LICENSE](LICENSE)
 
