@@ -31,7 +31,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 APP = "OfficeKick"
-VERSION = "0.8.2"
+VERSION = "0.8.3"
 
 CONNECTION_TYPES = (
     "openai",
@@ -345,6 +345,7 @@ class Store:
             self.data = {}
         self.data.setdefault("version", 1)
         self.data.setdefault("autoUpdateCheck", True)   # check GitHub at boot (no git)
+        self.data.setdefault("autoApplyApproved", False)  # global auto-apply of approved actions
         self.data.setdefault("connections", [])
         self.data.setdefault("profiles", [])
         self.data.setdefault("defaultProfile", None)
@@ -557,6 +558,7 @@ class Store:
             "debug": bool(d.get("debug")),
             "generateNotes": bool(d.get("generateNotes", False)),
             "autoUpdateCheck": bool(d.get("autoUpdateCheck", True)),
+            "autoApplyApproved": bool(d.get("autoApplyApproved", False)),
         }
 
 
@@ -1567,6 +1569,9 @@ class SlideKickHandler(BaseHTTPRequestHandler):
                     changed = True
                 if "generateNotes" in body and body["generateNotes"] is not None:
                     self.store.data["generateNotes"] = bool(body["generateNotes"])
+                    changed = True
+                if "autoApplyApproved" in body and body["autoApplyApproved"] is not None:
+                    self.store.data["autoApplyApproved"] = bool(body["autoApplyApproved"])
                     changed = True
                 if "autoUpdateCheck" in body and body["autoUpdateCheck"] is not None:
                     self.store.data["autoUpdateCheck"] = bool(body["autoUpdateCheck"])

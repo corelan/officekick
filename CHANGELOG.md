@@ -21,6 +21,15 @@
 ### Added
 - Every busy status (Asking ..., collecting context, generating image, applying, model-output repair) now shows a rotating indicator character so it reads as still-working.
 
+## [0.8.3] - 2026-10-31
+### Added
+- A global "Auto apply approved actions" setting in Settings -> Approval
+  policy (Behaviour group, persisted, default off). When on, every run's
+  auto-apply checkbox follows it (tick immediately and it applies when
+  gates render); when off the per-run checkbox stays manual. The user's
+  manual per-run override is remembered for that pane.
+  Verified: on -> persisted + the run checkbox ticks; off -> manual again.
+
 ## [0.8.2] - 2026-10-31
 ### Fixed / Changed
 - Session titles: a reasoning model burned the previous 24-token title

@@ -263,6 +263,36 @@
     });
   }
 
+  function autoApplyWanted() {
+    return !!(SK.cfg && SK.cfg.autoApplyApproved);
+  }
+
+  function syncAutoApplyCheckbox() {
+    var box = $("chat-autoapply");
+    if (box && autoApplyWanted()) box.checked = true;
+    if (box && !SK.autoApplyUserTouched) box.checked = autoApplyWanted();
+  }
+
+  function wireAutoApplySetting() {
+    var cb = $("set-autoapply");
+    if (!cb) return;
+    cb.checked = autoApplyWanted();
+    cb.addEventListener("change", function () {
+      var on = !!cb.checked;
+      apiJson("/api/settings", "PUT", { autoApplyApproved: on }).then(function () {
+        if (SK.cfg) SK.cfg.autoApplyApproved = on;
+        var box = $("chat-autoapply");
+        if (box) box.checked = on;           // follow the global immediately
+        syncAutoApplyCheckbox();
+        var msg = $("set-autoapply-msg");
+        if (msg) msg.textContent = on ? "ON - every run auto-applies approved actions." : "OFF - the per-run checkbox stays manual.";
+      }).catch(function (e) {
+        var msg = $("set-autoapply-msg");
+        if (msg) msg.textContent = "Save failed: " + ((e && e.message) || e);
+      });
+    });
+  }
+
   function updCheck() {
     var btn = $("upd-check"), info = $("upd-info");
     if (!btn || !info) return;
@@ -1844,6 +1874,7 @@ function applyOps(deck, ops, ctx) {
     var box = document.createElement("div");
     box.className = "opsbox";
     var h = document.createElement("h3");
+    syncAutoApplyCheckbox();
     h.textContent = "Proposed actions" + ($("chat-autoapply").checked ? " (auto-apply)" : "");
     box.appendChild(h);
 
@@ -2593,6 +2624,7 @@ function applyOps(deck, ops, ctx) {
     $("settings-debug-save").addEventListener("click", saveDebugOption);
     var updBtn = $("upd-check");
     if (updBtn) updBtn.addEventListener("click", updCheck);
+    wireAutoApplySetting();
     var updAuto = $("upd-auto");
     if (updAuto) {
       // remember the preference (on by default); the boot check honors it
