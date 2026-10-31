@@ -5,6 +5,10 @@
   'move_slide'" in the gate); the entry is in and the op is E2E-verified in
   the simulator (move last slide -> position 2 reorders correctly).
 
+## [0.5.2] - 2026-10-30
+### Changed
+- Deck outline character cap raised from 40,000 to 60,000 (per request).
+
 ## [0.5.1] - 2026-10-30
 ### Fixed
 - Large decks: the deck outline was hard-capped at 20,000 characters and 60

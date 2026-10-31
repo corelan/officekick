@@ -2083,7 +2083,7 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
       });
     });
     var total = lines.join("\n");
-    if (total.length > 40000) total = total.slice(0, 40000) + "\n…[truncated]";
+    if (total.length > 60000) total = total.slice(0, 60000) + "\n…[truncated]";
     return total;
   }
 
