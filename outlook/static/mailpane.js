@@ -563,6 +563,9 @@
       setStatus("Session resumed: \u201C" + SK.sessionName + "\u201D (" + SK.history.length + " message(s) loaded).", "ok");
       updateSessionLabel();
       pushHistoryStubRender();
+      // history must show real titles: a generic leftover "Session" gets an
+      // AI title based on the interactions, stored in the session file
+      if (/^session\b\s*$/i.test(String(SK.sessionName || ""))) aiNameSession(doc.id);
     }).catch(function (err) {
       setStatus("Could not load session: " + ((err && err.message) || err), "error");
     });
@@ -587,7 +590,7 @@
     var pastBody = $("past-body");
     if (pastBody) {
       pastBody.innerHTML = "";
-      for (var ti = turns.length - 1; ti >= Math.max(0, turns.length - 6) && ti >= 0; ti--) {
+      for (var ti = turns.length - 1; ti >= 0; ti--) {   // every run of the session, newest first
         pastBody.appendChild(pastTurnRow(turns[ti][0], turns[ti][1]));
       }
       wirePastHeader();   // wires the open/close click + sets the visibility (the pm glyph)
@@ -1442,6 +1445,25 @@ function applyOps(deck, ops, ctx) {
     $("chat-run").disabled = !on || SK.busy;
   }
 
+  function runQuickReply(stance) {
+    // reply + / reply - quick actions: a canned instruction runs through the
+    // normal pipeline (the open email's conversation is attached as context);
+    // the model proposes a draft_reply action with the AI-written text and
+    // the usual approval gate applies (MailKick never sends by itself)
+    if (SK.busy) return;
+    var prof = currentProfile();
+    if (!prof) { setStatus("No profile yet - create one on the Profiles tab first.", "error"); switchTab("settings"); switchSettingsSub("profiles"); return; }
+    var inp = $("chat-input");
+    if (!inp) return;
+    var stanceText = stance === "pos"
+      ? "positive and agreeable"
+      : "politely negative (declining) but still courteous";
+    inp.disabled = false;
+    inp.value = "Draft a polite reply to this email conversation in the tone the conversation uses (formal or informal). Stance: " + stanceText +
+      ". Then propose one draft_reply action with the AI-generated reply text (simple inline HTML only). Do not send anything.";
+    runPrompt();
+  }
+
   function runPrompt() {
     if (SK.busy) return;
     var input = $("chat-input");
@@ -1623,14 +1645,14 @@ function applyOps(deck, ops, ctx) {
     pm.className = "pmbox";
     pm.textContent = "+";
     head.appendChild(pm);
-    if (u.ts) {
-      var ts1 = document.createElement("span");
-      ts1.className = "ptts";
-      ts1.textContent = " " + u.ts + "  ";
-      head.appendChild(ts1);
-    }
     var uc = String(u.content || "");
-    head.appendChild(document.createTextNode(uc.length > 50 ? uc.slice(0, 50) + "…" : uc));
+    var ts1 = document.createElement("span");
+    ts1.className = "ptts";
+    ts1.textContent = u.ts || "no timestamp";   // timestamp first
+    head.appendChild(ts1);
+    var snip = document.createElement("div");
+    snip.className = "pt-text";                // the request text BELOW the ts
+    snip.textContent = uc.length > 50 ? uc.slice(0, 50) + "…" : uc;
     var body = document.createElement("div");
     body.className = "reqbody";
     var q1 = document.createElement("div");
@@ -1657,23 +1679,20 @@ function applyOps(deck, ops, ctx) {
       pm.textContent = pmGlyph(isOpen);
     });
     grp.appendChild(head);
+    grp.appendChild(snip);
     grp.appendChild(body);
     return grp;
   }
 
   function updatePastBox() {
+    // the box title is just a LABEL: the container shows every run box of
+    // the session, open by default; only the individual boxes have +/-
     var box = $("pastbox"), body = $("past-body"), head = $("past-head");
     if (!box || !body || !head) return;
     var n = body.querySelectorAll(".pastturn").length;
-    var open = body.classList.contains("open");
-    head.innerHTML = "";
-    var pm = document.createElement("span");
-    pm.className = "pmbox";
-    pm.textContent = pmGlyph(open);
-    head.appendChild(pm);
-    var lbl = document.createElement("span");
-    lbl.textContent = " Previous requests (" + n + ")";
-    head.appendChild(lbl);
+    head.textContent = "Previous requests (" + n + ")";
+    head.style.cursor = "default";
+    body.classList.add("open");   // the container list itself stays open
     box.style.display = n ? "" : "none";
   }
 
@@ -1695,17 +1714,14 @@ function applyOps(deck, ops, ctx) {
       body.insertBefore(row, body.firstChild);   // newest on top
       while (zone.firstChild) zone.removeChild(zone.firstChild);
     }
-    body.classList.remove("open");
     updatePastBox();
   }
 
   function wirePastHeader() {
+    // the title is not clickable; the per-run boxes carry the +/- toggles
     var head = $("past-head");
     if (!head) return;
-    head.onclick = function () {
-      $("past-body").classList.toggle("open");
-      updatePastBox();
-    };
+    head.onclick = null;
     updatePastBox();
   }
 
@@ -2440,6 +2456,9 @@ function applyOps(deck, ops, ctx) {
     });
 
     $("chat-run").addEventListener("click", runPrompt);
+    var rpos = $("reply-pos"), rneg = $("reply-neg");
+    if (rpos) rpos.addEventListener("click", function () { runQuickReply("pos"); });
+    if (rneg) rneg.addEventListener("click", function () { runQuickReply("neg"); });
     $("chat-input").addEventListener("keydown", function (ev) {
       if ((ev.metaKey || ev.ctrlKey) && ev.key === "Enter") { ev.preventDefault(); runPrompt(); }
     });
@@ -2661,6 +2680,9 @@ function applyOps(deck, ops, ctx) {
     });
 
     $("chat-run").addEventListener("click", runPrompt);
+    var rpos = $("reply-pos"), rneg = $("reply-neg");
+    if (rpos) rpos.addEventListener("click", function () { runQuickReply("pos"); });
+    if (rneg) rneg.addEventListener("click", function () { runQuickReply("neg"); });
     $("chat-input").addEventListener("keydown", function (ev) {
       if ((ev.metaKey || ev.ctrlKey) && ev.key === "Enter") { ev.preventDefault(); runPrompt(); }
     });

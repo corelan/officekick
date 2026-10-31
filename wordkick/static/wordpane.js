@@ -577,6 +577,9 @@
       setStatus("Session resumed: \u201C" + SK.sessionName + "\u201D (" + SK.history.length + " message(s) loaded).", "ok");
       updateSessionLabel();
       pushHistoryStubRender();
+      // history must show real titles: a generic leftover "Session" gets an
+      // AI title based on the interactions, stored in the session file
+      if (/^session\b\s*$/i.test(String(SK.sessionName || ""))) aiNameSession(doc.id);
     }).catch(function (err) {
       setStatus("Could not load session: " + ((err && err.message) || err), "error");
     });
@@ -601,7 +604,7 @@
     var pastBody = $("past-body");
     if (pastBody) {
       pastBody.innerHTML = "";
-      for (var ti = turns.length - 1; ti >= Math.max(0, turns.length - 6) && ti >= 0; ti--) {
+      for (var ti = turns.length - 1; ti >= 0; ti--) {   // every run of the session, newest first
         pastBody.appendChild(pastTurnRow(turns[ti][0], turns[ti][1]));
       }
       wirePastHeader();   // wires the open/close click + sets the visibility (the pm glyph)
@@ -1699,14 +1702,14 @@ function applyOps(deck, ops, ctx) {
     pm.className = "pmbox";
     pm.textContent = "+";
     head.appendChild(pm);
-    if (u.ts) {
-      var ts1 = document.createElement("span");
-      ts1.className = "ptts";
-      ts1.textContent = " " + u.ts + "  ";
-      head.appendChild(ts1);
-    }
     var uc = String(u.content || "");
-    head.appendChild(document.createTextNode(uc.length > 50 ? uc.slice(0, 50) + "…" : uc));
+    var ts1 = document.createElement("span");
+    ts1.className = "ptts";
+    ts1.textContent = u.ts || "no timestamp";   // timestamp first
+    head.appendChild(ts1);
+    var snip = document.createElement("div");
+    snip.className = "pt-text";                // the request text BELOW the ts
+    snip.textContent = uc.length > 50 ? uc.slice(0, 50) + "…" : uc;
     var body = document.createElement("div");
     body.className = "reqbody";
     var q1 = document.createElement("div");
@@ -1733,23 +1736,20 @@ function applyOps(deck, ops, ctx) {
       pm.textContent = pmGlyph(isOpen);
     });
     grp.appendChild(head);
+    grp.appendChild(snip);
     grp.appendChild(body);
     return grp;
   }
 
   function updatePastBox() {
+    // the box title is just a LABEL: the container shows every run box of
+    // the session, open by default; only the individual boxes have +/-
     var box = $("pastbox"), body = $("past-body"), head = $("past-head");
     if (!box || !body || !head) return;
     var n = body.querySelectorAll(".pastturn").length;
-    var open = body.classList.contains("open");
-    head.innerHTML = "";
-    var pm = document.createElement("span");
-    pm.className = "pmbox";
-    pm.textContent = pmGlyph(open);
-    head.appendChild(pm);
-    var lbl = document.createElement("span");
-    lbl.textContent = " Previous requests (" + n + ")";
-    head.appendChild(lbl);
+    head.textContent = "Previous requests (" + n + ")";
+    head.style.cursor = "default";
+    body.classList.add("open");   // the container list itself stays open
     box.style.display = n ? "" : "none";
   }
 
@@ -1771,17 +1771,14 @@ function applyOps(deck, ops, ctx) {
       body.insertBefore(row, body.firstChild);   // newest on top
       while (zone.firstChild) zone.removeChild(zone.firstChild);
     }
-    body.classList.remove("open");
     updatePastBox();
   }
 
   function wirePastHeader() {
+    // the title is not clickable; the per-run boxes carry the +/- toggles
     var head = $("past-head");
     if (!head) return;
-    head.onclick = function () {
-      $("past-body").classList.toggle("open");
-      updatePastBox();
-    };
+    head.onclick = null;
     updatePastBox();
   }
 

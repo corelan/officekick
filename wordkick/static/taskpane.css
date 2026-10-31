@@ -627,3 +627,16 @@ body.dark .oprow.op-mod .optype { color: #3fb950; }
 /* the request echo above the response/summary after a run completes */
 .reqecho { font-size: 12px; font-weight: 600; opacity: .75; margin: 2px 0 6px; word-break: break-word; }
 .reqecho::before { content: "Request: "; font-weight: 700; }
+
+/* long hint/description text wraps inside table cells + group boxes */
+table.list td { word-break: break-word; }
+table.list .muted, .setgroup .muted, .setgroup label { word-break: break-word; white-space: normal; }
+
+/* Behaviour group: let the checkbox label shrink + wrap in a narrow pane */
+.setgroup .field-inline.check { flex: 1 1 auto; min-width: 0; }
+
+/* the Previous-requests box: titled container, ALWAYS open; only the
+   individual run boxes open/close (+/-) */
+#past-body { display: block; }
+#past-head { cursor: default; opacity: .9; }
+.pastturn .pt-text { font-size: 12.5px; padding: 3px 0 0 24px; word-break: break-word; opacity: .85; }
