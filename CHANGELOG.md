@@ -21,6 +21,19 @@
 ### Added
 - Every busy status (Asking ..., collecting context, generating image, applying, model-output repair) now shows a rotating indicator character so it reads as still-working.
 
+## [0.7.0] - 2026-10-30
+### Added
+- **Update check without git**: the server fetches the VERSION file from the
+  GitHub repo (contents API with a raw fallback, cached 10 minutes) and
+  compares it with the running version. Settings → General now has a
+  "Check for updates" button; one silent check also runs at boot.
+  Shows "up to date (x, latest y)" or "Update available: y (you run x)"
+  with the update instructions (git pull + install.sh / install.ps1).
+- Private-repo support: put a read-only token in the env var
+  OFFICEKICK_GITHUB_TOKEN or ~/.officekick/github_token (never logged,
+  never rendered in the panes).
+- Test hook: /api/update-check?latest=X forces the remote value.
+
 ## [0.6.9] - 2026-10-30
 ### Fixed / Changed
 - The "Previous requests (N)" box now actually shows its content: up to the

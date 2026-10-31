@@ -218,6 +218,30 @@
     renderRequests();
   }
 
+
+  function updCheck() {
+    var btn = $("upd-check"), info = $("upd-info");
+    if (!btn || !info) return;
+    btn.disabled = true;
+    info.textContent = "Checking for updates…";
+    apiJson("/api/update-check", "GET").then(function (data) {
+      btn.disabled = false;
+      if (!data || data.ok === false) {
+        info.textContent = data && data.error ? data.error : "could not check for updates";
+        return;
+      }
+      if (data.upToDate) {
+        info.textContent = "You are up to date (" + data.current + ", latest " + data.latest + ").";
+      } else {
+        info.textContent = "Update available: " + data.latest + " (you run " + data.current + "). " +
+          (data.howToUpdate || "");
+      }
+    }).catch(function (e) {
+      btn.disabled = false;
+      info.textContent = "could not check for updates: " + (e && e.message ? e.message : e);
+    });
+  }
+
   function apiJson(path, method, body) {
     var t0 = Date.now();
     var verb = method || "GET";
@@ -2301,6 +2325,11 @@ function applyOps(deck, ops, ctx) {
       b.addEventListener("click", function () { switchSettingsSub(b.dataset.subtab); });
     });
     $("settings-debug-save").addEventListener("click", saveDebugOption);
+    var updBtn = $("upd-check");
+    if (updBtn) {
+      updBtn.addEventListener("click", updCheck);
+      updCheck();   // silent availability check at boot (cached on the server)
+    }
     updateSessionLabel();
     wireSessions();
     wireTemplates();

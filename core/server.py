@@ -31,7 +31,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 APP = "OfficeKick"
-VERSION = "0.6.9"
+VERSION = "0.7.0"
 
 CONNECTION_TYPES = (
     "openai",
@@ -864,6 +864,81 @@ def filter_image_models(store, conn_name):
         raise ApiError(502, "could not list models: %s" % exc)
 
 
+
+UPDATE_CACHE = {"t": 0.0, "data": None}
+
+
+def _version_tuple(v):
+    parts = re.findall(r"\d+", str(v or ""))
+    return tuple(int(x) for x in parts) or (0,)
+
+
+def _github_token():
+    """Optional read-only GitHub token: env first, then ~/.officekick/github_token."""
+    tok = os.environ.get("OFFICEKICK_GITHUB_TOKEN", "").strip()
+    if tok:
+        return tok
+    try:
+        fp = Path.home() / ".officekick" / "github_token"
+        if fp.exists():
+            return fp.read_text(encoding="utf-8").strip()
+    except Exception:
+        pass
+    return ""
+
+
+def update_check(force_latest=None):
+    """Compare the running VERSION with the latest in the GitHub repo.
+
+    Reads the VERSION file from GitHub (contents API, raw fallback; no git
+    involved). Cached for 10 minutes; ?latest= overrides the remote value
+    (used by tests). A private repo needs a read-only token in the env var
+    OFFICEKICK_GITHUB_TOKEN or the file ~/.officekick/github_token.
+    """
+    now = time.time()
+    if not force_latest:
+        cached = UPDATE_CACHE["data"]
+        if cached and now - UPDATE_CACHE["t"] < 600:
+            return cached
+    latest = force_latest or None
+    if latest is None:
+        headers = {"User-Agent": "officekick/" + VERSION}
+        tok = _github_token()
+        if tok:
+            headers["Authorization"] = "Bearer " + tok
+        api_url = "https://api.github.com/repos/corelan/officekick/contents/VERSION"
+        raw_url = "https://raw.githubusercontent.com/corelan/officekick/main/VERSION"
+        try:
+            try:
+                req = urllib.request.Request(api_url, headers=headers)
+                with urllib.request.urlopen(req, timeout=8) as r:
+                    payload = json.loads(r.read().decode("utf-8", "replace"))
+                import base64
+                latest = base64.b64decode(payload.get("content", "")).decode(
+                    "utf-8", "replace").strip()
+            except Exception:
+                req = urllib.request.Request(raw_url, headers=headers)
+                with urllib.request.urlopen(req, timeout=8) as r:
+                    latest = r.read().decode("utf-8", "replace").strip()
+        except Exception as exc:
+            note = " (private repo? put a read-only token in OFFICEKICK_GITHUB_TOKEN or ~/.officekick/github_token)" if not tok else ""
+            return {"ok": False, "error": "could not check for updates: %s%s" % (exc, note),
+                    "current": VERSION}
+    latest = (latest or "").strip()
+    if not latest:
+        return {"ok": False, "error": "no version published in the repo", "current": VERSION}
+    up_to_date = _version_tuple(latest) <= _version_tuple(VERSION)
+    data = {"ok": True, "current": VERSION, "latest": latest,
+            "upToDate": up_to_date,
+            "repo": "https://github.com/corelan/officekick",
+            "howToUpdate": "git pull in your local clone, then run install.sh (macOS) "
+                           "or install.ps1 (Windows) and reload the add-ins"}
+    if not force_latest:
+        UPDATE_CACHE["t"] = now
+        UPDATE_CACHE["data"] = data
+    return data
+
+
 def provider_list_models(store, conn_name, store_for_log=True):
     conn = store.find_connection(conn_name)
     if conn is None:
@@ -1312,6 +1387,8 @@ class SlideKickHandler(BaseHTTPRequestHandler):
             elif path.startswith("/api/sessions/"):
                 sid = path[len("/api/sessions/"):]
                 self._send_json(self.store.sessions.get(sid))
+            elif path == "/api/update-check":
+                self._send_json(update_check((query.get("latest") or [""])[0] or None))
             elif path == "/api/templates":
                 self._send_json({"templates": self.store.templates.list()})
             elif path.startswith("/api/templates/"):
