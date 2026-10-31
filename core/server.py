@@ -31,7 +31,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 APP = "OfficeKick"
-VERSION = "0.8.1"
+VERSION = "0.8.2"
 
 CONNECTION_TYPES = (
     "openai",
@@ -201,8 +201,22 @@ class SessionStore:
 
     def rename(self, sid, name):
         doc = self.get(sid)
-        return self.upsert(sid, (name or "")[:80] or doc.get("name") or "session",
-                           doc.get("exchanges"), doc)
+        # title-repair: the model may answer with reasoning fragments, fences,
+        # labels ("Title: x") or long essays - derive a clean short title
+        import re as _re
+        n = str(name or "")
+        n = _re.sub(r"<think>[\s\S]*?</think>", "", n, flags=_re.I)
+        n = _re.sub(r"^\s*```.*?```\s*$", "", n, flags=_re.S)
+        n = _re.sub(r"^\s*(title|session title|titel)\s*[:\-]\s*", "", n, flags=_re.I)
+        n = n.replace('"', "").replace("`", "").strip()
+        nl = [ln for ln in n.splitlines() if ln.strip()]
+        n = nl[0].strip() if nl else ""
+        words = n.split()
+        if len(words) > 7:
+            n = " ".join(words[:7])
+        if not n:
+            n = ""   # empty = keep the stored/derived name
+        return self.upsert(sid, n[:80], doc.get("exchanges"), doc)
 
     def delete(self, sid):
         if not self._valid(sid):

@@ -21,6 +21,24 @@
 ### Added
 - Every busy status (Asking ..., collecting context, generating image, applying, model-output repair) now shows a rotating indicator character so it reads as still-working.
 
+## [0.8.2] - 2026-10-31
+### Fixed / Changed
+- Session titles: a reasoning model burned the previous 24-token title
+  budget on hidden reasoning and returned nothing, so every AI title failed
+  silently and sessions stayed "session". The title call now gets 300
+  tokens; on failure the pane guarantees a rename to the derived request
+  name; the server rename route additionally repairs model answers
+  (reasoning fragments, code fences, "Title:"-labels, long essays).
+- Titles confirmed working with the user's real profile ("Sliding Context
+  Windows Explained").
+- Collapsed state of the per-run boxes in Previous requests: the head now
+  shows the first 50 characters of the request + the timestamp; + opens the
+  full request (click-to-refill an empty input) and the response/actions
+  summary; - collapses.
+### Confirmed
+- The session store keeps EVERY exchange (never truncated to 6); only the
+  model context and the History-tab preview are capped at 6.
+
 ## [0.8.1] - 2026-10-31
 ### Changed
 - Web lookups are no longer a user option: the checkbox is gone. The model

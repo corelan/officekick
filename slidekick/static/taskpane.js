@@ -521,13 +521,17 @@
 
   function aiNameSession(sid) {
     if (SK.testMode) return;   // no AI calls for test sessions
-    // one tiny call through the profile's other slot; on failure the derived name stays
+    // one tiny call through the profile's other slot; the derived name stays
+    // if anything fails, and the server repairs/cleans what the model returns
     var prof = currentProfile();
     if (!prof || !prof.other || !prof.other.connection || !prof.other.model) return;
     var first = derivedSessionName();
+    var renameFallback = function () {
+      apiJson("/api/sessions/rename/" + sid, "POST", { name: first.slice(0, 48) });
+    };
     apiJson("/api/chat", "POST", {
       connection: prof.other.connection, model: prof.other.model,
-      temperature: 0.2, max_tokens: 24,
+      temperature: 0.2, maxTokens: 300,
       messages: [
         { role: "system", content: "You generate very short chat-session titles. Reply with ONLY the title: 2-4 words, no quotes, no punctuation at the end." },
         { role: "user", content: "Session start: " + first.slice(0, 120) },
@@ -536,14 +540,16 @@
       var name = stripReasoning(resp.text || "").replace(/"/g, "").replace(/^[:\- ]+/, "").trim().slice(0, 48);
       // reject non-title junk (models that ignore the instruction and echo ops/json)
       var junk = /^[{\[]/.test(name) || /"(kind|ops|type)"/.test(name) || name.length < 2 || name.length > 60;
-      if (junk) return;
+      if (junk) { renameFallback(); return; }
       return apiJson("/api/sessions/rename/" + sid, "POST", { name: name }).then(function () {
         SK.sessionName = name;
         dbg("session.named", { id: sid, name: name });
         updateSessionLabel();
         if (SK.activeTab === "sessions") renderSessions();
       });
-    }).catch(function () { /* derived name stays */ });
+    }).catch(function () {
+      dbg("session.namingFailed", { id: sid });   // derived name stays
+    });
   }
 
   function resumeSession(sessId) {
@@ -2440,7 +2446,7 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
       head.appendChild(ts1);
     }
     var uc = String(u.content || "");
-    head.appendChild(document.createTextNode(uc.length > 110 ? uc.slice(0, 110) + "…" : uc));
+    head.appendChild(document.createTextNode(uc.length > 50 ? uc.slice(0, 50) + "…" : uc));
     var body = document.createElement("div");
     body.className = "reqbody";
     var q1 = document.createElement("div");
