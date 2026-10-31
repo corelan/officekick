@@ -465,36 +465,45 @@
     el.appendChild(note);
     // show the last up-to-6 messages (3 exchanges) as collapsed request/response
     // boxes, styled like the Inspector groups; future runs append below
-    var msgs = SK.history.slice(-6);
-    while (msgs.length % 2) msgs.shift();
-    function makeTurn(u, a) {
-      var box = document.createElement("div");
-      box.className = "reqgrp";
-      var head = document.createElement("div");
-      head.className = "reqhead2";
-      head.title = "Click to open/close the response";
-      var b1 = document.createElement("b");
-      b1.textContent = "Request: ";
-      head.appendChild(b1);
-      var uc = String(u.content || "");
-      head.appendChild(document.createTextNode(uc.length > 110 ? uc.slice(0, 110) + "…" : uc));
-      var body = document.createElement("div");
-      body.className = "reqbody";
-      var who = document.createElement("b");
-      who.textContent = "Response: ";
-      body.appendChild(who);
-      var ac = String(a.content || "");
-      body.appendChild(document.createTextNode(ac.length > 400 ? ac.slice(0, 400) + "…" : ac));
-      head.addEventListener("click", function () { body.classList.toggle("open"); });
-      box.appendChild(head);
-      box.appendChild(body);
-      return box;
-    }
-    for (var i = 0; i + 1 < msgs.length; i += 2) {
-      if (msgs[i].role === "user" && msgs[i + 1].role === "assistant") {
-        el.appendChild(makeTurn(msgs[i], msgs[i + 1]));
+    // every loaded exchange goes into the collapsible previous-requests
+    // box under the prompt zone, newest first inside it
+    var pastBody = $("past-body");
+    var pastBox = $("pastbox");
+    if (pastBody && pastBox) {
+      pastBody.innerHTML = "";
+      var list = SK.history.slice(0);
+      while (list.length % 2) list.shift();
+      for (var m = list.length - 2; m >= 0; m -= 2) {   // newest first inside the box
+        (function makeTurn(u, a) {
+          var grp = document.createElement("div");
+          grp.className = "reqgrp";
+          var head = document.createElement("div");
+          head.className = "reqhead2";
+          head.title = "Click to open/close";
+          var b1 = document.createElement("b");
+          b1.textContent = "Request: ";
+          head.appendChild(b1);
+          var uc = String(u.content || "");
+          head.appendChild(document.createTextNode(uc.length > 110 ? uc.slice(0, 110) + "…" : uc));
+          var body3 = document.createElement("div");
+          body3.className = "reqbody";
+          var who = document.createElement("b");
+          who.textContent = "Response: ";
+          body3.appendChild(who);
+          var ac = String(a.content || "");
+          body3.appendChild(document.createTextNode(ac.length > 500 ? ac.slice(0, 500) + "…" : ac));
+          head.addEventListener("click", function () { body3.classList.toggle("open"); });
+          grp.appendChild(head);
+          grp.appendChild(body3);
+          pastBody.appendChild(grp);
+        })(list[m], list[m + 1]);
       }
+      pastBox.style.display = pastBody.children.length ? "" : "none";
+      var ph = $("past-head");
+      if (ph) ph.textContent = "Previous requests (" + (pastBody.children.length) + ")";
+      $("past-body").classList.remove("open");
     }
+    if (jend > 0) {}
     renderSessions();  // refresh the "current" label
   }
 
@@ -1384,24 +1393,56 @@ function applyOps(deck, ops, ctx) {
     return { ok: false, text: stripped };
   }
 
+
+  function pushPastTurn(instruction) {
+    var zone = $("chat-output");
+    var pastBody = $("past-body");
+    var pastBox = $("pastbox");
+    if (!pastBody || !pastBox) return;
+    if (zone && zone.children.length) {
+      var grp = document.createElement("div");
+      grp.className = "reqgrp";
+      var head = document.createElement("div");
+      head.className = "reqhead2";
+      head.title = "Click to open/close this earlier turn";
+      var who = document.createElement("b");
+      who.textContent = "Request: ";
+      head.appendChild(who);
+      head.appendChild(document.createTextNode(instruction || "(earlier turn)"));
+      head.addEventListener("click", function () {
+        Array.prototype.forEach.call(grp.parentNode.querySelectorAll(".reqgrp .reqbody"), function (b) {
+          b.classList.toggle("open");
+        });
+      });
+      var body2 = document.createElement("div");
+      body2.className = "reqbody";
+      while (zone.firstChild) body2.appendChild(zone.firstChild);
+      grp.appendChild(head);
+      grp.appendChild(body2);
+      pastBody.insertBefore(grp, pastBody.firstChild);   // newest first inside the box
+    }
+    var n = pastBody.querySelectorAll(".reqgrp").length;
+    pastBox.style.display = n ? "" : "none";
+    var head = $("past-head");
+    if (head) head.textContent = "Previous requests (" + n + ")";
+  }
+
+  function wirePastHeader() {
+    var head = $("past-head");
+    if (!head) return;
+    head.onclick = function () {
+      $("past-body").classList.toggle("open");
+    };
+  }
+
   function renderParsed(parsed, ctx, instruction) {
+    // the previous rendered turn files itself into the collapsible
+    // previous-requests box; the zone then renders fresh for this run
+    pushPastTurn(SK.lastInstruction);
+    SK.lastInstruction = instruction;
     var out = $("chat-output");
-    // thread: the request prints above its response; click a request to copy
-    // it back into the prompt box; the thread keeps the last handful of turns
-    var reqline = document.createElement("div");
-    reqline.className = "reqline";
-    reqline.title = "Click to copy this request back into the input box";
-    var who = document.createElement("b");
-    who.textContent = "Request: ";
-    reqline.appendChild(who);
-    reqline.appendChild(document.createTextNode(instruction));
-    reqline.addEventListener("click", function () {
-      var inp = $("chat-input");
-      inp.value = instruction;
-      inp.focus();
-    });
-    out.appendChild(reqline);
-    while (out.children.length > 30) out.removeChild(out.firstChild);
+    out.innerHTML = "";
+    wirePastHeader();
     if (!parsed.ok) {
       var box = document.createElement("div");
       box.className = "reply-text";

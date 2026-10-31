@@ -576,9 +576,15 @@ button.armed { border-color: #b00020 !important; color: #fff !important; backgro
 
 /* rotating indicator while a busy status shows (Asking / collecting / image / applying / repair) */
 .status.busy::before {
-  content: "\u25D0";
+  content: "\25D0";
   display: inline-block;
   margin-right: 6px;
   animation: skspin 0.9s linear infinite;
 }
 @keyframes skspin { to { transform: rotate(360deg); } }
+
+/* Previous-requests box under the chat output */
+#pastbox { border: 1px solid rgba(127,127,127,.35); border-radius: 8px; margin: 10px 0 0; overflow: hidden; }
+#pastbox .reqhead2 { font-weight: 700; }
+#pastbox .reqbody { padding: 4px 8px 8px; border-top: 1px dashed rgba(127,127,127,.3); }
+#pastbox .reqgrp { margin: 8px 0 0; }

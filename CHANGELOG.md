@@ -21,6 +21,16 @@
 ### Added
 - Every busy status (Asking ..., collecting context, generating image, applying, model-output repair) now shows a rotating indicator character so it reads as still-working.
 
+## [0.6.5] - 2026-10-30
+### Changed
+- chat: the prompt sits at the top; below it the CURRENT response + proposed
+  actions; below that all previous turns are filed into ONE collapsible
+  "Previous requests (N)" box (newest first inside, click to expand; each
+  turn opens/closes its response too). Resuming fills the box from the
+  stored history; New session empties it.
+- fixed: the busy-status spinner printed a literal unicode escape in CSS;
+  it now renders the actual rotating character.
+
 ## [0.6.2] - 2026-10-30
 ### Changed
 - **Inspector moved into Settings** as a sub-tab (General / Approval policy /
