@@ -2216,6 +2216,14 @@ function applyOps(deck, ops, ctx) {
     });
     box.appendChild(tableRows);
 
+    // horizontal divider between the action list and the "don't ask again"
+    // session checkboxes (only when there are any)
+    if (Object.keys(confirmTypes).length) {
+      var gatehr = document.createElement("div");
+      gatehr.className = "gate-divider";
+      box.appendChild(gatehr);
+    }
+
     // remember-for-session checkboxes (one per confirm type present)
     var remember = {};
     Object.keys(confirmTypes).forEach(function (type) {

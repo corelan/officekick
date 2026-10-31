@@ -673,3 +673,6 @@ table.list .muted, .setgroup .muted, .setgroup label { word-break: break-word; w
 .oprowline1 .opcheckbox { margin-left: auto; }
 .oprow .opdesc { display: block; padding-left: 2px; }
 
+/* divider between the proposed actions and the 'don't ask again' checkboxes */
+.gate-divider { border-top: 1px solid var(--line); margin: 7px 0 6px 0; }
+

@@ -21,6 +21,13 @@
 ### Added
 - Every busy status (Asking ..., collecting context, generating image, applying, model-output repair) now shows a rotating indicator character so it reads as still-working.
 
+## [0.9.11] - 2026-10-31
+### Changed - approval gate
+- A horizontal divider now separates the proposed-actions list from the
+  "don't ask again for '<action>' this session" checkboxes (all three
+  add-ins; divider only renders when at least one confirm-mode action is
+  present).
+
 ## [0.9.10] - 2026-10-31
 ### Changed - proposed-actions layout
 - The approval gate rows are reorganized for the narrow pane: line 1 carries
