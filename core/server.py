@@ -31,7 +31,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 APP = "OfficeKick"
-VERSION = "0.7.3"
+VERSION = "0.7.4"
 
 CONNECTION_TYPES = (
     "openai",
@@ -314,6 +314,7 @@ class Store:
         else:
             self.data = {}
         self.data.setdefault("version", 1)
+        self.data.setdefault("autoUpdateCheck", True)   # check GitHub at boot (no git)
         self.data.setdefault("connections", [])
         self.data.setdefault("profiles", [])
         self.data.setdefault("defaultProfile", None)
@@ -525,6 +526,7 @@ class Store:
             "approvals": d.get("approvals") or dict(DEFAULT_APPROVALS),
             "debug": bool(d.get("debug")),
             "generateNotes": bool(d.get("generateNotes", False)),
+            "autoUpdateCheck": bool(d.get("autoUpdateCheck", True)),
         }
 
 
@@ -931,8 +933,11 @@ def update_check(force_latest=None):
     data = {"ok": True, "current": VERSION, "latest": latest,
             "upToDate": up_to_date,
             "repo": "https://github.com/corelan/officekick",
-            "howToUpdate": "git pull in your local clone, then run install.sh (macOS) "
-                           "or install.ps1 (Windows) and reload the add-ins"}
+            "howToUpdate": "To update: run git pull in your local OfficeKick clone, "
+                           "then run install.sh (macOS) or install.ps1 (Windows) again "
+                           "(it redeploys the add-ins and restarts the local server), and "
+                           "reload the task pane (reopen the add-in; restart Office if it "
+                           "keeps showing the old UI). No automatic git pull is attempted."}
     if not force_latest:
         UPDATE_CACHE["t"] = now
         UPDATE_CACHE["data"] = data
@@ -1538,6 +1543,9 @@ class SlideKickHandler(BaseHTTPRequestHandler):
                     changed = True
                 if "generateNotes" in body and body["generateNotes"] is not None:
                     self.store.data["generateNotes"] = bool(body["generateNotes"])
+                    changed = True
+                if "autoUpdateCheck" in body and body["autoUpdateCheck"] is not None:
+                    self.store.data["autoUpdateCheck"] = bool(body["autoUpdateCheck"])
                     changed = True
                 if "trackedChanges" in body and body["trackedChanges"] is not None:
                     self.store.data["trackedChanges"] = bool(body["trackedChanges"])

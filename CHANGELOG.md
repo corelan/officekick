@@ -21,6 +21,15 @@
 ### Added
 - Every busy status (Asking ..., collecting context, generating image, applying, model-output repair) now shows a rotating indicator character so it reads as still-working.
 
+## [0.7.4] - 2026-10-30
+### Changed
+- Update check preferences: "Check for updates automatically at startup" is
+  now a persisted setting (on by default) in Settings -> General, together
+  with a "Check now" button. The boot check runs only when the setting is on.
+- The instructions shown on an available update spell out the manual steps
+  (git pull in the local clone, rerun install.sh / install.ps1, reload the
+  task pane) and explicitly say no automatic git pull is attempted.
+
 ## [0.7.3] - 2026-10-30
 ### Changed
 - The proposed-actions box shows only the actions now; the approval-policy

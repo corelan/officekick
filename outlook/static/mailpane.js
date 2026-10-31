@@ -2320,9 +2320,17 @@ function applyOps(deck, ops, ctx) {
     });
     $("settings-debug-save").addEventListener("click", saveDebugOption);
     var updBtn = $("upd-check");
-    if (updBtn) {
-      updBtn.addEventListener("click", updCheck);
-      updCheck();   // silent availability check at boot (cached on the server)
+    if (updBtn) updBtn.addEventListener("click", updCheck);
+    var updAuto = $("upd-auto");
+    if (updAuto) {
+      // remember the preference (on by default); the boot check honors it
+      apiJson("/api/config", "GET").then(function (cfg) {
+        updAuto.checked = !(cfg && cfg.autoUpdateCheck === false);
+        if (updAuto.checked) updCheck();   // silent availability check at boot
+      }, function () { updAuto.checked = true; updCheck(); });
+      updAuto.addEventListener("change", function () {
+        apiJson("/api/settings", "PUT", { autoUpdateCheck: !!updAuto.checked });
+      });
     }
     updateSessionLabel();
     wireSessions();
