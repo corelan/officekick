@@ -597,3 +597,10 @@ button.armed { border-color: #b00020 !important; color: #fff !important; backgro
 
 /* request timer next to Run */
 .chattimer { font-variant-numeric: tabular-nums; opacity: .75; font-size: 12px; margin-left: 8px; }
+
+.pmbox { display: inline-block; min-width: 16px; text-align: center; font-weight: 700;
+  border: 1px solid currentColor; border-radius: 4px; padding: 0 5px; margin-right: 4px; }
+.pastturn { padding: 6px 2px; border-top: 1px solid rgba(127,127,127,.25); font-size: 12.5px; }
+.pastturn:first-child { border-top: none; }
+.pt-req, .pt-res { padding: 2px 0; word-break: break-word; }
+.pt-res { opacity: .8; }

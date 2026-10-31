@@ -467,43 +467,17 @@
     el.appendChild(note);
     // show the last up-to-6 messages (3 exchanges) as collapsed request/response
     // boxes, styled like the Inspector groups; future runs append below
-    // every loaded exchange goes into the collapsible previous-requests
-    // box under the prompt zone, newest first inside it
+    // the last 6 interactions (newest first) as flat rows in the box
+    var list = SK.history.slice(0);
+    while (list.length % 2) list.shift();
+    var turns = [];
+    for (var mi = 0; mi + 1 < list.length; mi += 2) turns.push([list[mi], list[mi + 1]]);
     var pastBody = $("past-body");
-    var pastBox = $("pastbox");
-    if (pastBody && pastBox) {
+    if (pastBody) {
       pastBody.innerHTML = "";
-      var list = SK.history.slice(0);
-      while (list.length % 2) list.shift();
-      for (var m = list.length - 2; m >= 0; m -= 2) {   // newest first inside the box
-        (function makeTurn(u, a) {
-          var grp = document.createElement("div");
-          grp.className = "reqgrp";
-          var head = document.createElement("div");
-          head.className = "reqhead2";
-          head.title = "Click to open/close";
-          var b1 = document.createElement("b");
-          b1.textContent = "Request: ";
-          head.appendChild(b1);
-          var uc = String(u.content || "");
-          head.appendChild(document.createTextNode(uc.length > 110 ? uc.slice(0, 110) + "…" : uc));
-          var body3 = document.createElement("div");
-          body3.className = "reqbody";
-          var who = document.createElement("b");
-          who.textContent = "Response: ";
-          body3.appendChild(who);
-          var ac = String(a.content || "");
-          body3.appendChild(document.createTextNode(ac.length > 500 ? ac.slice(0, 500) + "…" : ac));
-          head.addEventListener("click", function () { body3.classList.toggle("open"); });
-          grp.appendChild(head);
-          grp.appendChild(body3);
-          pastBody.appendChild(grp);
-        })(list[m], list[m + 1]);
+      for (var ti = turns.length - 1; ti >= Math.max(0, turns.length - 6) && ti >= 0; ti--) {
+        pastBody.appendChild(pastTurnRow(turns[ti][0], turns[ti][1]));
       }
-      pastBox.style.display = pastBody.children.length ? "" : "none";
-      var ph = $("past-head");
-      if (ph) ph.textContent = "Previous requests (" + (pastBody.children.length) + ")";
-      $("past-body").classList.remove("open");
     }
     renderSessions();  // refresh the "current" label
   }
@@ -1420,37 +1394,63 @@ function applyOps(deck, ops, ctx) {
   }
 
 
+
+  function pmGlyph(open) { return open ? "\u2212" : "+"; }   // boxed minus / plus
+
+  function pastTurnRow(u, a) {
+    var row = document.createElement("div");
+    row.className = "pastturn";
+    var q1 = document.createElement("div");
+    q1.className = "pt-req";
+    var b1 = document.createElement("b");
+    b1.textContent = "Request: ";
+    q1.appendChild(b1);
+    var uc = String(u.content || "");
+    q1.appendChild(document.createTextNode(uc.length > 140 ? uc.slice(0, 140) + "…" : uc));
+    var q2 = document.createElement("div");
+    q2.className = "pt-res";
+    var b2 = document.createElement("b");
+    b2.textContent = "Response: ";
+    q2.appendChild(b2);
+    var ac = String(a.content || "");
+    q2.appendChild(document.createTextNode(ac.length > 400 ? ac.slice(0, 400) + "…" : ac));
+    row.appendChild(q1);
+    row.appendChild(q2);
+    return row;
+  }
+
+  function updatePastBox() {
+    var box = $("pastbox"), body = $("past-body"), head = $("past-head");
+    if (!box || !body || !head) return;
+    var n = body.querySelectorAll(".pastturn").length;
+    var open = body.classList.contains("open");
+    head.innerHTML = "";
+    var pm = document.createElement("span");
+    pm.className = "pmbox";
+    pm.textContent = pmGlyph(open);
+    head.appendChild(pm);
+    var lbl = document.createElement("span");
+    lbl.textContent = " Previous requests (" + n + ")";
+    head.appendChild(lbl);
+    box.style.display = n ? "" : "none";
+  }
+
+  // every run files the PREVIOUS rendered turn here (newest first);
+  // the box stays collapsed after each new run
   function pushPastTurn(instruction) {
     var zone = $("chat-output");
-    var pastBody = $("past-body");
-    var pastBox = $("pastbox");
-    if (!pastBody || !pastBox) return;
-    if (zone && zone.children.length) {
-      var grp = document.createElement("div");
-      grp.className = "reqgrp";
-      var head = document.createElement("div");
-      head.className = "reqhead2";
-      head.title = "Click to open/close this earlier turn";
-      var who = document.createElement("b");
-      who.textContent = "Request: ";
-      head.appendChild(who);
-      head.appendChild(document.createTextNode(instruction || "(earlier turn)"));
-      head.addEventListener("click", function () {
-        Array.prototype.forEach.call(grp.parentNode.querySelectorAll(".reqgrp .reqbody"), function (b) {
-          b.classList.toggle("open");
-        });
-      });
-      var body2 = document.createElement("div");
-      body2.className = "reqbody";
-      while (zone.firstChild) body2.appendChild(zone.firstChild);
-      grp.appendChild(head);
-      grp.appendChild(body2);
-      pastBody.insertBefore(grp, pastBody.firstChild);   // newest first inside the box
-    }
-    var n = pastBody.querySelectorAll(".reqgrp").length;
-    pastBox.style.display = n ? "" : "none";
+    var body = $("past-body");
     var head = $("past-head");
-    if (head) head.textContent = "Previous requests (" + n + ")";
+    if (!body || !$("pastbox")) return;
+    if (zone && zone.children.length) {
+      var respText = zone.textContent || "";
+      var row = pastTurnRow({ content: instruction || "(earlier turn)" }, { content: respText });
+      while (zone.firstChild) zone.removeChild(zone.firstChild);
+      body.insertBefore(row, body.firstChild);   // newest first inside the box
+    }
+    // the box is closed again as a new run starts its own top turn
+    body.classList.remove("open");
+    updatePastBox();
   }
 
   function wirePastHeader() {
@@ -1458,7 +1458,9 @@ function applyOps(deck, ops, ctx) {
     if (!head) return;
     head.onclick = function () {
       $("past-body").classList.toggle("open");
+      updatePastBox();
     };
+    updatePastBox();
   }
 
   function renderParsed(parsed, ctx, instruction) {

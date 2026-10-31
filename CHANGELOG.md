@@ -21,6 +21,15 @@
 ### Added
 - Every busy status (Asking ..., collecting context, generating image, applying, model-output repair) now shows a rotating indicator character so it reads as still-working.
 
+## [0.6.9] - 2026-10-30
+### Fixed / Changed
+- The "Previous requests (N)" box now actually shows its content: up to the
+  6 most recent interactions as flat Request/Response rows, newest to oldest
+  (resume fills it from the saved history; live runs file each finished turn).
+  Each interaction shows the request text and the response/gate summary.
+- The box header got a boxed +/− indicator (plus = collapsed, minus = open).
+- Lost wirePastHeader during the refactor restored (that was the empty box).
+
 ## [0.6.8] - 2026-10-30
 ### Fixed
 - Resume failed with "can't find variable jend" (a leaked variable from the
