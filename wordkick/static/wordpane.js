@@ -571,6 +571,8 @@
       SK.history = (doc.exchanges || []).slice(-HISTORY_MAX_EXCHANGES * 2);
       SK.sessionId = doc.id;
       SK.sessionName = doc.name || "";
+      var inp1 = $("chat-input");
+      if (inp1) { inp1.disabled = false; inp1.value = ""; }
       switchTab("chat");
       setStatus("Session resumed: \u201C" + SK.sessionName + "\u201D (" + SK.history.length + " message(s) loaded).", "ok");
       updateSessionLabel();
@@ -802,6 +804,8 @@
       SK.history = [];
       SK.sessionId = null;
       SK.sessionName = "";
+      var inp0 = $("chat-input");
+      if (inp0) { inp0.disabled = false; inp0.value = ""; }
       switchTab("chat");
       setStatus("New session - the current one stays saved.", "");
       var el = $("chat-output");
@@ -1531,9 +1535,9 @@ function applyOps(deck, ops, ctx) {
       setStatus("Profile '" + prof.name + "' has no model assigned for this route. Open Profiles and pick connection + model.", "error");
       return;
     }
-    input.value = "";   // the request is captured; the box clears right away
     filePreviousRun();  // the previous request/response moves into the history box NOW
     SK.busy = true;
+    input.disabled = true;   // the text stays visible but locked while working
     setRunEnabled(false);
     chatTimerStart();
     var wantCtx = $("chat-context").checked;
@@ -1620,6 +1624,8 @@ function applyOps(deck, ops, ctx) {
       stopChatTimer();
       SK.busy = false;
       setRunEnabled(true);
+      input.disabled = false;
+      if ($( "chat-output" ) && $("chat-output").children.length) input.value = "";
     });
   }
 
@@ -1783,6 +1789,11 @@ function applyOps(deck, ops, ctx) {
     SK.lastInstruction = instruction;
     var out = $("chat-output");
     out.innerHTML = "";
+    // the request prints above the response/summary (echoed by the clear)
+    var reqEcho = document.createElement("div");
+    reqEcho.className = "reqecho";
+    reqEcho.textContent = instruction;
+    out.appendChild(reqEcho);
     wirePastHeader();
     if (!parsed.ok) {
       var box = document.createElement("div");
@@ -2106,6 +2117,8 @@ function applyOps(deck, ops, ctx) {
 
   function switchTab(id) {
     SK.activeTab = id;
+    var inp = $("chat-input");
+    if (inp && !SK.busy) inp.disabled = false;   // returning to a sheet always frees the input
     if (id === "requests") renderRequests();
     if (id === "sessions") renderSessions();
     Array.prototype.forEach.call(document.querySelectorAll("#tabs button"), function (b) {

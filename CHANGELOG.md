@@ -21,6 +21,18 @@
 ### Added
 - Every busy status (Asking ..., collecting context, generating image, applying, model-output repair) now shows a rotating indicator character so it reads as still-working.
 
+## [0.8.4] - 2026-10-31
+### Changed - run/input interaction
+- Run no longer blanks the input instantly: the request text stays visible
+  with the box disabled while the run works (visibly dimmed); the Run button
+  stays the only disabled-while-busy gate as before.
+- When the run reports a result, the box clears and the pane prints
+  "Request: <your text>" right above the response / proposed actions.
+- On failure (unreachable model, retries exhausted): the input is re-enabled
+  and keeps the text for a retry; the failed attempt is still persisted.
+- The box is always re-enabled when switching tabsheets and back, clicking
+  New session, or resuming a session.
+
 ## [0.8.3] - 2026-10-31
 ### Added
 - A global "Auto apply approved actions" setting in Settings -> Approval

@@ -622,3 +622,8 @@ body.dark .reqgrp.reqbad { border-color: rgba(239,68,68,.7); background: rgba(23
 .oprow.op-del .optype { color: #f85149; }
 .oprow.op-del .opdesc { color: #f85149; }
 body.dark .oprow.op-mod .optype { color: #3fb950; }
+#chat-input:disabled { opacity: .55; }
+
+/* the request echo above the response/summary after a run completes */
+.reqecho { font-size: 12px; font-weight: 600; opacity: .75; margin: 2px 0 6px; word-break: break-word; }
+.reqecho::before { content: "Request: "; font-weight: 700; }
