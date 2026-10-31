@@ -515,7 +515,7 @@
     var note = document.createElement("div");
     note.className = "opnote";
     note.textContent = "Resumed session \u201C" + SK.sessionName + "\u201D - the AI sees the last " +
-      Math.min(HISTORY_MAX_EXCHANGES, SK.history.length / 2) + " exchange(s). The last turns are below (collapsed; click a request to open it). Continue typing below.";
+      Math.min(HISTORY_MAX_EXCHANGES, SK.history.length / 2) + " exchange(s). The last turns are in the Previous requests box below (collapsed; click its header to open). Continue typing below.";
     el.appendChild(note);
     // show the last up-to-6 messages (3 exchanges) as collapsed request/response
     // boxes, styled like the Inspector groups; future runs append below
@@ -530,6 +530,7 @@
       for (var ti = turns.length - 1; ti >= Math.max(0, turns.length - 6) && ti >= 0; ti--) {
         pastBody.appendChild(pastTurnRow(turns[ti][0], turns[ti][1]));
       }
+      wirePastHeader();   // wires the open/close click + sets the visibility (the pm glyph)
     }
     renderSessions();  // refresh the "current" label
   }

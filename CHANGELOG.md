@@ -21,6 +21,13 @@
 ### Added
 - Every busy status (Asking ..., collecting context, generating image, applying, model-output repair) now shows a rotating indicator character so it reads as still-working.
 
+## [0.7.1] - 2026-10-30
+### Fixed
+- After a resume, the "Previous requests (N)" box existed but was never made
+  visible and its header click was not wired (updates lost on the resume
+  path); resumes now show the collapsed box with the past turns, and the
+  header toggles with the boxed +/- indicator. Verified end to end.
+
 ## [0.7.0] - 2026-10-30
 ### Added
 - **Update check without git**: the server fetches the VERSION file from the
