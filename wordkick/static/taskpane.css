@@ -616,3 +616,9 @@ body.dark .reqgrp.reqbad { border-color: rgba(239,68,68,.7); background: rgba(23
 .pastturn .ptts { opacity: .55; font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .pastturn .pt-res { opacity: .85; }
 .pt-req:hover, .bubble.user:hover { background: rgba(127,127,127,.08); }
+
+/* proposed actions: edits/applications green, deletions red (readable in dark too) */
+.oprow.op-mod .optype { color: #34d058; }
+.oprow.op-del .optype { color: #f85149; }
+.oprow.op-del .opdesc { color: #f85149; }
+body.dark .oprow.op-mod .optype { color: #3fb950; }

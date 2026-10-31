@@ -21,6 +21,18 @@
 ### Added
 - Every busy status (Asking ..., collecting context, generating image, applying, model-output repair) now shows a rotating indicator character so it reads as still-working.
 
+## [0.8.1] - 2026-10-31
+### Changed
+- Web lookups are no longer a user option: the checkbox is gone. The model
+  decides - when a request needs up-to-date info it returns
+  {"kind":"web_lookup"} (prompt rule everywhere), the pane runs the
+  web-enabled call automatically, then re-asks with the fresh results
+  (once; no loops; honesty fallbacks kept). Inspector-visible.
+- Proposed actions are color-coded for dark-mode readability: green type
+  labels for applications/edits/modifications (layout, formatting, notes,
+  tables, shapes, images, reply/draft/message ops), red for deletions
+  (delete_slide/shape) in light and dark mode (E2E-verified colors).
+
 ## [0.8.0] - 2026-10-31
 ### Changed - Previous-requests as group box with per-turn boxes
 - "Previous requests" is the titled group-box head (boxed +/-, turn count);

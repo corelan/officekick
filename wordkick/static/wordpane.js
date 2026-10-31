@@ -425,6 +425,8 @@
     "- If the request is a question/explanation/brainstorm rather than a document change, use format A.",
     "- Image requests: always return an insert_image op (never generate the picture inline); DocKick fetches it with the user's configured image model. Include a concrete, self-contained prompt in the op.",
     "- Image refinement ('refine/change the image'): write a FRESH self-contained image prompt describing the FULL desired result. Never embed previous prompts, the conversation, or op JSON into it - only the scene essentials plus the requested change. Prefer 200-600 words.",
+    "- LIVE WEB LOOKUPS: when the request needs up-to-date info you cannot reliably know (current events, news, prices, recent releases, rankings, live data), reply with ONLY {\"kind\":\"web_lookup\"} - nothing else. SlideKick then runs a web-enabled lookup and re-asks you with fresh citable results. Never use it for deck/document/mail edits, styling, general concepts, or what the outline/context already answers.",
+
     "- Picture placement: 'here / at the cursor / current position' = the image lands at the caret (the pane's 'insert at cursor' checkbox); default = end of document. Keep insert_image minimal (type + prompt only).",
   ].join("\n");
 
@@ -1270,6 +1272,16 @@ function validateOps(rawOps, ctx) {
     return { ops: ops, invalid: invalid, notesDropped: 0 };
   }
 
+  var OP_EFFECT = {
+    create_slide: "add", edit_slide: "edit", replace_text: "edit", set_notes: "edit",
+    create_table: "add", create_shape: "add", create_image: "add", insert_image: "add",
+    apply_layout: "edit", format_text: "edit", format_selection: "edit",
+    move_shape: "edit", move_slide: "edit", set_background: "edit", add_hyperlink: "edit",
+    set_alt_text: "edit", set_categories: "edit", draft_reply: "add", new_message: "add",
+    compose_body: "edit", save_draft: "add", create_template: "add", web_lookup: "edit",
+    delete_slide: "del", delete_shape: "del"
+  };
+
   function fmtOp(op, ctx) {
     var paraRef = function (i) {
       if (!ctx || !ctx.paragraphs || !ctx.paragraphs[i - 1]) return "";
@@ -1497,13 +1509,8 @@ function applyOps(deck, ops, ctx) {
 
     ctxPromise.then(function (ctx) {
       SK.lastCtx = ctx;
-      var webChk = $("chat-web");
       SK.webResults = "";
-      var webPromise = (webChk && webChk.checked)
-        ? webLookup(prof, instruction)
-            .then(function (ws) { SK.webResults = ws; setStatus(webChk.checked && !ws ? "Live lookup: nothing to search - continuing." : "Live lookup results collected.", "busy"); })
-            .catch(function (e) { SK.webResults = "(web lookup failed: " + (e && e.message || e) + ")"; })
-        : Promise.resolve("").then(function () { SK.webResults = ""; });
+      var webPromise = Promise.resolve("");
       return webPromise.then(function () {
       var sys = SYSTEM_PROMPT + "\nHost: " + (SK.sim ? "DocKick simulator" : SK.deck.capabilities().host);
             var user = (ctx ? formatContext(ctx) : "(no deck context requested)") + "\n\nUSER REQUEST:\n" + instruction;
@@ -1514,7 +1521,36 @@ function applyOps(deck, ops, ctx) {
        .concat([{ role: "user", content: user }]);
       dbg("prompt", { profile: prof.name, route: route, model: ref.model, connection: ref.connection, instruction: instruction, hadContext: !!ctx, messages: messages });
       setStatus("Asking " + ref.model + " (via " + ref.connection + ")…", "busy");
-      return askRetryable(function () { return apiJson("/api/chat", "POST", { connection: ref.connection, model: ref.model, messages: messages }); }).then(function (resp) {
+      var askedLookup = false;
+      function mainAsk() {
+        return askRetryable(function () { return apiJson("/api/chat", "POST", { connection: ref.connection, model: ref.model, messages: messages }); })
+          .then(function (resp) {
+            var pre = tryParse(resp.text);
+            if (pre.ok && pre.kind === "web_lookup" && !askedLookup) {
+              askedLookup = true;
+              setStatus("Doing a live web lookup through the model…", "busy");
+              return webLookup(prof, instruction).then(function (ws) {
+                if (!ws) {
+                  return { ok: true, kind: "reply",
+                           text: "No web-enabled model available for a live lookup (the model reported no web access). Re-phrase or check the profile/connection." };
+                }
+                SK.webResults = ws;
+                messages = messages.concat([{ role: "assistant", content: pre.text || '{"kind":"web_lookup"}' },
+                                            { role: "user", content: "WEB LOOKUP RESULTS:\n" + ws +
+                                              "\n\nAnswer the ORIGINAL USER REQUEST now using these results (cite sources); the required JSON format rules apply again." }]);
+                setStatus("Answering with the fresh web results…", "busy");
+                return mainAsk2();
+              }).catch(function (e) {
+                return { ok: true, kind: "reply", text: "The live web lookup failed: " + ((e && e.message) || e) };
+              });
+            }
+            return resp;
+          });
+      }
+      function mainAsk2() {
+        return askRetryable(function () { return apiJson("/api/chat", "POST", { connection: ref.connection, model: ref.model, messages: messages }); });
+      }
+      return mainAsk().then(function (resp) {
         dbg("response", { text: resp.text, elapsedMs: resp.elapsedMs });
         SK.lastModelText = { text: resp.text };
         var parsed = tryParse(resp.text);
@@ -1827,7 +1863,8 @@ function applyOps(deck, ops, ctx) {
     var tableRows = document.createElement("div");
     rows.forEach(function (row) {
       var r = document.createElement("div");
-      r.className = "oprow" + (row.mode === "deny" ? " blocked" : row.mode === "invalid" ? " invalid" : "");
+      r.className = "oprow " + (OP_EFFECT[row.op.type] === "del" ? "op-del" : "op-mod") +
+        (row.mode === "deny" ? " blocked" : row.mode === "invalid" ? " invalid" : "");
       var badge = document.createElement("span");
       badge.className = "optype " + row.op.type;
       badge.textContent = (OPS_META[row.op.type] || { label: row.op.type }).label;
