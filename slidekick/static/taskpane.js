@@ -166,12 +166,25 @@
       box.innerHTML = '<div class="opnote">No requests yet. Every AI call (chat, models, image) is logged here with status, duration and payloads.</div>';
       return;
     }
+    // newest on top; show up to 6 boxes; only the newest starts open;
+    // click a box header to open/close it
+    var shown = entries.slice(0, 6);
     var frag = document.createDocumentFragment();
-    entries.forEach(function (e) {
-      var row = document.createElement("div");
-      row.className = "reqrow " + (e.ok ? "reqok" : "reqbad");
+    if (entries.length > shown.length) {
+      var more = document.createElement("div");
+      more.className = "opnote";
+      more.textContent = "(" + (entries.length - shown.length) + " older request(s) not shown)";
+      frag.appendChild(more);
+    }
+    shown.forEach(function (e, i) {
+      var grpb = document.createElement("div");
+      grpb.className = "reqgrp " + (e.ok ? "reqok" : "reqbad");
       var head = document.createElement("div");
-      head.className = "reqhead";
+      head.className = "reqhead2";
+      head.title = "Click to open/close this request/response";
+      var ts = document.createElement("b");
+      ts.textContent = fmtClock(e.at) + "  ";
+      head.appendChild(ts);
       var badge = document.createElement("span");
       badge.className = "reqbadge " + (e.ok ? "ok" : "bad");
       badge.textContent = e.ok ? ("HTTP " + e.status) : (e.status ? ("HTTP " + e.status) : "NETWORK");
@@ -179,26 +192,31 @@
       var lab = document.createElement("span");
       lab.textContent = " " + e.method + " " + e.path +
         (e.conn ? "  [" + e.conn + (e.model ? ":" + e.model : "") + "]" : "") +
-        "  " + fmtClock(e.at) + "  " + e.ms + " ms";
+        "  " + e.ms + " ms";
       head.appendChild(lab);
-      row.appendChild(head);
+      var body = document.createElement("div");
+      body.className = "reqbody";
       if (e.err) {
         var err = document.createElement("div");
         err.className = "reqerr";
         err.textContent = e.err;
-        row.appendChild(err);
+        body.appendChild(err);
       }
       if (e.req || e.resp) {
-        var det = document.createElement("details");
-        var sum = document.createElement("summary");
-        sum.textContent = "payload";
-        det.appendChild(sum);
         var pre = document.createElement("pre");
         pre.textContent = (e.req ? "Request:\n" + e.req : "") + (e.resp ? "\nResponse:\n" + e.resp : "");
-        det.appendChild(pre);
-        row.appendChild(det);
+        body.appendChild(pre);
+      } else {
+        var none = document.createElement("div");
+        none.className = "opnote";
+        none.textContent = "(no payload captured)";
+        body.appendChild(none);
       }
-      frag.appendChild(row);
+      if (i === 0) body.classList.add("open");
+      head.addEventListener("click", function () { body.classList.toggle("open"); });
+      grpb.appendChild(head);
+      grpb.appendChild(body);
+      frag.appendChild(grpb);
     });
     box.innerHTML = "";
     box.appendChild(frag);
@@ -2520,6 +2538,7 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
     Array.prototype.forEach.call(document.querySelectorAll("#tab-settings .subpanel"), function (p2) {
       p2.classList.toggle("active", p2.id === "sub-" + id);
     });
+    if (id === "inspector" && typeof renderRequests === "function") renderRequests();
   }
 
   function switchTab(id) {
@@ -2905,8 +2924,7 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
       }
       $("statusbar").textContent = "SlideKick v" + (cfg.version || "0.1.0") +
         (window.location && window.location.protocol === "https:" ? " - \u{1F512} " : " - ") +
-        "server 127.0.0.1:" + cfg.port + " - debug " + (cfg.debug ? "ON" : "off") +
-        " - connections: " + (cfg.connections || []).length;
+        "server 127.0.0.1:" + cfg.port + (cfg.debug ? " - debug ON" : "");
       return cfg;
     });
   }

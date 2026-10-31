@@ -21,7 +21,6 @@
       <button data-tab="about">About</button>
       <button data-tab="sessions">History</button>
       <button data-tab="templates">Templates</button>
-      <button data-tab="requests">Inspector</button>
     </nav>
   </header>
 
@@ -161,6 +160,7 @@
       <button data-subtab="approvals">Approval policy</button>
       <button data-subtab="connections">Connections</button>
       <button data-subtab="profiles">Profiles</button>
+      <button data-subtab="inspector">Inspector</button>
     </div>
     <div class="subpanel active" id="sub-general">
       <h2>Debug logging</h2>
@@ -260,6 +260,14 @@
         <div id="prof-formmsg" class="formmsg"></div>
       </form>
         </div>
+    <div class="subpanel" id="sub-inspector">
+      <div class="row row-wrap">
+        <button id="req-clear" class="btn subtle" type="button">Clear log</button>
+        <button id="req-refresh" class="btn subtle" type="button">Refresh</button>
+        <span class="opnote" id="req-note">Every request to the local server is logged (chat / models / image). Errors show in red with the provider's message.</span>
+      </div>
+      <div id="req-list" class="req-list"></div>
+        </div>
   </section>
 
     <!-- ============================= ABOUT ============================= -->
@@ -326,15 +334,7 @@
       <div id="tpl-list" class="tpl-list"></div>
     </section>
 
-    <!-- ============================ REQUESTS ============================ -->
-    <section id="tab-requests" class="tab">
-      <div class="row row-wrap">
-        <button id="req-clear" class="btn subtle" type="button">Clear log</button>
-        <button id="req-refresh" class="btn subtle" type="button">Refresh</button>
-        <span class="opnote" id="req-note">Every request to the local server is logged (chat / models / image). Errors show in red with the provider's message.</span>
-      </div>
-      <div id="req-list" class="req-list"></div>
-    </section>
+    
 
 </main>
 

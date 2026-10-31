@@ -545,3 +545,13 @@ button.armed { border-color: #b00020 !important; color: #fff !important; backgro
   background: rgba(127,127,127,.10); border-left: 3px solid rgba(30,125,70,.6); word-break: break-word; }
 .reqline:hover { background: rgba(127,127,127,.18); }
 @media (prefers-color-scheme: dark) { .reqline { background: rgba(127,127,127,.14); border-left-color: rgba(155,232,127,.6); } }
+
+/* Inspector inside Settings: grouped request/response boxes, newest on top */
+.reqgrp { border: 1px solid rgba(127,127,127,.35); border-radius: 8px; margin: 0 0 8px; overflow: hidden; }
+.reqgrp.reqbad { border-color: rgba(200,60,60,.5); }
+.reqhead2 { cursor: pointer; padding: 7px 10px; font-size: 12px; background: rgba(127,127,127,.07); user-select: none; }
+.reqhead2:hover { background: rgba(127,127,127,.16); }
+.reqhead2 b { font-variant-numeric: tabular-nums; }
+.reqbody { display: none; padding: 6px 10px 8px; }
+.reqbody.open { display: block; }
+.reqbody pre { max-height: 240px; overflow: auto; margin: 4px 0; white-space: pre-wrap; word-break: break-word; }

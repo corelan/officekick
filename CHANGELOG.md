@@ -9,6 +9,18 @@
 ### Fixed
 - Settings sub-tab headers: readable in Office dark mode (lime) and a darker green in light mode.
 
+## [0.6.2] - 2026-10-30
+### Changed
+- **Inspector moved into Settings** as a sub-tab (General / Approval policy /
+  Connections / Profiles / Inspector); the top strip is
+  Sessions | Settings | About | History (- Templates in MailKick).
+- Inspector entries render as **grouped boxes, newest on top**, capped at 6
+  visible with a "(N older not shown)" note; each box shows a **timestamp
+  + HTTP status + method/path + duration** in its header; only the newest
+  box opens by default and all boxes open/close by clicking their header.
+- Status bar no longer shows the connection count or "debug off" (it only
+  prints "debug ON" when debugging is enabled).
+
 ## [0.6.1] - 2026-10-30
 ### Changed (chat flow)
 - Run now turns the prompt box into a chat thread: each run prints its
