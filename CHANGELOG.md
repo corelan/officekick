@@ -21,6 +21,15 @@
 ### Added
 - Every busy status (Asking ..., collecting context, generating image, applying, model-output repair) now shows a rotating indicator character so it reads as still-working.
 
+## [0.8.9] - 2026-10-31
+### Fixed - settings round-trip
+- Settings values saved in one visit were displayed OFF after closing and
+  reopening the pane (the checkbox was wired before the config loaded and was
+  never synced afterwards). The Settings "Auto apply approved actions" checkbox
+  and the per-run auto-apply box now follow the stored setting on every config
+  load; a manual toggle is never overridden by a later config refresh.
+  (Persistence itself was never lost - the stored value was always correct.)
+
 ## [0.8.8] - 2026-10-31
 ### Changed - MailKick behaviour
 - **draft_reply and forward no longer require approval** (default policy
