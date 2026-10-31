@@ -31,7 +31,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 APP = "OfficeKick"
-VERSION = "0.9.4"
+VERSION = "0.9.5"
 
 CONNECTION_TYPES = (
     "openai",
@@ -347,7 +347,8 @@ class Store:
         self.data.setdefault("version", 1)
         self.data.setdefault("autoUpdateCheck", True)   # check GitHub at boot (no git)
         self.data.setdefault("autoApplyApproved", False)  # legacy global auto-apply (fallback for autoApplyByApp)
-        self.data.setdefault("autoApplyByApp", {})  # per-add-in auto-apply: slidekick/wordkick/mailkick
+        self.data.setdefault("autoApplyByApp", {})
+        self.data.setdefault("trackedChanges", False)  # DocKick revision setting  # per-add-in auto-apply: slidekick/wordkick/mailkick
         self.data.setdefault("connections", [])
         self.data.setdefault("profiles", [])
         self.data.setdefault("defaultProfile", None)
@@ -559,6 +560,7 @@ class Store:
             "approvals": d.get("approvals") or dict(DEFAULT_APPROVALS),
             "debug": bool(d.get("debug")),
             "generateNotes": bool(d.get("generateNotes", False)),
+            "trackedChanges": bool(d.get("trackedChanges", False)),
             "autoUpdateCheck": bool(d.get("autoUpdateCheck", True)),
             "autoApplyApproved": bool(d.get("autoApplyApproved", False)),
             "autoApplyByApp": {

@@ -21,6 +21,26 @@
 ### Added
 - Every busy status (Asking ..., collecting context, generating image, applying, model-output repair) now shows a rotating indicator character so it reads as still-working.
 
+## [0.9.5] - 2026-10-31
+### Fixed - DocKick tracked-changes error after applying edits
+- With "AI edits land as tracked changes" ON, every apply ended with
+  "revisions: The property 'changeTrackingMode' is not available..." and the
+  revision setting silently switched itself off. Cause: the pane read
+  `document.changeTrackingMode` on the Word.js proxy without loading it first
+  (modern Word.js throws exactly that error for unloaded properties). The
+  read/write now follows the documented pattern - `isSetSupported("WordApi",
+  "1.6")` guard, `document.load("changeTrackingMode")`, `context.sync()`,
+  then set - and after the batch the pane RESTORES the tracking mode the
+  document had before the AI edits instead of always switching it off
+  (a mode you had enabled yourself stays enabled).
+### Fixed - tracked-changes setting dropped on reopen
+- The server's `/api/config` projection omitted `trackedChanges`: the pane
+  only "remembered" the setting while it stayed open in the same session (it
+  was assigned client-side right after saving) and silently lost it after
+  every reopen - edits then landed as direct edits even though the setting
+  said ON. The value is now part of `/api/config` (and stored by default),
+  so the checkbox survives reloads like every other setting.
+
 ## [0.9.4] - 2026-10-31
 ### Changed - narrow-pane settings layout
 - Connections view: instead of a wide table (Name | Type | Base URL | Key),

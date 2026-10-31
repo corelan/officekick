@@ -1121,12 +1121,21 @@
 
   WordDeck.prototype.setTrackChanges = function (on) {
     return this.run("setTrackChanges", function (ctx) {
-      var doc = ctx.document;
-      if (typeof doc.changeTrackingMode === "undefined") {
-        throw new FriendlyError("this Word build does not support change-tracking mode - edits will be applied directly.");
+      // reading/setting changeTrackingMode needs WordApi 1.6 AND an explicit
+      // load + sync first - an unguarded proxy read throws
+      // "The property 'changeTrackingMode' is not available..."
+      if (!Office.context.requirements.isSetSupported("WordApi", "1.6")) {
+        throw new FriendlyError("this Word build does not support change-tracking mode (needs WordApi 1.6) - edits will be applied directly.");
       }
-      doc.changeTrackingMode = on ? "trackAll" : "off";
-      return ctx.sync().then(function () { return { ok: true }; });
+      var doc = ctx.document;
+      doc.load("changeTrackingMode");
+      return ctx.sync().then(function () {
+        var previous = doc.changeTrackingMode;
+        doc.changeTrackingMode = on ? "trackAll" : "off";
+        return ctx.sync().then(function () {
+          return { ok: true, previous: previous };
+        });
+      });
     });
   };
 
@@ -1400,7 +1409,9 @@ function applyOps(deck, ops, ctx) {
     var revOn = !!(SK.cfg && SK.cfg.trackedChanges);
     var pre = Promise.resolve();
     if (revOn && deck.setTrackChanges) {
-      pre = deck.setTrackChanges(true).catch(function (err) {
+      pre = deck.setTrackChanges(true).then(function (res) {
+        SK.revPrevMode = res && res.previous ? String(res.previous) : null;
+      }).catch(function (err) {
         revNote = (err && err.message) || String(err);
         SK.cfg.trackedChanges = false; // do not retry per-op
       });
@@ -1506,9 +1517,14 @@ function applyOps(deck, ops, ctx) {
     return pre.then(function () { return chain; }).then(function () {
       var res = { lines: lines, manualNotes: manualNotes };
       if (revNote) lines.push({ ok: false, text: "revisions: " + revNote });
+      // restore whatever the change-tracking mode was before the AI-edits
+      // batch (do not stomp a tracking mode the user had enabled themselves)
+      var prevTrack = String(SK.revPrevMode || "");
+      var wasOn = prevTrack.toLowerCase().indexOf("track") === 0;  // trackAll / TrackMineOnly
       var off = (SK.cfg && SK.cfg.trackedChanges && deck.setTrackChanges)
-        ? deck.setTrackChanges(false).catch(function () { return null; })
+        ? deck.setTrackChanges(wasOn).catch(function () { return null; })
         : Promise.resolve(null);
+      SK.revPrevMode = null;
       return off.then(function () { return res; });
     });
   }
