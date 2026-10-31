@@ -432,7 +432,7 @@
     '{"kind":"mail_ops","ops":[ ... ]}',
     "",
     "Allowed op types:",
-    '- {"type":"draft_reply","html":"<p>reply text</p>"} (READ mode: opens a reply window with this content; simple inline tags only - p, br, b, i, a, ul, li)',
+    '- {"type":"draft_reply","html":"<p>reply text</p>"} (READ mode: opens a reply window with this content; simple inline tags only - p, br, b, i, a, ul, li; write the reply in the SAME LANGUAGE and tone as the conversation)',
     '- {"type":"compose_body","html":"<p>...</p>"} (COMPOSE mode only: replaces the body of the email being written)',
     '- {"type":"set_categories","names":["Category"]} (names should exist in the KNOWN CATEGORIES list from the context when present; if the context says the master list is unavailable, still use sensible category names - the pane will report unchecked ones)',
     '- {"type":"save_draft"} (COMPOSE mode: saves the message being composed as a draft)',
@@ -1460,7 +1460,7 @@ function applyOps(deck, ops, ctx) {
       : "politely negative (declining) but still courteous";
     inp.disabled = false;
     inp.value = "Draft a polite reply to this email conversation in the tone the conversation uses (formal or informal). Stance: " + stanceText +
-      ". Then propose one draft_reply action with the AI-generated reply text (simple inline HTML only). Do not send anything.";
+      ". Reply entirely in the same language as the conversation, in the same tone (formal or informal). Then propose one draft_reply action with the AI-generated reply text (simple inline HTML only). Do not send anything.";
     runPrompt();
   }
 

@@ -16,6 +16,7 @@
     categories: ["Blue Team"],
   };
   var compose = null; // {subject, bodyText} when mode = compose
+  var replyWin = null; // simulated reply window from draftReply
   var log = [];
 
   class FriendlyError extends Error {}
@@ -39,7 +40,10 @@
                subject: email.subject, bodyText: minimal ? "" : email.body, categories: email.categories.slice(), warnings: [], minimal: minimal, selectedItems: multi };
     },
     draftReply: async function (html) {
-      log.push("reply window opened with " + String(html).length + " chars");
+      // the sim can not open a real Outlook reply window - show the drafted
+      // reply as a simulated reply window in the debug area instead
+      replyWin = { html: String(html) };
+      log.push("reply window opened (simulated) with " + String(html).length + " chars");
       return { ok: true };
     },
     composeBody: async function (html) {
@@ -67,13 +71,14 @@
       log.push("draft saved");
       return { ok: true };
     },
-    resetAll: function () { compose = null; log = []; },
+    resetAll: function () { compose = null; replyWin = null; log = []; },
     renderDebug: function (el) {
       var rows = [];
       rows.push("<h3>Simulator email</h3>");
       rows.push('<div class="opnote">mode: ' + (compose ? "COMPOSE (draft open)" : "READ (message selected)") +
         " - " + log.length + " applied op(s)</div>");
       if (compose) rows.push('<div class="simrow"><b>COMPOSE:</b> ' + esc(compose.subject) + "</div>");
+      if (replyWin) rows.push('<div class="simrow sim-reply"><b>REPLY WINDOW (simulated):</b><br />' + replyWin.html + "</div>");
       rows.push('<div class="simrow"><b>FROM</b> ' + esc(email.from) + " - <b>SUBJECT</b> " + esc(email.subject) + "</div>");
       rows.push('<div class="simrow"><b>BODY</b><br />' + esc(email.body).split("\n").join("<br />") + "</div>");
       (log || []).forEach(function (l) { rows.push('<div class="simrow"><i>' + esc(l) + "</i></div>"); });
