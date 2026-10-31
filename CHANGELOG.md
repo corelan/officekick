@@ -432,7 +432,7 @@ title was "gone" after reopening the add-in)
   buttons; `RequestedHeight` 480 -> 350 (schema max) - the official validator
   now passes; `install.sh` GUID refs reconciled to the shipped manifest Id.
 ### Repo
-- `tests/` is untracked and gitignored (local-only); docs/outlook.md rewritten
+- `tests/` is untracked and gitignored (local-only); docs/mailkick.md rewritten
   (templates, sessions, Inspector, install/uninstall, limits).
 
 ## [0.2.3] - 2026-10-30
@@ -477,7 +477,7 @@ title was "gone" after reopening the add-in)
 
 ## [0.1.8] - 2026-10-30
 ### Added
-- **MailKick** - the Outlook add-in (docs/outlook.md): email context, draft_reply /
+- **MailKick** - the Outlook add-in (docs/mailkick.md): email context, draft_reply /
   compose_body / set_categories / save_draft ops, read+compose modes, simulator,
   installer manifest render + Mac sideload instructions + the Windows catalog step.
 ### Fixed

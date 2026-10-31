@@ -5,7 +5,7 @@ technology stack, from Corelan:
 
 - **Corelan SlideKick** - the PowerPoint add-in (details: [docs/slidekick.md](docs/slidekick.md))
 - **Corelan DocKick** - the Word add-in (details: [docs/dockick.md](docs/dockick.md))
-- **Corelan MailKick** - the Outlook add-in: summarize/translate, draft replies (you send), categories ([docs/outlook.md](docs/outlook.md))
+- **Corelan MailKick** - the Outlook add-in: summarize/translate, draft replies (you send), categories ([docs/mailkick.md](docs/mailkick.md))
 
 Type what you want, in plain language: `reword the current slide`,
 `make slides about threat hunting`, `add a table of the key findings`, `leave a
@@ -67,7 +67,7 @@ Config (API keys, profiles, policy) lives in `~/.officekick/config.json`
   **quit and reopen Outlook**. If it does not appear: Outlook -> Get Add-ins ->
   **My add-ins -> Custom Addins -> Add a custom add-in -> Add from File** - press
   **Cmd+Shift+G** in the picker and paste that folder/path. Windows: same trusted
-  catalog as the other two add-ins. See [docs/outlook.md](docs/outlook.md).
+  catalog as the other two add-ins. See [docs/mailkick.md](docs/mailkick.md).
 - Ribbon buttons (the https/commands mode) are experimental: modern Office-Mac
   builds register them but do not render the classic commands ribbon (verified on
   16.114); the Add-ins route always works. The detailed docs cover this.
