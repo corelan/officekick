@@ -94,6 +94,7 @@ textarea#chat-input {
 .status.busy { border-color: #fde68a; background: #fffbeb; color: var(--accent-ink); }
 .status.error { border-color: #fecaca; background: #fef2f2; color: var(--bad); }
 .status.ok { border-color: #bbf7d0; background: #f0fdf4; color: var(--ok); }
+.status.pending { border-color: #fde68a; background: #fefce8; color: #92510a; }
 .hidden { display: none !important; }
 
 .output { margin-top: 10px; }
@@ -101,8 +102,8 @@ textarea#chat-input {
   white-space: pre-wrap; background: var(--panel); border: 1px solid var(--line);
   border-radius: 8px; padding: 10px; margin: 6px 0;
 }
-.opsbox { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px; margin: 6px 0; }
-.opsbox h3 { margin: 2px 0 8px 0; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; }
+.opsbox { background: #f4faf3; border: 1px solid rgba(47,158,91,.35); border-radius: 8px; padding: 8px 10px; margin: 6px 0; }
+.opsbox h3 { margin: 2px 0 2px 0; font-size: 13px; color: var(--ok); text-transform: none; letter-spacing: .1px; }
 .oprow { display: flex; gap: 8px; align-items: baseline; padding: 5px 2px; border-top: 1px solid var(--line); font-size: 12.5px; }
 .oprow:first-of-type { border-top: none; }
 .optype {
@@ -187,7 +188,9 @@ body.dark h2 { color: var(--muted); }
 body.dark .status.busy { background: #2b2415; border-color: #65501f; color: var(--accent-ink); }
 body.dark .status.error { background: #2e1a1c; border-color: #6b2a2e; color: var(--bad); }
 body.dark .status.ok { background: #14271b; border-color: #245a38; color: var(--ok); }
-body.dark .reply-text, body.dark .opsbox, body.dark table.list,
+body.dark .status.pending { background: #2b2415; border-color: #65501f; color: #ffdf8f; }
+body.dark .opsbox { background: #16241c; border-color: rgba(155,232,127,.35); }
+body.dark .reply-text, body.dark table.list,
 body.dark form#conn-form, body.dark form#prof-form, body.dark .sim-deck,
 body.dark .sk-header, body.dark .sk-footer { background: var(--panel); }
 body.dark label input[type="text"], body.dark label input[type="password"],
@@ -349,6 +352,7 @@ textarea#chat-input {
 .status.busy { border-color: #fde68a; background: #fffbeb; color: var(--accent-ink); }
 .status.error { border-color: #fecaca; background: #fef2f2; color: var(--bad); }
 .status.ok { border-color: #bbf7d0; background: #f0fdf4; color: var(--ok); }
+.status.pending { border-color: #fde68a; background: #fefce8; color: #92510a; }
 .hidden { display: none !important; }
 
 .output { margin-top: 10px; }
@@ -356,8 +360,8 @@ textarea#chat-input {
   white-space: pre-wrap; background: var(--panel); border: 1px solid var(--line);
   border-radius: 8px; padding: 10px; margin: 6px 0;
 }
-.opsbox { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px; margin: 6px 0; }
-.opsbox h3 { margin: 2px 0 8px 0; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; }
+.opsbox { background: #f4faf3; border: 1px solid rgba(47,158,91,.35); border-radius: 8px; padding: 8px 10px; margin: 6px 0; }
+.opsbox h3 { margin: 2px 0 2px 0; font-size: 13px; color: var(--ok); text-transform: none; letter-spacing: .1px; }
 .oprow { display: flex; gap: 8px; align-items: baseline; padding: 5px 2px; border-top: 1px solid var(--line); font-size: 12.5px; }
 .oprow:first-of-type { border-top: none; }
 .optype {
@@ -442,7 +446,9 @@ body.dark h2 { color: var(--muted); }
 body.dark .status.busy { background: #2b2415; border-color: #65501f; color: var(--accent-ink); }
 body.dark .status.error { background: #2e1a1c; border-color: #6b2a2e; color: var(--bad); }
 body.dark .status.ok { background: #14271b; border-color: #245a38; color: var(--ok); }
-body.dark .reply-text, body.dark .opsbox, body.dark table.list,
+body.dark .status.pending { background: #2b2415; border-color: #65501f; color: #ffdf8f; }
+body.dark .opsbox { background: #16241c; border-color: rgba(155,232,127,.35); }
+body.dark .reply-text, body.dark table.list,
 body.dark form#conn-form, body.dark form#prof-form, body.dark .sim-deck,
 body.dark .sk-header, body.dark .sk-footer { background: var(--panel); }
 body.dark label input[type="text"], body.dark label input[type="password"],

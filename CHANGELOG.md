@@ -21,6 +21,16 @@
 ### Added
 - Every busy status (Asking ..., collecting context, generating image, applying, model-output repair) now shows a rotating indicator character so it reads as still-working.
 
+## [0.6.8] - 2026-10-30
+### Fixed
+- Resume failed with "can't find variable jend" (a leaked variable from the
+  past-requests refactor); resumes verified against a real mail session.
+- The "Approval needed / Review proposed actions" status line now carries the
+  amber pending treatment in light and dark mode; the proposed-actions box
+  itself: light-green tint in dark mode, soft mint in light mode, with a
+  plain "Proposed actions" title and a small muted policy note instead of
+  the uppercase banner.
+
 ## [0.6.7] - 2026-10-30
 ### Added
 - A request timer next to Run: clicking Run starts an H:MM:SS counter; it freezes at the elapsed time when the run finishes (or fails) and restarts on the next Run. Verified live.

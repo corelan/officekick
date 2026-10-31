@@ -533,7 +533,6 @@
       if (ph) ph.textContent = "Previous requests (" + (pastBody.children.length) + ")";
       $("past-body").classList.remove("open");
     }
-    if (jend > 0) {}
     renderSessions();  // refresh the "current" label
   }
 
@@ -2414,9 +2413,16 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
     var box = document.createElement("div");
     box.className = "opsbox";
     var h = document.createElement("h3");
-    h.textContent = "Proposed actions" + ($("chat-autoapply").checked ? " (auto-apply)" : "") + " - approval policy: " +
-      OP_TYPES.filter(function (t) { return approvalMode(t) !== "auto"; }).map(function (t) { return OPS_META[t].label + "=" + approvalMode(t); }).join(", ");
+    h.textContent = "Proposed actions" + ($("chat-autoapply").checked ? " (auto-apply)" : "");
     box.appendChild(h);
+    var pol = [];
+    OP_TYPES.forEach(function (t) {
+      if (approvalMode(t) !== "auto") pol.push(OPS_META[t].label + ": " + approvalMode(t));
+    });
+    var polnote = document.createElement("div");
+    polnote.className = "opnote";
+    polnote.textContent = "policy: " + (pol.length ? pol.join(" | ") : "all set to auto");
+    box.appendChild(polnote);
 
     if (!caps.text) {
       var warn = document.createElement("div");
@@ -2604,7 +2610,7 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
     });
 
     out.appendChild(box);
-    setStatus(confirmOps ? "Approval needed before applying." : "Review proposed actions.", "");
+    setStatus(confirmOps ? "Approval needed before applying." : "Review proposed actions.", "pending");
     dbg("ops.preview", { total: rows.length, auto: autoOps, confirm: confirmOps, deny: rows.filter(function (r) { return r.mode === "deny"; }).length, invalid: invalidOps });
   }
 
