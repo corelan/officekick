@@ -21,6 +21,15 @@
 ### Added
 - Every busy status (Asking ..., collecting context, generating image, applying, model-output repair) now shows a rotating indicator character so it reads as still-working.
 
+## [0.9.10] - 2026-10-31
+### Changed - proposed-actions layout
+- The approval gate rows are reorganized for the narrow pane: line 1 carries
+  the action tag, the approval checkbox (right-aligned) and the red cancel
+  button; the action explanation moves to its own line BELOW instead of being
+  squeezed next to them. Two-click confirm/revert on the cancel button and the
+  checkbox semantics are unchanged. Applied to all three add-ins; verified at
+  pane width and forced ~300 px (no horizontal overflow).
+
 ## [0.9.9] - 2026-10-31
 ### Added - API sweep round two
 - SlideKick: "Merge deck…" button next to Refresh deck - pick a .pptx and

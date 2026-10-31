@@ -2006,6 +2006,11 @@ function applyOps(deck, ops, ctx) {
       var r = document.createElement("div");
       r.className = "oprow " + (OP_EFFECT[row.op.type] === "del" ? "op-del" : "op-mod") +
         (row.mode === "deny" ? " blocked" : row.mode === "invalid" ? " invalid" : "");
+      // narrow pane: line 1 = action tag + checkbox + cancel (right aligned);
+      // the description lands on its own line BELOW
+      var line1 = document.createElement("span");
+      line1.className = "oprowline1";
+      r.appendChild(line1);
       var badge = document.createElement("span");
       badge.className = "optype " + row.op.type;
       badge.textContent = (OPS_META[row.op.type] || { label: row.op.type }).label;
@@ -2015,8 +2020,7 @@ function applyOps(deck, ops, ctx) {
         : row.mode === "invalid" ? (row.op && row.op.type ? row.op.type + ": " : "") + (row.reason || "invalid")
         : fmtOp(row.op, ctx);
       desc.textContent = text;
-      r.appendChild(badge);
-      r.appendChild(desc);
+      line1.appendChild(badge);
       if (row.mode === "confirm") {
         var cb = document.createElement("input");
         cb.type = "checkbox";
@@ -2030,24 +2034,24 @@ function applyOps(deck, ops, ctx) {
           lab.textContent = cb.checked ? (SK.sessionApprovals[row.op.type] === "auto" ? "(approved for this session)" : "(approved once)") : "(needs approval)";
           updateApplyLabel();
         });
-        r.appendChild(cb);
-        r.appendChild(lab);
+        line1.appendChild(cb);
+        line1.appendChild(lab);
         row._cb = cb;
       } else if (row.mode === "auto") {
         var note2 = document.createElement("span");
         note2.className = "opnote";
         note2.textContent = "auto";
-        r.appendChild(note2);
+        line1.appendChild(note2);
       } else if (row.mode === "deny") {
         var note3 = document.createElement("span");
         note3.className = "opnote";
         note3.textContent = "denied";
-        r.appendChild(note3);
+        line1.appendChild(note3);
       } else {
         var note4 = document.createElement("span");
         note4.className = "opnote";
         note4.textContent = row.reason || "";
-        r.appendChild(note4);
+        line1.appendChild(note4);
       }
       var x = document.createElement("button");
       x.type = "button";
@@ -2069,8 +2073,9 @@ function applyOps(deck, ops, ctx) {
         r.style.display = "none";
         updateApplyLabel();
       });
-      r.appendChild(x);
+      line1.appendChild(x);
       tableRows.appendChild(r);
+      r.appendChild(desc);   // the action explanation, below the action line
     });
     box.appendChild(tableRows);
 

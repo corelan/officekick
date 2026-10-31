@@ -698,3 +698,11 @@ body.dark .btn.replyneg { color: #f85149; border-color: rgba(248,81,73,.55); }
 .apvopts { display: flex; flex-wrap: wrap; gap: 4px 16px; }
 .apvopts label { font-weight: 400; margin: 0; white-space: nowrap;
   display: inline-flex; align-items: center; gap: 4px; }
+
+/* proposed actions: stacked rows - action tag + checkbox + cancel on line 1,
+   the action explanation on its own line below */
+.oprow { display: block; padding: 6px 2px; }
+.oprowline1 { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 3px 0; }
+.oprowline1 .opcheckbox { margin-left: auto; }
+.oprow .opdesc { display: block; padding-left: 2px; }
+
