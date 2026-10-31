@@ -59,6 +59,7 @@
     move_slide: { label: "move slide", hint: "moves a slide so it becomes slide M (numbers as in the outline); runs alone in a batch." },
     set_background: { label: "slide background", hint: "AI-generated picture or a solid color as the slide background." },
     add_hyperlink: { label: "add hyperlink", hint: "links one shape (from the outline) to a URL." },
+    style_shape:  { label: "style shape", hint: "solid fill and/or outline color for one shape (PowerPointApi 1.4)." },
     set_alt_text: { label: "alt text", hint: "sets the accessibility alt text of one shape." },
     delete_slide: { label: "delete slide", hint: "Removes a slide from the deck." },
   };
@@ -464,6 +465,7 @@
     '- {"type":"format_selection","font":{"bold":true}} (format ONLY the text the user has selected right now; same font subset; no slide/shape fields)',
     '- {"type":"set_background","slide":N,"kind":"image","prompt":"description"} (use an AI-generated picture as the slide background) or {"type":"set_background","slide":N,"kind":"solid","color":"#RRGGBB"} (a solid background color)',
     '- {"type":"add_hyperlink","slide":N,"shape":N,"url":"https://...","tip":"tooltip text"} (link the shape to the URL; url must be http(s) or mailto:)',
+    '- {"type":"style_shape","slide":N,"shape":N,"fill":"#RRGGBB","line":"#RRGGBB"} (solid fill and/or outline color for ONE shape; colors as HTML hex or named; PowerPointApi 1.4; at least one of fill/line)',
     '- {"type":"set_alt_text","slide":N,"shape":N,"description":"alt text","title":"optional title"} (accessibility alt text for the shape)',
     '- {"type":"move_slide","slide":N,"to":M} (move slide N so it becomes slide M; numbers as in the outline 1..N; run it ALONE in its own reply - do not combine with other ops. PowerPoint cannot place a brand-new slide at a position: create it first (it lands last) and move_slide it in a following step)',
     '- {"type":"delete_slide","slide":N}',
@@ -1672,6 +1674,21 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
     });
   };
 
+  OfficeDeck.prototype.styleShape = function (slideIndex, shapeIndex, fill, line) {
+    return this.run("styleShape", function (ctx) {
+      // PowerPointApi 1.4: ShapeFill.setSolidColor + ShapeLineFormat
+      var shape = ctx.presentation.slides.getItemAt(slideIndex).shapes.getItemAt(shapeIndex);
+      if (fill) {
+        shape.fill.setSolidColor(String(fill));
+      }
+      if (line) {
+        shape.lineFormat.visible = true;
+        shape.lineFormat.color = String(line);
+      }
+      return ctx.sync().then(function () { return { ok: true }; });
+    });
+  };
+
 OfficeDeck.prototype.setNotes = function (i, text) {
     var self = this;
     return this.run("setNotes", function (ctx) {
@@ -1925,6 +1942,21 @@ OfficeDeck.prototype.setNotes = function (i, text) {
         if (op.font && typeof op.font.size === "number" && op.font.size >= 6 && op.font.size <= 400) { fontS.size = op.font.size; hasAnyS = true; }
         if (!hasAnyS) { bad("no format changes requested"); return; }
         out.font = fontS;
+      } else if (t === "style_shape") {
+        if (!slideOk(op.slide) || !shapeOk(op.slide, op.shape)) { bad("shape not in the context list for that slide"); return; }
+        var fillS = null, lineS = null;
+        if (typeof op.fill === "string" && op.fill.trim()) {
+          if (!/^[\w#\(\), .%]{1,40}$/.test(op.fill.trim())) { bad("bad fill color"); return; }
+          fillS = op.fill.trim();
+        }
+        if (typeof op.line === "string" && op.line.trim()) {
+          if (!/^[\w#\(\), .%]{1,40}$/.test(op.line.trim())) { bad("bad line color"); return; }
+          lineS = op.line.trim();
+        }
+        if (!fillS && !lineS) { bad("fill or line color required"); return; }
+        out.slide = op.slide; out.shape = op.shape;
+        if (fillS) out.fill = fillS;
+        if (lineS) out.line = lineS;
       } else if (t === "set_background") {
         if (!slideOk(op.slide)) { bad("bad slide index"); return; }
         if (op.kind !== "image" && op.kind !== "solid" && op.kind !== "gradient") { bad("kind must be image, solid or gradient"); return; }
@@ -2008,7 +2040,7 @@ OfficeDeck.prototype.setNotes = function (i, text) {
     create_table: "add", create_shape: "add", create_image: "add", insert_image: "add",
     apply_layout: "edit", format_text: "edit", format_selection: "edit",
     move_shape: "edit", move_slide: "edit", set_background: "edit", add_hyperlink: "edit",
-    set_alt_text: "edit", set_categories: "edit", draft_reply: "add", new_message: "add",
+    set_alt_text: "edit", set_categories: "edit", draft_reply: "add", style_shape: "edit", new_message: "add",
     compose_body: "edit", save_draft: "add", create_template: "add", web_lookup: "edit",
     delete_slide: "del", delete_shape: "del"
   };
@@ -2065,6 +2097,9 @@ OfficeDeck.prototype.setNotes = function (i, text) {
           (op.kind === "image" ? " (picture: " + op.prompt.slice(0, 50) + "…)" : op.kind === "solid" ? " (" + op.color + ")" : "");
       case "add_hyperlink":
         return "Slide " + op.slide + ", shape " + op.shape + " -> " + op.url;
+      case "style_shape":
+        return "Slide " + op.slide + ", shape " + op.shape + ": " +
+          (op.fill ? "fill " + op.fill : "") + (op.fill && op.line ? ", " : "") + (op.line ? "line " + op.line : "");
       case "set_alt_text":
         return "Slide " + op.slide + ", shape " + op.shape + " alt text";
       case "format_text": {
@@ -2212,6 +2247,11 @@ OfficeDeck.prototype.setNotes = function (i, text) {
             lines.push({ ok: true, text: "slide " + op.slide + " background set (" + op.kind + (op.kind === "solid" ? " " + op.color : "") + ")" });
           });
         }
+        case "style_shape":
+          return deck.styleShape(cur, op.shape - 1, op.fill, op.line).then(function () {
+            lines.push({ ok: true, text: "styled shape " + op.shape + " on slide " + op.slide +
+              (op.fill ? " fill=" + op.fill : "") + (op.line ? " line=" + op.line : "") });
+          });
         case "add_hyperlink":
           return deck.addHyperlink(cur, op.shape - 1, op.url, op.tip).then(function () {
             lines.push({ ok: true, text: "hyperlink added on slide " + op.slide + ", shape " + op.shape });

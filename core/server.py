@@ -31,7 +31,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 APP = "OfficeKick"
-VERSION = "0.9.7"
+VERSION = "0.9.8"
 
 CONNECTION_TYPES = (
     "openai",
@@ -87,6 +87,10 @@ DEFAULT_APPROVALS = {
     "create_shape": "auto",
     "accept_changes": "confirm",
     "set_track_changes": "confirm",
+    "add_hyperlink": "confirm",
+    "format_selection": "confirm",
+    "style_shape": "confirm",
+    "new_meeting": "auto",
 }
 APPROVAL_MODES = ("auto", "confirm", "deny")
 OP_TYPES = tuple(DEFAULT_APPROVALS.keys())

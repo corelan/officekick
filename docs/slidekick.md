@@ -86,6 +86,14 @@ is about how SlideKick works.
 - Notes that cannot be written automatically on older builds fall back to a
   copy-paste box in the pane.
 
+### Styling shapes
+
+`style_shape` gives the model a direct lever over existing shapes (PowerPointApi
+1.4): a solid fill color and/or an outline color for ONE shape, e.g.
+"make the callout on slide 4 dark blue with an orange border". Works on any
+shape in the outline, including textboxes and the shapes created by
+`create_shape`.
+
 ## Design on demand
 
 Use the **Design this deck** chip (or type e.g. "design this deck",

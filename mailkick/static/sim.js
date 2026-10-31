@@ -18,6 +18,7 @@
   var compose = null; // {subject, bodyText} when mode = compose
   var replyWin = null;      // simulated reply window (draft_reply)
   var forwardWin = null;    // simulated forward window (forward op)
+  var meetingWin = null;    // simulated meeting window (new_meeting op)
   var lastWin = null;       // most recently opened simulated window
   var log = [];
 
@@ -39,13 +40,14 @@
                  subject: compose.subject, bodyText: minimal ? "" : compose.bodyText, categories: [], warnings: [], minimal: minimal, selectedItems: multi, masterCategories: ["Blue Team", "Red Team", "AI"] };
       }
       return { host: "Outlook", mode: "read", sender: email.from, to: email.to,
-               subject: email.subject, bodyText: minimal ? "" : email.body, categories: email.categories.slice(), warnings: [], minimal: minimal, selectedItems: multi };
+               subject: email.subject, bodyText: minimal ? "" : email.body, categories: email.categories.slice(), warnings: [], minimal: minimal, selectedItems: multi,
+               attachments: [{ name: "hunt-plan.pptx", size: 1482334 }, { name: "ioc-list.csv", size: 41210 }] };
     },
-    draftReply: async function (html) {
+    draftReply: async function (html, all) {
       // the sim can not open a real Outlook reply window - show the drafted
       // reply as a simulated reply window in the debug area instead
-      replyWin = { html: String(html) };
-      lastWin = { kind: "reply", html: replyWin.html };
+      replyWin = { html: String(html), all: !!all };
+      lastWin = { kind: "reply", html: replyWin.html, all: !!all };
       log.push("reply window opened (simulated) with " + String(html).length + " chars");
       return { ok: true };
     },
@@ -84,19 +86,36 @@
       log.push("draft saved");
       return { ok: true };
     },
+    newMeeting: async function (op) {
+      meetingWin = {
+        subject: String(op.subject || "(no subject)"),
+        when: String(op.start || "?") + " to " + String(op.end || "?"),
+        location: String(op.location || ""),
+        attendees: [].concat(op.required || [], op.optional || []).join(", "),
+        body: String(op.body || ""),
+      };
+      lastWin = { kind: "meeting", subject: meetingWin.subject, when: meetingWin.when,
+                  location: meetingWin.location, attendees: meetingWin.attendees, body: meetingWin.body };
+      log.push("meeting form opened (simulated) - " + meetingWin.subject);
+      return { ok: true };
+    },
     lastWindow: function () { return lastWin; },
-    resetAll: function () { compose = null; replyWin = null; forwardWin = null; lastWin = null; log = []; },
+    resetAll: function () { compose = null; replyWin = null; forwardWin = null; meetingWin = null; lastWin = null; log = []; },
     renderDebug: function (el) {
       var rows = [];
       rows.push("<h3>Simulator email</h3>");
       rows.push('<div class="opnote">mode: ' + (compose ? "COMPOSE (draft open)" : "READ (message selected)") +
         " - " + log.length + " applied op(s)</div>");
       if (compose) rows.push('<div class="simrow"><b>COMPOSE:</b> ' + esc(compose.subject) + "</div>");
-      if (replyWin) rows.push('<div class="simrow sim-reply"><b>REPLY WINDOW (simulated):</b><br />' + replyWin.html + "</div>");
+      if (replyWin) rows.push('<div class="simrow sim-reply"><b>' + (replyWin.all ? "REPLY-ALL WINDOW (simulated):" : "REPLY WINDOW (simulated):") + '</b><br />' + replyWin.html + "</div>");
+      if (meetingWin) rows.push('<div class="simrow sim-meeting"><b>MEETING FORM (simulated):</b> ' + esc(meetingWin.subject) +
+        " - " + esc(meetingWin.when) + (meetingWin.location ? " - " + esc(meetingWin.location) : "") +
+        (meetingWin.attendees ? "<br />required/optional: " + esc(meetingWin.attendees) : "") + "</div>");
       if (forwardWin) rows.push('<div class="simrow sim-forward"><b>FORWARD WINDOW (simulated):</b> FW: ' + esc(forwardWin.subject) +
         (forwardWin.to.length ? " - to: " + esc(forwardWin.to.join(", ")) : " - recipients: you pick") +
         (forwardWin.note ? "<br /><i>note:</i><br />" + forwardWin.note : "") + "</div>");
       rows.push('<div class="simrow"><b>FROM</b> ' + esc(email.from) + " - <b>SUBJECT</b> " + esc(email.subject) + "</div>");
+      rows.push('<div class="simrow"><b>ATTACHMENTS</b> hunt-plan.pptx (1.4 MB), ioc-list.csv (40 kB)</div>');
       rows.push('<div class="simrow"><b>BODY</b><br />' + esc(email.body).split("\n").join("<br />") + "</div>");
       (log || []).forEach(function (l) { rows.push('<div class="simrow"><i>' + esc(l) + "</i></div>"); });
       el.innerHTML = rows.join("");

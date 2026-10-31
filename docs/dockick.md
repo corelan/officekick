@@ -43,13 +43,15 @@ text and re-enable the input.
 | edit paragraph | replaces one paragraph's text, keeping its style | auto |
 | accept tracked changes | accepts ALL tracked changes in the document (`body.getTrackedChanges().acceptAll()`) - finalize the AI edits made with revisions on; confirm by default | confirm |
 | set track changes | turns the document's own Track Changes mode on/off (the Review-tab toggle; `document.changeTrackingMode`) - does not touch existing revisions; confirm by default | confirm |
+| add hyperlink | links the FIRST occurrence of a text to a URL (`Range.hyperlink`, WordApi 1.3) | confirm |
+| format selected text | format changes applied to the text you selected right now | confirm |
 | replace text | find/replace (all matches by default) | auto |
 | insert table | inserts a table from a rectangular values grid (WordApi 1.3) | auto |
 | insert comment | adds a comment anchored on matching text (WordApi 1.4) | auto |
 | delete paragraph | removes a paragraph by index | confirm |
 | rewrite document | replaces the body with a new paragraph list | confirm |
 | insert image | generates a picture from a description with the profile's Image model, inserts it at the end | confirm |
-| format text | (re)styles one paragraph: bold/italic/color/size/underline/allCaps/highlight + alignment | confirm |
+| format text | (re)styles one paragraph: bold/italic/color/size/underline/allCaps/highlight + alignment; optional `style` (Heading 1-3, Title, Subtitle, List Bullet/Number, Quote, Normal) re-styles the whole paragraph | confirm |
 | create template block | appends a titled template block with fillable content controls (text / dropdown / checkbox / date) | confirm |
 | reply | conversational answer - never touches the document | n/a |
 

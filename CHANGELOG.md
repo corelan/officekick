@@ -21,6 +21,28 @@
 ### Added
 - Every busy status (Asking ..., collecting context, generating image, applying, model-output repair) now shows a rotating indicator character so it reads as still-working.
 
+## [0.9.8] - 2026-10-31
+### Added - proactive API sweep (Outlook / Word / PowerPoint)
+- MailKick: `new_meeting` op - opens the Outlook MEETING form (subject,
+  required/optional attendees, ISO start/end, location, body) for review; the
+  invite is never sent by MailKick (approval default `auto`).
+- MailKick: `draft_reply` accepts `"all":true` - reply-ALL to everyone on the
+  thread (`displayReplyAllForm`, Mailbox 1.1).
+- MailKick: the email context lists ATTACHMENTS (name + size) of the open
+  message, so drafts can reference them by name (contents are not read).
+- DocKick: `add_hyperlink` op - links the first occurrence of a text to a URL
+  (`Range.hyperlink`, WordApi 1.3).
+- DocKick: `format_selection` op - the format changes apply to the text the
+  user currently has selected.
+- DocKick: `format_text` accepts a `style` (Heading 1-3, Title, Subtitle, List
+  Bullet/Number, Quote, Normal) via `styleBuiltIn` - re-styles whole paragraphs
+  (e.g. turn something into a bullet list).
+- SlideKick: `style_shape` op - solid fill and/or outline color for one shape
+  (`ShapeFill.setSolidColor` / `ShapeLineFormat`, PowerPointApi 1.4).
+### Fixed
+- A failing op in the MAIL apply chain could leave the pane stuck on
+  "Applying..." (same per-op catch fix DocKick got in 0.9.6).
+
 ## [0.9.7] - 2026-10-31
 ### Added - set track changes (DocKick)
 - New op `set_track_changes` with `on:true|false`: flips the DOCUMENT's own

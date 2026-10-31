@@ -59,6 +59,8 @@
     create_template:  { label: "create template block", hint: "appends a titled template block with fillable content controls (text, dropdown, checkbox, date)." },
     accept_changes:   { label: "accept tracked changes", hint: "Accepts ALL tracked changes currently in the document (finalizes the AI edits made with revisions on)." },
     set_track_changes: { label: "set track changes", hint: "Turns the document's own Track Changes mode on or off (the Review-tab toggle). Does not touch existing revisions." },
+    add_hyperlink:    { label: "add hyperlink", hint: "Links the FIRST occurrence of the given text to a URL (WordApi 1.3)." },
+    format_selection: { label: "format selected text", hint: "Applies the same font changes to the text YOU selected right now." },
   };
   var OP_TYPES = Object.keys(OPS_META);
 
@@ -459,6 +461,9 @@
     '- {"type":"insert_image","prompt":"detailed image description"} (generate a picture from the description and insert it at the end of the document; only when the user asks for a picture/image/illustration/logo)',
     '- {"type":"format_text","para":N,"font":{"bold":true},"align":"center"} (format ONE paragraph from the outline: font = {"bold","italic","color","size","name","underline","allCaps","highlightColor"} subset; align = left|center|right|justify; only what is requested)',
     '- to format only PART of a paragraph, add "find":"exact words appearing in that paragraph" (all matches within the paragraph are formatted; e.g. {"type":"format_text","para":N,"find":"AI","font":{"bold":true}})',
+    '- {"type":"add_hyperlink","find":"exact text to link","url":"https://..."} (links the FIRST occurrence of that text; url must be http(s) or mailto:)',
+    '- {"type":"format_selection","font":{...same font subset}} (formats the TEXT THE USER HAS SELECTED right now; no para field)',
+    '- format_text may also carry "style":"Heading 2|Heading 3|Title|Subtitle|List Bullet|List Number|Quote|Normal" (re-styles the whole paragraph, e.g. make para 4 a bullet list; then format props still apply on top)',
     '- {"type":"accept_changes"} (accepts ALL tracked changes in the document; use ONLY when the user asks to accept/approve/finalize the changes or revisions; list it AFTER the edits that produced them)',
     '- {"type":"set_track_changes","on":true|false} (turns the DOCUMENT\'s Track Changes mode on/off - the Review-tab toggle; use when the user asks to start/stop tracking; turning it off does NOT remove existing revisions - offer accept_changes for those; the pane\'s separate "AI edits as tracked changes" lives in Settings)',
     "",
@@ -1060,7 +1065,7 @@
     });
   };
 
-  WordDeck.prototype.formatText = function (index, font) {
+  WordDeck.prototype.formatText = function (index, font, style) {
     return this.run("formatText", function (ctx) {
       // Word.js collections have no getItemAt: load + sync, then index .items
       var paras = ctx.document.body.paragraphs;
@@ -1073,6 +1078,7 @@
         var range = para.getAsRange
           ? para.getAsRange()
           : para.getRange("Whole");
+        if (style) range.styleBuiltIn = style;   // WordApi 1.3 built-in token
         var rf = range.font;
       if (font.bold != null) rf.bold = font.bold;
       if (font.italic != null) rf.italic = font.italic;
@@ -1151,6 +1157,42 @@
       }
       var tcs = ctx.document.body.getTrackedChanges();
       tcs.acceptAll();
+      return ctx.sync().then(function () { return { ok: true }; });
+    });
+  };
+
+  WordDeck.prototype.addHyperlink = function (findText, url) {
+    return this.run("addHyperlink", function (ctx) {
+      // Range.hyperlink exists since WordApi 1.3
+      if (!Office.context.requirements.isSetSupported("WordApi", "1.3")) {
+        throw new FriendlyError("hyperlinks need WordApi 1.3 - update Word.");
+      }
+      var range = ctx.document.body.getRange("Whole");
+      var found = range.search(String(findText), {});
+      found.load("items");
+      return ctx.sync().then(function () {
+        var items = found.items || [];
+        if (!items.length) {
+          throw new FriendlyError("'" + findText + "' not found in the document.");
+        }
+        items[0].hyperlink = String(url);
+        return ctx.sync().then(function () { return { ok: true, count: items.length }; });
+      });
+    });
+  };
+
+  WordDeck.prototype.formatSelection = function (font) {
+    return this.run("formatSelection", function (ctx) {
+      var sel = ctx.document.getSelection();
+      if (font.bold != null) sel.font.bold = font.bold;
+      if (font.italic != null) sel.font.italic = font.italic;
+      if (font.allCaps != null) sel.font.allCaps = font.allCaps;
+      if (font.underline != null) sel.font.underline = font.underline ? "Single" : "None";
+      if (font.color) sel.font.color = font.color;
+      if (font.highlightColor) sel.font.highlightColor = font.highlightColor;
+      if (font.name) sel.font.name = font.name;
+      if (font.size) sel.font.size = font.size;
+      if (font.align) sel.paragraphFormat.alignment = { left: "Left", center: "Center", right: "Right", justify: "Justified" }[font.align];
       return ctx.sync().then(function () { return { ok: true }; });
     });
   };
@@ -1255,7 +1297,21 @@
   function slideOkF(idx, ctx) {
     return typeof idx === "number" && ctx && ctx.paragraphs && ctx.paragraphs[idx - 1];
   }
-function validateOps(rawOps, ctx) {
+function normalizeWordStyle(v) {
+    // Word.BuiltInStyleName tokens (localization-safe via styleBuiltIn)
+    var k = String(v || "").toLowerCase().replace(/\s+/g, "");
+    var map = {
+      "title": "title", "subtitle": "subtitle", "normal": "normal", "bodytext": "normal",
+      "quote": "quote", "intensequote": "intenseQuote",
+      "listbullet": "listBullet", "bullet": "listBullet", "bullets": "listBullet",
+      "listnumber": "listNumber", "numbered": "listNumber", "numberedlist": "listNumber"
+    };
+    var h = k.match(/^heading([1-6])$/) || (k === "h1" ? ["x", "1"] : k === "h2" ? ["x", "2"] : k === "h3" ? ["x", "3"] : k === "h4" ? ["x", "4"] : null);
+    if (h) map["heading" + h[1]] = "heading" + h[1];
+    return map[k] || null;
+  }
+
+  function validateOps(rawOps, ctx) {
     var ops = [], invalid = [];
     (rawOps || []).forEach(function (op, index) {
       if (!op || typeof op !== "object") { invalid.push({ op: op, reason: "not an object" }); return; }
@@ -1338,6 +1394,24 @@ function validateOps(rawOps, ctx) {
       } else if (t === "set_track_changes") {
         if (typeof op.on !== "boolean") { bad("missing on:true|false"); return; }
         out.on = op.on;
+      } else if (t === "add_hyperlink") {
+        if (typeof op.find !== "string" || !op.find.trim()) { bad("missing find text"); return; }
+        var linkF = op.find.trim();
+        if (linkF.length > 200) { bad("find text too long (200 chars max)"); return; }
+        if (typeof op.url !== "string" || !/^(https?:\/\/|mailto:)/i.test(op.url.trim())) { bad("url must start with http(s):// or mailto:"); return; }
+        out.find = linkF; out.url = op.url.trim();
+      } else if (t === "format_selection") {
+        var selFont = {}, selAny = false;
+        ["bold", "italic", "allCaps", "underline"].forEach(function (kSel) {
+          if (op.font && typeof op.font[kSel] === "boolean") { selFont[kSel] = op.font[kSel]; selAny = true; }
+        });
+        if (op.font && typeof op.font.color === "string" && /^[\w#\(\), .%]+$/.test(op.font.color)) { selFont.color = op.font.color; selAny = true; }
+        if (op.font && typeof op.font.highlightColor === "string" && /^[\w#]+$/.test(op.font.highlightColor)) { selFont.highlightColor = op.font.highlightColor; selAny = true; }
+        if (op.font && typeof op.font.name === "string" && op.font.name) { selFont.name = op.font.name; selAny = true; }
+        if (op.font && typeof op.font.size === "number" && op.font.size >= 6 && op.font.size <= 400) { selFont.size = op.font.size; selAny = true; }
+        if (op.font && typeof op.font.align === "string" && ["left", "center", "right", "justify"].indexOf(op.font.align) >= 0) { selFont.align = op.font.align; selAny = true; }
+        if (!selAny) { bad("no format changes requested"); return; }
+        out.font = selFont;
       } else if (t === "format_text") {
         var paraOk = slideOkF(op.para, ctx);
         if (!paraOk) { bad("bad paragraph index"); return; }
@@ -1350,7 +1424,12 @@ function validateOps(rawOps, ctx) {
         if (op.font && typeof op.font.name === "string" && op.font.name) { fontW.name = op.font.name; hasAnyW = true; }
         if (op.font && typeof op.font.size === "number" && op.font.size >= 6 && op.font.size <= 400) { fontW.size = op.font.size; hasAnyW = true; }
         if (typeof op.align === "string" && /^(left|center|right|justify)$/i.test(op.align)) { fontW.align = op.align.toLowerCase(); hasAnyW = true; }
-        if (!hasAnyW) { bad("no format changes requested"); return; }
+        if (typeof op.style === "string" && op.style.trim()) {
+          var stN = normalizeWordStyle(op.style);
+          if (!stN) { bad("unsupported style '" + op.style + "' (use Heading 1-3, Title, Subtitle, List Bullet, List Number, Quote or Normal)"); return; }
+          out.style = stN;
+        }
+        if (!hasAnyW && !out.style) { bad("no format changes requested"); return; }
         out.para = op.para; out.font = fontW;
         if (typeof op.find === "string" && op.find.trim()) {
           var findW = op.find.trim().slice(0, 200);
@@ -1375,7 +1454,8 @@ function validateOps(rawOps, ctx) {
     move_shape: "edit", move_slide: "edit", set_background: "edit", add_hyperlink: "edit",
     set_alt_text: "edit", set_categories: "edit", draft_reply: "add", new_message: "add",
     compose_body: "edit", save_draft: "add", create_template: "add", web_lookup: "edit",
-    delete_slide: "del", delete_shape: "del", accept_changes: "edit", set_track_changes: "edit"
+    delete_slide: "del", delete_shape: "del", accept_changes: "edit", set_track_changes: "edit",
+    add_hyperlink: "edit", format_selection: "edit"
   };
 
   function fmtOp(op, ctx) {
@@ -1403,6 +1483,10 @@ function validateOps(rawOps, ctx) {
         return "REWRITE document: " + op.items.length + " paragraph(s)";
       case "accept_changes":
         return "Accept ALL tracked changes in the document";
+      case "add_hyperlink":
+        return "Hyperlink '" + op.find.slice(0, 60) + "' -> " + op.url;
+      case "format_selection":
+        return "Format ONLY the selected text: " + Object.keys(op.font).join(", ");
       case "set_track_changes":
         return "Turn Track Changes " + (op.on ? "on" : "off") + " in the document";
       case "format_text": {
@@ -1483,6 +1567,14 @@ function applyOps(deck, ops, ctx) {
           return deck.acceptChanges().then(function () {
             lines.push({ ok: true, text: "all tracked changes accepted" });
           });
+        case "add_hyperlink":
+          return deck.addHyperlink(op.find, op.url).then(function (res) {
+            lines.push({ ok: true, text: "hyperlink added on '" + op.find.slice(0, 50) + "' -> " + op.url });
+          });
+        case "format_selection":
+          return deck.formatSelection(op.font).then(function () {
+            lines.push({ ok: true, text: "formatted the selected text: " + Object.keys(op.font).join(", ") });
+          });
         case "set_track_changes":
           return deck.setTrackChanges(op.on).then(function () {
             lines.push({ ok: true, text: "track changes turned " + (op.on ? "on" : "off") + " in the document" });
@@ -1498,7 +1590,7 @@ function applyOps(deck, ops, ctx) {
                 Object.keys(op.font).join(", ") });
             });
           }
-          return deck.formatText(adj(op.para - 1), op.font).then(function () {
+          return deck.formatText(adj(op.para - 1), op.font, op.style).then(function () {
             lines.push({ ok: true, text: "format paragraph " + op.para + ": " + Object.keys(op.font).join(", ") });
           });
         }

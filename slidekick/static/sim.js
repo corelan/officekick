@@ -162,6 +162,13 @@ window.__SK_SIM__ = true;
       sh.hyperlink = { address: url, screenTip: tip || "" };
       return { ok: true };
     }
+    async styleShape(slideIndex, shapeIndex, fill, line) {
+      const sh = slides[slideIndex] && slides[slideIndex].shapes[shapeIndex];
+      if (!sh) throw new FriendlyError("Shape " + shapeIndex + " on slide " + slideIndex + " does not exist");
+      if (fill) sh.fill = String(fill);
+      if (line) sh.line = String(line);
+      return { ok: true };
+    }
     async setAltText(slideIndex, shapeIndex, description, title) {
       const sh = slides[slideIndex] && slides[slideIndex].shapes[shapeIndex];
       if (!sh) throw new FriendlyError("Shape " + shapeIndex + " on slide " + slideIndex + " does not exist");
@@ -283,6 +290,11 @@ window.__SK_SIM__ = true;
             '<span class="idx">[' + (i + 1) + ']</span><span class="t">' + esc(s.title) + "</span>" +
             (bullets ? "<ul>" + bullets + "</ul>" : "") +
             (s.notes ? '<div class="notes">notes: ' + esc(s.notes) + "</div>" : "") +
+            s.shapes.filter((sh) => sh.fill || sh.line)
+              .map((sh, k) => '<div class="notes">shape ' + (s.shapes.indexOf(sh) + 1) + ": " +
+                (sh.fill ? "fill " + esc(sh.fill) : "") + (sh.fill && sh.line ? ", " : "") +
+                (sh.line ? "line " + esc(sh.line) : "") + "</div>")
+              .join("") +
             "</div>"
           );
         })

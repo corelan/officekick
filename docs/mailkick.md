@@ -32,6 +32,14 @@ DocKick (Word). **MailKick never sends email** - it drafts; you review and send.
   gate (default `auto`, so the reply window opens immediately after the run);
   you review it and send. MailKick never sends email.
 
+  `reply +` / `reply −` accept a "reply to all/everyone" request too (the
+  draft_reply op carries `"all":true` then, and the pane uses displayReplyAllForm).
+  Meeting requests are supported with the `new_meeting` op: the model fills
+  subject, attendees, start/end (ISO date-times), location and body, and the
+  Outlook meeting form opens for review - MailKick never sends invites itself.
+  The email context also lists ATTACHMENTS (name + size) of the open mail so
+  drafts can reference them by name (their contents are not read).
+
   In real Outlook the apply opens the reply/forward window for you (reply =
   `displayReplyForm`, forward = `displayNewMessageForm` - in the message
   window, plus your note above the quoted original). In the simulator a

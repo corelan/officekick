@@ -16,6 +16,7 @@
 
   var paras = [];
   var tables = [];
+  var links = [];
   var comments = [];
   var templateBlocks = [];
   var trackChanges = false;
@@ -131,9 +132,28 @@
       if (!hits) throw new FriendlyError('"' + findText + '" not found in that paragraph.');
       return { ok: true, count: hits };
     },
-    formatText: async function (index, font) {
+    formatText: async function (index, font, style) {
       if (!paras[index]) throw new FriendlyError("Paragraph " + index + " does not exist");
       paras[index].font = Object.assign(paras[index].font || {}, font);
+      if (style) {
+        var label = String(style).replace(/([a-z])([A-Z])/g, "$1 $2").replace(/^./, function (c) { return c.toUpperCase(); });
+        paras[index].style = label;
+      }
+      return { ok: true };
+    },
+    addHyperlink: async function (findText, url) {
+      var hit = paras.find((pp) => String(pp.text).toLowerCase().indexOf(String(findText).toLowerCase()) !== -1);
+      if (!hit) throw new FriendlyError('"' + findText + '" not found in the document.');
+      links.push({ find: String(findText), url: String(url) });
+      return { ok: true, count: 1 };
+    },
+    formatSelection: async function (font) {
+      // the sim has no real selection: format the middle paragraph as the
+      // "simulated selection"
+      const target = paras[Math.min(1, paras.length - 1)];
+      if (!target) throw new FriendlyError("nothing to format");
+      target.font = Object.assign(target.font || {}, font);
+      target.simSelection = true;
       return { ok: true };
     },
     addImage: async function (payload) {
@@ -169,6 +189,9 @@
       tables.forEach(function (t, i) {
         rows.push('<div class="simrow"><b>table ' + (i + 1) + "</b>: " +
           (t.values || []).map(function (r) { return r.join(" | "); }).join(" // ") + "</div>");
+      });
+      links.forEach(function (l, i) {
+        rows.push('<div class="simrow"><b>link ' + (i + 1) + "</b>: '" + esc(l.find.slice(0, 60)) + "' -> " + esc(l.url) + "</div>");
       });
       comments.forEach(function (c) {
         rows.push('<div class="simrow"><b>comment</b> on ' + esc(c.anchor) + ": " + esc(String(c.text).slice(0, 100)) + "</div>");

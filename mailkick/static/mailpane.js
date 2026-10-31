@@ -53,6 +53,7 @@
     save_draft:     { label: "save draft", hint: "Saves the message you are composing as a draft." },
     new_message:    { label: "new message from template", hint: "Opens a prefilled NEW email window (to/subject/body) - you review and send." },
     forward:        { label: "forward", hint: "Opens a forward window for the selected mail (quoted original + your optional note) - you review and send." },
+    new_meeting:    { label: "new meeting", hint: "Opens a MEETING/calendar form (subject, attendees, start/end, location, body) - you review and send the invite." },
   };
   var OP_TYPES = Object.keys(OPS_META);
 
@@ -442,7 +443,8 @@
     '{"kind":"mail_ops","ops":[ ... ]}',
     "",
     "Allowed op types:",
-    '- {"type":"draft_reply","html":"<p>reply text</p>"} (READ mode: opens a reply window with this content; simple inline tags only - p, br, b, i, a, ul, li; write the reply in the SAME LANGUAGE and tone as the conversation)',
+    '- {"type":"draft_reply","html":"<p>reply text</p>","all":true} (READ mode: opens a reply window with this content; add "all":true to reply to EVERYONE on the thread; simple inline tags only - p, br, b, i, a, ul, li; write the reply in the SAME LANGUAGE and tone as the conversation)',
+    '- {"type":"new_meeting","subject":"...","required":["a@b.c"],"optional":[],"start":"2026-11-02T14:00","end":"2026-11-02T15:00","location":"...","body":"..."} (opens a NEW MEETING form; required/optional = email addresses; ISO date-times; the form opens for YOU to review - MailKick never sends anything itself)',
     '- {"type":"compose_body","html":"<p>...</p>"} (COMPOSE mode only: replaces the body of the email being written)',
     '- {"type":"set_categories","names":["Category"]} (names should exist in the KNOWN CATEGORIES list from the context when present; if the context says the master list is unavailable, still use sensible category names - the pane will report unchecked ones)',
     '- {"type":"save_draft"} (COMPOSE mode: saves the message being composed as a draft)',
@@ -453,7 +455,8 @@
     "- Named templates: when the request mentions a template, its content is listed in the EMAIL CONTEXT (NAMED TEMPLATE '<name>'). Use it as the structural/wording base for draft_reply/compose_body/new_message, then adapt per the user's instructions and the email context.",
     "- Choose ops that match the mode stated in the EMAIL CONTEXT; wrong-mode ops are rejected.",
     "- ACTION RULE (critical): any request to reply, draft, answer, respond, forward, fwd, send, write, notify, thank, confirm, decline, request, categorize or otherwise ACT on the mail is an ACTION request: answer with format B ops (draft_reply / forward / new_message / set_categories / compose_body / save_draft), NEVER with format A prose. Never write the reply/forward text into the chat, never say 'here is what I would say', never ask whether to do it - propose the op. Format A is ONLY for questions, summaries, translations and explanations about the content.",
-    "- 'reply'/'answer'/'respond' on the open mail means draft_reply. 'forward'/'fwd' means the forward op.",
+    "- 'reply'/'answer'/'respond' on the open mail means draft_reply (add \"all\":true when the user says reply to all/everyone). 'forward'/'fwd' means the forward op. Meeting/calendar/invite requests mean new_meeting.",
+    "- The context may list ATTACHMENTS (names + sizes) of the open mail: reference them by name in drafts/explanations, but you CANNOT read their contents.",
     "- Reply/summary/translate/brainstorm requests that need no change: use format A.",
     "- Keep reply drafts short and human; greeting + body + signoff unless told otherwise.",
     "- LIVE WEB LOOKUPS: when the request needs up-to-date info you cannot reliably know (current events, news, prices, recent releases, rankings, live data), reply with ONLY {\"kind\":\"web_lookup\"} - nothing else. MailKick then runs a web-enabled lookup and re-asks you with fresh citable results. Never use it for mail edits, styling, general concepts, or what the email context already answers.",
@@ -1156,6 +1159,14 @@
           ]).then(function (vals2) {
             out.to = String(vals2[0] || "");
             out.categories = (vals2[1] || []).map(function (c) { return c.displayName || c; });
+            try {
+              // read-mode attachment listing is a sync item property (Mailbox 1.1)
+              if (!isCompose && item.attachments && typeof item.attachments.length === "number") {
+                out.attachments = item.attachments.slice(0, 12).map(function (a) {
+                  return { name: String(a.name || "?"), size: a.size || 0 };
+                });
+              }
+            } catch (eAtt) { /* listing not available */ }
             var done = function (txt) { out.bodyText = String(txt || ""); resolve(out); };
             try {
               item.body.getAsync("text", function (r) {
@@ -1169,14 +1180,43 @@
     });
   };
 
-  MailDeck.prototype.draftReply = function (html) {
+  MailDeck.prototype.draftReply = function (html, all) {
     return promisify(function (resolve, reject) {
       var item = Office.context.mailbox.item;
-      if (!item || !item.displayReplyForm) {
-        reject(new FriendlyError("Open a received message first (a reply needs an existing email)."));
+      if (!item || (!all && !item.displayReplyForm) || (all && !item.displayReplyAllForm)) {
+        reject(new FriendlyError(all
+          ? "Open a received message first (a reply-all needs an existing email)."
+          : "Open a received message first (a reply needs an existing email)."));
         return;
       }
-      item.displayReplyForm(String(html));
+      if (all) item.displayReplyAllForm(String(html));   // Mailbox 1.1
+      else item.displayReplyForm(String(html));
+      resolve({ ok: true });
+    });
+  };
+
+  MailDeck.prototype.newMeeting = function (op) {
+    return promisify(function (resolve, reject) {
+      var mb = Office.context.mailbox;
+      if (!mb || !mb.displayNewAppointmentForm) {
+        reject(new FriendlyError("this Outlook build cannot open meeting forms (needs Mailbox 1.1+)."));
+        return;
+      }
+      var startM = new Date(String(op.start || "")), endM = new Date(String(op.end || ""));
+      if (isNaN(startM.getTime()) || isNaN(endM.getTime())) {
+        reject(new FriendlyError("start/end must be ISO date-times like 2026-11-02T14:00."));
+        return;
+      }
+      if (endM < startM) { var tmp = endM; endM = startM; startM = tmp; }
+      mb.displayNewAppointmentForm({
+        requiredAttendees: (op.required || []).slice(0),
+        optionalAttendees: (op.optional || []).slice(0),
+        start: startM,
+        end: endM,
+        location: String(op.location || ""),
+        subject: String(op.subject || ""),
+        body: String(op.body || ""),
+      });
       resolve({ ok: true });
     });
   };
@@ -1327,7 +1367,7 @@
       if (!op || typeof op !== "object") { invalid.push({ op: op, reason: "not an object" }); return; }
       var t = op.type;
       if (OP_TYPES.indexOf(t) < 0) { invalid.push({ op: op, reason: "unknown op type '" + t + "'" }); return; }
-      if (!ctx && t !== "draft_reply" && t !== "set_categories") {
+      if (!ctx && t !== "draft_reply" && t !== "set_categories" && t !== "new_meeting") {
         invalid.push({ op: op, reason: "needs email context (enable \u0027include email context\u0027)" });
         return;
       }
@@ -1342,6 +1382,7 @@
         }
         if (html.length > 20000) { bad("reply too long (max 20000 chars)"); return; }
         out.html = html;
+        out.all = op.all === true;
       } else if (t === "compose_body") {
         if (!ctx || ctx.mode !== "compose") { bad("compose_body works only on an email being composed"); return; }
         var cb = op.html;
@@ -1366,6 +1407,31 @@
         if (fwTo.length > 50) { bad("too many recipients (max 50)"); return; }
         if (note) out.html = note;
         out.to = fwTo;
+      } else if (t === "new_meeting") {
+        if (typeof op.subject !== "string" || !op.subject.trim()) { bad("missing subject"); return; }
+        out.subject = op.subject.trim().slice(0, 150);
+        var emailOkM = function (arr) {
+          return arr != null && Array.isArray(arr) && arr.every(function (e) {
+            return typeof e === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e.trim());
+          });
+        };
+        var reqM = [], optM = [];
+        if (op.required != null) {
+          if (!emailOkM(op.required)) { bad("required must be an array of email addresses"); return; }
+          reqM = op.required.map(function (e) { return e.trim(); }).slice(0, 50);
+        }
+        if (op.optional != null) {
+          if (!emailOkM(op.optional)) { bad("optional must be an array of email addresses"); return; }
+          optM = op.optional.map(function (e) { return e.trim(); }).slice(0, 50);
+        }
+        if (reqM.length || optM.length) { out.required = reqM; out.optional = optM; }
+        var startM = new Date(String(op.start || "")), endM = new Date(String(op.end || ""));
+        if (isNaN(startM.getTime()) || isNaN(endM.getTime())) {
+          bad("start/end must be ISO date-times like 2026-11-02T14:00"); return;
+        }
+        out.start = String(op.start); out.end = String(op.end);
+        if (typeof op.location === "string" && op.location.trim()) out.location = op.location.trim().slice(0, 200);
+        if (typeof op.body === "string" && op.body.trim()) out.body = op.body.slice(0, 4000);
       } else if (t === "save_draft") {
         if (!ctx || ctx.mode !== "compose") { bad("save draft works only while composing"); return; }
       } else if (t === "new_message") {
@@ -1392,7 +1458,7 @@
     apply_layout: "edit", format_text: "edit", format_selection: "edit",
     move_shape: "edit", move_slide: "edit", set_background: "edit", add_hyperlink: "edit",
     set_alt_text: "edit", set_categories: "edit", draft_reply: "add", new_message: "add",
-    compose_body: "edit", save_draft: "add", create_template: "add", web_lookup: "edit", forward: "add",
+    compose_body: "edit", save_draft: "add", create_template: "add", web_lookup: "edit", forward: "add", new_meeting: "add",
     delete_slide: "del", delete_shape: "del"
   };
 
@@ -1400,7 +1466,11 @@
     switch (op.type) {
       case "draft_reply": {
         var pr = op.html.length > 70 ? op.html.slice(0, 70) + "…" : op.html;
-        return "Reply window with: " + pr;
+        return (op.all ? "Reply-ALL window (everyone on the thread) with: " : "Reply window with: ") + pr;
+      }
+      case "new_meeting": {
+        var whoM = (((op.required || []).join(", ")) + ((op.required || []).length && (op.optional || []).length ? ", " : "") + ((op.optional || []).join(", "))) || "(you pick attendees)";
+        return "Meeting form: " + op.subject + " - " + op.start + " to " + op.end + " - " + whoM;
       }
       case "forward": {
         var fwN = (op.html ? op.html : "").replace(/<[^>]*>/g, " ").trim();
@@ -1428,8 +1498,8 @@ function applyOps(deck, ops, ctx) {
     var runOne = function (op) {
       switch (op.type) {
         case "draft_reply":
-          return deck.draftReply(op.html).then(function () {
-            lines.push({ ok: true, text: "reply window opened with AI content - review and send" });
+          return deck.draftReply(op.html, !!op.all).then(function () {
+            lines.push({ ok: true, text: (op.all ? "reply-ALL window opened" : "reply window opened") + " with AI content - review and send" });
           });
         case "forward":
           return deck.forwardMessage(op, ctx).then(function () {
@@ -1451,12 +1521,20 @@ function applyOps(deck, ops, ctx) {
           return deck.newMessage({ to: op.to, subject: op.subject, html: op.html }).then(function () {
             lines.push({ ok: true, text: "new email window opened - review and send" });
           });
+        case "new_meeting":
+          return deck.newMeeting(op).then(function () {
+            lines.push({ ok: true, text: "meeting form opened (subject: " + op.subject + ") - review and send the invite yourself" });
+          });
       }
       return Promise.resolve();
     };
     var chain = Promise.resolve();
     ops.forEach(function (op) {
-      chain = chain.then(function () { return runOne(op); }, function (err) {
+      chain = chain.then(function () {
+        return runOne(op).catch(function (err) {
+          lines.push({ ok: false, text: fmtOp(op, ctx) + " - " + ((err && err.message) || String(err)) });
+        });
+      }, function (err) {
         lines.push({ ok: false, text: fmtOp(op, ctx) + " - " + ((err && err.message) || String(err)) });
         return Promise.resolve();
       });
@@ -1476,6 +1554,11 @@ function applyOps(deck, ops, ctx) {
     if (ctx.to) lines.push("TO: " + ctx.to);
     if (ctx.subject) lines.push("SUBJECT: " + ctx.subject);
     if (ctx.categories && ctx.categories.length) lines.push("CATEGORIES: " + ctx.categories.join(", "));
+    if (ctx.attachments && ctx.attachments.length) {
+      lines.push("ATTACHMENTS: " + ctx.attachments.map(function (a) {
+        return a.name + (a.size ? " (" + (a.size > 1048576 ? (a.size / 1048576).toFixed(1) + " MB" : Math.round(a.size / 1024) + " kB") + ")" : "");
+      }).join(", "));
+    }
     var body = String(ctx.bodyText || "");
     if (body.length > 4000) body = body.slice(0, 4000) + "…[truncated]";
     lines.push("BODY:\n" + body);
@@ -2142,6 +2225,11 @@ function applyOps(deck, ops, ctx) {
     if (w.kind === "reply") {
       head = "Simulated reply window - real Outlook opens it for review (you still send it yourself)";
       body = w.html || "";
+    } else if (w.kind === "meeting") {
+      head = "Simulated meeting window - real Outlook opens the appointment form (you send it yourself)";
+      body = "<p><b>" + esc(w.subject || "") + "</b><br />" + esc(w.when || "") +
+        (w.location ? " - " + esc(w.location) : "") + "</p>" +
+        (w.attendees ? "<p><b>Attendees:</b> " + esc(w.attendees) + "</p>" : "") + (w.body || "");
     } else {
       head = "Simulated forward window - FW: " + esc(w.subject || "") + " - real Outlook opens it for review";
       body = (w.to && w.to.length ? "<p><b>To:</b> " + esc(w.to.join(", ")) + "</p>"
