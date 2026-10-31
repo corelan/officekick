@@ -555,3 +555,12 @@ button.armed { border-color: #b00020 !important; color: #fff !important; backgro
 .reqbody { display: none; padding: 6px 10px 8px; }
 .reqbody.open { display: block; }
 .reqbody pre { max-height: 240px; overflow: auto; margin: 4px 0; white-space: pre-wrap; word-break: break-word; }
+
+/* rotating indicator while a busy status shows (Asking / collecting / image / applying / repair) */
+.status.busy::before {
+  content: "\u25D0";
+  display: inline-block;
+  margin-right: 6px;
+  animation: skspin 0.9s linear infinite;
+}
+@keyframes skspin { to { transform: rotate(360deg); } }

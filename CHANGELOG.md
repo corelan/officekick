@@ -9,6 +9,10 @@
 ### Fixed
 - Settings sub-tab headers: readable in Office dark mode (lime) and a darker green in light mode.
 
+## [0.6.3] - 2026-10-30
+### Added
+- Every busy status (Asking ..., collecting context, generating image, applying, model-output repair) now shows a rotating indicator character so it reads as still-working.
+
 ## [0.6.2] - 2026-10-30
 ### Changed
 - **Inspector moved into Settings** as a sub-tab (General / Approval policy /
