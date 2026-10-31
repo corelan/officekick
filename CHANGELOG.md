@@ -21,6 +21,11 @@
 ### Added
 - Every busy status (Asking ..., collecting context, generating image, applying, model-output repair) now shows a rotating indicator character so it reads as still-working.
 
+## [0.7.2] - 2026-10-30
+### Changed
+- Tab order: History now sits between Sessions and Settings in all three
+  add-ins (Sessions | History | Settings | About [| Templates]).
+
 ## [0.7.1] - 2026-10-30
 ### Fixed
 - After a resume, the "Previous requests (N)" box existed but was never made
