@@ -21,6 +21,18 @@
 ### Added
 - Every busy status (Asking ..., collecting context, generating image, applying, model-output repair) now shows a rotating indicator character so it reads as still-working.
 
+## [0.6.6] - 2026-10-30
+### Added
+- **Test runs stay out of history**: a built-in nosave flag - simulator runs
+  and any pane loaded with ?nosave=1 never write to the session store (and
+  skip the AI-naming call); add &save=1 to a simulator URL to save anyway.
+  Verified: a sim run added no session rows.
+- History titles render immediately at tab open (already instant from the
+  derived name; the AI name replaces it when it arrives).
+### Verified
+- Session storage integrity: every session file holds even, role-paired
+  exchanges with correct app tags (2 live mailkick sessions intact).
+
 ## [0.6.5] - 2026-10-30
 ### Changed
 - chat: the prompt sits at the top; below it the CURRENT response + proposed

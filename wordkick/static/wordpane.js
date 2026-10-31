@@ -403,6 +403,7 @@
   }
 
   function saveSessionNow() {
+    if (SK.testMode) return;   // test runs never end up in history
     if (!SK.history.length) return;
     var payload = { exchanges: SK.history.slice(), app: SK.app };
     var createPromise;
@@ -427,6 +428,7 @@
   }
 
   function aiNameSession(sid) {
+    if (SK.testMode) return;   // no AI calls for test sessions
     // one tiny call through the profile's other slot; on failure the derived name stays
     var prof = currentProfile();
     if (!prof || !prof.other || !prof.other.connection || !prof.other.model) return;
@@ -2417,6 +2419,11 @@ function applyOps(deck, ops, ctx) {
   function boot() {
     var params = new URLSearchParams(String(window.location.search || ""));
     SK.sim = window.__SK_SIM__ === true || params.has("sim");
+
+    // internal test-run flag: simulator runs and ?nosave=1 never write
+    // to the session history (and skip AI-naming); force with &save=1
+    SK.forceSave = /[?&]save=1/.test(window.location.search);
+    SK.testMode = (SK.sim || /\?.*nosave=1/.test(window.location.search)) && !SK.forceSave;
     if (SK.sim) {
       $("host-badge").style.display = "";
       $("host-badge").textContent = "SIM";
