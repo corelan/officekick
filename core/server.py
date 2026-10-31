@@ -31,7 +31,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 APP = "OfficeKick"
-VERSION = "0.8.9"
+VERSION = "0.9.0"
 
 CONNECTION_TYPES = (
     "openai",
@@ -346,7 +346,8 @@ class Store:
             self.data = {}
         self.data.setdefault("version", 1)
         self.data.setdefault("autoUpdateCheck", True)   # check GitHub at boot (no git)
-        self.data.setdefault("autoApplyApproved", False)  # global auto-apply of approved actions
+        self.data.setdefault("autoApplyApproved", False)  # legacy global auto-apply (fallback for autoApplyByApp)
+        self.data.setdefault("autoApplyByApp", {})  # per-add-in auto-apply: slidekick/wordkick/mailkick
         self.data.setdefault("connections", [])
         self.data.setdefault("profiles", [])
         self.data.setdefault("defaultProfile", None)
@@ -560,6 +561,10 @@ class Store:
             "generateNotes": bool(d.get("generateNotes", False)),
             "autoUpdateCheck": bool(d.get("autoUpdateCheck", True)),
             "autoApplyApproved": bool(d.get("autoApplyApproved", False)),
+            "autoApplyByApp": {
+                app: bool((d.get("autoApplyByApp") or {}).get(app, d.get("autoApplyApproved", False)))
+                for app in ("slidekick", "wordkick", "mailkick")
+            },
         }
 
 
@@ -1288,6 +1293,27 @@ def validate_profile_body(store, body):
 # --------------------------------------------------------------------------- #
 # HTTP server
 # --------------------------------------------------------------------------- #
+_ASSET_RE = re.compile(
+    r'(src|href)="((?!(?:https?:)?//|#)[^"?]+?\.(?:js|css))"'
+)
+
+
+def _version_asset_refs(html_bytes):
+    """Append ?v=<VERSION> to relative js/css asset refs in served HTML.
+
+    Without this, hosts (and the simulator) can execute a heuristically
+    cached OLD build of the pane scripts after an update - asset URLs that
+    carry the version never collide with stale cache entries.
+    """
+    if not html_bytes:
+        return html_bytes
+    try:
+        html = html_bytes.decode("utf-8")
+    except UnicodeDecodeError:
+        return html_bytes
+    return _ASSET_RE.sub(lambda m: '%s="%s?v=%s"' % (m.group(1), m.group(2), VERSION), html).encode("utf-8")
+
+
 STATIC_DOCS = {
     "/": "taskpane.html",
     "/taskpane": "taskpane.html",
@@ -1371,6 +1397,8 @@ class SlideKickHandler(BaseHTTPRequestHandler):
             data = src.encode("utf-8")
         else:
             data = target.read_bytes()
+        if suffix == ".html":
+            data = _version_asset_refs(data)
         self.send_response(200)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(data)))
@@ -1578,6 +1606,12 @@ class SlideKickHandler(BaseHTTPRequestHandler):
                 if "autoApplyApproved" in body and body["autoApplyApproved"] is not None:
                     self.store.data["autoApplyApproved"] = bool(body["autoApplyApproved"])
                     changed = True
+                if "autoApplyByApp" in body and body["autoApplyByApp"] is not None:
+                    for _app, _on in dict(body["autoApplyByApp"]).items():
+                        if _app in ("slidekick", "wordkick", "mailkick"):
+                            byapp = self.store.data.setdefault("autoApplyByApp", {})
+                            byapp[_app] = bool(_on)
+                            changed = True
                 if "autoUpdateCheck" in body and body["autoUpdateCheck"] is not None:
                     self.store.data["autoUpdateCheck"] = bool(body["autoUpdateCheck"])
                     changed = True

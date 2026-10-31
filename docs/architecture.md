@@ -30,10 +30,10 @@ officekick/
                                              v
 +---------------------------------------------------------------------------------------+
 |  core/server.py (python stdlib, threads, dual-stack loopback)                          |
-|    static files per add-in, no-store: /slidekick/static/  /wordkick/static/           |
+|    static files per add-in, no-store + ?v=<version> on script/style asset URLs   |
 |                                       /mailkick/static/  (legacy /outlook/static alias) |
 |    /api/health   /api/update-check (reads VERSION from GitHub; ?latest= test override) |
-|    /api/config   /api/settings (approvals, autoApplyApproved, debug, autoUpdateCheck)  |
+|    /api/config   /api/settings (approvals, autoApplyByApp per add-in, debug, autoUpdateCheck) |
 |    /api/connections(+rename)  /api/profiles(+rename)  /api/test-connection             |
 |    /api/models   /api/image   /api/debug (daily append log)                            |
 |    /api/sessions(+/id, +/rename/<id>) - per-app sessions, AI-named, resumable          |

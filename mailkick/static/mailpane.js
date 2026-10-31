@@ -259,6 +259,9 @@
   }
 
   function autoApplyWanted() {
+    // per-add-in setting first; the legacy global is the fallback
+    var byApp = SK.cfg && SK.cfg.autoApplyByApp;
+    if (byApp && byApp[SK.app] !== undefined) return !!byApp[SK.app];
     return !!(SK.cfg && SK.cfg.autoApplyApproved);
   }
 
@@ -275,8 +278,13 @@
     cb.addEventListener("change", function () {
       var on = !!cb.checked;
       SK.autoApplyUserTouched = true;   // boot config loads must not undo this
-      apiJson("/api/settings", "PUT", { autoApplyApproved: on }).then(function () {
-        if (SK.cfg) SK.cfg.autoApplyApproved = on;
+      var byAppPut = {};
+      byAppPut[SK.app] = on;   // module-specific: this add-in only
+      apiJson("/api/settings", "PUT", { autoApplyByApp: byAppPut }).then(function () {
+        if (SK.cfg) {
+          if (!SK.cfg.autoApplyByApp) SK.cfg.autoApplyByApp = {};
+          SK.cfg.autoApplyByApp[SK.app] = on;
+        }
         var box = $("chat-autoapply");
         if (box) box.checked = on;           // follow the global immediately
         syncAutoApplyCheckbox();
@@ -2515,7 +2523,7 @@ function applyOps(deck, ops, ctx) {
       // the auto-apply checkbox was wired before the config arrived - keep it
       // in sync with the stored setting from now on (the "off after reopen" bug)
       var sap2 = $("set-autoapply");
-      if (sap2 && !SK.autoApplyUserTouched) sap2.checked = !!(SK.cfg && SK.cfg.autoApplyApproved);
+      if (sap2 && !SK.autoApplyUserTouched) sap2.checked = autoApplyWanted();
       syncAutoApplyCheckbox();   // and the per-run box follows the global too
       dbg("config.loaded", { connections: (cfg.connections || []).length, profiles: (cfg.profiles || []).length, debug: cfg.debug });
       renderChat();
@@ -2678,216 +2686,6 @@ function applyOps(deck, ops, ctx) {
         apiJson("/api/settings", "PUT", { autoUpdateCheck: !!updAuto.checked });
       });
     }
-    updateSessionLabel();
-    wireSessions();
-    wireTemplates();
-    $("req-clear").addEventListener("click", clearRequests);
-    $("req-refresh").addEventListener("click", renderRequests);
-    $("sim-reset").addEventListener("click", function () {
-      window.SimDeck.resetAll();
-      renderSimDeck();
-      updateDeckSummary();
-      setStatus("Simulator email reset.", "");
-    });
-  }
-
-  function bootOffice() {
-    var badge = $("host-badge");
-    if (typeof Office === "undefined") {
-      badge.style.display = "";
-      badge.textContent = "NO OFFICE.JS";
-      setStatus("Office.js failed to load. Check the internet connection, then reopen the pane.", "error");
-      return;
-    }
-    Office.onReady(function (info) {
-      badge.style.display = "";
-      badge.textContent = "MAIL";
-      SK.deck = new MailDeck();
-      applyTheme();
-      watchTheme();
-      finishBoot();
-    });
-  }
-
-  function finishBoot() {
-    wireEvents();
-    bootLoad(0);
-  }
-
-  function bootSuccess(cfg) {
-    updateDeckSummary();
-    renderSimDeck();
-    if (!(cfg.connections || []).length) { switchTab("settings"); switchSettingsSub("connections"); }
-    setStatus("Ready. Debug: " + (cfg.debug ? "on" : "off") + ".", "ok");
-  }
-
-  // retries cover the update window: the pane can be opened while the server
-  // is restarting (installer / LaunchAgent)
-  function bootLoad(attempt) {
-    loadConfigAndRender().then(bootSuccess, function (err) { bootFail(err, attempt); });
-  }
-
-  function bootFail(err, attempt) {
-    if (attempt < 3) {
-      setStatus("Server not reachable yet - retrying (" + (attempt + 1) + "/3)…", "busy");
-      setTimeout(function () { bootLoad(attempt + 1); }, 1000);
-      return;
-    }
-    setStatus("Cannot reach the OfficeKick server: " + err.message + " Is it running? (install.sh / install.ps1 / LaunchAgent)", "error");
-    $("statusbar").textContent = "server unreachable: " + err.message;
-  }
-
-  function boot() {
-    var params = new URLSearchParams(String(window.location.search || ""));
-    SK.sim = window.__MAILKICK_SIM__ === true || window.__SK_SIM__ === true || params.has("sim");
-    SK.forceSave = /[?&]save=1/.test(window.location.search);
-    SK.testMode = (SK.sim || /\?.*nosave=1/.test(window.location.search)) && !SK.forceSave;
-    if (SK.sim) {
-      $("host-badge").style.display = "";
-      $("host-badge").textContent = "SIM";
-      var simTab = $("sim-panel");
-      simTab.style.display = "";
-      var nav = document.createElement("button");
-      nav.textContent = "Sim email";
-      nav.dataset.tab = "sim";
-      $("tabs").appendChild(nav);
-      nav.addEventListener("click", function () { switchTab("sim"); });
-      SK.deck = new window.SimDeck();
-      applyTheme();
-      finishBoot();
-    } else {
-      bootOffice();
-    }
-  }
-
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", boot);
-  } else {
-    boot();
-  }
-
-  function wireEvents() {
-    Array.prototype.forEach.call(document.querySelectorAll("#tabs button"), function (b) {
-      b.addEventListener("click", function () { switchTab(b.dataset.tab); });
-    });
-
-    $("chat-run").addEventListener("click", runPrompt);
-    var rpos = $("reply-pos"), rneg = $("reply-neg");
-    if (rpos) rpos.addEventListener("click", function () { runQuickReply("pos"); });
-    if (rneg) rneg.addEventListener("click", function () { runQuickReply("neg"); });
-    $("chat-input").addEventListener("keydown", function (ev) {
-      if ((ev.metaKey || ev.ctrlKey) && ev.key === "Enter") { ev.preventDefault(); runPrompt(); }
-    });
-    $("chat-new").addEventListener("click", function () {
-      resetHistory();
-      $("chat-output").innerHTML = "";
-      $("chat-input").value = "";
-      setStatus("Conversation history cleared.", "ok");
-    });
-    $("chat-refresh-deck").addEventListener("click", function () { updateDeckSummary(); setStatus("Email refreshed.", ""); });
-
-    $("conn-new").addEventListener("click", resetConnForm);
-    $("conn-save").addEventListener("click", saveConnection);
-    $("conn-test").addEventListener("click", testConnection);
-    $("conn-delete").addEventListener("click", function () {
-      if (!SK.editingConn) {
-        setFormMsg($("conn-formmsg"), "Nothing selected to delete - click a connection name first.");
-        return;
-      }
-      var used = (SK.cfg.profiles || []).filter(function (p) {
-        return (p.content && p.content.connection === SK.editingConn) ||
-               (p.other && p.other.connection === SK.editingConn);
-      }).map(function (p) { return p.name; });
-      if (used.length) {
-        window.alert("Connection '" + SK.editingConn + "' is used by profile(s): " +
-          used.join(", ") + ". Remove it from those profiles first.");
-        return;
-      }
-      if (!window.confirm("Delete connection '" + SK.editingConn + "'?")) return;
-      apiJson("/api/connections/" + encodeURIComponent(SK.editingConn), "DELETE")
-        .then(function () { resetConnForm(); return loadConfigAndRender(); })
-        .catch(function (err) { window.alert(err.message); });
-    });
-    $("conn-type").addEventListener("change", function () {
-      var t = CONN_TYPE_BY_ID[$("conn-type").value];
-      if (t && !SK.connBaseDirty) $("conn-base").value = t.base;
-      $("conn-key").placeholder = t && t.keyHint ? t.keyHint : "";
-    });
-    $("conn-base").addEventListener("input", function () { SK.connBaseDirty = true; });
-
-    $("prof-new").addEventListener("click", resetProfForm);
-    $("prof-save").addEventListener("click", saveProfile);
-    $("prof-delete").addEventListener("click", function () {
-      if (!SK.editingProf) {
-        setFormMsg($("prof-formmsg"), "Nothing selected to delete - click a profile name first.");
-        return;
-      }
-      if (!window.confirm("Delete profile '" + SK.editingProf + "'?")) return;
-      apiJson("/api/profiles/" + encodeURIComponent(SK.editingProf), "DELETE")
-        .then(function () { resetProfForm(); return loadConfigAndRender(); })
-        .catch(function (err) { window.alert(err.message); });
-    });
-    $("prof-default").addEventListener("click", function () {
-      var name = $("prof-name").value.trim();
-      if (!name) { setFormMsg($("prof-formmsg"), "Fill in the profile name first."); return; }
-      apiJson("/api/settings", "PUT", { defaultProfile: name }).then(loadConfigAndRender).then(function () {
-        setFormMsg($("prof-formmsg"), "Default profile set to '" + name + "'.", true);
-      }).catch(function (err) { setFormMsg($("prof-formmsg"), err.message); });
-    });
-    Array.prototype.forEach.call(document.querySelectorAll("[data-refresh]"), function (btn) {
-      btn.addEventListener("click", function () {
-        var slot = "prof-" + btn.dataset.refresh;
-        var connName = $(slot + "-conn").value;
-        if (!connName) return;
-        var isImage = slot.indexOf("-image") > 0;
-        var cap = isImage && SK.profImageFilter ? "image" : null;
-        delete SK.modelsCache[connName + (cap ? "::image" : "")];
-        populateModelSelect(slot, connName, $(slot + "-model").value, cap);
-      });
-    });
-    $("prof-image-toggle").addEventListener("click", function () {
-      SK.profImageFilter = !SK.profImageFilter;
-      $("prof-image-toggle").textContent = SK.profImageFilter ? "image-capable only" : "show all models";
-      var connName = $("prof-image-conn").value;
-      if (connName) {
-        delete SK.modelsCache[connName + (SK.profImageFilter ? "::image" : "")];
-        populateModelSelect("prof-image", connName, "", SK.profImageFilter ? "image" : null);
-      }
-    });
-    ["content", "other", "image"].forEach(function (slot) {
-      $("prof-" + slot + "-conn").addEventListener("change", function () {
-        populateModelSelect("prof-" + slot, $("prof-" + slot + "-conn").value, "",
-          slot === "image" && SK.profImageFilter ? "image" : null);
-      });
-      $("prof-" + slot + "-model").addEventListener("change", function () {
-        var isCustom = $("prof-" + slot + "-model").value === "__custom__";
-        $("prof-" + slot + "-custom").classList.toggle("hidden", !isCustom);
-        if (isCustom) $("prof-" + slot + "-custom").focus();
-      });
-    });
-    // convenience: picking a content model with an untouched 'other' slot
-    // copies the choice (connection + model, incl. custom ids) over
-    $("prof-content-model").addEventListener("change", function () {
-      var model = $("prof-content-model").value;
-      var otherModel = $("prof-other-model");
-      if (otherModel.value) return; // 'other' already has a choice - leave it
-      var conn = $("prof-content-conn").value;
-      if (!conn || !model) return;
-      $("prof-other-conn").value = conn;
-      populateModelSelect("prof-other", conn, model).then(function () {
-        if (model === "__custom__") {
-          $("prof-other-model").value = "__custom__";
-          $("prof-other-custom").classList.remove("hidden");
-          $("prof-other-custom").value = $("prof-content-custom").value;
-        }
-      });
-    });
-
-    $("settings-save").addEventListener("click", saveApprovals);
-    Array.prototype.forEach.call(document.querySelectorAll("#settings-subtabs button"), function (b) {
-      b.addEventListener("click", function () { switchSettingsSub(b.dataset.subtab); });
-    });
-    $("settings-debug-save").addEventListener("click", saveDebugOption);
     updateSessionLabel();
     wireSessions();
     wireTemplates();

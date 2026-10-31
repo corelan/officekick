@@ -21,6 +21,28 @@
 ### Added
 - Every busy status (Asking ..., collecting context, generating image, applying, model-output repair) now shows a rotating indicator character so it reads as still-working.
 
+## [0.9.0] - 2026-10-31
+### Added - per-add-in auto-apply
+- "Auto apply approved actions" is now a per-add-in setting: one value for
+  SlideKick, one for DocKick, one for MailKick (stored as `autoApplyByApp`).
+  The toggle in each pane's Settings > Approval policy writes only that
+  add-in's value; existing setups keep working (the previous global
+  `autoApplyApproved` is the fallback when an add-in has no value yet).
+
+### Fixed - MailKick settings wiring
+- MailKick's pane carried a duplicated boot/events tail: an older copy of
+  wireEvents/boot won via JS last-definition-wins and silently disabled newer
+  wiring, including the auto-apply settings toggle (this is why the setting
+  looked like it never persisted in MailKick). The duplicated tail is removed;
+  the settings checkbox now loads, writes and re-opens with the stored
+  per-add-in value (E2E: OFF cycle, reopen, ON cycle, cross-add-in values).
+
+### Fixed - stale pane scripts after updates
+- The server now tags the pane's script/style assets with the current version
+  (`?v=<version>` on served taskpane/simulator HTML), so browsers, Office hosts
+  and the simulator can never execute a heuristically cached older build after
+  an update; static responses were already `no-store`.
+
 ## [0.8.9] - 2026-10-31
 ### Fixed - settings round-trip
 - Settings values saved in one visit were displayed OFF after closing and

@@ -268,6 +268,9 @@
   }
 
   function autoApplyWanted() {
+    // per-add-in setting first; the legacy global is the fallback
+    var byApp = SK.cfg && SK.cfg.autoApplyByApp;
+    if (byApp && byApp[SK.app] !== undefined) return !!byApp[SK.app];
     return !!(SK.cfg && SK.cfg.autoApplyApproved);
   }
 
@@ -284,8 +287,13 @@
     cb.addEventListener("change", function () {
       var on = !!cb.checked;
       SK.autoApplyUserTouched = true;   // boot config loads must not undo this
-      apiJson("/api/settings", "PUT", { autoApplyApproved: on }).then(function () {
-        if (SK.cfg) SK.cfg.autoApplyApproved = on;
+      var byAppPut = {};
+      byAppPut[SK.app] = on;   // module-specific: this add-in only
+      apiJson("/api/settings", "PUT", { autoApplyByApp: byAppPut }).then(function () {
+        if (SK.cfg) {
+          if (!SK.cfg.autoApplyByApp) SK.cfg.autoApplyByApp = {};
+          SK.cfg.autoApplyByApp[SK.app] = on;
+        }
         var box = $("chat-autoapply");
         if (box) box.checked = on;           // follow the global immediately
         syncAutoApplyCheckbox();
@@ -3298,7 +3306,7 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
       // the auto-apply checkbox was wired before the config arrived - keep it
       // in sync with the stored setting from now on (the "off after reopen" bug)
       var sap2 = $("set-autoapply");
-      if (sap2 && !SK.autoApplyUserTouched) sap2.checked = !!(SK.cfg && SK.cfg.autoApplyApproved);
+      if (sap2 && !SK.autoApplyUserTouched) sap2.checked = autoApplyWanted();
       syncAutoApplyCheckbox();   // and the per-run box follows the global too
       dbg("config.loaded", { connections: (cfg.connections || []).length, profiles: (cfg.profiles || []).length, debug: cfg.debug });
       renderChat();
