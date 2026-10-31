@@ -588,3 +588,6 @@ button.armed { border-color: #b00020 !important; color: #fff !important; backgro
 #pastbox .reqhead2 { font-weight: 700; }
 #pastbox .reqbody { padding: 4px 8px 8px; border-top: 1px dashed rgba(127,127,127,.3); }
 #pastbox .reqgrp { margin: 8px 0 0; }
+
+/* request timer next to Run */
+.chattimer { font-variant-numeric: tabular-nums; opacity: .75; font-size: 12px; margin-left: 8px; }

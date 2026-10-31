@@ -2178,6 +2178,7 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
     input.value = "";   // the request is captured; the box clears right away
     SK.busy = true;
     setRunEnabled(false);
+    chatTimerStart();
     var wantCtx = $("chat-context").checked;
     setStatus("Collecting deck context…", "busy");
     var ctxPromise = (wantCtx ? SK.deck.getContext({}) : Promise.resolve(null)).then(function (ctx) {
@@ -2232,6 +2233,7 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
       // the request left the pane but failed - keep it in the session too
       pushHistory(instruction, "(failed: " + msg + ")");
     }).then(function () {
+      stopChatTimer();
       SK.busy = false;
       setRunEnabled(true);
     });
@@ -2247,6 +2249,29 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
       if (Array.isArray(obj.ops)) return { ok: true, kind: "slide_ops", ops: obj.ops }; // tolerate missing kind
     }
     return { ok: false, text: stripped };
+  }
+
+
+
+  function chatTimerStart() {
+    stopChatTimer();
+    var el = $("chat-timer");
+    if (!el) return;
+    SK.chatTimer = { iv: null, t0: Date.now(), el: el };
+    function tick() {
+      var t = Math.floor((Date.now() - SK.chatTimer.t0) / 1000);
+      var h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), s2 = t % 60;
+      var mm = (m < 10 && h ? "0" : "") + m;
+      var ss = (s2 < 10 ? "0" : "") + s2;
+      el.textContent = h ? (h + " h " + mm + ":" + ss) : (mm + ":" + ss);
+    }
+    tick();
+    SK.chatTimer.iv = setInterval(tick, 500);
+  }
+
+  function stopChatTimer() {
+    if (SK.chatTimer && SK.chatTimer.iv) { clearInterval(SK.chatTimer.iv); SK.chatTimer.iv = null; }
+    // the final elapsed time stays visible (frozen) until the next run
   }
 
 

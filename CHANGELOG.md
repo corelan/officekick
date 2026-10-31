@@ -21,6 +21,10 @@
 ### Added
 - Every busy status (Asking ..., collecting context, generating image, applying, model-output repair) now shows a rotating indicator character so it reads as still-working.
 
+## [0.6.7] - 2026-10-30
+### Added
+- A request timer next to Run: clicking Run starts an H:MM:SS counter; it freezes at the elapsed time when the run finishes (or fails) and restarts on the next Run. Verified live.
+
 ## [0.6.6] - 2026-10-30
 ### Added
 - **Test runs stay out of history**: a built-in nosave flag - simulator runs
