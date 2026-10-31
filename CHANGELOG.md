@@ -21,6 +21,16 @@
 ### Added
 - Every busy status (Asking ..., collecting context, generating image, applying, model-output repair) now shows a rotating indicator character so it reads as still-working.
 
+## [0.7.9] - 2026-10-31
+### Fixed
+- Live lookup actually switched to the model side in all panes (0.7.8
+  described it; the pane rework had not landed): one call through the
+  profile's model, ":online" appended on openrouter connections, honesty
+  fallbacks (NO_WEB_ACCESS / can't browse / no web access) -> the run
+  continues and the status says the model has no web access.
+### Verified
+- Live E2E: model cites 5 fresh sources incl. an Oct-2026 benchmark score.
+
 ## [0.7.8] - 2026-10-31
 ### Changed
 - Settings -> General regrouped into boxed sections per add-in: a

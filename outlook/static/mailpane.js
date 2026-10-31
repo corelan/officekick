@@ -229,48 +229,32 @@
   }
 
   // ---- live web lookups (optional checkbox): ONE call through a model with
-  // web access - any model on an openrouter connection gets the ":online"
-  // suffix (openrouter injects fresh web results + citations, no keys);
-  // other providers are asked too and report honestly if they cannot. ----
-  function webLookupQueries(prof, instruction) {
+  // web access; the MODEL does the lookup (no local search API keys). Any
+  // model on an openrouter connection gets the ":online" suffix so
+  // openrouter injects fresh web results + source citations. Other
+  // providers are asked too; models without web access answer
+  // NO_WEB_ACCESS and the pane says so in the status. ----
+  function webLookup(prof, instruction) {
     var ref = prof.other && prof.other.connection && prof.other.model ? prof.other : prof.content;
-    var sys = "You translate a user request into 0-3 short WEB SEARCH queries " +
-      "(each max 10 words, no quotes) that would help answer it. " +
-      "If a live lookup would add nothing, return no queries. " +
-      "Reply with ONLY minified JSON: {\"queries\": [\"q one\", \"q two\"]}";
+    var model = ref.model;
+    var conn = (SK.cfg.connections || []).filter(function (c) { return c.name === ref.connection; })[0] || {};
+    if (conn.type === "openrouter") model = model + ":online";
+    var sys = "You have LIVE WEB ACCESS. Research the user's request with web search now. " +
+      "Return 4-8 short facts that help answer it; after EACH fact put its source URL in ( ): " +
+      "like \"fact text (https://source.example/page)\". Be current; mention dates when known. " +
+      "If you actually cannot access the web, reply with exactly NO_WEB_ACCESS.";
     return askRetryable(function () {
       return apiJson("/api/chat", "POST", {
-        connection: ref.connection, model: ref.model,
-        temperature: 0.2, maxTokens: 200,
+        connection: ref.connection, model: model,
         messages: [{ role: "system", content: sys },
-                   { role: "user", content: instruction.slice(0, 400) }],
+                   { role: "user", content: instruction.slice(0, 600) }],
       });
     }).then(function (resp) {
-      var t = stripReasoning(resp.text || "");
-      var m = /\{[\\s\\S]*\}/.exec(t);
-      if (!m) return [];
-      try {
-        var obj = JSON.parse(m[0]);
-        var qs = Array.isArray(obj && obj.queries) ? obj.queries : [];
-        return qs.filter(function (x) { return typeof x === "string" && x.trim(); }).slice(0, 3);
-      } catch (e) { return []; }
+      var t = String(resp.text || "").trim();
+      if (!t || /^NO_WEB_ACCESS\b/i.test(t) || /cannot access (the )?web/i.test(t) ||
+          /can'?t browse/i.test(t) || /no web access/i.test(t)) return "";
+      return "MODEL-SIDE WEB LOOKUP via " + model + ":\n" + t.slice(0, 5000);
     });
-  }
-
-  function runWebSearches(queries) {
-    if (!queries.length) return Promise.resolve("");
-    return Promise.all(queries.map(function (q) {
-      return apiJson("/api/websearch?q=" + encodeURIComponent(q), "GET")
-        .then(function (res) {
-          var rs = (res && res.results) || [{ error: "no results" }];
-          var out = "SEARCH: " + q + "\n";
-          rs.slice(0, 5).forEach(function (r, i2) {
-            out += (i2 + 1) + ". " + (r.title || "(no title)") + " - " + (r.url || "") +
-              (r.error ? " [" + r.error + "]" : (r.snippet ? "\n   " + r.snippet : "")) + "\n";
-          });
-          return out;
-        }).catch(function (e) { return "SEARCH: " + q + "\n[search failed: " + (e && e.message || e) + "]\n"; });
-    })).then(function (parts) { return parts.join("\n"); });
   }
 
   function updCheck() {
@@ -1435,8 +1419,9 @@ function applyOps(deck, ops, ctx) {
       SK.lastCtx = ctx;
       var sys = SYSTEM_PROMPT + "\nHost: " + (SK.sim ? "MailKick simulator" : SK.deck.capabilities().host);
       var webChk = $("chat-web");
+      SK.webResults = "";
       var webPromise = (webChk && webChk.checked)
-        ? webLookupQueries(prof, instruction).then(runWebSearches)
+        ? webLookup(prof, instruction)
             .catch(function (e) { SK.webResults = "(web lookup failed: " + (e && e.message || e) + ")"; })
         : Promise.resolve("").then(function () { SK.webResults = ""; });
       return webPromise.then(function () {
