@@ -539,7 +539,11 @@ button.armed { border-color: #b00020 !important; color: #fff !important; backgro
 
 /* Settings sub-tabs (General / Approval policy / Connections / Profiles) */
 .subtabs { display: flex; gap: 4px; margin: 2px 0 12px 0; border-bottom: 1px solid rgba(128,128,128,.35); }
-.subtabs button { padding: 7px 12px; border: none; background: none; cursor: pointer; font-weight: 600; opacity: .55; border-bottom: 2px solid transparent; }
-.subtabs button.active { opacity: 1; border-bottom-color: currentColor; }
+.subtabs button { padding: 7px 12px; border: none; background: none; cursor: pointer; font-weight: 600; border-bottom: 2px solid transparent; color: #1e7d46; }
+.subtabs button.active { color: #14603a; border-bottom-color: #1e7d46; }
+@media (prefers-color-scheme: dark) {
+  .subtabs button { color: #9be87f; }            /* lime: readable on the dark Office theme */
+  .subtabs button.active { color: #c3f79d; border-bottom-color: #9be87f; }
+}
 .subpanel { display: none; }
 .subpanel.active { display: block; }

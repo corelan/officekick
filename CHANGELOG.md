@@ -5,6 +5,10 @@
   'move_slide'" in the gate); the entry is in and the op is E2E-verified in
   the simulator (move last slide -> position 2 reorders correctly).
 
+## [0.5.3] - 2026-10-30
+### Fixed
+- Settings sub-tab headers: readable in Office dark mode (lime) and a darker green in light mode.
+
 ## [0.5.2] - 2026-10-30
 ### Changed
 - Deck outline character cap raised from 40,000 to 60,000 (per request).
