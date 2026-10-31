@@ -1588,14 +1588,7 @@ function applyOps(deck, ops, ctx) {
     var h = document.createElement("h3");
     h.textContent = "Proposed actions" + ($("chat-autoapply").checked ? " (auto-apply)" : "");
     box.appendChild(h);
-    var pol = [];
-    OP_TYPES.forEach(function (t) {
-      if (approvalMode(t) !== "auto") pol.push(OPS_META[t].label + ": " + approvalMode(t));
-    });
-    var polnote = document.createElement("div");
-    polnote.className = "opnote";
-    polnote.textContent = "policy: " + (pol.length ? pol.join(" | ") : "all set to auto");
-    box.appendChild(polnote);
+
 
     if (!caps.text) {
       var warn = document.createElement("div");

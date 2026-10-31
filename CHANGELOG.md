@@ -21,6 +21,12 @@
 ### Added
 - Every busy status (Asking ..., collecting context, generating image, applying, model-output repair) now shows a rotating indicator character so it reads as still-working.
 
+## [0.7.3] - 2026-10-30
+### Changed
+- The proposed-actions box shows only the actions now; the approval-policy
+  summary line was removed (policy editing stays in Settings -> Approval
+  policy, and the per-action approval controls remain on each row).
+
 ## [0.7.2] - 2026-10-30
 ### Changed
 - Tab order: History now sits between Sessions and Settings in all three
