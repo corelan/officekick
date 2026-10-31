@@ -1339,7 +1339,7 @@ function applyOps(deck, ops, ctx) {
     var instruction = input.value.trim();
     if (!instruction) return;
     var prof = currentProfile();
-    if (!prof) { setStatus("No profile yet - create one on the Profiles tab first.", "error"); switchTab("profiles"); return; }
+    if (!prof) { setStatus("No profile yet - create one on the Profiles tab first.", "error"); switchTab("settings"); switchSettingsSub("profiles"); return; }
     var route = $("chat-route").value;
     var ref = routeToModel(prof, route, instruction);
     if (!ref || !ref.connection || !ref.model) {
@@ -1719,6 +1719,17 @@ function applyOps(deck, ops, ctx) {
   // ------------------------------------------------------------------ //
   // Tabs
   // ------------------------------------------------------------------ //
+  function switchSettingsSub(id) {
+    var bar = document.getElementById("settings-subtabs");
+    if (!bar) return;
+    Array.prototype.forEach.call(bar.querySelectorAll("button[data-subtab]"), function (b) {
+      b.classList.toggle("active", b.dataset.subtab === id);
+    });
+    Array.prototype.forEach.call(document.querySelectorAll("#tab-settings .subpanel"), function (p2) {
+      p2.classList.toggle("active", p2.id === "sub-" + id);
+    });
+  }
+
   function switchTab(id) {
     SK.activeTab = id;
     if (id === "requests") renderRequests();
@@ -2227,6 +2238,9 @@ function applyOps(deck, ops, ctx) {
     });
 
     $("settings-save").addEventListener("click", saveApprovals);
+    Array.prototype.forEach.call(document.querySelectorAll("#settings-subtabs button"), function (b) {
+      b.addEventListener("click", function () { switchSettingsSub(b.dataset.subtab); });
+    });
     $("settings-debug-save").addEventListener("click", saveDebugOption);
     $("settings-tc-save").addEventListener("click", function () {
       apiJson("/api/settings", "PUT", { trackedChanges: $("settings-trackedchanges").checked }).then(function () {
@@ -2272,7 +2286,7 @@ function applyOps(deck, ops, ctx) {
   function bootSuccess(cfg) {
     updateDeckSummary();
     renderSimDeck();
-    if (!(cfg.connections || []).length) switchTab("connections");
+    if (!(cfg.connections || []).length) { switchTab("settings"); switchSettingsSub("connections"); }
     setStatus("Ready. Debug: " + (cfg.debug ? "on" : "off") + ".", "ok");
   }
 

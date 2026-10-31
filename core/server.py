@@ -31,7 +31,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 APP = "OfficeKick"
-VERSION = "0.4.3"
+VERSION = "0.5.0"
 
 CONNECTION_TYPES = (
     "openai",
@@ -324,7 +324,7 @@ class Store:
         # speaker-notes generation is opt-in (off by default)
         self.data.setdefault("generateNotes", False)
         # AI edits as tracked changes (Word; opt-in)
-        self.data.setdefault("trackedChanges", False)
+        self.data.setdefault("trackedChanges", True)
         self.save()
 
     def save(self):

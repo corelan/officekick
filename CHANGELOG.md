@@ -5,6 +5,15 @@
   'move_slide'" in the gate); the entry is in and the op is E2E-verified in
   the simulator (move last slide -> position 2 reorders correctly).
 
+## [0.5.0] - 2026-10-30
+### Changed (UI restructure)
+- Settings now hosts sub-tabs: General (behavior toggles + debug logging),
+  Approval policy (its own sheet), Connections, Profiles. Top strip =
+  Sessions | Settings | About | History | Inspector - Connections/Profiles
+  moved under Settings; IDs kept; error-path navigation lands right.
+- Word: AI edits as tracked changes is now the DEFAULT (on unless switched
+  off in Settings > General; existing installs flipped on as well).
+
 ## [0.4.2] - 2026-10-30
 ### Added
 - **move_slide** op (SlideKick): reorders a slide to any position. PowerPoint

@@ -17,8 +17,6 @@
     </div>
     <nav class="sk-tabs" id="tabs">
       <button data-tab="chat" class="active">Sessions</button>
-      <button data-tab="connections">Connections</button>
-      <button data-tab="profiles">Profiles</button>
       <button data-tab="settings">Settings</button>
       <button data-tab="about">About</button>
       <button data-tab="sessions">History</button>
@@ -150,17 +148,13 @@
 
     <!-- =========================== SETTINGS =========================== -->
     <section id="tab-settings" class="tab">
-      <h2>Approval policy per action</h2>
-      <p class="muted">MailKick never sends document changes without this policy:
-        <b>auto</b> = apply immediately, <b>confirm</b> = apply only after you tick it in the
-        preview, <b>deny</b> = blocked with a notice.</p>
-      <table class="list" id="approvals-table"></table>
-
-      <div class="row">
-        <button id="settings-save" class="btn primary" type="button">Save policy</button>
-      </div>
-      <div id="settings-msg" class="formmsg"></div>
-
+    <div class="subtabs" id="settings-subtabs">
+      <button data-subtab="general" class="active">General</button>
+      <button data-subtab="approvals">Approval policy</button>
+      <button data-subtab="connections">Connections</button>
+      <button data-subtab="profiles">Profiles</button>
+    </div>
+    <div class="subpanel active" id="sub-general">
       <h2>Debug logging</h2>
       <p class="muted">When enabled, MailKick appends AI interactions and document-edit traces
         to <span id="debug-path" class="small"></span> (one file per day). Debug output
@@ -170,7 +164,95 @@
         <label class="field-inline check"><input type="checkbox" id="settings-debug" /> enable debug logging</label>
       </div>
       <div class="row"><button id="settings-debug-save" class="btn" type="button">Save debug setting</button></div>
-    </section>
+    </div>
+    <div class="subpanel" id="sub-approvals">
+      <h2>Approval policy per action</h2>
+      <p class="muted">MailKick never sends email without this policy:
+        <b>auto</b> = apply immediately, <b>confirm</b> = apply only after you tick it in the
+        preview, <b>deny</b> = blocked with a notice. MailKick never sends mail.</p>
+      <table class="list" id="approvals-table"></table>
+      <div class="row">
+        <button id="settings-save" class="btn primary" type="button">Save policy</button>
+      </div>
+      <div id="settings-msg" class="formmsg"></div>
+    </div>
+    <div class="subpanel" id="sub-connections">
+
+      <table class="list" id="conn-list"></table>
+      <div class="row"><button id="conn-new" class="btn subtle" type="button">+ New connection</button></div>
+
+      <form id="conn-form" autocomplete="off">
+        <h2 id="conn-form-title">New connection</h2>
+        <label>Name
+          <input id="conn-name" type="text" maxlength="64" placeholder="e.g. openrouter-main" />
+        </label>
+        <label>Type
+          <select id="conn-type"></select>
+        </label>
+        <label>Base URL
+          <input id="conn-base" type="text" placeholder="https://…" spellcheck="false" />
+        </label>
+        <label>API Key <span class="muted">(leave empty to keep an existing key)</span>
+          <input id="conn-key" type="password" placeholder="" autocomplete="new-password" spellcheck="false" />
+        </label>
+        <div class="row">
+          <button id="conn-save" class="btn primary" type="button">Save</button>
+          <button id="conn-test" class="btn" type="button">Test connection</button>
+          <button id="conn-delete" class="btn danger" type="button">Delete</button>
+        </div>
+        <div id="conn-formmsg" class="formmsg"></div>
+        <div id="conn-testout" class="testout"></div>
+      </form>
+        </div>
+    <div class="subpanel" id="sub-profiles">
+
+      <div class="muted">A profile pairs a <b>content model</b> (document edits/generation) with an
+        <b>other-actions model</b> (chat, brainstorming, advice). ★ = default profile.</div>
+      <table class="list" id="prof-list"></table>
+      <div class="row"><button id="prof-new" class="btn subtle" type="button">+ New profile</button></div>
+
+      <form id="prof-form" autocomplete="off">
+        <h2 id="prof-form-title">New profile</h2>
+        <label>Profile name
+          <input id="prof-name" type="text" maxlength="64" placeholder="e.g. daily-driver" />
+        </label>
+        <fieldset>
+          <legend>Content model <span class="muted">(document edits)</span></legend>
+          <label>Connection <select id="prof-content-conn"></select></label>
+          <div class="row row-tight">
+            <label class="grow">Model <select id="prof-content-model"></select></label>
+            <button class="btn subtle" type="button" data-refresh="content">Refresh list</button>
+          </div>
+          <input id="prof-content-custom" type="text" placeholder="custom model id" class="hidden" spellcheck="false" />
+        </fieldset>
+        <fieldset>
+          <legend>Other-actions model <span class="muted">(chat / brainstorm / advice)</span></legend>
+          <label>Connection <select id="prof-other-conn"></select></label>
+          <div class="row row-tight">
+            <label class="grow">Model <select id="prof-other-model"></select></label>
+            <button class="btn subtle" type="button" data-refresh="other">Refresh list</button>
+          </div>
+          <input id="prof-other-custom" type="text" placeholder="custom model id" class="hidden" spellcheck="false" />
+        </fieldset>
+        <fieldset>
+          <legend>Image model <span class="muted">(optional - pictures via an images API; e.g. gpt-image-1)</span></legend>
+          <label>Connection <select id="prof-image-conn"></select></label>
+<button class="btn subtle" type="button" id="prof-image-toggle" title="Toggles between image-capable models only and the full list (>420 on OpenRouter)">show all models</button>
+          <div class="row row-tight">
+            <label class="grow">Model <select id="prof-image-model"></select></label>
+            <button class="btn subtle" type="button" data-refresh="image">Refresh list</button>
+          </div>
+          <input id="prof-image-custom" type="text" placeholder="custom model id" class="hidden" spellcheck="false" />
+        </fieldset>
+        <div class="row">
+          <button id="prof-save" class="btn primary" type="button">Save profile</button>
+          <button id="prof-default" class="btn" type="button">Set as default</button>
+          <button id="prof-delete" class="btn danger" type="button">Delete</button>
+        </div>
+        <div id="prof-formmsg" class="formmsg"></div>
+      </form>
+        </div>
+  </section>
 
     <!-- ============================= ABOUT ============================= -->
     <section id="tab-about" class="tab">

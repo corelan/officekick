@@ -17,8 +17,6 @@
     </div>
     <nav class="sk-tabs" id="tabs">
       <button data-tab="chat" class="active">Sessions</button>
-      <button data-tab="connections">Connections</button>
-      <button data-tab="profiles">Profiles</button>
       <button data-tab="settings">Settings</button>
       <button data-tab="about">About</button>
       <button data-tab="sessions">History</button>
@@ -69,8 +67,42 @@
       <div id="sim-deck-view" class="sim-deck"></div>
     </section>
 
-    <!-- ========================== CONNECTIONS ========================== -->
-    <section id="tab-connections" class="tab">
+    <!-- =========================== SETTINGS =========================== -->
+    <section id="tab-settings" class="tab">
+    <div class="subtabs" id="settings-subtabs">
+      <button data-subtab="general" class="active">General</button>
+      <button data-subtab="approvals">Approval policy</button>
+      <button data-subtab="connections">Connections</button>
+      <button data-subtab="profiles">Profiles</button>
+    </div>
+    <div class="subpanel active" id="sub-general">
+      <label class="field-inline check" style="margin:8px 0 4px 0"><input type="checkbox" id="settings-notes" />
+        Generate speaker notes when creating or editing slides</label>
+      <p class="muted" style="margin:0 0 4px 0">When off (default), notes are never generated or
+        written on slides - notes actions from the model are skipped and the prompt tells the
+        model not to produce them. Turn it on here if you want notes.</p>
+      <div class="row">
+        <label class="field-inline check"><input type="checkbox" id="settings-debug" /> enable debug logging</label>
+      </div>
+      <p class="muted">When enabled, SlideKick appends AI interactions and deck-edit traces
+        to <span id="debug-path" class="small"></span> (one file per day). Debug output
+        contains slide text content and full provider payloads - keep it off when working
+        on sensitive decks.</p>
+      <div class="row"><button id="settings-debug-save" class="btn" type="button">Save debug setting</button></div>
+    </div>
+    <div class="subpanel" id="sub-approvals">
+      <h2>Approval policy per action</h2>
+      <p class="muted">SlideKick never sends deck changes without this policy:
+        <b>auto</b> = apply immediately, <b>confirm</b> = apply only after you tick it in the
+        preview, <b>deny</b> = blocked with a notice.</p>
+      <table class="list" id="approvals-table"></table>
+      <div class="row">
+        <button id="settings-save" class="btn primary" type="button">Save policy</button>
+      </div>
+      <div id="settings-msg" class="formmsg"></div>
+    </div>
+    <div class="subpanel" id="sub-connections">
+
       <table class="list" id="conn-list"></table>
       <div class="row"><button id="conn-new" class="btn subtle" type="button">+ New connection</button></div>
 
@@ -96,10 +128,9 @@
         <div id="conn-formmsg" class="formmsg"></div>
         <div id="conn-testout" class="testout"></div>
       </form>
-    </section>
+        </div>
+    <div class="subpanel" id="sub-profiles">
 
-    <!-- =========================== PROFILES =========================== -->
-    <section id="tab-profiles" class="tab">
       <div class="muted">A profile pairs a <b>content model</b> (slide edits/generation) with an
         <b>other-actions model</b> (chat, brainstorming, advice). ★ = default profile.</div>
       <table class="list" id="prof-list"></table>
@@ -145,35 +176,8 @@
         </div>
         <div id="prof-formmsg" class="formmsg"></div>
       </form>
-    </section>
-
-    <!-- =========================== SETTINGS =========================== -->
-    <section id="tab-settings" class="tab">
-      <h2>Approval policy per action</h2>
-      <p class="muted">SlideKick never sends deck changes without this policy:
-        <b>auto</b> = apply immediately, <b>confirm</b> = apply only after you tick it in the
-        preview, <b>deny</b> = blocked with a notice.</p>
-      <table class="list" id="approvals-table"></table>
-      <label class="field-inline check" style="margin:8px 0 4px 0"><input type="checkbox" id="settings-notes" />
-        Generate speaker notes when creating or editing slides</label>
-      <p class="muted" style="margin:0 0 4px 0">When off (default), notes are never generated or
-        written on slides - notes actions from the model are skipped and the prompt tells the
-        model not to produce them. Turn it on here if you want notes.</p>
-      <div class="row">
-        <button id="settings-save" class="btn primary" type="button">Save policy</button>
-      </div>
-      <div id="settings-msg" class="formmsg"></div>
-
-      <h2>Debug logging</h2>
-      <p class="muted">When enabled, SlideKick appends AI interactions and deck-edit traces
-        to <span id="debug-path" class="small"></span> (one file per day). Debug output
-        contains slide text content and full provider payloads - keep it off when working
-        on sensitive decks.</p>
-      <div class="row">
-        <label class="field-inline check"><input type="checkbox" id="settings-debug" /> enable debug logging</label>
-      </div>
-      <div class="row"><button id="settings-debug-save" class="btn" type="button">Save debug setting</button></div>
-    </section>
+        </div>
+  </section>
 
     <!-- ============================= ABOUT ============================= -->
     <section id="tab-about" class="tab">

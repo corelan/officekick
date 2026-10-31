@@ -49,7 +49,7 @@
   var OPS_META = {
     draft_reply:    { label: "draft reply", hint: "Opens a reply window with AI-written HTML content - you review and send." },
     compose_body:   { label: "replace compose text", hint: "Rewrites the body of the email you are composing (review first)." },
-    set_categories: { label: "categories", hint: "Adds Outlook categories to the selected message (must exist in your master list)." },
+    set_categories: { label: "categories", hint: "Adds Outlook categories to the selected message; names are checked against your mailbox master list when Outlook's permission level allows reading it." },
     save_draft:     { label: "save draft", hint: "Saves the message you are composing as a draft." },
     new_message:    { label: "new message from template", hint: "Opens a prefilled NEW email window (to/subject/body) - you review and send." },
   };
@@ -324,9 +324,9 @@
     "Allowed op types:",
     '- {"type":"draft_reply","html":"<p>reply text</p>"} (READ mode: opens a reply window with this content; simple inline tags only - p, br, b, i, a, ul, li)',
     '- {"type":"compose_body","html":"<p>...</p>"} (COMPOSE mode only: replaces the body of the email being written)',
-    '- {"type":"set_categories","names":["Category"]} (must already exist in the mailbox master category list)',
+    '- {"type":"set_categories","names":["Category"]} (names should exist in the KNOWN CATEGORIES list from the context when present; if the context says the master list is unavailable, still use sensible category names - the pane will report unchecked ones)',
     '- {"type":"save_draft"} (COMPOSE mode: saves the message being composed as a draft)',
-    '- {"type":"new_message","to":["someone@example.com"]?,"subject":"..."","html":"..."} (read or compose: opens a NEW email window prefilled; simple inline tags only)',
+    '- {"type":"new_message","html":"..."} (read or compose: opens a NEW email window prefilled; simple inline tags only)',
     "",
     "Rules:",
     "- Named templates: when the request mentions a template, its content is listed in the EMAIL CONTEXT (NAMED TEMPLATE '<name>'). Use it as the structural/wording base for draft_reply/compose_body/new_message, then adapt per the user's instructions and the email context.",
@@ -891,6 +891,11 @@
   MailDeck.prototype.getContext = function (opts) {
     var self = this;
     return MailDeck.prototype._getContextCore.call(self, opts).then(function (ctx) {
+      return masterCategoriesList().then(function (list) {
+        if (list) ctx.masterCategories = list;
+        return ctx;
+      });
+    }).then(function (ctx) {
       // Mailbox 1.13: enrich with the items the user multi-selected (batch triage)
       return new Promise(function (resMulti) {
         try {
@@ -992,6 +997,22 @@
     });
   };
 
+  function masterCategoriesList() {
+    // mailbox-wide category master list - needs the elevated ReadWriteMailbox
+    // permission; any failure (incl. "Elevated permission is required")
+    // resolves null instead of throwing
+    return promisify(function (resolve) {
+      try {
+        var mb = Office.context.mailbox;
+        if (!mb || !mb.masterCategories || !mb.masterCategories.getAsync) { resolve(null); return; }
+        mb.masterCategories.getAsync(function (r) {
+          if (!r || r.status !== "succeeded") { resolve(null); return; }
+          resolve((r.value || []).map(function (c) { return c.displayName; }));
+        });
+      } catch (e) { resolve(null); }
+    });
+  }
+
   MailDeck.prototype.setCategories = function (names) {
     return promisify(function (resolve, reject) {
       var item = Office.context.mailbox.item;
@@ -999,18 +1020,24 @@
         reject(new FriendlyError("this Outlook build does not support categories from add-ins (Mailbox 1.8)."));
         return;
       }
-      Office.context.mailbox.masterCategories.getAsync(function (mr) {
-        if (mr.status !== "succeeded") { reject(new FriendlyError("could not read the mailbox category list: " + mr.error.message)); return; }
+      masterCategoriesList().then(function (list) {
+        var apply = function (note) {
+          item.categories.addAsync(names.map(String), function (r) {
+            r.status === "succeeded" ? resolve({ ok: true, note: note }) : reject(new FriendlyError(r.error.message));
+          });
+        };
+        if (!list) {
+          apply("(applied WITHOUT checking the master list - reading it needs elevated mailbox permissions; new names may get created in your mailbox)");
+          return;
+        }
         var known = {};
-        (mr.value || []).forEach(function (c) { known[c.displayName.toLowerCase()] = true; });
+        list.forEach(function (c) { known[String(c).toLowerCase()] = true; });
         var unknown = (names || []).filter(function (n) { return !known[String(n).toLowerCase()]; });
         if (unknown.length) {
           reject(new FriendlyError("category not in your master list: " + unknown.join(", ") + " - create it in Outlook first."));
           return;
         }
-        item.categories.addAsync(names.map(String), function (r) {
-          r.status === "succeeded" ? resolve({ ok: true }) : reject(new FriendlyError(r.error.message));
-        });
+        apply("");
       });
     });
   };
@@ -1156,8 +1183,8 @@ function applyOps(deck, ops, ctx) {
             lines.push({ ok: true, text: "compose body replaced (" + op.html.length + " chars)" });
           });
         case "set_categories":
-          return deck.setCategories(op.names).then(function () {
-            lines.push({ ok: true, text: "categories added: " + op.names.join(", ") });
+          return deck.setCategories(op.names).then(function (r) {
+            lines.push({ ok: true, text: "categories added: " + op.names.join(", ") + (r && r.note ? " " + r.note : "") });
           });
         case "save_draft":
           return deck.saveDraft().then(function () {
@@ -1196,6 +1223,10 @@ function applyOps(deck, ops, ctx) {
     if (body.length > 4000) body = body.slice(0, 4000) + "…[truncated]";
     lines.push("BODY:\n" + body);
     if (ctx.warnings && ctx.warnings.length) lines.push("(warnings: " + ctx.warnings.join("; ") + ")");
+    if (ctx.masterCategories && ctx.masterCategories.length)
+      lines.push("KNOWN CATEGORIES (mailbox master list): " + ctx.masterCategories.join(", "));
+    else if (!ctx.minimal)
+      lines.push("(category master list not readable at this permission level - propose sensible category names anyway)");
     if (ctx.minimal) lines.push("(minimal context: the full email body was not included - the 'include email context' box was unticked)");
     if (ctx.selectedItems && ctx.selectedItems.length) {
       lines.push("MULTI-SELECTED ITEMS (" + ctx.selectedItems.length + "):");
@@ -1226,7 +1257,7 @@ function applyOps(deck, ops, ctx) {
     var instruction = input.value.trim();
     if (!instruction) return;
     var prof = currentProfile();
-    if (!prof) { setStatus("No profile yet - create one on the Profiles tab first.", "error"); switchTab("profiles"); return; }
+    if (!prof) { setStatus("No profile yet - create one on the Profiles tab first.", "error"); switchTab("settings"); switchSettingsSub("profiles"); return; }
     var route = $("chat-route").value;
     var ref = routeToModel(prof, route, instruction);
     if (!ref || !ref.connection || !ref.model) {
@@ -1610,6 +1641,17 @@ function applyOps(deck, ops, ctx) {
   // ------------------------------------------------------------------ //
   // Tabs
   // ------------------------------------------------------------------ //
+  function switchSettingsSub(id) {
+    var bar = document.getElementById("settings-subtabs");
+    if (!bar) return;
+    Array.prototype.forEach.call(bar.querySelectorAll("button[data-subtab]"), function (b) {
+      b.classList.toggle("active", b.dataset.subtab === id);
+    });
+    Array.prototype.forEach.call(document.querySelectorAll("#tab-settings .subpanel"), function (p2) {
+      p2.classList.toggle("active", p2.id === "sub-" + id);
+    });
+  }
+
   function switchTab(id) {
     SK.activeTab = id;
     if (id === "requests") renderRequests();
@@ -2112,6 +2154,9 @@ function applyOps(deck, ops, ctx) {
     });
 
     $("settings-save").addEventListener("click", saveApprovals);
+    Array.prototype.forEach.call(document.querySelectorAll("#settings-subtabs button"), function (b) {
+      b.addEventListener("click", function () { switchSettingsSub(b.dataset.subtab); });
+    });
     $("settings-debug-save").addEventListener("click", saveDebugOption);
     updateSessionLabel();
     wireSessions();
@@ -2152,7 +2197,7 @@ function applyOps(deck, ops, ctx) {
   function bootSuccess(cfg) {
     updateDeckSummary();
     renderSimDeck();
-    if (!(cfg.connections || []).length) switchTab("connections");
+    if (!(cfg.connections || []).length) { switchTab("settings"); switchSettingsSub("connections"); }
     setStatus("Ready. Debug: " + (cfg.debug ? "on" : "off") + ".", "ok");
   }
 

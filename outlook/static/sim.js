@@ -33,7 +33,7 @@
       ];
       if (compose) {
         return { host: "Outlook", mode: "compose", sender: email.from, to: "you@corelan.example",
-                 subject: compose.subject, bodyText: minimal ? "" : compose.bodyText, categories: [], warnings: [], minimal: minimal, selectedItems: multi };
+                 subject: compose.subject, bodyText: minimal ? "" : compose.bodyText, categories: [], warnings: [], minimal: minimal, selectedItems: multi, masterCategories: ["Blue Team", "Red Team", "AI"] };
       }
       return { host: "Outlook", mode: "read", sender: email.from, to: email.to,
                subject: email.subject, bodyText: minimal ? "" : email.body, categories: email.categories.slice(), warnings: [], minimal: minimal, selectedItems: multi };
@@ -49,12 +49,11 @@
       return { ok: true };
     },
     setCategories: async function (names) {
-      var known = { "blue team": 1, "red team": 1, "ai": 1 };
-      (names || []).forEach(function (n) {
-        if (!known[String(n).toLowerCase()]) throw new FriendlyError("category not in your master list: " + n);
-      });
+      // sim mirrors the real degraded mode: the fake mailbox master list
+      var known = ["Blue Team", "Red Team", "AI"];
+      var unknown = (names || []).filter(function (n) { return known.indexOf(n) < 0; });
       log.push("categories added: " + names.join(", "));
-      return { ok: true };
+      return { ok: true, note: unknown.length ? "(applied WITHOUT checking the master list; new: " + unknown.join(", ") + ")" : "" };
     },
     newMessage: async function (payload) {
       // opens a simulated compose draft prefilled - the user "sends" it
