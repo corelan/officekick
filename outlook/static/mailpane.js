@@ -458,13 +458,46 @@
     var el = $("chat-output");
     if (!el) return;
     el.innerHTML = "";
-    var box = document.createElement("div");
-    box.className = "opnote";
-    box.textContent = "Resumed session \u201C" + SK.sessionName + "\u201D - the AI sees the last " +
-      Math.min(HISTORY_MAX_EXCHANGES, SK.history.length / 2) + " exchange(s). Continue typing below.";
-    el.appendChild(box);
+    var note = document.createElement("div");
+    note.className = "opnote";
+    note.textContent = "Resumed session \u201C" + SK.sessionName + "\u201D - the AI sees the last " +
+      Math.min(HISTORY_MAX_EXCHANGES, SK.history.length / 2) + " exchange(s). The last turns are below (collapsed; click a request to open it). Continue typing below.";
+    el.appendChild(note);
+    // show the last up-to-6 messages (3 exchanges) as collapsed request/response
+    // boxes, styled like the Inspector groups; future runs append below
+    var msgs = SK.history.slice(-6);
+    while (msgs.length % 2) msgs.shift();
+    function makeTurn(u, a) {
+      var box = document.createElement("div");
+      box.className = "reqgrp";
+      var head = document.createElement("div");
+      head.className = "reqhead2";
+      head.title = "Click to open/close the response";
+      var b1 = document.createElement("b");
+      b1.textContent = "Request: ";
+      head.appendChild(b1);
+      var uc = String(u.content || "");
+      head.appendChild(document.createTextNode(uc.length > 110 ? uc.slice(0, 110) + "…" : uc));
+      var body = document.createElement("div");
+      body.className = "reqbody";
+      var who = document.createElement("b");
+      who.textContent = "Response: ";
+      body.appendChild(who);
+      var ac = String(a.content || "");
+      body.appendChild(document.createTextNode(ac.length > 400 ? ac.slice(0, 400) + "…" : ac));
+      head.addEventListener("click", function () { body.classList.toggle("open"); });
+      box.appendChild(head);
+      box.appendChild(body);
+      return box;
+    }
+    for (var i = 0; i + 1 < msgs.length; i += 2) {
+      if (msgs[i].role === "user" && msgs[i + 1].role === "assistant") {
+        el.appendChild(makeTurn(msgs[i], msgs[i + 1]));
+      }
+    }
     renderSessions();  // refresh the "current" label
   }
+
 
   function deleteSession(sessId) {
     apiJson("/api/sessions/" + sessId, "DELETE").then(function () {

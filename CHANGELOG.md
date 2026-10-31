@@ -9,6 +9,14 @@
 ### Fixed
 - Settings sub-tab headers: readable in Office dark mode (lime) and a darker green in light mode.
 
+## [0.6.4] - 2026-10-30
+### Added / fixed
+- Resuming a session now loads the last up to 6 messages as collapsed
+  request/response boxes (Inspector-style, all collapsed, click to open)
+  right above the prompt, so it visually resumes where you left off.
+- The Settings sub-tab bar and the top tab strip wrap when the pane is
+  narrow (no more Inspector falling out of view).
+
 ## [0.6.3] - 2026-10-30
 ### Added
 - Every busy status (Asking ..., collecting context, generating image, applying, model-output repair) now shows a rotating indicator character so it reads as still-working.
