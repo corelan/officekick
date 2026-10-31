@@ -35,7 +35,7 @@ rejected up front (e.g. compose_body on a received message).
 
 ## Shared features
 Same as the other two add-ins: Sessions (auto-saved, AI-named, resumable,
-renamable from the Sessions tab), the Inspector request/response log with
+renamable from the History tab (the past-sessions list; the chat tab itself is now called Sessions)), the Inspector request/response log with
 expandable payloads, per-op approvals + Select all + auto-apply, image models
 via the profile's Image slot (insert_image -> insert the picture at the end of
 the compose body), and the About footer with license/repo links.

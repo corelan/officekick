@@ -67,7 +67,7 @@ is about how SlideKick works.
 
 - **Conversation memory**: follow-ups automatically include your recent turns
   (last 6 exchanges, session-only) - "use the 2nd title you suggested" just
-  works. **New conversation** clears it; nothing is stored on disk.
+  works. **New session** clears it; nothing is stored on disk.
 - **Speaker notes are opt-in (off by default)**: SlideKick only generates or
   writes speaker notes when "Generate speaker notes" is enabled in Settings.
   When off, the model is told not to produce notes and any notes actions it

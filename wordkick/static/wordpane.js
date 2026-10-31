@@ -707,7 +707,7 @@
     var el = $("chat-history-note");
     if (!el) return;
     var n = Math.floor(SK.history.length / 2);
-    el.textContent = n ? "AI sees the last " + n + " exchange(s)" : "new conversation";
+    el.textContent = n ? "AI sees the last " + n + " exchange(s)" : "new session";
   }
 
   function routeToModel(prof, route, instruction) {
