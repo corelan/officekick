@@ -60,7 +60,8 @@ is about how SlideKick works.
   Change any of these in **Settings**. `confirm` shows a checkbox per action
   (unchecked by default) with a *don't ask again this session* option; the
   preview also has a **Select all** button to approve everything pending at
-  once. `deny` blocks the action with a visible notice. The **auto-apply**
+  once. `deny` blocks the action with a visible notice. Every proposed action
+  row also has a red **X** to remove it from the list (second click confirms). The **auto-apply**
   checkbox skips the review step entirely for runs where every action is `auto`
   by policy - if any action needs approval (or is blocked/invalid), the gated
   preview appears exactly as without it.

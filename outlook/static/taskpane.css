@@ -664,3 +664,10 @@ body.dark .btn.replyneg { color: #f85149; border-color: rgba(248,81,73,.55); }
 #past-body { display: block; }
 #past-head { cursor: default; opacity: .9; }
 .pastturn .pt-text { font-size: 12.5px; padding: 3px 0 0 24px; word-break: break-word; opacity: .85; }
+
+/* per-action remove: a red X at the end of each proposed action; the first
+   click arms it ("sure?"), the second removes the row from the list */
+.op-x { margin-left: auto; min-width: 26px; height: 22px; border: 1px solid rgba(239,68,68,.55);
+  background: none; color: #ef4444; border-radius: 5px; cursor: pointer; font-weight: 700; font-size: 12px; }
+.op-x.armed { background: #ef4444; color: #fff; }
+.op-x:hover { background: rgba(239,68,68,.12); }

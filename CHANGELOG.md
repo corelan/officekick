@@ -21,6 +21,23 @@
 ### Added
 - Every busy status (Asking ..., collecting context, generating image, applying, model-output repair) now shows a rotating indicator character so it reads as still-working.
 
+## [0.8.6] - 2026-10-31
+### Added
+- The approval gate: a red **X** per proposed action to remove that action from
+  the list (first click arms a "sure?", the second removes; the Apply totals
+  and Select all respect the removal).
+- **Run refreshes the context readout**: every Run updates the deck/document/
+  email summary line and the simulator view, in all three add-ins.
+### Changed / docs
+- docs/architecture.md rewritten for the current reality: three add-ins
+  (incl. MailKick + the outlook/ tree), the real API surface (sessions,
+  templates, image, test-connection, update-check), current op lists per
+  app, the sessions/Previous-requests model, model-side web lookups, gate
+  features, and the token-free update check.
+- README gained a "How to update OfficeKick" section.
+- docs/dockick.md: the op table now lists insert image / format text /
+  create template block with their real default policies.
+
 ## [0.8.5] - 2026-10-31
 ### Added
 - MailKick quick actions `reply +` / `reply −` (green/red): one click drafts a

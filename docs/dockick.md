@@ -46,12 +46,18 @@ text and re-enable the input.
 | insert comment | adds a comment anchored on matching text (WordApi 1.4) | auto |
 | delete paragraph | removes a paragraph by index | confirm |
 | rewrite document | replaces the body with a new paragraph list | confirm |
+| insert image | generates a picture from a description with the profile's Image model, inserts it at the end | confirm |
+| format text | (re)styles one paragraph: bold/italic/color/size/underline/allCaps/highlight + alignment | confirm |
+| create template block | appends a titled template block with fillable content controls (text / dropdown / checkbox / date) | confirm |
 | reply | conversational answer - never touches the document | n/a |
 
 Change these in **Settings** like in SlideKick (auto / confirm / deny per
-action, Select all on the preview, auto-apply for all-`auto` runs,
-conversation memory). Deletions keep their indices consistent while a batch
-applies (earlier deletions shift the later ones).
+action, Select all on the preview, per-run auto-apply, the global
+"Auto apply approved actions" option, "don't ask again this session",
+conversation memory). Each proposed action row has a red **X** to remove it
+from the list (second click confirms the removal) before applying.
+Deletions keep their indices consistent while a batch applies (earlier
+deletions shift the later ones).
 
 Comments on Word builds without WordApi 1.4 fall back to a **copy-paste box**
 in the pane with the comment text and its anchor, instead of failing.

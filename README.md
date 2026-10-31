@@ -47,6 +47,34 @@ detect the installed Office apps, deploy files to
 service (LaunchAgent / Scheduled Task; the server also restarts on crash), start
 the server and health-check it.
 
+### How to update OfficeKick
+
+The server itself never runs `git` and needs no tokens. It only *detects*
+updates:
+
+- **Check**: Settings -> "Check now" (or the **Check for updates automatically
+  at startup** option, on by default). It reads this repo's `VERSION` file from
+  GitHub, compares with the running version and shows a plain-text notice.
+- **Apply** (macOS):
+
+  ```bash
+  cd officekick
+  git pull
+  ./install.sh     # re-deploys + restarts the server, stays idempotent
+  ```
+
+- **Apply** (Windows):
+
+  ```powershell
+  cd officekick
+  git pull
+  .\install.ps1
+  ```
+
+- **Then**: quit and reopen the Office app(s) so the task panes load the new
+  static files. Your config (`~/.officekick/config.json`) and sessions survive
+  updates. There is no automatic `git pull`, ever.
+
 Useful flags: `--port N` / `-Port N`, `--dev` / `-Dev` (serve from the repo),
 `--no-launchagent` / `-NoScheduledTask`, `--https` (macOS: ribbon button +
 local CA), `status`, `run`, `uninstall [--purge]`.

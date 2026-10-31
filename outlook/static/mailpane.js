@@ -1482,6 +1482,9 @@ function applyOps(deck, ops, ctx) {
     input.disabled = true;   // the text stays visible but locked while working
     setRunEnabled(false);
     chatTimerStart();
+    // the deck/document/email readout refreshes automatically on every run
+    updateDeckSummary();
+    renderSimDeck();
     var wantCtx = $("chat-context").checked;
     setStatus("Collecting email context…", "busy");
     var ctxPromise = SK.deck.getContext({ minimal: !wantCtx }).catch(function (err) {
@@ -1896,6 +1899,27 @@ function applyOps(deck, ops, ctx) {
         note4.textContent = row.reason || "";
         r.appendChild(note4);
       }
+      var x = document.createElement("button");
+      x.type = "button";
+      x.className = "op-x";
+      x.textContent = "\u00D7";
+      x.title = "Remove this action from the proposed list (second click confirms)";
+      x.addEventListener("click", function () {
+        if (x.dataset.armed !== "1") {
+          x.dataset.armed = "1";   // confirm: second click within 3.5 s removes
+          x.classList.add("armed");
+          x.textContent = "sure?";
+          setTimeout(function () {
+            if (!x.isConnected) return;
+            x.dataset.armed = "0"; x.classList.remove("armed"); x.textContent = "\u00D7";
+          }, 3500);
+          return;
+        }
+        row.removed = true;
+        r.style.display = "none";
+        updateApplyLabel();
+      });
+      r.appendChild(x);
       tableRows.appendChild(r);
     });
     box.appendChild(tableRows);
@@ -1925,12 +1949,15 @@ function applyOps(deck, ops, ctx) {
     var applyBtn = document.createElement("button");
     applyBtn.className = "btn primary";
     var updateApplyLabel = function () {
+      // removed actions (X) no longer count towards the apply totals
+      var liveAuto = rows.filter(function (r) { return !r.removed && r.mode === "auto"; }).length;
+      var liveConfirm = rows.filter(function (r) { return !r.removed && r.mode === "confirm"; }).length;
       var approved = rows.filter(function (r) {
-        return r.mode === "confirm" && r._cb && r._cb.checked;
+        return !r.removed && r.mode === "confirm" && r._cb && r._cb.checked;
       }).length;
-      applyBtn.textContent = "Apply " + autoOps + " auto" +
-        (confirmOps ? " + " + approved + "/" + confirmOps + " approved" : "");
-      applyBtn.disabled = (autoOps + approved === 0) || !caps.text;
+      applyBtn.textContent = "Apply " + liveAuto + " auto" +
+        (liveConfirm ? " + " + approved + "/" + liveConfirm + " approved" : "");
+      applyBtn.disabled = (liveAuto + approved === 0) || !caps.text;
     };
     updateApplyLabel();
     if (confirmOps > 0) {
@@ -1941,6 +1968,7 @@ function applyOps(deck, ops, ctx) {
       selectAllBtn.addEventListener("click", function (ev) {
         ev.preventDefault();
         rows.forEach(function (r) {
+          if (r.removed) return;
           if (r.mode === "confirm" && r._cb && !r._cb.checked) {
             r._cb.checked = true;
             r._cb.dispatchEvent(new Event("change"));
@@ -1977,6 +2005,7 @@ function applyOps(deck, ops, ctx) {
     applyBtn.addEventListener("click", function () {
       var chosen = [];
       rows.forEach(function (row) {
+        if (row.removed) return;   // removed with the X icon
         if (row.mode === "auto") chosen.push(row.op);
         else if (row.mode === "confirm" && row._cb && row._cb.checked) chosen.push(row.op);
       });
