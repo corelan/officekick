@@ -21,6 +21,25 @@
 ### Added
 - Every busy status (Asking ..., collecting context, generating image, applying, model-output repair) now shows a rotating indicator character so it reads as still-working.
 
+## [0.7.7] - 2026-10-31
+### Added
+- **Live web lookups** (optional): a "live web lookups" checkbox in the chat
+  tab. When ticked, the run happens in two phases: a small model call
+  proposes 0-3 web search queries, the server executes them (stdlib only;
+  Brave or Tavily with a BRAVE_SEARCH_API_KEY / TAVILY_API_KEY env var,
+  otherwise keyless DuckDuckGo HTML), and the results ride into the main
+  prompt as WEB RESULTS the model can cite. Search failures degrade
+  gracefully ("no results"/"failed"), visible in the status line.
+  Verified live end to end through OpenRouter (searched + answered).
+- **Auto-retry on model calls**: transport failures (connection refused,
+  5xx, 429) retry automatically up to 5 attempts, 10 s apart, with the
+  attempt counter in the status line; business errors (4xx) fail fast.
+- **Timer format**: the request timer now reads "Mmin sssec(s)" (e.g.
+  "0min 08sec(s)"), hours as "1h 02min 03sec(s)".
+- **Connection test**: Settings -> Connections gets a Test button per
+  connection (server /api/test-connection = cheap list-models roundtrip);
+  the row shows reachability + model count + ms, or the failure reason.
+
 ## [0.7.6] - 2026-10-31
 ### Fixed - session-history loss (user-reported: a 4-request session with a
 title was "gone" after reopening the add-in)

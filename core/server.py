@@ -31,7 +31,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 APP = "OfficeKick"
-VERSION = "0.7.6"
+VERSION = "0.7.7"
 
 CONNECTION_TYPES = (
     "openai",
@@ -886,6 +886,113 @@ def filter_image_models(store, conn_name):
 UPDATE_CACHE = {"t": 0.0, "data": None}
 
 
+WEBSEARCH_TIMEOUT = 12
+
+
+def web_search_query(q):
+    """Run a web search with stdlib only. Engines tried in order:
+
+    1. Brave (BRAVE_SEARCH_API_KEY)  2. Tavily (TAVILY_API_KEY)
+    3. DuckDuckGo HTML (no key, best effort - the markup changes)
+    Returns a list of {title, url, snippet} dicts; errors = a single
+    {"error": ...} item so the model can report the failure honestly.
+    """
+    q = str(q or "").strip()
+    if not q:
+        return [{"error": "empty search query"}]
+    headers = {"User-Agent": " Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                             "AppleWebKit/537.36 (KHTML, like Gecko) Safari/605.1.15"}
+    import urllib.parse as up
+
+    results = []
+
+    def try_json_api(url, payload_headers, get_from):
+        try:
+            req = urllib.request.Request(url, headers=payload_headers)
+            with urllib.request.urlopen(req, timeout=WEBSEARCH_TIMEOUT) as r:
+                data = json.loads(r.read().decode("utf-8", "replace"))
+            got = get_from(data)
+            if isinstance(got, list):
+                results.extend(got[:8])
+        except Exception as exc:
+            return str(exc)
+        return None if results else "no results"
+
+    brave = os.environ.get("BRAVE_SEARCH_API_KEY", "").strip()
+    tavily = os.environ.get("TAVILY_API_KEY", "").strip()
+    err_notes = []
+
+    if brave:
+        u = "https://api.search.brave.com/res/v1/web/search?q=" + up.quote(q)
+        err_notes.append(try_json_api(u, headers | {
+            "X-Subscription-Token": brave, "Accept": "application/json"},
+            lambda d: [{"title": (x.get("title") or "")[:140],
+                        "url": x.get("url") or "",
+                        "snippet": (x.get("description") or "")[:220]}
+                       for x in (d.get("web", {}) or {}).get("results", [])[:6]]))
+        if results:
+            return results
+    if tavily:
+        req = urllib.request.Request(
+            "https://api.tavily.com/search",
+            data=json.dumps({"api_key": tavily, "query": q, "max_results": 6}).encode(),
+            headers=headers | {"Content-Type": "application/json"})
+        try:
+            with urllib.request.urlopen(req, timeout=WEBSEARCH_TIMEOUT) as r:
+                data = json.loads(r.read().decode("utf-8", "replace"))
+            results.extend([{"title": (x.get("title") or "")[:140], "url": x.get("url") or "",
+                             "snippet": (x.get("content") or "")[:220]}
+                            for x in (data.get("results") or [])[:6]])
+        except Exception as exc:
+            err_notes.append(str(exc))
+        if results:
+            return results
+
+    # DuckDuckGo HTML (no key): parse result links from the html block
+    try:
+        u = "https://html.duckduckgo.com/html/?q=" + up.quote(q)
+        req = urllib.request.Request(u, headers=headers)
+        with urllib.request.urlopen(req, timeout=WEBSEARCH_TIMEOUT) as r:
+            html_text = r.read().decode("utf-8", "replace")
+        # links look like: <a rel="nofollow" class="result__a" href="...">title</a>
+        hrefs = re.findall(r'class="result__a"[^>]*href="([^"]+)"[^>]*>(.*?)</a>',
+                           html_text, re.S)[:8]
+        for href, title in hrefs:
+            link = href
+            if link.startswith("//duckduckgo.com/l/?uddg="):
+                m2 = re.search(r"uddg=([^&]+)", link)
+                if m2:
+                    link = up.unquote(m2.group(1))
+            snippet = ""
+            ms = re.search(r'class="result__snippet"[^>]*>(.*?)</a>', html_text, re.S)
+            if ms:
+                snippet = re.sub(r"<[^>]+>", "", ms.group(1))[:220]
+            results.append({"title": re.sub(r"<[^>]+>", "", title)[:140],
+                            "url": link, "snippet": snippet})
+    except Exception as exc:
+        err_notes.append("duckduckgo: %s" % exc)
+
+    if results:
+        return results
+    return [{"error": "web search failed: " + ("; ".join(err_notes) or "no results")}]
+
+
+def test_connection(store, name):
+    """Reach the provider: cheap list-models call, auth/base errors surface."""
+    if not name:
+        return {"ok": False, "error": "which connection? (unknown connection name)"}
+    t0 = time.time()
+    try:
+        resp = provider_list_models(store, name)
+        models = resp.get("models") if isinstance(resp, dict) else resp
+        n = len(models) if isinstance(models, (list, tuple)) else 0
+        return {"ok": True, "connection": name, "models": n,
+                "ms": int((time.time() - t0) * 1000)}
+    except Exception as exc:
+        return {"ok": False, "connection": name,
+                "error": "%s" % exc, "ms": int((time.time() - t0) * 1000)}
+
+
 def _version_tuple(v):
     parts = re.findall(r"\d+", str(v or ""))
     return tuple(int(x) for x in parts) or (0,)
@@ -1408,6 +1515,13 @@ class SlideKickHandler(BaseHTTPRequestHandler):
             elif path.startswith("/api/sessions/"):
                 sid = path[len("/api/sessions/"):]
                 self._send_json(self.store.sessions.get(sid))
+            elif path == "/api/websearch":
+                q = (query.get("q") or [""])[0]
+                self._send_json({"ok": True, "query": q, "results": web_search_query(q)})
+            elif path == "/api/test-connection":
+                name = (query.get("connection") or [""])[0]
+                result = test_connection(self.store, name)
+                self._send_json(result)
             elif path == "/api/update-check":
                 self._send_json(update_check((query.get("latest") or [""])[0] or None))
             elif path == "/api/templates":

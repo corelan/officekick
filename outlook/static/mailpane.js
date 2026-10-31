@@ -219,6 +219,59 @@
   }
 
 
+  function testConnection(name, msgEl) {
+    msgEl.textContent = "Testing connection '" + name + "'…";
+    apiJson("/api/test-connection?connection=" + encodeURIComponent(name), "GET")
+      .then(function (res) {
+        if (res && res.ok) msgEl.textContent = "'" + name + "' reachable: " + res.models + " model(s), " + res.ms + " ms";
+        else msgEl.textContent = "'" + name + "' FAILED: " + ((res && res.error) || res || "unknown");
+      }).catch(function (e) { msgEl.textContent = "'" + name + "' FAILED: " + (e && e.message || e); });
+  }
+
+  // ---- live web lookups (optional checkbox): call 1 = the model proposes
+  // 0-3 search queries; the server executes them; the results ride into the
+  // real prompt as WEB RESULTS. Failing search degrades without aborting. ----
+  function webLookupQueries(prof, instruction) {
+    var ref = prof.other && prof.other.connection && prof.other.model ? prof.other : prof.content;
+    var sys = "You translate a user request into 0-3 short WEB SEARCH queries " +
+      "(each max 10 words, no quotes) that would help answer it. " +
+      "If a live lookup would add nothing, return no queries. " +
+      "Reply with ONLY minified JSON: {\"queries\": [\"q one\", \"q two\"]}";
+    return askRetryable(function () {
+      return apiJson("/api/chat", "POST", {
+        connection: ref.connection, model: ref.model,
+        temperature: 0.2, maxTokens: 200,
+        messages: [{ role: "system", content: sys },
+                   { role: "user", content: instruction.slice(0, 400) }],
+      });
+    }).then(function (resp) {
+      var t = stripReasoning(resp.text || "");
+      var m = /\{[\\s\\S]*\}/.exec(t);
+      if (!m) return [];
+      try {
+        var obj = JSON.parse(m[0]);
+        var qs = Array.isArray(obj && obj.queries) ? obj.queries : [];
+        return qs.filter(function (x) { return typeof x === "string" && x.trim(); }).slice(0, 3);
+      } catch (e) { return []; }
+    });
+  }
+
+  function runWebSearches(queries) {
+    if (!queries.length) return Promise.resolve("");
+    return Promise.all(queries.map(function (q) {
+      return apiJson("/api/websearch?q=" + encodeURIComponent(q), "GET")
+        .then(function (res) {
+          var rs = (res && res.results) || [{ error: "no results" }];
+          var out = "SEARCH: " + q + "\n";
+          rs.slice(0, 5).forEach(function (r, i2) {
+            out += (i2 + 1) + ". " + (r.title || "(no title)") + " - " + (r.url || "") +
+              (r.error ? " [" + r.error + "]" : (r.snippet ? "\n   " + r.snippet : "")) + "\n";
+          });
+          return out;
+        }).catch(function (e) { return "SEARCH: " + q + "\n[search failed: " + (e && e.message || e) + "]\n"; });
+    })).then(function (parts) { return parts.join("\n"); });
+  }
+
   function updCheck() {
     var btn = $("upd-check"), info = $("upd-info");
     if (!btn || !info) return;
@@ -1380,17 +1433,24 @@ function applyOps(deck, ops, ctx) {
     ctxPromise.then(function (ctx) {
       SK.lastCtx = ctx;
       var sys = SYSTEM_PROMPT + "\nHost: " + (SK.sim ? "MailKick simulator" : SK.deck.capabilities().host);
+      var webChk = $("chat-web");
+      var webPromise = (webChk && webChk.checked)
+        ? webLookupQueries(prof, instruction).then(runWebSearches)
+            .catch(function (e) { SK.webResults = "(web lookup failed: " + (e && e.message || e) + ")"; })
+        : Promise.resolve("").then(function () { SK.webResults = ""; });
+      return webPromise.then(function () {
       if (!(SK.cfg && SK.cfg.generateNotes)) sys += "\n" + NOTES_OFF_RULE;
       var ctxText = ctx ? formatContext(ctx) : "(no email could be read - make sure an email is open or selected and the reading pane stays open)";
       return getTemplateBlock(instruction).then(function (tplBlock) {
         var user = ctxText + "\n\n" + (tplBlock ? tplBlock + "\n" : "") + "\nUSER REQUEST:\n" + instruction;
+        if (SK.webResults) user += "\n\nWEB RESULTS (live lookup, cite them when relevant):\n" + SK.webResults;
         var messages = [
           { role: "system", content: sys },
         ].concat(SK.history.slice(-(HISTORY_MAX_EXCHANGES * 2)))
          .concat([{ role: "user", content: user }]);
         dbg("prompt", { profile: prof.name, route: route, model: ref.model, connection: ref.connection, instruction: instruction, hadContext: !!ctx, templateUsed: !!tplBlock, history: SK.history.length, messages: messages });
         setStatus("Asking " + ref.model + " (via " + ref.connection + ")…", "busy");
-        return apiJson("/api/chat", "POST", { connection: ref.connection, model: ref.model, messages: messages }).then(function (resp) {
+        return askRetryable(function () { return apiJson("/api/chat", "POST", { connection: ref.connection, model: ref.model, messages: messages }); }).then(function (resp) {
           dbg("response", { text: resp.text, elapsedMs: resp.elapsedMs });
           SK.lastModelText = { text: resp.text };
           var parsed = tryParse(resp.text);
@@ -1401,7 +1461,7 @@ function applyOps(deck, ops, ctx) {
               { role: "user", content: REPAIR_ASK },
             ]);
             dbg("repair.request", {});
-            return apiJson("/api/chat", "POST", { connection: ref.connection, model: ref.model, messages: repair }).then(function (resp2) {
+            return askRetryable(function () { return apiJson("/api/chat", "POST", { connection: ref.connection, model: ref.model, messages: repair }); }).then(function (resp2) {
               dbg("repair.response", { text: resp2.text, elapsedMs: resp2.elapsedMs });
               SK.lastModelText = { text: resp2.text };
               return tryParse(resp2.text);
@@ -1411,6 +1471,7 @@ function applyOps(deck, ops, ctx) {
         }).then(function (parsed) {
           renderParsed(parsed, ctx, instruction);
           pushHistory(instruction, assistantHistoryText(parsed));
+        });
         });
       });
     }).catch(function (err) {
@@ -1441,6 +1502,24 @@ function applyOps(deck, ops, ctx) {
 
 
 
+  // ---- auto-retry for model asks: 5 attempts, 10 s apart, on transport
+  // errors/server hiccups only (4xx business errors fail immediately) ----
+  function askRetryable(askFn, attempt) {
+    attempt = attempt || 1;
+    return askFn().catch(function (err) {
+      var status = err && err.status;
+      var retries_429 = status === 429;
+      var serverish = !status || status >= 500 || retries_429;
+      if (!serverish || attempt >= 5) throw err;
+      var secs = 10;
+      setStatus("Attempt " + attempt + "/5 failed (" + ((err && err.message) || err) +
+        ") - retrying in " + secs + " s…", "busy");
+      return new Promise(function (res) { setTimeout(res, secs * 1000); }, function () {}).then(function () {
+        return askRetryable(askFn, attempt + 1);
+      });
+    });
+  }
+
   function chatTimerStart() {
     stopChatTimer();
     var el = $("chat-timer");
@@ -1449,9 +1528,9 @@ function applyOps(deck, ops, ctx) {
     function tick() {
       var t = Math.floor((Date.now() - SK.chatTimer.t0) / 1000);
       var h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), s2 = t % 60;
-      var mm = (m < 10 && h ? "0" : "") + m;
+      var mm = (m < 10 ? "0" : "") + m;
       var ss = (s2 < 10 ? "0" : "") + s2;
-      el.textContent = h ? (h + " h " + mm + ":" + ss) : (mm + ":" + ss);
+      el.textContent = (h ? h + "h " : "") + mm + "min " + ss + "sec(s)";
     }
     tick();
     SK.chatTimer.iv = setInterval(tick, 500);
@@ -1909,12 +1988,19 @@ function applyOps(deck, ops, ctx) {
         (used.length ? '<br /><span class="opnote">in use: ' + esc(used.join(", ")) + "</span>" : "");
       rows.push(
         "<tr><td>" + nameCell + "</td><td>" + esc(c.type) + "</td><td>" + esc(c.baseUrl || "-") + "</td>" +
-        "<td>" + (c.hasKey ? "set" : "—") + "</td></tr>"
+        "<td>" + (c.hasKey ? "set" : "—") + '</td><td>' +
+        '<button class="btn" data-test="' + esc(c.name) + '">Test</button>' +
+        '<span class="opnote" data-testmsg="' + esc(c.name) + '"></span></td></tr>'
       );
     });
     list.innerHTML = rows.join("") || "<tr><td>No connections yet - add one below.</td></tr>";
     Array.prototype.forEach.call(list.querySelectorAll("[data-edit]"), function (b) {
       b.addEventListener("click", function () { editConnection(b.dataset.edit); });
+    });
+    Array.prototype.forEach.call(list.querySelectorAll("[data-test]"), function (b) {
+      b.addEventListener("click", function () {
+        testConnection(b.dataset.test, list.querySelector('[data-testmsg="' + b.dataset.test + '"]'));
+      });
     });
   }
 
