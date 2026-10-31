@@ -219,7 +219,7 @@
   }
 
 
-  function testConnection(name, msgEl) {
+  function testConnRow(name, msgEl) {
     msgEl.textContent = "Testing connection '" + name + "'…";
     apiJson("/api/test-connection?connection=" + encodeURIComponent(name), "GET")
       .then(function (res) {
@@ -228,9 +228,10 @@
       }).catch(function (e) { msgEl.textContent = "'" + name + "' FAILED: " + (e && e.message || e); });
   }
 
-  // ---- live web lookups (optional checkbox): call 1 = the model proposes
-  // 0-3 search queries; the server executes them; the results ride into the
-  // real prompt as WEB RESULTS. Failing search degrades without aborting. ----
+  // ---- live web lookups (optional checkbox): ONE call through a model with
+  // web access - any model on an openrouter connection gets the ":online"
+  // suffix (openrouter injects fresh web results + citations, no keys);
+  // other providers are asked too and report honestly if they cannot. ----
   function webLookupQueries(prof, instruction) {
     var ref = prof.other && prof.other.connection && prof.other.model ? prof.other : prof.content;
     var sys = "You translate a user request into 0-3 short WEB SEARCH queries " +
@@ -1999,7 +2000,7 @@ function applyOps(deck, ops, ctx) {
     });
     Array.prototype.forEach.call(list.querySelectorAll("[data-test]"), function (b) {
       b.addEventListener("click", function () {
-        testConnection(b.dataset.test, list.querySelector('[data-testmsg="' + b.dataset.test + '"]'));
+        testConnRow(b.dataset.test, list.querySelector('[data-testmsg="' + b.dataset.test + '"]'));
       });
     });
   }

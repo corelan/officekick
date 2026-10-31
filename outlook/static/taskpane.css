@@ -617,3 +617,7 @@ body.dark .sk-tabs button.active { color: #101010; background: var(--accent); }
 .list .reqgrp.failed .reqhead2 { color: #f87171; }
 .list .reqgrp.failed { border-color: rgba(248,113,113,.45); }
 body.dark .list .reqgrp.failed { border-color: rgba(248,113,113,.35); }
+
+.setgroup { border: 1px solid var(--line, rgba(127,127,127,.35)); border-radius: 8px;
+  padding: 8px 12px 10px; margin: 0 0 12px 0; }
+.setgroup > .setgh { margin: 0 0 6px 0; font-size: 12px; font-weight: 700; letter-spacing: .3px; }

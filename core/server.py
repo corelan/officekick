@@ -31,7 +31,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 APP = "OfficeKick"
-VERSION = "0.7.7"
+VERSION = "0.7.8"
 
 CONNECTION_TYPES = (
     "openai",
@@ -886,97 +886,6 @@ def filter_image_models(store, conn_name):
 UPDATE_CACHE = {"t": 0.0, "data": None}
 
 
-WEBSEARCH_TIMEOUT = 12
-
-
-def web_search_query(q):
-    """Run a web search with stdlib only. Engines tried in order:
-
-    1. Brave (BRAVE_SEARCH_API_KEY)  2. Tavily (TAVILY_API_KEY)
-    3. DuckDuckGo HTML (no key, best effort - the markup changes)
-    Returns a list of {title, url, snippet} dicts; errors = a single
-    {"error": ...} item so the model can report the failure honestly.
-    """
-    q = str(q or "").strip()
-    if not q:
-        return [{"error": "empty search query"}]
-    headers = {"User-Agent": " Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                             "AppleWebKit/537.36 (KHTML, like Gecko) Safari/605.1.15"}
-    import urllib.parse as up
-
-    results = []
-
-    def try_json_api(url, payload_headers, get_from):
-        try:
-            req = urllib.request.Request(url, headers=payload_headers)
-            with urllib.request.urlopen(req, timeout=WEBSEARCH_TIMEOUT) as r:
-                data = json.loads(r.read().decode("utf-8", "replace"))
-            got = get_from(data)
-            if isinstance(got, list):
-                results.extend(got[:8])
-        except Exception as exc:
-            return str(exc)
-        return None if results else "no results"
-
-    brave = os.environ.get("BRAVE_SEARCH_API_KEY", "").strip()
-    tavily = os.environ.get("TAVILY_API_KEY", "").strip()
-    err_notes = []
-
-    if brave:
-        u = "https://api.search.brave.com/res/v1/web/search?q=" + up.quote(q)
-        err_notes.append(try_json_api(u, headers | {
-            "X-Subscription-Token": brave, "Accept": "application/json"},
-            lambda d: [{"title": (x.get("title") or "")[:140],
-                        "url": x.get("url") or "",
-                        "snippet": (x.get("description") or "")[:220]}
-                       for x in (d.get("web", {}) or {}).get("results", [])[:6]]))
-        if results:
-            return results
-    if tavily:
-        req = urllib.request.Request(
-            "https://api.tavily.com/search",
-            data=json.dumps({"api_key": tavily, "query": q, "max_results": 6}).encode(),
-            headers=headers | {"Content-Type": "application/json"})
-        try:
-            with urllib.request.urlopen(req, timeout=WEBSEARCH_TIMEOUT) as r:
-                data = json.loads(r.read().decode("utf-8", "replace"))
-            results.extend([{"title": (x.get("title") or "")[:140], "url": x.get("url") or "",
-                             "snippet": (x.get("content") or "")[:220]}
-                            for x in (data.get("results") or [])[:6]])
-        except Exception as exc:
-            err_notes.append(str(exc))
-        if results:
-            return results
-
-    # DuckDuckGo HTML (no key): parse result links from the html block
-    try:
-        u = "https://html.duckduckgo.com/html/?q=" + up.quote(q)
-        req = urllib.request.Request(u, headers=headers)
-        with urllib.request.urlopen(req, timeout=WEBSEARCH_TIMEOUT) as r:
-            html_text = r.read().decode("utf-8", "replace")
-        # links look like: <a rel="nofollow" class="result__a" href="...">title</a>
-        hrefs = re.findall(r'class="result__a"[^>]*href="([^"]+)"[^>]*>(.*?)</a>',
-                           html_text, re.S)[:8]
-        for href, title in hrefs:
-            link = href
-            if link.startswith("//duckduckgo.com/l/?uddg="):
-                m2 = re.search(r"uddg=([^&]+)", link)
-                if m2:
-                    link = up.unquote(m2.group(1))
-            snippet = ""
-            ms = re.search(r'class="result__snippet"[^>]*>(.*?)</a>', html_text, re.S)
-            if ms:
-                snippet = re.sub(r"<[^>]+>", "", ms.group(1))[:220]
-            results.append({"title": re.sub(r"<[^>]+>", "", title)[:140],
-                            "url": link, "snippet": snippet})
-    except Exception as exc:
-        err_notes.append("duckduckgo: %s" % exc)
-
-    if results:
-        return results
-    return [{"error": "web search failed: " + ("; ".join(err_notes) or "no results")}]
-
-
 def test_connection(store, name):
     """Reach the provider: cheap list-models call, auth/base errors surface."""
     if not name:
@@ -998,20 +907,6 @@ def _version_tuple(v):
     return tuple(int(x) for x in parts) or (0,)
 
 
-def _github_token():
-    """Optional read-only GitHub token: env first, then ~/.officekick/github_token."""
-    tok = os.environ.get("OFFICEKICK_GITHUB_TOKEN", "").strip()
-    if tok:
-        return tok
-    try:
-        fp = Path.home() / ".officekick" / "github_token"
-        if fp.exists():
-            return fp.read_text(encoding="utf-8").strip()
-    except Exception:
-        pass
-    return ""
-
-
 def update_check(force_latest=None):
     """Compare the running VERSION with the latest in the GitHub repo.
 
@@ -1027,27 +922,15 @@ def update_check(force_latest=None):
             return cached
     latest = force_latest or None
     if latest is None:
-        headers = {"User-Agent": "officekick/" + VERSION}
-        tok = _github_token()
-        if tok:
-            headers["Authorization"] = "Bearer " + tok
-        api_url = "https://api.github.com/repos/corelan/officekick/contents/VERSION"
+        headers = {"User-Agent": "officekick/" + VERSION,
+                   "Accept": "application/vnd.github.raw"}
         raw_url = "https://raw.githubusercontent.com/corelan/officekick/main/VERSION"
         try:
-            try:
-                req = urllib.request.Request(api_url, headers=headers)
-                with urllib.request.urlopen(req, timeout=8) as r:
-                    payload = json.loads(r.read().decode("utf-8", "replace"))
-                import base64
-                latest = base64.b64decode(payload.get("content", "")).decode(
-                    "utf-8", "replace").strip()
-            except Exception:
-                req = urllib.request.Request(raw_url, headers=headers)
-                with urllib.request.urlopen(req, timeout=8) as r:
-                    latest = r.read().decode("utf-8", "replace").strip()
+            req = urllib.request.Request(raw_url, headers=headers)
+            with urllib.request.urlopen(req, timeout=8) as r:
+                latest = r.read().decode("utf-8", "replace").strip()
         except Exception as exc:
-            note = " (private repo? put a read-only token in OFFICEKICK_GITHUB_TOKEN or ~/.officekick/github_token)" if not tok else ""
-            return {"ok": False, "error": "could not check for updates: %s%s" % (exc, note),
+            return {"ok": False, "error": "could not check for updates: %s" % exc,
                     "current": VERSION}
     latest = (latest or "").strip()
     if not latest:
@@ -1515,9 +1398,6 @@ class SlideKickHandler(BaseHTTPRequestHandler):
             elif path.startswith("/api/sessions/"):
                 sid = path[len("/api/sessions/"):]
                 self._send_json(self.store.sessions.get(sid))
-            elif path == "/api/websearch":
-                q = (query.get("q") or [""])[0]
-                self._send_json({"ok": True, "query": q, "results": web_search_query(q)})
             elif path == "/api/test-connection":
                 name = (query.get("connection") or [""])[0]
                 result = test_connection(self.store, name)

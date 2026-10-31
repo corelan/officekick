@@ -97,11 +97,7 @@
       <label class="field-inline check" style="margin:0 0 8px 0"><input type="checkbox" id="upd-auto" />
         Check for updates automatically at startup</label>
 
-      <label class="field-inline check" style="margin:8px 0 4px 0"><input type="checkbox" id="settings-notes" />
-        Generate speaker notes when creating or editing slides</label>
-      <p class="muted" style="margin:0 0 4px 0">When off (default), notes are never generated or
-        written on slides - notes actions from the model are skipped and the prompt tells the
-        model not to produce them. Turn it on here if you want notes.</p>
+      <div class="setgroup"><h2 class="setgh">General (all add-ins)</h2>
       <div class="row">
         <label class="field-inline check"><input type="checkbox" id="settings-debug" /> enable debug logging</label>
       </div>
@@ -110,6 +106,16 @@
         contains slide text content and full provider payloads - keep it off when working
         on sensitive decks.</p>
       <div class="row"><button id="settings-debug-save" class="btn" type="button">Save debug setting</button></div>
+      </div>
+
+      <div class="setgroup"><h2 class="setgh">PowerPoint-specific</h2>
+      <div class="row">
+        <label class="field-inline check"><input type="checkbox" id="settings-notes" /> Generate speaker notes when creating or editing slides</label>
+      </div>
+      <p class="muted" style="margin:0 0 4px 0">When off (default), notes are never generated or
+        written on slides - notes actions from the model are skipped and the prompt tells the
+        model not to produce them. Turn it on here if you want notes.</p>
+      </div>
     </div>
     <div class="subpanel" id="sub-approvals">
       <h2>Approval policy per action</h2>

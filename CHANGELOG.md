@@ -21,6 +21,21 @@
 ### Added
 - Every busy status (Asking ..., collecting context, generating image, applying, model-output repair) now shows a rotating indicator character so it reads as still-working.
 
+## [0.7.8] - 2026-10-31
+### Changed
+- Settings -> General regrouped into boxed sections per add-in: a
+  "General (all add-ins)" box (update check + debug logging) and a
+  tool-specific box ("PowerPoint-specific" = speaker notes; "Word-specific"
+  = tracked changes; MailKick has none). The handlers/ids are unchanged.
+- Web lookups now run through the MODEL exclusively: the previous
+  local-search machinery (Brave/Tavily keys, DuckDuckGo scraping and the
+  /api/websearch route) is removed. Models on an openrouter connection get
+  the ":online" suffix for the lookup call; other providers are asked and
+  honestly report "no web access" (status shows it, the run continues).
+### Fixed
+- The update check no longer mentions or uses GitHub tokens; it is a plain
+  unauthenticated VERSION fetch (the repo goes public).
+
 ## [0.7.7] - 2026-10-31
 ### Added
 - **Live web lookups** (optional): a "live web lookups" checkbox in the chat
