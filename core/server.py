@@ -31,7 +31,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 APP = "OfficeKick"
-VERSION = "0.9.1"
+VERSION = "0.9.2"
 
 CONNECTION_TYPES = (
     "openai",
@@ -1298,7 +1298,7 @@ _ASSET_RE = re.compile(
 )
 
 
-def _version_asset_refs(html_bytes):
+def _decorate_html(html_bytes):
     """Append ?v=<VERSION> to relative js/css asset refs in served HTML.
 
     Without this, hosts (and the simulator) can execute a heuristically
@@ -1311,7 +1311,16 @@ def _version_asset_refs(html_bytes):
         html = html_bytes.decode("utf-8")
     except UnicodeDecodeError:
         return html_bytes
-    return _ASSET_RE.sub(lambda m: '%s="%s?v=%s"' % (m.group(1), m.group(2), VERSION), html).encode("utf-8")
+    html = _ASSET_RE.sub(lambda m: '%s="%s?v=%s"' % (m.group(1), m.group(2), VERSION), html)
+    tag = '<script>window.__SK_BUILD = "%s";</script>' % VERSION
+    if "<head" in html:
+        html = html.replace("<head>", "<head>" + tag, 1) if html.count("<head>") else html
+    if "window.__SK_BUILD" not in html:
+        # head variant with attributes (or no head at all): prepend right after <html>
+        html = html.replace("<html", "<html", 1)
+        if "<body" in html:
+            html = html.replace("<body", tag + "<body", 1)
+    return html.encode("utf-8")
 
 
 STATIC_DOCS = {
@@ -1398,7 +1407,7 @@ class SlideKickHandler(BaseHTTPRequestHandler):
         else:
             data = target.read_bytes()
         if suffix == ".html":
-            data = _version_asset_refs(data)
+            data = _decorate_html(data)
         self.send_response(200)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(data)))

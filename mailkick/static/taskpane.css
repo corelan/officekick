@@ -671,3 +671,12 @@ body.dark .btn.replyneg { color: #f85149; border-color: rgba(248,81,73,.55); }
   background: none; color: #ef4444; border-radius: 5px; cursor: pointer; font-weight: 700; font-size: 12px; }
 .op-x.armed { background: #ef4444; color: #fff; }
 .op-x:hover { background: rgba(239,68,68,.12); }
+
+/* simulated reply/forward windows shown after an apply in the simulator */
+.simwin { border: 1px solid var(--line); border-left: 3px solid var(--primary);
+  border-radius: 8px; margin: 10px 0 0 0; background: var(--panel);
+  overflow: hidden; word-break: break-word; text-align: left; }
+.simwin-head { padding: 6px 10px; font-weight: 600; font-size: 12px;
+  color: var(--primary); background: #eef5ff; }
+.simwin-body { padding: 8px 12px; font-size: 12px; line-height: 1.45; white-space: normal; }
+.simwin-body p { margin: 4px 0; }

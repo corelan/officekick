@@ -29,7 +29,18 @@ DocKick (Word). **MailKick never sends email** - it drafts; you review and send.
   reply − (red) a **politely negative (declining)** one - both in the tone the
   conversation itself uses (formal/informal), based on the open email thread.
   The result arrives as a proposed `draft_reply` action behind the approval
-  gate; you review it and send. MailKick never sends email.
+  gate (default `auto`, so the reply window opens immediately after the run);
+  you review it and send. MailKick never sends email.
+
+  In real Outlook the apply opens the reply/forward window for you (reply =
+  `displayReplyForm`, forward = `displayNewMessageForm` - in the message
+  window, plus your note above the quoted original). In the simulator a
+  bordered "Simulated reply/forward window" card appears in the chat output
+  right after the run, and the window also shows in the Sim email panel.
+
+  Tip: if a window does not appear in real Outlook, open the About tab - the
+  "Pane build" row must match the server version; a mismatch means the pane
+  runs a stale cached build: close and reopen the pane (or restart Outlook).
 
 ## Named templates
 The Templates tab: enter body text, give it a name, save. Use it from the Chat

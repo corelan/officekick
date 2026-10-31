@@ -1854,6 +1854,7 @@ function applyOps(deck, ops, ctx) {
         renderApplyResult(autoResult, res);
         var fails = res.lines.filter(function (l) { return !l.ok; }).length;
         setStatus(fails ? "Auto-applied with " + fails + " error(s)." : "Auto-applied " + validation.ops.length + " action(s).", fails ? "error" : "ok");
+        noteSimWindows();
         renderSimDeck();
         updateDeckSummary();
         dbg("ops.applied", { lines: res.lines, autoapply: true });
@@ -2105,6 +2106,7 @@ function applyOps(deck, ops, ctx) {
         }
         var fails = res.lines.filter(function (l) { return !l.ok; }).length;
         setStatus(fails ? "Applied with " + fails + " error(s)." : "Applied " + chosen.length + " op(s).", fails ? "error" : "ok");
+        noteSimWindows();
         renderSimDeck();
         updateDeckSummary();
         dbg("ops.applied", { lines: res.lines, manualNotes: res.manualNotes });
@@ -2128,6 +2130,28 @@ function applyOps(deck, ops, ctx) {
     }).catch(function (err) {
       el.textContent = "Document: unreadable (" + err.message + ")";
     });
+  }
+
+  function noteSimWindows() {
+    if (!SK.sim || !SK.deck || !SK.deck.lastWindow) return;
+    var w = SK.deck.lastWindow();
+    if (!w) return;
+    var out = $("chat-output");
+    if (!out) return;
+    var head, body;
+    if (w.kind === "reply") {
+      head = "Simulated reply window - real Outlook opens it for review (you still send it yourself)";
+      body = w.html || "";
+    } else {
+      head = "Simulated forward window - FW: " + esc(w.subject || "") + " - real Outlook opens it for review";
+      body = (w.to && w.to.length ? "<p><b>To:</b> " + esc(w.to.join(", ")) + "</p>"
+              : "<p><b>To:</b> (you pick recipients in Outlook)</p>") + (w.note ? w.note : "");
+    }
+    var card = document.createElement("div");
+    card.className = "simwin";
+    card.innerHTML = '<div class="simwin-head">' + esc(head) + "</div>" +
+      '<div class="simwin-body">' + body + "</div>";
+    out.appendChild(card);
   }
 
   function renderSimDeck() {
@@ -2489,10 +2513,21 @@ function applyOps(deck, ops, ctx) {
   // ------------------------------------------------------------------ //
   // About tab
   // ------------------------------------------------------------------ //
+  function paneBuildLabel() {
+    var build = window.__SK_BUILD;
+    if (!build) return "(unknown - reload the pane)";
+    var server = SK.cfg && SK.cfg.version ? String(SK.cfg.version) : null;
+    if (server && server !== String(build)) {
+      return "v" + build + " - STALE, close and reopen the pane (server runs v" + server + ")";
+    }
+    return "v" + build + (server ? " (current)" : "");
+  }
+
   function renderAbout() {
     var kv = [
       ["Corelan MailKick add-in", SK.cfg ? "v" + (SK.cfg.version || "0.1.3") : "0.1.3"],
       ["Server", "v" + (SK.cfg ? SK.cfg.version || "0.1.0" : "?") + " on 127.0.0.1:" + (SK.cfg ? SK.cfg.port : "?")],
+      ["Pane build", paneBuildLabel()],
       ["Config file", SK.cfg ? SK.cfg.configPath : "?"],
       ["Connections", SK.cfg ? (SK.cfg.connections || []).length : "?"],
       ["Profiles", SK.cfg ? (SK.cfg.profiles || []).length : "?"],

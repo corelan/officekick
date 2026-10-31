@@ -16,7 +16,9 @@
     categories: ["Blue Team"],
   };
   var compose = null; // {subject, bodyText} when mode = compose
-  var replyWin = null; // simulated reply window from draftReply
+  var replyWin = null;      // simulated reply window (draft_reply)
+  var forwardWin = null;    // simulated forward window (forward op)
+  var lastWin = null;       // most recently opened simulated window
   var log = [];
 
   class FriendlyError extends Error {}
@@ -43,6 +45,7 @@
       // the sim can not open a real Outlook reply window - show the drafted
       // reply as a simulated reply window in the debug area instead
       replyWin = { html: String(html) };
+      lastWin = { kind: "reply", html: replyWin.html };
       log.push("reply window opened (simulated) with " + String(html).length + " chars");
       return { ok: true };
     },
@@ -68,6 +71,9 @@
     },
     forwardMessage: async function (op, ctx) {
       var subj = (ctx && ctx.subject) || email.subject;
+      forwardWin = { to: (op.to && op.to.slice(0)) || [], subject: subj,
+                     note: String(op.html || ""), quoted: String((ctx && ctx.bodyText) || email.body) };
+      lastWin = { kind: "forward", to: forwardWin.to, subject: forwardWin.subject, note: forwardWin.note, quoted: forwardWin.quoted };
       log.push("forward window opened (simulated) - FW: " + subj +
         ", note " + String(op.html || "").length + " chars" +
         (op.to && op.to.length ? ", to " + op.to.join(",") : ", recipients to pick"));
@@ -78,7 +84,8 @@
       log.push("draft saved");
       return { ok: true };
     },
-    resetAll: function () { compose = null; replyWin = null; log = []; },
+    lastWindow: function () { return lastWin; },
+    resetAll: function () { compose = null; replyWin = null; forwardWin = null; lastWin = null; log = []; },
     renderDebug: function (el) {
       var rows = [];
       rows.push("<h3>Simulator email</h3>");
@@ -86,6 +93,9 @@
         " - " + log.length + " applied op(s)</div>");
       if (compose) rows.push('<div class="simrow"><b>COMPOSE:</b> ' + esc(compose.subject) + "</div>");
       if (replyWin) rows.push('<div class="simrow sim-reply"><b>REPLY WINDOW (simulated):</b><br />' + replyWin.html + "</div>");
+      if (forwardWin) rows.push('<div class="simrow sim-forward"><b>FORWARD WINDOW (simulated):</b> FW: ' + esc(forwardWin.subject) +
+        (forwardWin.to.length ? " - to: " + esc(forwardWin.to.join(", ")) : " - recipients: you pick") +
+        (forwardWin.note ? "<br /><i>note:</i><br />" + forwardWin.note : "") + "</div>");
       rows.push('<div class="simrow"><b>FROM</b> ' + esc(email.from) + " - <b>SUBJECT</b> " + esc(email.subject) + "</div>");
       rows.push('<div class="simrow"><b>BODY</b><br />' + esc(email.body).split("\n").join("<br />") + "</div>");
       (log || []).forEach(function (l) { rows.push('<div class="simrow"><i>' + esc(l) + "</i></div>"); });

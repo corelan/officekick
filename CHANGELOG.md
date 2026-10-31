@@ -21,6 +21,22 @@
 ### Added
 - Every busy status (Asking ..., collecting context, generating image, applying, model-output repair) now shows a rotating indicator character so it reads as still-working.
 
+## [0.9.2] - 2026-10-31
+### Fixed - reply +/- / forward "window" visibility
+- In the simulator, draft replies and forwards now open a REAL visible
+  simulated window: a bordered card appears directly in the chat output right
+  after the run ("Simulated reply/forward window - real Outlook opens it for
+  review"), and the forward window is also rendered in the Sim email panel
+  (previously forwards were only a log line, replies only in the panel).
+  Real Outlook behaviour is unchanged and was already correct: applying a
+  draft_reply opens `item.displayReplyForm(...)`, applying a forward opens
+  `Office.context.mailbox.displayNewMessageForm(...)` - the window appears
+  after you press Apply (or immediately when auto-apply is on).
+- About tab: "Pane build" row shows the build of the JS actually executing in
+  the pane (injected by the server with every HTML response) and flags it
+  STALE when it does not match the server version - the definitive answer to
+  "am I running the new build?" in cached webviews.
+
 ## [0.9.1] - 2026-10-31
 ### Added - editing one item of a list (SlideKick)
 - `replace_text` now supports a `find` fragment: with `{"find":"<the exact
