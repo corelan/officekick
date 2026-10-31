@@ -57,6 +57,7 @@
     insert_image:      { label: "insert image", hint: "Generates a picture from a description with the profile's image model and inserts it at the end of the document (or at the cursor with the checkbox)." },
     format_text:      { label: "format text", hint: "bold/italic/color/size/underline/allCaps/highlight + alignment on one paragraph." },
     create_template:  { label: "create template block", hint: "appends a titled template block with fillable content controls (text, dropdown, checkbox, date)." },
+    accept_changes:   { label: "accept tracked changes", hint: "Accepts ALL tracked changes currently in the document (finalizes the AI edits made with revisions on)." },
   };
   var OP_TYPES = Object.keys(OPS_META);
 
@@ -457,6 +458,7 @@
     '- {"type":"insert_image","prompt":"detailed image description"} (generate a picture from the description and insert it at the end of the document; only when the user asks for a picture/image/illustration/logo)',
     '- {"type":"format_text","para":N,"font":{"bold":true},"align":"center"} (format ONE paragraph from the outline: font = {"bold","italic","color","size","name","underline","allCaps","highlightColor"} subset; align = left|center|right|justify; only what is requested)',
     '- to format only PART of a paragraph, add "find":"exact words appearing in that paragraph" (all matches within the paragraph are formatted; e.g. {"type":"format_text","para":N,"find":"AI","font":{"bold":true}})',
+    '- {"type":"accept_changes"} (accepts ALL tracked changes in the document; use ONLY when the user asks to accept/approve/finalize the changes or revisions; list it AFTER the edits that produced them)',
     "",
     "Rules:",
     "- Paragraph numbers are 1-based (para 1 = the first paragraph) and MUST come from the outline below. If the user says \"the 3rd paragraph\", that is para 3. Never invent them.",
@@ -1139,6 +1141,18 @@
     });
   };
 
+  WordDeck.prototype.acceptChanges = function () {
+    return this.run("acceptChanges", function (ctx) {
+      // TrackedChangeCollection.acceptAll() - WordApi 1.6
+      if (!Office.context.requirements.isSetSupported("WordApi", "1.6")) {
+        throw new FriendlyError("accepting tracked changes needs WordApi 1.6 - update Word.");
+      }
+      var tcs = ctx.document.body.getTrackedChanges();
+      tcs.acceptAll();
+      return ctx.sync().then(function () { return { ok: true }; });
+    });
+  };
+
   function q34() { return String.fromCharCode(34); }
   WordDeck.prototype.formatTextFind = function (index, findText, font) {
     return this.run("formatTextFind", function (ctx) {
@@ -1245,7 +1259,7 @@ function validateOps(rawOps, ctx) {
       if (!op || typeof op !== "object") { invalid.push({ op: op, reason: "not an object" }); return; }
       var t = op.type;
       if (OP_TYPES.indexOf(t) < 0) { invalid.push({ op: op, reason: "unknown op type '" + t + "'" }); return; }
-      if (!ctx && t !== "insert_paragraphs" && t !== "create_table") {
+      if (!ctx && t !== "insert_paragraphs" && t !== "create_table" && t !== "accept_changes") {
         invalid.push({ op: op, reason: "needs document context (enable 'include document context')" });
         return;
       }
@@ -1356,7 +1370,7 @@ function validateOps(rawOps, ctx) {
     move_shape: "edit", move_slide: "edit", set_background: "edit", add_hyperlink: "edit",
     set_alt_text: "edit", set_categories: "edit", draft_reply: "add", new_message: "add",
     compose_body: "edit", save_draft: "add", create_template: "add", web_lookup: "edit",
-    delete_slide: "del", delete_shape: "del"
+    delete_slide: "del", delete_shape: "del", accept_changes: "edit"
   };
 
   function fmtOp(op, ctx) {
@@ -1382,6 +1396,8 @@ function validateOps(rawOps, ctx) {
         return "Delete paragraph " + op.para + paraRef(op.para);
       case "rewrite_doc":
         return "REWRITE document: " + op.items.length + " paragraph(s)";
+      case "accept_changes":
+        return "Accept ALL tracked changes in the document";
       case "format_text": {
         var fp = [];
         Object.keys(op.font).forEach(function (kf2) {
@@ -1456,6 +1472,10 @@ function applyOps(deck, ops, ctx) {
             deleted.push(op.para - 1);
             lines.push({ ok: true, text: "paragraph " + op.para + " deleted" });
           });
+        case "accept_changes":
+          return deck.acceptChanges().then(function () {
+            lines.push({ ok: true, text: "all tracked changes accepted" });
+          });
         case "rewrite_doc":
           return deck.rewriteDoc(op).then(function () {
             lines.push({ ok: true, text: "document rewritten: " + op.items.length + " paragraph(s)" });
@@ -1509,7 +1529,14 @@ function applyOps(deck, ops, ctx) {
     };
     var chain = Promise.resolve();
     ops.forEach(function (op) {
-      chain = chain.then(function () { return runOne(op); }, function (err) {
+      chain = chain.then(function () {
+        // per-op error capture INSIDE the link: a rejection from the last
+        // op must not reject the whole chain (the tail - tracking restore +
+        // final status - would never run)
+        return runOne(op).catch(function (err) {
+          lines.push({ ok: false, text: fmtOp(op, ctx) + " - " + ((err && err.message) || String(err)) });
+        });
+      }, function (err) {
         lines.push({ ok: false, text: fmtOp(op, ctx) + " - " + ((err && err.message) || String(err)) });
         return Promise.resolve();
       });

@@ -21,6 +21,19 @@
 ### Added
 - Every busy status (Asking ..., collecting context, generating image, applying, model-output repair) now shows a rotating indicator character so it reads as still-working.
 
+## [0.9.6] - 2026-10-31
+### Added - accept tracked changes (DocKick)
+- New op `accept_changes`: accepts ALL tracked changes in the document body
+  (`body.getTrackedChanges().acceptAll()`, WordApi 1.6) - finalize the edits
+  the AI made with revisions on. Ask for it ("accept the changes") and the
+  model emits it after its edit ops; approval default `confirm` (accepting is
+  final). Works with or without the tracked-changes setting enabled.
+### Fixed - a failing LAST op stalled the apply
+- An error thrown by the last applied op rejected the whole apply chain: the
+  per-op error row, the revision-mode restore and the final status never ran
+  and the pane stayed on "Applying…". Per-op errors are now captured inside
+  their chain link. (Surfaced while E2E-testing the new op in the simulator.)
+
 ## [0.9.5] - 2026-10-31
 ### Fixed - DocKick tracked-changes error after applying edits
 - With "AI edits land as tracked changes" ON, every apply ended with

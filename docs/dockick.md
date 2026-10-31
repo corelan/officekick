@@ -41,6 +41,7 @@ text and re-enable the input.
 |---|---|---|
 | insert paragraphs | adds styled paragraphs at the end (Title / Heading 1-3 / Quote / List Paragraph / Normal) | auto |
 | edit paragraph | replaces one paragraph's text, keeping its style | auto |
+| accept tracked changes | accepts ALL tracked changes in the document (`body.getTrackedChanges().acceptAll()`) - finalize the AI edits made with revisions on; confirm by default | confirm |
 | replace text | find/replace (all matches by default) | auto |
 | insert table | inserts a table from a rectangular values grid (WordApi 1.3) | auto |
 | insert comment | adds a comment anchored on matching text (WordApi 1.4) | auto |

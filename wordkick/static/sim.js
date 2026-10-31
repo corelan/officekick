@@ -110,6 +110,12 @@
       trackChanges = !!on;
       return { ok: true };
     },
+    acceptChanges: async function () {
+      // the sim does not model revision entries; accepting just finalizes
+      var accepted = trackChanges ? 1 : 0;
+      trackChanges = false;
+      return { ok: true, count: accepted, simulated: true };
+    },
     formatTextFind: async function (index, findText, font) {
       const para = paras[index];
       if (!para) throw new FriendlyError("Paragraph " + index + " does not exist");
