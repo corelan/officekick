@@ -14,8 +14,11 @@ DocKick (Word). **MailKick never sends email** - it drafts; you review and send.
   failing field never blanks the whole context.
 - **Conversational answers** (summarize, translate, brainstorm) appear in the pane.
 - **Actions (ops)**, each behind the approval gate:
-  - `draft_reply` (default confirm) - opens a real reply window with AI-written
-    content; **you review and send** - MailKick never sends.
+  - `draft_reply` (default auto) - opens a real reply window with AI-written
+    content; **you review and send** - MailKick never sends (that is why
+    drafting needs no approval).
+  - `forward` (default auto) - opens a forward window for the selected mail:
+    quoted original plus the AI's optional note; recipients optional.
   - `compose_body` (default confirm) - replaces the body of the email you are
     composing (destructive by nature - review first).
   - `set_categories` (default auto) - adds existing categories from your mailbox

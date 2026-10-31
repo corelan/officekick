@@ -52,6 +52,7 @@
     set_categories: { label: "categories", hint: "Adds Outlook categories to the selected message; names are checked against your mailbox master list when Outlook's permission level allows reading it." },
     save_draft:     { label: "save draft", hint: "Saves the message you are composing as a draft." },
     new_message:    { label: "new message from template", hint: "Opens a prefilled NEW email window (to/subject/body) - you review and send." },
+    forward:        { label: "forward", hint: "Opens a forward window for the selected mail (quoted original + your optional note) - you review and send." },
   };
   var OP_TYPES = Object.keys(OPS_META);
 
@@ -426,7 +427,7 @@
     "When the context lists MULTI-SELECTED ITEMS, treat them as the batch the user wants processed (e.g. suggest or set categories per item).",
     "You get the current email context and a user request. In text fields use real line breaks, never literal backslash-n. Reply with ONLY one JSON",
     "object - never commentary, never code fences, never reasoning. Format A",
-    "(conversational):",
+    "(conversational info ONLY: questions, summaries, translations, explanations about the content):",
     '{"kind":"reply","text":"your answer"}',
     "Format B (mailbox actions):",
     '{"kind":"mail_ops","ops":[ ... ]}',
@@ -437,10 +438,13 @@
     '- {"type":"set_categories","names":["Category"]} (names should exist in the KNOWN CATEGORIES list from the context when present; if the context says the master list is unavailable, still use sensible category names - the pane will report unchecked ones)',
     '- {"type":"save_draft"} (COMPOSE mode: saves the message being composed as a draft)',
     '- {"type":"new_message","html":"..."} (read or compose: opens a NEW email window prefilled; simple inline tags only)',
+    '- {"type":"forward","comment":"<p>short note above the quoted original (optional)</p>","to":["a@b.c"]} (READ mode: opens a FORWARD window for the current mail - subject FW:..., quoted original, your optional note; recipients optional)',
     "",
     "Rules:",
     "- Named templates: when the request mentions a template, its content is listed in the EMAIL CONTEXT (NAMED TEMPLATE '<name>'). Use it as the structural/wording base for draft_reply/compose_body/new_message, then adapt per the user's instructions and the email context.",
     "- Choose ops that match the mode stated in the EMAIL CONTEXT; wrong-mode ops are rejected.",
+    "- ACTION RULE (critical): any request to reply, draft, answer, respond, forward, fwd, send, write, notify, thank, confirm, decline, request, categorize or otherwise ACT on the mail is an ACTION request: answer with format B ops (draft_reply / forward / new_message / set_categories / compose_body / save_draft), NEVER with format A prose. Never write the reply/forward text into the chat, never say 'here is what I would say', never ask whether to do it - propose the op. Format A is ONLY for questions, summaries, translations and explanations about the content.",
+    "- 'reply'/'answer'/'respond' on the open mail means draft_reply. 'forward'/'fwd' means the forward op.",
     "- Reply/summary/translate/brainstorm requests that need no change: use format A.",
     "- Keep reply drafts short and human; greeting + body + signoff unless told otherwise.",
     "- LIVE WEB LOOKUPS: when the request needs up-to-date info you cannot reliably know (current events, news, prices, recent releases, rankings, live data), reply with ONLY {\"kind\":\"web_lookup\"} - nothing else. MailKick then runs a web-enabled lookup and re-asks you with fresh citable results. Never use it for mail edits, styling, general concepts, or what the email context already answers.",
@@ -1168,6 +1172,38 @@
     });
   };
 
+  MailDeck.prototype.forwardMessage = function (op, ctx) {
+    return promisify(function (resolve, reject) {
+      var mb = Office.context.mailbox;
+      if (!mb || !mb.displayNewMessageForm) {
+        reject(new FriendlyError("Forward needs a newer Outlook build (displayNewMessageForm is missing)."));
+        return;
+      }
+      var c = ctx || {};
+      if (!c.bodyText) {
+        reject(new FriendlyError("Forward needs the full email context - enable the include-email-context checkbox."));
+        return;
+      }
+      var esc = function (sv) {
+        return String(sv == null ? "" : sv).replace(/[&<>"]/g, function (ch) {
+          var q = String.fromCharCode(34); return { "&": "&amp;", "<": "&lt;", ">": "&gt;", q: "&quot;" }[ch];
+        });
+      };
+      var bodyHtml = esc(c.bodyText).split(/\r?\n/).join("<br />");
+      var head = "-----Original Message-----<br />" +
+        "From: " + esc(c.sender || "") + "<br />" +
+        (Array.isArray(c.to) ? "To: " + esc(c.to.join(", ")) : "To: " + esc(c.to || "")) + "<br />" +
+        "Subject: " + esc(c.subject || "") + "<br /><br />";
+      var note = op.html ? op.html + "<br /><br />" : "";
+      mb.displayNewMessageForm({
+        toRecipients: op.to || [],
+        subject: "FW: " + String(c.subject || ""),
+        htmlBody: note + head + bodyHtml,
+      });
+      resolve({ ok: true });
+    });
+  };
+
   MailDeck.prototype.composeBody = function (html) {
     return promisify(function (resolve, reject) {
       var item = Office.context.mailbox.item;
@@ -1313,6 +1349,14 @@
           bad("bad category names"); return;
         }
         out.names = names.map(String);
+      } else if (t === "forward") {
+        if (!ctx || ctx.mode !== "read") { bad("forward works only on a received email (READ mode)"); return; }
+        var note = typeof op.comment === "string" ? op.comment : (typeof op.html === "string" ? op.html : "");
+        if (note.length > 8000) { bad("forward note too long (max 8000 chars)"); return; }
+        var fwTo = Array.isArray(op.to) ? op.to.filter(function (x) { return typeof x === "string" && x; }) : [];
+        if (fwTo.length > 50) { bad("too many recipients (max 50)"); return; }
+        if (note) out.html = note;
+        out.to = fwTo;
       } else if (t === "save_draft") {
         if (!ctx || ctx.mode !== "compose") { bad("save draft works only while composing"); return; }
       } else if (t === "new_message") {
@@ -1339,7 +1383,7 @@
     apply_layout: "edit", format_text: "edit", format_selection: "edit",
     move_shape: "edit", move_slide: "edit", set_background: "edit", add_hyperlink: "edit",
     set_alt_text: "edit", set_categories: "edit", draft_reply: "add", new_message: "add",
-    compose_body: "edit", save_draft: "add", create_template: "add", web_lookup: "edit",
+    compose_body: "edit", save_draft: "add", create_template: "add", web_lookup: "edit", forward: "add",
     delete_slide: "del", delete_shape: "del"
   };
 
@@ -1348,6 +1392,12 @@
       case "draft_reply": {
         var pr = op.html.length > 70 ? op.html.slice(0, 70) + "…" : op.html;
         return "Reply window with: " + pr;
+      }
+      case "forward": {
+        var fwN = (op.html ? op.html : "").replace(/<[^>]*>/g, " ").trim();
+        fwN = fwN.length > 60 ? fwN.slice(0, 60) + "\u2026" : fwN;
+        var fwTo2 = (op.to && op.to.length) ? " -> " + op.to.join(", ") : " -> (you pick recipients)";
+        return "Forward window for this mail" + fwTo2 + (fwN ? " - note: " + fwN : "");
       }
       case "compose_body":
         return "REPLACE the email you are composing (" + op.html.length + " chars) - review";
@@ -1371,6 +1421,10 @@ function applyOps(deck, ops, ctx) {
         case "draft_reply":
           return deck.draftReply(op.html).then(function () {
             lines.push({ ok: true, text: "reply window opened with AI content - review and send" });
+          });
+        case "forward":
+          return deck.forwardMessage(op, ctx).then(function () {
+            lines.push({ ok: true, text: "forward window opened (quoted original" + (op.to && op.to.length ? ", " + op.to.length + " recipient(s)" : "") + ") - review and send" });
           });
         case "compose_body":
           return deck.composeBody(op.html).then(function () {
@@ -1485,6 +1539,9 @@ function applyOps(deck, ops, ctx) {
     // the deck/document/email readout refreshes automatically on every run
     updateDeckSummary();
     renderSimDeck();
+    // the global auto-apply setting must tick the per-run box BEFORE the
+    // all-auto evaluation happens (it used to tick inside the gate render)
+    syncAutoApplyCheckbox();
     var wantCtx = $("chat-context").checked;
     setStatus("Collecting email context…", "busy");
     var ctxPromise = SK.deck.getContext({ minimal: !wantCtx }).catch(function (err) {

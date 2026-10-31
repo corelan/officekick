@@ -66,6 +66,13 @@
       log.push("new message window opened (prefilled)");
       return { ok: true };
     },
+    forwardMessage: async function (op, ctx) {
+      var subj = (ctx && ctx.subject) || email.subject;
+      log.push("forward window opened (simulated) - FW: " + subj +
+        ", note " + String(op.html || "").length + " chars" +
+        (op.to && op.to.length ? ", to " + op.to.join(",") : ", recipients to pick"));
+      return { ok: true };
+    },
     saveDraft: async function () {
       if (!compose) throw new FriendlyError("save draft works only while composing");
       log.push("draft saved");

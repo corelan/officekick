@@ -21,6 +21,22 @@
 ### Added
 - Every busy status (Asking ..., collecting context, generating image, applying, model-output repair) now shows a rotating indicator character so it reads as still-working.
 
+## [0.8.8] - 2026-10-31
+### Changed - MailKick behaviour
+- **draft_reply and forward no longer require approval** (default policy
+  `auto`): MailKick opens the reply/forward window immediately and you send it
+  yourself - nothing is ever sent automatically. The global
+  "Auto apply approved actions" setting now also ticks the per-run box before
+  the all-auto evaluation, so the first run of a session skips the preview
+  correctly.
+- **Action requests now propose ops, not prose**: a hard rule for the model -
+  any reply/forward/draft/send/categorize request must come back as an op
+  (`draft_reply` / `forward` / ...), never as chat text of "what I would say".
+- **New `forward` op** (READ mode, default auto): opens a forward window for
+  the selected mail with the quoted original, the model's optional note
+  above it and optional recipients (Outlook build providing
+  `displayNewMessageForm`; the simulator simulates the window).
+
 ## [0.8.7] - 2026-10-31
 ### Changed - naming
 - The Outlook add-in folder/URL is now `mailkick/` everywhere, matching the

@@ -1546,6 +1546,9 @@ function applyOps(deck, ops, ctx) {
     // the deck/document/email readout refreshes automatically on every run
     updateDeckSummary();
     renderSimDeck();
+    // the global auto-apply setting must tick the per-run box BEFORE the
+    // all-auto evaluation happens (it used to tick inside the gate render)
+    syncAutoApplyCheckbox();
     var wantCtx = $("chat-context").checked;
     setStatus("Collecting document context…", "busy");
     var ctxPromise = wantCtx ? SK.deck.getContext({}).catch(function (err) {
