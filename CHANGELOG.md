@@ -9,6 +9,17 @@
 ### Fixed
 - Settings sub-tab headers: readable in Office dark mode (lime) and a darker green in light mode.
 
+## [0.6.0] - 2026-10-30
+### Changed (Chat tab layout)
+- The chat tab is now grouped: **Profile / route** in its own group box;
+  **Current session** starts with the context info card (purple in light
+  mode, cyan in dark), then the include-context + auto-apply checkboxes and
+  the Refresh button, a subtle divider, and then the session label, prompt
+  box, Run and the output. The New session button sits below the group box.
+- Pane footer: a lock icon shows when the pane uses https; the default
+  profile name is no longer printed. Also fixed 5 leaked DocKick strings
+  inside MailKick (About row, API warnings, unreachable-server messages).
+
 ## [0.5.2] - 2026-10-30
 ### Changed
 - Deck outline character cap raised from 40,000 to 60,000 (per request).

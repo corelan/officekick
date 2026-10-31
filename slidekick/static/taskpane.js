@@ -2888,8 +2888,8 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
         el.parentNode.removeChild(el);
       }
       $("statusbar").textContent = "SlideKick v" + (cfg.version || "0.1.0") +
-        " - server 127.0.0.1:" + cfg.port + " - default profile: " +
-        (cfg.defaultProfile || "(none)") + " - debug " + (cfg.debug ? "ON" : "off") +
+        (window.location && window.location.protocol === "https:" ? " - \u{1F512} " : " - ") +
+        "server 127.0.0.1:" + cfg.port + " - debug " + (cfg.debug ? "ON" : "off") +
         " - connections: " + (cfg.connections || []).length;
       return cfg;
     });

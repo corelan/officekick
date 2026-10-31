@@ -529,3 +529,13 @@ button.armed { border-color: #b00020 !important; color: #fff !important; backgro
 }
 .subpanel { display: none; }
 .subpanel.active { display: block; }
+
+/* Chat tab: grouped layout */
+.groupbox { border: 1px solid rgba(127,127,127,.35); border-radius: 10px; padding: 8px 12px 10px; margin: 0 0 12px 0; }
+.groupbox > legend { font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; padding: 0 6px; color: #1e7d46; }
+.chat-div { border: 0; border-top: 1px dashed rgba(127,127,127,.4); margin: 10px 0 8px; }
+.ctxinfo { display: inline-block; padding: 5px 10px; border-radius: 8px; background: rgba(122,75,208,.10); color: #5b3aa8; border: 1px solid rgba(122,75,208,.25); font-size: 12px; }
+@media (prefers-color-scheme: dark) {
+  .groupbox > legend { color: #9be87f; }
+  .ctxinfo { background: rgba(0,205,229,.12); color: #6ee7f5; border-color: rgba(0,205,229,.3); }
+}
