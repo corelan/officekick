@@ -21,6 +21,12 @@ DocKick (Word). **MailKick never sends email** - it drafts; you review and send.
   - `set_categories` (default auto) - adds existing categories from your mailbox
     master list; unknown ones are reported back.
   - `save_draft` (default auto) - saves the composed message as a draft.
+- **Quick replies - `reply +` and `reply −`** (next to the Run button): one
+  click, no typing. reply + (green) asks the AI to draft a **positive** reply,
+  reply − (red) a **politely negative (declining)** one - both in the tone the
+  conversation itself uses (formal/informal), based on the open email thread.
+  The result arrives as a proposed `draft_reply` action behind the approval
+  gate; you review it and send. MailKick never sends email.
 
 ## Named templates
 The Templates tab: enter body text, give it a name, save. Use it from the Chat
@@ -35,7 +41,10 @@ rejected up front (e.g. compose_body on a received message).
 
 ## Shared features
 Same as the other two add-ins: Sessions (auto-saved, AI-named, resumable,
-renamable from the History tab (the past-sessions list; the chat tab itself is now called Sessions)), the Inspector request/response log with
+renamable from the History tab; the chat tab itself is now called Sessions),
+the **Previous-requests box** (below the prompt: every run with its timestamp
+first, the request text below, +/- to expand - all runs of the resumed
+session), the Inspector request/response log with
 expandable payloads, per-op approvals + Select all + auto-apply, image models
 via the profile's Image slot (insert_image -> insert the picture at the end of
 the compose body), and the About footer with license/repo links.

@@ -21,6 +21,22 @@
 ### Added
 - Every busy status (Asking ..., collecting context, generating image, applying, model-output repair) now shows a rotating indicator character so it reads as still-working.
 
+## [0.8.5] - 2026-10-31
+### Added
+- MailKick quick actions `reply +` / `reply −` (green/red): one click drafts a
+  polite reply from the open conversation in its own tone (formal/informal),
+  positive or politely negative, and proposes a `draft_reply` action behind
+  the approval gate (MailKick still never sends).
+### Changed
+- **Previous requests** is now the title of an always-open box: every run of
+  the (resumed) session is its own +/- box with the timestamp first and the
+  request text below it; the title itself is not a button anymore.
+- Resuming a session titled just "Session" asks the AI for a better title
+  based on the interactions and stores it (History shows real titles).
+### Fixed
+- The approval-policy table and the Behaviour group wrap their text instead of
+  overflowing in narrow panes.
+
 ## [0.8.4] - 2026-10-31
 ### Changed - run/input interaction
 - Run no longer blanks the input instantly: the request text stays visible

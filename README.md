@@ -13,7 +13,10 @@ review comment on this paragraph`. The add-in reads your file, sends it with
 your request to the AI model **you** configured, shows the proposed changes,
 and applies them only when your approval policy allows it.
 
-Nothing goes through a third-party service: the add-ins talk to the providers
+Every exchange is auto-saved in a resumable local session; the pane's
+**Previous-requests box** shows each run with its timestamp (+/- to expand).
+MailKick adds **reply + / reply −** one-click buttons for a drafted polite
+reply. Nothing goes through a third-party service: the add-ins talk to the providers
 *you* configure (OpenAI, Anthropic, OpenRouter, any OpenAI-compatible server,
 Ollama, llama.cpp), through one small local server on your own machine.
 Connections, model profiles and the approval policy are configured **once** and

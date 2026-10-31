@@ -65,9 +65,19 @@ is about how SlideKick works.
   by policy - if any action needs approval (or is blocked/invalid), the gated
   preview appears exactly as without it.
 
-- **Conversation memory**: follow-ups automatically include your recent turns
-  (last 6 exchanges, session-only) - "use the 2nd title you suggested" just
-  works. **New session** clears it; nothing is stored on disk.
+- **Conversation memory**: follow-ups include your recent turns - the model
+  sees the last 6 exchanges of the session, so "use the 2nd title you
+  suggested" just works. **New session** starts fresh.
+- **Sessions & the Previous-requests box**: every exchange is auto-saved in a
+  local, AI-named session (resumable from the **History** tab). The box below
+  the prompt lists every run of the (resumed) session, newest first: the
+  timestamp first, the request text below it, and a +/- box to expand the full
+  request and the response/summary. Clicking a stored request refills an empty
+  input box. While a run works your typed text stays visible (locked input);
+  it is cleared when the result prints, with "Request: ..." echoed above it -
+  a failed run re-enables the input and keeps your text. Older saves titled
+  just "Session" get an AI-generated title on resume (stored in the session
+  file).
 - **Speaker notes are opt-in (off by default)**: SlideKick only generates or
   writes speaker notes when "Generate speaker notes" is enabled in Settings.
   When off, the model is told not to produce notes and any notes actions it

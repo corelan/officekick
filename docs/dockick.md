@@ -28,6 +28,13 @@ Install + uninstall basics: see the top-level [README](../README.md).
   text), tables and your current selection, so "reword the current paragraph"
   works without naming indices.
 
+**Sessions & the Previous-requests box** (shared with the other add-ins): every
+exchange is auto-saved in a local, AI-named session and can be resumed from the
+**History** tab. The box below the prompt lists every run - timestamp first,
+the request text below it, +/- to expand the full request and the response;
+clicking a stored request refills an empty input. Failed runs keep your typed
+text and re-enable the input.
+
 ## Document actions (ops)
 
 | Action | What it does | Default policy |
