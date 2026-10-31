@@ -352,6 +352,7 @@
     "- Slide numbers are 1-based (slide 1 = the first slide in the filmstrip) and MUST come from the outline below. When the user says \"slide 2\", use \"slide\":2. Never invent them. Shape indexes keep the numbers shown in the outline.",
     "- One body element = one bullet/paragraph; keep bullets short unless told otherwise.",
     "- Reword/tighten requests: only rewrite wording, keep the meaning and slide count.",
+    "- LARGE DECKS: the outline lists every slide. If you cannot address all of them in one reply, work in batches of at most 20 ops and end each reply with a short note of exactly what remains.",
     "- If the request is a question/explanation/brainstorm rather than a deck change, use format A.",
     "- Design passes ('design this deck/slide', improve alignment/balance): emit ops (apply_layout, move_shape, create_table) computed from the geometry in the outline; when the user asks only for advice, use format A.",
     "- Image requests: always return a create_image op (never generate the picture inline); SlideKick fetches it with the user's configured image model. Include a concrete, self-contained prompt in the op.",
@@ -872,7 +873,7 @@
     return pre.then(function () {
       var wantText = self._textApi !== false;
       var wantPf = self._pfApi === true;
-      var limit = Math.min(opts.maxSlides || 60, 200);
+      var limit = Math.min(opts.maxSlides || 200, 400);
       return self.run("getContext", function (ctx) {
         var pres = ctx.presentation;
         var slides = pres.slides;
@@ -2050,6 +2051,23 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
       if (ctx.selection.textPreview) selBits.push("selected text: \"" + ctx.selection.textPreview + "\"");
       if (selBits.length) lines.push("SELECTION: " + selBits.join(" | "));
     }
+    if (ctx.slides.length > 40) {
+      var bodyPrevF = function (s2) {
+        var t2 = (s2.shapes || []).filter(function (sh) { return sh.isBody && sh.text; })
+          .map(function (sh) { return sh.text; }).join(" ") || "";
+        t2 = String(t2).replace(/\r|\n/g, " ");
+        if (t2.length > 90) t2 = t2.slice(0, 90) + "…";
+        return t2 ? " — " + t2 : "";
+      };
+      ctx.slides.forEach(function (s2) {
+        var star2 = ctx.selected && ctx.selected.indexOf(s2.idx) >= 0 ? "*" : "";
+        var tt2 = (s2.shapes || []).filter(function (sh) { return sh.isTitle || (sh.text && /title/i.test(sh.name)); })[0];
+        var line2 = "[" + (s2.idx + 1) + star2 + "] " + (tt2 && tt2.text ? tt2.text : "(no title)") + bodyPrevF(s2);
+        if (line2.length > 160) line2 = line2.slice(0, 160);
+        lines.push(line2);
+      });
+      lines.push("(compact outline for a large deck - " + ctx.slides.length + " slides listed; body text is a preview)");
+    } else
     ctx.slides.forEach(function (s) {
       var star = ctx.selected && ctx.selected.indexOf(s.idx) >= 0 ? "*" : "";
       var title = (s.shapes || []).filter(function (sh) { return sh.isTitle || (sh.text && /title/i.test(sh.name)); })[0];
@@ -2065,7 +2083,7 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
       });
     });
     var total = lines.join("\n");
-    if (total.length > 20000) total = total.slice(0, 20000) + "\n…[truncated]";
+    if (total.length > 40000) total = total.slice(0, 40000) + "\n…[truncated]";
     return total;
   }
 

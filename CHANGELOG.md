@@ -5,6 +5,16 @@
   'move_slide'" in the gate); the entry is in and the op is E2E-verified in
   the simulator (move last slide -> position 2 reorders correctly).
 
+## [0.5.1] - 2026-10-30
+### Fixed
+- Large decks: the deck outline was hard-capped at 20,000 characters and 60
+  slides - a 121-slide deck with rich text got truncated around slide 38 and
+  the model correctly reported it could only see those. The outline now
+  covers up to 200 slides; decks with more than 40 slides get a COMPACT
+  outline (every slide with title + a 90-char body preview instead of
+  per-shape dumps); the character cap is 40,000; the prompt instructs the
+  model to work large tasks in batches of max 20 ops and state what remains.
+
 ## [0.5.0] - 2026-10-30
 ### Changed (UI restructure)
 - Settings now hosts sub-tabs: General (behavior toggles + debug logging),
