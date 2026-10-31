@@ -539,3 +539,9 @@ button.armed { border-color: #b00020 !important; color: #fff !important; backgro
   .groupbox > legend { color: #9be87f; }
   .ctxinfo { background: rgba(0,205,229,.12); color: #6ee7f5; border-color: rgba(0,205,229,.3); }
 }
+
+/* Chat thread: clickable request line above each response */
+.reqline { cursor: pointer; padding: 6px 10px; margin: 0 0 6px; border-radius: 8px;
+  background: rgba(127,127,127,.10); border-left: 3px solid rgba(30,125,70,.6); word-break: break-word; }
+.reqline:hover { background: rgba(127,127,127,.18); }
+@media (prefers-color-scheme: dark) { .reqline { background: rgba(127,127,127,.14); border-left-color: rgba(155,232,127,.6); } }

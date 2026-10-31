@@ -1346,6 +1346,7 @@ function applyOps(deck, ops, ctx) {
       setStatus("Profile '" + prof.name + "' has no model assigned for this route. Open Profiles and pick connection + model.", "error");
       return;
     }
+    input.value = "";   // the request is captured; the box clears right away
     SK.busy = true;
     setRunEnabled(false);
     var wantCtx = $("chat-context").checked;
@@ -1412,7 +1413,22 @@ function applyOps(deck, ops, ctx) {
 
   function renderParsed(parsed, ctx, instruction) {
     var out = $("chat-output");
-    out.innerHTML = "";
+    // thread: the request prints above its response; click a request to copy
+    // it back into the prompt box; the thread keeps the last handful of turns
+    var reqline = document.createElement("div");
+    reqline.className = "reqline";
+    reqline.title = "Click to copy this request back into the input box";
+    var who = document.createElement("b");
+    who.textContent = "Request: ";
+    reqline.appendChild(who);
+    reqline.appendChild(document.createTextNode(instruction));
+    reqline.addEventListener("click", function () {
+      var inp = $("chat-input");
+      inp.value = instruction;
+      inp.focus();
+    });
+    out.appendChild(reqline);
+    while (out.children.length > 30) out.removeChild(out.firstChild);
     if (!parsed.ok) {
       var box = document.createElement("div");
       box.className = "reply-text";

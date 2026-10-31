@@ -9,6 +9,14 @@
 ### Fixed
 - Settings sub-tab headers: readable in Office dark mode (lime) and a darker green in light mode.
 
+## [0.6.1] - 2026-10-30
+### Changed (chat flow)
+- Run now turns the prompt box into a chat thread: each run prints its
+  **Request** above the **Response**; older turns stack above (the thread
+  keeps the last ~15 turns). Clicking a request line copies it back into the
+  input box for a quick re-ask.
+- The prompt box is smaller (4 rows) and clears the moment a request is sent.
+
 ## [0.6.0] - 2026-10-30
 ### Changed (Chat tab layout)
 - The chat tab is now grouped: **Profile / route** in its own group box;
