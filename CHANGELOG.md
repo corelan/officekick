@@ -21,6 +21,20 @@
 ### Added
 - Every busy status (Asking ..., collecting context, generating image, applying, model-output repair) now shows a rotating indicator character so it reads as still-working.
 
+## [0.8.0] - 2026-10-31
+### Changed - Previous-requests as group box with per-turn boxes
+- "Previous requests" is the titled group-box head (boxed +/-, turn count);
+  inside it every run is its own collapsible box: the head shows the boxed
+  +/-, the request date/time and a snippet; opening it shows the full
+  request (clicking it refills the input box, only when the input is empty)
+  and the response / proposed-actions summary.
+- Filing now happens the moment Run is clicked: the previous run moves out
+  of the top zone into the box immediately, so during a run only the new
+  activity sits between the prompt and the history box.
+### Added
+- Inspector: failed requests render in unmistakable red (border, header,
+  badge) in light and dark mode.
+
 ## [0.7.9] - 2026-10-31
 ### Fixed
 - Live lookup actually switched to the model side in all panes (0.7.8

@@ -1405,6 +1405,7 @@ function applyOps(deck, ops, ctx) {
       return;
     }
     input.value = "";   // the request is captured; the box clears right away
+    filePreviousRun();  // the previous request/response moves into the history box NOW
     SK.busy = true;
     setRunEnabled(false);
     chatTimerStart();
@@ -1532,23 +1533,39 @@ function applyOps(deck, ops, ctx) {
   function pmGlyph(open) { return open ? "\u2212" : "+"; }   // boxed minus / plus
 
   function pastTurnRow(u, a) {
-    var row = document.createElement("div");
-    row.className = "pastturn";
+    // one collapsible turn box: header = +/- and timestamp + the request
+    // snippet; inside = the full request (clickable to refill the input)
+    // and the response/gate summary
+    var grp = document.createElement("div");
+    grp.className = "reqgrp pastturn";
+    var head = document.createElement("div");
+    head.className = "reqhead2";
+    head.title = "Click to open/close this request/response";
+    var pm = document.createElement("span");
+    pm.className = "pmbox";
+    pm.textContent = "+";
+    head.appendChild(pm);
+    if (u.ts) {
+      var ts1 = document.createElement("span");
+      ts1.className = "ptts";
+      ts1.textContent = " " + u.ts + "  ";
+      head.appendChild(ts1);
+    }
+    var uc = String(u.content || "");
+    head.appendChild(document.createTextNode(uc.length > 110 ? uc.slice(0, 110) + "…" : uc));
+    var body = document.createElement("div");
+    body.className = "reqbody";
     var q1 = document.createElement("div");
     q1.className = "pt-req";
     q1.style.cursor = "pointer";
-    q1.title = "Click to load this request into the input box (only if the box is empty)";
+    q1.title = "Click to load this request into the input box (only when the box is empty)";
     var b1 = document.createElement("b");
     b1.textContent = "Request: ";
     q1.appendChild(b1);
-    var ts1 = document.createElement("span");
-    ts1.className = "ptts";
-    ts1.textContent = (u.ts || "") + (u.ts ? "  " : "");
-    q1.appendChild(ts1);
-    var uc = String(u.content || "");
-    var fullReq = String(u.full !== undefined ? u.full : uc);
+    var fullReq = uc;
+    q1.appendChild(document.createTextNode(fullReq));
     q1.addEventListener("click", function () { copyRequestToInput(fullReq); });
-    q1.appendChild(document.createTextNode(uc.length > 140 ? uc.slice(0, 140) + "…" : uc));
+    body.appendChild(q1);
     var q2 = document.createElement("div");
     q2.className = "pt-res";
     var b2 = document.createElement("b");
@@ -1556,9 +1573,14 @@ function applyOps(deck, ops, ctx) {
     q2.appendChild(b2);
     var ac = String(a.content || "");
     q2.appendChild(document.createTextNode(ac.length > 400 ? ac.slice(0, 400) + "…" : ac));
-    row.appendChild(q1);
-    row.appendChild(q2);
-    return row;
+    body.appendChild(q2);
+    head.addEventListener("click", function () {
+      var isOpen = body.classList.toggle("open");
+      pm.textContent = pmGlyph(isOpen);
+    });
+    grp.appendChild(head);
+    grp.appendChild(body);
+    return grp;
   }
 
   function updatePastBox() {
@@ -1577,26 +1599,24 @@ function applyOps(deck, ops, ctx) {
     box.style.display = n ? "" : "none";
   }
 
-  // every run files the PREVIOUS rendered turn here (newest first);
-  // the box stays collapsed after each new run
-  function pushPastTurn(instruction) {
+  // On Run: the PREVIOUS run (request + its reply / proposed-actions text)
+  // files itself into the box immediately and the top zone blanks, so only
+  // the current run is between the prompt and the history box.
+  function filePreviousRun() {
     var zone = $("chat-output");
     var body = $("past-body");
-    var head = $("past-head");
     if (!body || !$("pastbox")) return;
-    if (zone && zone.children.length) {
-      var respText = zone.textContent || "";
+    if (zone && zone.childNodes.length && SK.lastInstruction) {
       var lastUser = null;
       for (var hi = SK.history.length - 1; hi >= 0; hi--) {
         if (SK.history[hi].role === "user") { lastUser = SK.history[hi]; break; }
       }
       var row = pastTurnRow(
-        { content: instruction || "(earlier turn)", ts: (lastUser && lastUser.ts) || "" },
-        { content: respText, ts: (lastUser && lastUser.ts) || "" });
+        { content: SK.lastInstruction, ts: (lastUser && lastUser.ts) || "" },
+        { content: zone.textContent || "", ts: (lastUser && lastUser.ts) || "" });
+      body.insertBefore(row, body.firstChild);   // newest on top
       while (zone.firstChild) zone.removeChild(zone.firstChild);
-      body.insertBefore(row, body.firstChild);   // newest first inside the box
     }
-    // the box is closed again as a new run starts its own top turn
     body.classList.remove("open");
     updatePastBox();
   }
@@ -1612,9 +1632,6 @@ function applyOps(deck, ops, ctx) {
   }
 
   function renderParsed(parsed, ctx, instruction) {
-    // the previous rendered turn files itself into the collapsible
-    // previous-requests box; the zone then renders fresh for this run
-    pushPastTurn(SK.lastInstruction);
     SK.lastInstruction = instruction;
     var out = $("chat-output");
     out.innerHTML = "";
