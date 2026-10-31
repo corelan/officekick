@@ -596,6 +596,17 @@
         var who = document.createElement("b");
         who.textContent = (m.role === "user" ? "You" : "AI") + ": ";
         var c = String(m.content || "");
+        if (m.role === "user" && m.ts) {
+          var its = document.createElement("span");
+          its.className = "ptts";
+          its.textContent = m.ts + "  ";
+          b.appendChild(its);
+        }
+        if (m.role === "user") {
+          b.style.cursor = "pointer";
+          var tclick = String(m.content || "");
+          b.addEventListener("click", function () { copyRequestToInput(tclick); });
+        }
         if (c.length > 240) c = c.slice(0, 240) + "…";
         var txt = document.createElement("span");
         txt.textContent = c;
@@ -740,17 +751,16 @@
       return String(rawT).slice(0, 400);
     }
     if (parsed.kind === "reply") return String(parsed.text || "").slice(0, HISTORY_MAX_CHARS);
+    // store only the action types and how many per type were executed -
+    // no descriptions, no prompts (keeps the session/context compact)
     var ops = parsed.ops || [];
-    var parts = ops.slice(0, 3).map(function (op) {
-      var d = fmtOp(op, SK.lastCtx);
-      return d.length > 110 ? d.slice(0, 110) + "…" : d;
+    var counts = {};
+    ops.forEach(function (op) {
+      var t = op && op.type ? String(op.type) : "unknown";
+      counts[t] = (counts[t] || 0) + 1;
     });
-    var sum = "Applied: " + parts.join("; ") + (ops.length > 3 ? " (+" + (ops.length - 3) + " more)" : "");
-    var imgOp = ops.filter(function (o) { return o.type === "create_image" || o.type === "insert_image"; })[0];
-    if (imgOp && imgOp.prompt) {
-      sum += " [image prompt: " + String(imgOp.prompt).slice(0, 600) + (String(imgOp.prompt).length > 600 ? "…" : "") + "]";
-    }
-    return sum.slice(0, HISTORY_MAX_CHARS);
+    var byType = Object.keys(counts).map(function (t) { return t + " x" + counts[t]; }).join(", ");
+    return ("Executed " + ops.length + " action(s)" + (byType ? ": " + byType : "")).slice(0, HISTORY_MAX_CHARS);
   }
 
   function historyCap(text) {
@@ -758,9 +768,26 @@
     return s.length > HISTORY_MAX_CHARS ? s.slice(0, HISTORY_MAX_CHARS) + " [truncated]" : s;
   }
 
+  function nowStamp() {
+    var d = new Date();
+    function z(n) { return (n < 10 ? "0" : "") + n; }
+    return d.getFullYear() + "-" + z(d.getMonth() + 1) + "-" + z(d.getDate()) + " " +
+      z(d.getHours()) + ":" + z(d.getMinutes());
+  }
+
+  // clicking a stored request reloads it into the input box, but only when
+  // the input is empty (never clobber a typed draft)
+  function copyRequestToInput(fullText) {
+    var inp = $("chat-input");
+    if (!inp || inp.value) return;
+    inp.value = String(fullText || "");
+    inp.focus();
+  }
+
   function pushHistory(userText, assistantText) {
-    SK.history.push({ role: "user", content: historyCap(userText) });
-    SK.history.push({ role: "assistant", content: historyCap(assistantText) });
+    var stamp = nowStamp();
+    SK.history.push({ role: "user", content: historyCap(userText), ts: stamp });
+    SK.history.push({ role: "assistant", content: historyCap(assistantText), ts: stamp });
     // persist every request/response immediately - a pane closing right after
     // an exchange must never lose it (no debounce here)
     saveSessionNow();
@@ -2230,6 +2257,8 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
       setStatus(msg, "error");
       // the request left the pane but failed - keep it in the session too
       pushHistory(instruction, "(failed: " + msg + ")");
+      // give the request back so the user can just hit Run again
+      if (input && !input.value) input.value = instruction;
     }).then(function () {
       stopChatTimer();
       SK.busy = false;
@@ -2281,10 +2310,19 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
     row.className = "pastturn";
     var q1 = document.createElement("div");
     q1.className = "pt-req";
+    q1.style.cursor = "pointer";
+    q1.title = "Click to load this request into the input box (only if the box is empty)";
     var b1 = document.createElement("b");
     b1.textContent = "Request: ";
     q1.appendChild(b1);
+    var ts1 = document.createElement("span");
+    ts1.className = "ptts";
+    ts1.textContent = (u.ts || "") + (u.ts ? "  " : "");
+    q1.appendChild(ts1);
     var uc = String(u.content || "");
+    var fullReq = String(u.full || uc);
+    q1.firstChild.title = q1.title;
+    q1.addEventListener("click", function () { copyRequestToInput(fullReq); });
     q1.appendChild(document.createTextNode(uc.length > 140 ? uc.slice(0, 140) + "…" : uc));
     var q2 = document.createElement("div");
     q2.className = "pt-res";
@@ -2323,7 +2361,13 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
     if (!body || !$("pastbox")) return;
     if (zone && zone.children.length) {
       var respText = zone.textContent || "";
-      var row = pastTurnRow({ content: instruction || "(earlier turn)" }, { content: respText });
+      var lastUser = null;
+      for (var hi = SK.history.length - 1; hi >= 0; hi--) {
+        if (SK.history[hi].role === "user") { lastUser = SK.history[hi]; break; }
+      }
+      var row = pastTurnRow(
+        { content: instruction || "(earlier turn)", ts: (lastUser && lastUser.ts) || "" },
+        { content: respText, ts: (lastUser && lastUser.ts) || "" });
       while (zone.firstChild) zone.removeChild(zone.firstChild);
       body.insertBefore(row, body.firstChild);   // newest first inside the box
     }

@@ -586,3 +586,6 @@ button.armed { border-color: #b00020 !important; color: #fff !important; backgro
 .pastturn:first-child { border-top: none; }
 .pt-req, .pt-res { padding: 2px 0; word-break: break-word; }
 .pt-res { opacity: .8; }
+
+.ptts { opacity: .55; font-size: 11px; font-variant-numeric: tabular-nums; }
+.bubble.user { cursor: pointer; }

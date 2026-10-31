@@ -31,7 +31,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 APP = "OfficeKick"
-VERSION = "0.7.4"
+VERSION = "0.7.5"
 
 CONNECTION_TYPES = (
     "openai",
@@ -211,7 +211,11 @@ class SessionStore:
             role = m.get("role")
             content = m.get("content")
             if role in ("user", "assistant") and isinstance(content, str):
-                out.append({"role": role, "content": content[:8000]})
+                entry = {"role": role, "content": content[:8000]}
+                ts = str(m.get("ts") or "").strip()
+                if ts:
+                    entry["ts"] = ts[:32]   # when the exchange happened
+                out.append(entry)
         return out[-40:]
 
 

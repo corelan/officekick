@@ -21,6 +21,24 @@
 ### Added
 - Every busy status (Asking ..., collecting context, generating image, applying, model-output repair) now shows a rotating indicator character so it reads as still-working.
 
+## [0.7.5] - 2026-10-31
+### Changed
+- Request history: each stored exchange carries a local timestamp; the
+  Previous-requests rows and the session peek show "Request: <date time> ..."
+  (older sessions without a timestamp simply show without it).
+- Ops replies are stored as a compact recap only: "Executed N action(s):
+  type x count, ..." (no action text, no image prompts; text replies are
+  stored verbatim). Applies to the session store AND the model context.
+- Clicking a stored request (previous-requests row or session-peek bubble)
+  reloads the full request into the input box, but only when the box is
+  empty - a typed draft is never clobbered. The chat input no longer shows
+  an example; empty = empty.
+### Fixed
+- A failed request (model unreachable etc.) now puts the request text back
+  into the input box so it can be retried with Run; the failed exchange is
+  still saved to the session as "(failed: ...)".
+- Session sanitizer dropped per-exchange timestamps; it now keeps them.
+
 ## [0.7.4] - 2026-10-30
 ### Changed
 - Update check preferences: "Check for updates automatically at startup" is
