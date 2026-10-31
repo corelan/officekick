@@ -10,7 +10,7 @@ officekick/
   core/server.py           local companion server (Python stdlib only, loopback)
   slidekick/               PowerPoint add-in: manifest template + task pane
   wordkick/                Word add-in (DocKick): manifest template + task pane
-  outlook/                 Outlook add-in (MailKick): manifest template + task pane
+  mailkick/                Outlook add-in (MailKick): manifest template + task pane
   docs/                    per-add-in docs + this architecture page
   tools/                   mock AI provider + icon generator
   tests/                   server test suite (kept LOCAL, not in the repo)
@@ -31,7 +31,7 @@ officekick/
 +---------------------------------------------------------------------------------------+
 |  core/server.py (python stdlib, threads, dual-stack loopback)                          |
 |    static files per add-in, no-store: /slidekick/static/  /wordkick/static/           |
-|                                       /outlook/static/                                 |
+|                                       /mailkick/static/  (legacy /outlook/static alias) |
 |    /api/health   /api/update-check (reads VERSION from GitHub; ?latest= test override) |
 |    /api/config   /api/settings (approvals, autoApplyApproved, debug, autoUpdateCheck)  |
 |    /api/connections(+rename)  /api/profiles(+rename)  /api/test-connection             |

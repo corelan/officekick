@@ -69,7 +69,7 @@ removed as well. Uninstall via Outlook: Get Add-ins -> My add-ins -> Custom
 Addins -> remove the add-in (it appears under the name Corelan MailKick).
 
 ## Simulators
-http://localhost:8765/outlook/static/simulator.html exercises the whole
+http://localhost:8765/mailkick/static/simulator.html exercises the whole
 pipeline in a browser (fake message + compose draft).
 
 ## Hard limits (Office.js)

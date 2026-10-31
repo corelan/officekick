@@ -21,6 +21,16 @@
 ### Added
 - Every busy status (Asking ..., collecting context, generating image, applying, model-output repair) now shows a rotating indicator character so it reads as still-working.
 
+## [0.8.7] - 2026-10-31
+### Changed - naming
+- The Outlook add-in folder/URL is now `mailkick/` everywhere, matching the
+  add-in's name: docs moved to docs/mailkick.md, the add-in static tree is
+  served at /mailkick/static/, and the manifest points there. Older
+  sideloaded manifests (the legacy /outlook/static URL) keep working: the
+  server aliases it to the mailkick tree, and installers clean up the old
+  deployed folder. The Windows installer (install.ps1) now also deploys
+  MailKick and renders its manifest into the trusted catalog.
+
 ## [0.8.6] - 2026-10-31
 ### Added
 - The approval gate: a red **X** per proposed action to remove that action from

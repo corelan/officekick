@@ -31,7 +31,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 APP = "OfficeKick"
-VERSION = "0.8.6"
+VERSION = "0.8.7"
 
 CONNECTION_TYPES = (
     "openai",
@@ -1338,6 +1338,10 @@ class SlideKickHandler(BaseHTTPRequestHandler):
         if rel in STATIC_DOCS:
             rel = STATIC_DOCS[rel]
         rel = rel.lstrip("/")
+        # legacy name: the MailKick pane lived under outlook/ before 0.8.7;
+        # older sideloaded manifests keep working without a reinstall
+        if rel.startswith("outlook/"):
+            rel = "mailkick/" + rel[len("outlook/"):]
         target = (sdir / rel).resolve()
         is_simulator = target.name == "simulator.html"
         if not str(target).startswith(str(sdir)) or (not is_simulator and not target.is_file()):

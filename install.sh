@@ -26,7 +26,7 @@ LAUNCH_LABEL="com.corelan.officekick"
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 SRC_DIR="$REPO_DIR/slidekick"       # PowerPoint add-in (SlideKick)
 WORDKICK_DIR="$REPO_DIR/wordkick"   # Word add-in (DocKick)
-OUTLOOK_DIR="$REPO_DIR/outlook"     # Outlook add-in (MailKick)
+MAILKICK_DIR="$REPO_DIR/mailkick"   # Outlook add-in (MailKick)
 SERVER_REPO="$REPO_DIR/core/server.py"
 INSTALL_DIR="$HOME/Library/Application Support/$APP_NAME"
 CONFIG_DIR="$HOME/.officekick"
@@ -34,10 +34,10 @@ LOG_DIR="$HOME/Library/Logs/$APP_NAME"
 PLIST="$HOME/Library/LaunchAgents/$LAUNCH_LABEL.plist"
 MANIFEST_NAME="slidekick.xml"
 WORD_MANIFEST_NAME="dockick.xml"
-OUTLOOK_MANIFEST_NAME="mailkick.xml"
+MAILKICK_MANIFEST_NAME="mailkick.xml"
 GUID="c7b1f2a9-86d3-4e58-9a4b-2f6d5e0c3b81"
 WORD_GUID="ce1e8f09-db1c-4598-8f5b-6a65b7802d59"
-OUTLOOK_GUID="8f4d3b62-91c7-4a2e-bb5d-3c70e6a92f18"
+MAILKICK_GUID="8f4d3b62-91c7-4a2e-bb5d-3c70e6a92f18"
 DEFAULT_PORT=8765
 VERSION="$(cat "$REPO_DIR/VERSION" 2>/dev/null || echo 0.1.3)"
 CERT_DIR="$CONFIG_DIR/certs"
@@ -492,8 +492,9 @@ do_install() {
       mkdir -p "$INSTALL_DIR/wordkick"
       if command -v rsync >/dev/null 2>&1; then
         rsync -a --exclude '.DS_Store' --exclude '__pycache__' "$WORDKICK_DIR/" "$INSTALL_DIR/wordkick/"
-        mkdir -p "$INSTALL_DIR/outlook"
-        rsync -a --exclude '.DS_Store' --exclude '__pycache__' "$OUTLOOK_DIR/" "$INSTALL_DIR/outlook/"
+        mkdir -p "$INSTALL_DIR/mailkick"
+        rm -rf "$INSTALL_DIR/outlook"   # legacy folder name
+        rsync -a --exclude '.DS_Store' --exclude '__pycache__' "$MAILKICK_DIR/" "$INSTALL_DIR/mailkick/"
       else
         cp -R "$WORDKICK_DIR/." "$INSTALL_DIR/wordkick/"
       fi
@@ -576,8 +577,8 @@ do_install() {
   # --- MailKick (Outlook): Outlook-Mac cannot be sideloaded from the wef folder;
   # --- print the ready-to-use manual step instead (the manifest = ready anyway)
   local o_app="/Applications/Microsoft Outlook.app"
-  if [[ -f "$OUTLOOK_DIR/manifest.template.xml" ]]; then
-    render_manifest "$OUTLOOK_DIR" "$INSTALL_DIR/manifest/$OUTLOOK_MANIFEST_NAME"
+  if [[ -f "$MAILKICK_DIR/manifest.template.xml" ]]; then
+    render_manifest "$MAILKICK_DIR" "$INSTALL_DIR/manifest/$MAILKICK_MANIFEST_NAME"
     if [[ -d "$o_app" ]]; then
       ok "detected Outlook: $o_app"
     else
@@ -586,12 +587,12 @@ do_install() {
     # the right folder for Outlook-Mac add-ins: its container wef documents folder
     local o_container="$HOME/Library/Containers/com.microsoft.Outlook/Data/Documents/wef"
     mkdir -p "$o_container" 2>/dev/null && \
-      cp "$INSTALL_DIR/manifest/$OUTLOOK_MANIFEST_NAME" "$o_container/$OUTLOOK_MANIFEST_NAME" 2>/dev/null && \
+      cp "$INSTALL_DIR/manifest/$MAILKICK_MANIFEST_NAME" "$o_container/$MAILKICK_MANIFEST_NAME" 2>/dev/null && \
       ok "MailKick manifest placed in Outlook's add-in folder: $o_container/"
     say "  if Outlook does not show the add-in after a restart, sideload it once via the dialog:"
     say "     Outlook -> Get Add-ins (or the ellipsis overflow) -> My add-ins ->"
     say "     Custom Addins -> Add a custom add-in -> Add from File, then press"
-    say "     Cmd+Shift+G and paste: $o_container/$OUTLOOK_MANIFEST_NAME"
+    say "     Cmd+Shift+G and paste: $o_container/$MAILKICK_MANIFEST_NAME"
     say "  (Windows: the same trusted catalog as SlideKick/DocKick installs it automatically)"
   else
     warn "MailKick not built yet - skipping Outlook"
@@ -685,7 +686,7 @@ PYPLIST
       say "     (profiles/connections are shared with SlideKick)"
     fi
   fi
-  if [[ -d "/Applications/Microsoft Outlook.app" && -f "$OUTLOOK_DIR/manifest.template.xml" ]]; then
+  if [[ -d "/Applications/Microsoft Outlook.app" && -f "$MAILKICK_DIR/manifest.template.xml" ]]; then
     title "👋  First use - Outlook (MailKick):"
     say "  1. Outlook-Mac has no silent sideload:"
     say "     Outlook -> Get Add-ins (or the \u2026 overflow in the ribbon)"
@@ -721,7 +722,7 @@ do_uninstall() {
     wef="$container/Data/Documents/wef"
     for f in "$wef"/*.xml; do
       [[ -f "$f" ]] || continue
-      if grep -q "$GUID" "$f" 2>/dev/null || grep -q "$WORD_GUID" "$f" 2>/dev/null || grep -q "$OUTLOOK_GUID" "$f" 2>/dev/null; then
+      if grep -q "$GUID" "$f" 2>/dev/null || grep -q "$WORD_GUID" "$f" 2>/dev/null || grep -q "$MAILKICK_GUID" "$f" 2>/dev/null; then
         rm -f "$f"; removed=1
       fi
     done
@@ -731,7 +732,7 @@ do_uninstall() {
   if [[ -d "$outwef" ]]; then
     for f in "$outwef"/*.xml; do
       [[ -f "$f" ]] || continue
-      grep -q "$OUTLOOK_GUID" "$f" 2>/dev/null && rm -f "$f" && removed=1
+      grep -q "$MAILKICK_GUID" "$f" 2>/dev/null && rm -f "$f" && removed=1
     done
   fi
   [[ "$removed" == "1" ]] && ok "manifests removed from Office container(s)"

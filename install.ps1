@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  OfficeKick installer for Windows - SlideKick (PowerPoint) and DocKick (Word).
+  OfficeKick installer for Windows - SlideKick (PowerPoint), DocKick (Word) and MailKick (Outlook).
   The add-in code, task pane and local server are identical to macOS; only
   registration differs: a per-user trusted catalog (registry) instead of the
   Mac Wef folder, and a Scheduled Task instead of a LaunchAgent.
@@ -174,7 +174,7 @@ if ($Action -eq "help") {
 }
 
 if ($Action -eq "uninstall") {
-    Say "OfficeKick - uninstall (SlideKick + DocKick)"
+    Say "OfficeKick - uninstall (SlideKick + DocKick + MailKick)"
     try { Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction Stop; Ok "scheduled task removed" } catch { Warn "no scheduled task" }
     if (Test-Path $StartupBat) { Remove-Item $StartupBat -Force; Ok "Startup .cmd removed" }
     if (Test-Path "$CatalogBase\$CatalogGUID") { Remove-Item "$CatalogBase\$CatalogGUID" -Recurse -Force; Ok "trusted catalog removed" }
@@ -324,7 +324,7 @@ function New-LocalCerts {
 }
 
 # ------------------------------------------------------------------ install
-Say "OfficeKick $Version - install/update (Windows): SlideKick + DocKick"
+Say "OfficeKick $Version - install/update (Windows): SlideKick + DocKick + MailKick"
 Stop-Server   # stop a previously installed server so updates take effect
 $py = Find-Python
 $useTls = $false
@@ -366,6 +366,11 @@ if ($Dev) {
     if (Test-Path (Join-Path $RepoDir "wordkick\manifest.template.xml")) {
       robocopy (Join-Path $RepoDir "wordkick") "$InstallDir\wordkick" /MIR /XD "__pycache__" ".DS_Store" /NFL /NDL /NJH /NJS | Out-Null
     }
+    # MailKick (Outlook) subtree: same deploy mechanism
+    if (Test-Path (Join-Path $RepoDir "mailkick\manifest.template.xml")) {
+      robocopy (Join-Path $RepoDir "mailkick") "$InstallDir\mailkick" /MIR /XD "__pycache__" ".DS_Store" /NFL /NDL /NJH /NJS | Out-Null
+      Remove-Item "$InstallDir\outlook" -Recurse -Force -ErrorAction SilentlyContinue   # legacy folder name
+    }
     $serverPy  = Join-Path $InstallDir "server.py"
     $staticDir = $InstallDir
     Ok "files deployed to $InstallDir"
@@ -401,6 +406,23 @@ if (Test-Path $wordTpl) {
     }
 } else {
     Warn "wordkick\manifest.template.xml not found - DocKick skipped"
+}
+
+# ---- MailKick (Outlook) manifest: rendered when its template exists (same
+# trusted catalog); pane URL points at /mailkick/static ----
+$mailTpl = Join-Path $RepoDir "mailkick\manifest.template.xml"
+if (Test-Path $mailTpl) {
+    $xml2 = (Get-Content $mailTpl -Raw) -replace "__PORT__", "$Port" -replace "__SCHEME__", "http"
+    $mailManifestPath = Join-Path $ManifestDir "mailkick.xml"
+    Set-Content -Path $mailManifestPath -Value $xml2 -Encoding UTF8
+    try {
+        [xml](Get-Content $mailManifestPath -Raw) > $null
+        Ok "MailKick manifest rendered + valid XML"
+    } catch {
+        Die "MailKick manifest is not valid XML: $($_.Exception.Message)"
+    }
+} else {
+    Warn "mailkick\manifest.template.xml not found - MailKick skipped"
 }
 
 # ---- trusted catalog (per-user, no admin) ----
