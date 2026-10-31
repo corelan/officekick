@@ -21,6 +21,17 @@
 ### Added
 - Every busy status (Asking ..., collecting context, generating image, applying, model-output repair) now shows a rotating indicator character so it reads as still-working.
 
+## [0.9.7] - 2026-10-31
+### Added - set track changes (DocKick)
+- New op `set_track_changes` with `on:true|false`: flips the DOCUMENT's own
+  Track Changes mode (the Review-tab toggle, `document.changeTrackingMode`, 
+  WordApi 1.6) - the model can now actually do "turn off track changes"
+  instead of answering that it only works in Word. It does not touch existing
+  revisions (offer accept_changes for those) and leaves the pane's separate
+  "AI edits as tracked changes" setting in Settings alone.
+- Approval default `confirm`. E2E in the simulator: gate shows the toggle,
+  apply flips it, `trackedChanges` config untouched.
+
 ## [0.9.6] - 2026-10-31
 ### Added - accept tracked changes (DocKick)
 - New op `accept_changes`: accepts ALL tracked changes in the document body

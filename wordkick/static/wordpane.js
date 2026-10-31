@@ -58,6 +58,7 @@
     format_text:      { label: "format text", hint: "bold/italic/color/size/underline/allCaps/highlight + alignment on one paragraph." },
     create_template:  { label: "create template block", hint: "appends a titled template block with fillable content controls (text, dropdown, checkbox, date)." },
     accept_changes:   { label: "accept tracked changes", hint: "Accepts ALL tracked changes currently in the document (finalizes the AI edits made with revisions on)." },
+    set_track_changes: { label: "set track changes", hint: "Turns the document's own Track Changes mode on or off (the Review-tab toggle). Does not touch existing revisions." },
   };
   var OP_TYPES = Object.keys(OPS_META);
 
@@ -459,6 +460,7 @@
     '- {"type":"format_text","para":N,"font":{"bold":true},"align":"center"} (format ONE paragraph from the outline: font = {"bold","italic","color","size","name","underline","allCaps","highlightColor"} subset; align = left|center|right|justify; only what is requested)',
     '- to format only PART of a paragraph, add "find":"exact words appearing in that paragraph" (all matches within the paragraph are formatted; e.g. {"type":"format_text","para":N,"find":"AI","font":{"bold":true}})',
     '- {"type":"accept_changes"} (accepts ALL tracked changes in the document; use ONLY when the user asks to accept/approve/finalize the changes or revisions; list it AFTER the edits that produced them)',
+    '- {"type":"set_track_changes","on":true|false} (turns the DOCUMENT\'s Track Changes mode on/off - the Review-tab toggle; use when the user asks to start/stop tracking; turning it off does NOT remove existing revisions - offer accept_changes for those; the pane\'s separate "AI edits as tracked changes" lives in Settings)',
     "",
     "Rules:",
     "- Paragraph numbers are 1-based (para 1 = the first paragraph) and MUST come from the outline below. If the user says \"the 3rd paragraph\", that is para 3. Never invent them.",
@@ -1259,7 +1261,7 @@ function validateOps(rawOps, ctx) {
       if (!op || typeof op !== "object") { invalid.push({ op: op, reason: "not an object" }); return; }
       var t = op.type;
       if (OP_TYPES.indexOf(t) < 0) { invalid.push({ op: op, reason: "unknown op type '" + t + "'" }); return; }
-      if (!ctx && t !== "insert_paragraphs" && t !== "create_table" && t !== "accept_changes") {
+      if (!ctx && t !== "insert_paragraphs" && t !== "create_table" && t !== "accept_changes" && t !== "set_track_changes") {
         invalid.push({ op: op, reason: "needs document context (enable 'include document context')" });
         return;
       }
@@ -1333,6 +1335,9 @@ function validateOps(rawOps, ctx) {
           clean.push(entry);
         }
         out.title = op.title.trim().slice(0, 100); out.fields = clean;
+      } else if (t === "set_track_changes") {
+        if (typeof op.on !== "boolean") { bad("missing on:true|false"); return; }
+        out.on = op.on;
       } else if (t === "format_text") {
         var paraOk = slideOkF(op.para, ctx);
         if (!paraOk) { bad("bad paragraph index"); return; }
@@ -1370,7 +1375,7 @@ function validateOps(rawOps, ctx) {
     move_shape: "edit", move_slide: "edit", set_background: "edit", add_hyperlink: "edit",
     set_alt_text: "edit", set_categories: "edit", draft_reply: "add", new_message: "add",
     compose_body: "edit", save_draft: "add", create_template: "add", web_lookup: "edit",
-    delete_slide: "del", delete_shape: "del", accept_changes: "edit"
+    delete_slide: "del", delete_shape: "del", accept_changes: "edit", set_track_changes: "edit"
   };
 
   function fmtOp(op, ctx) {
@@ -1398,6 +1403,8 @@ function validateOps(rawOps, ctx) {
         return "REWRITE document: " + op.items.length + " paragraph(s)";
       case "accept_changes":
         return "Accept ALL tracked changes in the document";
+      case "set_track_changes":
+        return "Turn Track Changes " + (op.on ? "on" : "off") + " in the document";
       case "format_text": {
         var fp = [];
         Object.keys(op.font).forEach(function (kf2) {
@@ -1475,6 +1482,10 @@ function applyOps(deck, ops, ctx) {
         case "accept_changes":
           return deck.acceptChanges().then(function () {
             lines.push({ ok: true, text: "all tracked changes accepted" });
+          });
+        case "set_track_changes":
+          return deck.setTrackChanges(op.on).then(function () {
+            lines.push({ ok: true, text: "track changes turned " + (op.on ? "on" : "off") + " in the document" });
           });
         case "rewrite_doc":
           return deck.rewriteDoc(op).then(function () {
