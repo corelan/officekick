@@ -30,6 +30,17 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.63
+### Fixed
+- ART pass: set_shape_image ops no longer reference hallucinated shape
+  indices ("shape 9 not in the context list" x N). Before the art round the
+  pane re-reads the LIVE deck and hands the model the real per-slide shape
+  inventory (1-based indices, sizes included); the prompt forbids guessed
+  indices and points the model at the structure pass's roundedRectangle /
+  ellipse placeholders as the cut-out spots.
+- Repaired a broken build introduced during an interrupted edit (unterminated
+  string in the make-over pass note + a mangled ART pass block); syntax and
+  suite verified again.
 ## 0.9.62
 ### Added
 - DocKick and MailKick get the same "Reload pane" button as SlideKick

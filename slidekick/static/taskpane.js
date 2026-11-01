@@ -3179,8 +3179,23 @@ OfficeDeck.prototype.setNotes = function (i, text) {
             }
             return seq;
           }
-          function wholePass(passName, spec) {
-            return passAsk(passName, spec, null, null).then(function (pk) { return collect(pk, null, null); });
+          function wholePass(passName, spec, liveShapes) {
+            return passAsk(passName, spec + (liveShapes ? "\n\n" + liveShapes : ""), null, null).then(function (pk) { return collect(pk, null, null); });
+          }
+          function liveShapeInventory(lo, hi) {
+            // the REAL current shapes per slide (1-based numbers like the ops use)
+            return SK.deck.getContext({ maxSlides: 80 }).then(function (c2) {
+              var out = ["CURRENT SHAPES (live deck; the numbers ARE the 1-based shape indices to use in ops):"];
+              c2.slides.forEach(function (sl) {
+                if (sl.idx + 1 < (lo || 1) || (hi && sl.idx + 1 > hi)) return;
+                var parts = (sl.shapes || []).map(function (sh) {
+                  return "[" + (sh.idx + 1) + "] " + sh.type +
+                    (sh.width && sh.height ? " (" + Math.round(sh.width) + "x" + Math.round(sh.height) + ")" : "");
+                }).join(", ");
+                out.push("Slide " + (sl.idx + 1) + ": " + (parts || "(no shapes)"));
+              });
+              return out.join("\n");
+            }, function () { return "CURRENT SHAPES: (deck read failed - only use set_background images this round)"; });
           }
           // PASS 1 - STRUCTURE: the skeleton, chunked, completeness enforced
           var p1 = chunkRangePass("STRUCTURE PASS",
@@ -3196,11 +3211,13 @@ OfficeDeck.prototype.setNotes = function (i, text) {
           });
           // PASS 3 - ART: imagery only where the concept calls for it
           var p3 = p2.then(function () {
+            return liveShapeInventory().then(function (inv) {
             return wholePass("ART PASS",
-            "ART PASS - imagery only where the concept calls for it: AI picture backgrounds for cover and section slides, cut-out picture fills inside shapes for content slides, always in the concept's one image style. Use set_background kind:image and set_shape_image. Quality over quantity.").then(function (more) {
+            "ART PASS - imagery only where the concept calls for it: AI picture backgrounds for cover and section slides (set_background kind:image), and cut-out picture fills inside EXISTING shapes for content slides. Use set_shape_image ONLY on shape indices from the CURRENT SHAPES list below - the roundedRectangle/ellipse placeholders created in the structure pass are exactly your cut-out spots. NEVER guess indices. If a slide has no suitable shape yet, skip it and note it in your ops, or add create_shape with a solid fill instead - but never set_shape_image on a missing shape. Quality over quantity; set_background images per the concept's cover/section plan." + inv).then(function (more) {
               all = all.concat(more);
               return all;
             });
+          });
           });
           // PASS 4 - REVIEW LOOP: the model audits its own redesign and keeps
           // fixing until it declares the deck done (max 2 fix rounds)
