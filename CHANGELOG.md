@@ -30,6 +30,12 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.45
+### Changed
+- Partial-apply dimming refined: the Apply button dims while any confirm
+  row is unticked (0/Z, 1/Z, ...), un-dims at full approval and when the
+  selection turns fully automatic. The dimming lives in the apply label
+  update, so it tracks every live selection change.
 ## 0.9.44
 ### Changed
 - **Confirm before a partial Apply**: clicking "Apply X auto + Y/Z

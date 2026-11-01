@@ -2124,6 +2124,8 @@ function applyOps(deck, ops, ctx) {
       applyBtn.textContent = "Apply " + liveAuto + " auto" +
         (liveConfirm ? " + " + approved + "/" + liveConfirm + " approved" : "");
       applyBtn.disabled = (liveAuto + approved === 0) || !caps.text;
+      // partial selection = some confirm rows unticked -> dim as a visual hint
+      applyBtn.classList.toggle("halfapply", !!liveConfirm && approved < liveConfirm);
     };
     updateApplyLabel();
     if (confirmOps > 0) {

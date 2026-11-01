@@ -3317,9 +3317,6 @@ OfficeDeck.prototype.setNotes = function (i, text) {
         line1.appendChild(cb);
         line1.appendChild(lab);
         row._cb = cb;
-        cb.addEventListener("change", function () {
-          lab.textContent = cb.checked ? "(approved once)" : "(needs approval)";
-        });
         row._lab = lab;
       } else if (row.mode === "auto") {
         var note2 = document.createElement("span");
@@ -3405,6 +3402,8 @@ OfficeDeck.prototype.setNotes = function (i, text) {
       applyBtn.textContent = "Apply " + liveAuto + " auto" +
         (liveConfirm ? " + " + approved + "/" + liveConfirm + " approved" : "");
       applyBtn.disabled = (liveAuto + approved === 0) || !caps.text;
+      // partial selection = some confirm rows unticked -> dim as a visual hint
+      applyBtn.classList.toggle("halfapply", !!liveConfirm && approved < liveConfirm);
     };
     updateApplyLabel();
     if (confirmOps > 0) {
