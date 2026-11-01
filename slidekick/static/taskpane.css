@@ -689,3 +689,6 @@ body.dark #srvbeat.bad { background: #ff6b6b; }
 body:not(.dark) #chat-timer { color: #1a7f37; }
 body.dark #chat-timer { color: #7ee787; }
 
+
+/* partial-apply button: some confirm rows are left unticked */
+button.halfapply { opacity: .72; }

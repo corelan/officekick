@@ -2188,7 +2188,19 @@ function applyOps(deck, ops, ctx) {
         if (remember[type].checked && chosen.some(function (op) { return op.type === type; })) {
           SK.sessionApprovals[type] = "auto";
         }
+      });      // unapproved confirm rows would silently vanish - ask before skipping
+      var skips = rows.filter(function (row) {
+        return !row.removed && row.mode === "confirm" && row._cb && !row._cb.checked;
       });
+      var counts = {};
+      skips.forEach(function (row) { counts[OPS_META[row.op.type].label] = (counts[OPS_META[row.op.type].label] || 0) + 1; });
+      var skipList = Object.keys(counts).map(function (l) { return counts[l] + " " + l; }).join(", ");
+      if (skipList && chosen.length) {
+        var okApply = window.confirm(
+          skips.length + " (needs approval) action(s) are NOT approved and will be skipped: " +
+          skipList + ". Apply the other " + chosen.length + " action(s) anyway?");
+        if (!okApply) return;
+      }
       if (!chosen.length) { setStatus("Nothing approved - nothing applied.", ""); return; }
       dbg("ops.apply", { approved: chosen.map(function (op) { return op.type; }), count: chosen.length });
       applyBtn.disabled = true;

@@ -30,6 +30,14 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.44
+### Changed
+- **Confirm before a partial Apply**: clicking "Apply X auto + Y/Z
+  approved" when some confirm rows are still unticked now asks first
+  ("N (needs approval) action(s) are NOT approved and will be skipped: ...
+  Apply the other X anyway?"). Cancel = nothing applies. Previously the
+  unticked actions silently vanished. All three add-ins; the Apply button
+  also dims slightly while the selection is a partial one.
 ## 0.9.43
 ### Added
 - **Make-over mode as a skill**: when the request asks for a design
