@@ -480,6 +480,41 @@ def sideload_windows_catalog():
         warn("could not register the trusted catalog: %s" % e)
 
 
+# ------------------------------------------------------------ office caches #
+def clear_office_caches():
+    """Forget stale Office add-in registrations + webview caches (safe ONLY
+    while the Office apps are not running: the stores rebuild at launch)."""
+    if is_windows():
+        return
+    if DRY_RUN:
+        out("  [..]  [dry-run] would clear the Office add-in caches (Webkit/WEF stores)")
+        return
+    base_dir = hp("Library", "Containers")
+    if not os.path.isdir(base_dir):
+        return
+    for cid in sorted(os.listdir(base_dir)):
+        if not (cid.startswith("com.microsoft.") or cid.startswith("UFB")):
+            continue
+        data = os.path.join(base_dir, cid, "Data", "Library")
+        caches = os.path.join(data, "Caches")
+        if os.path.isdir(caches):
+            for sub in ("Microsoft", "com.microsoft.Powerpoint", "com.microsoft.ctrlstrcaches",
+                        "com.microsoft.Word", "WebKit"):
+                shutil.rmtree(os.path.join(caches, sub), ignore_errors=True)
+        wef_store = os.path.join(data, "Application Support", "Microsoft", "Office", "16.0", "Wef")
+        if os.path.isdir(wef_store):
+            shutil.rmtree(wef_store, ignore_errors=True)
+    ok("cleared Office add-in caches + WEF registration stores (rebuilt at launch)")
+
+
+def office_app_running():
+    if is_mac():
+        rc, o = run_quiet(["bash", "-c",
+                           "pgrep -f 'Microsoft (PowerPoint|Word|Outlook).app' >/dev/null 2>&1 && echo yes"])
+        return rc == 0 and "yes" in o
+    return False
+
+
 # -------------------------------------------------------- autostart: macOS #
 def build_app_bundle():
     a = app_bundle()
@@ -718,6 +753,11 @@ def do_uninstall(purge):
                     ok("trusted folder catalog removed")
                 except OSError:
                     pass
+    if office_app_running():
+        warn("Office apps are running - skipping the cache flush (quit Office, then "
+             "delete leftover caches by re-running this uninstall)")
+    else:
+        clear_office_caches()
     inst = install_dir()
     if DRY_RUN:
         out("  [..]  [dry-run] would remove " + inst)
@@ -794,6 +834,12 @@ def install(mode_name="Install", interactive=True):
             want = True
     stop_server()
     deploy_files()
+    if office_app_running():
+        warn("Office apps are running - skipping the add-in cache clear"
+             " (quit Office, re-run this install, reopen the apps to fully flush"
+             " an old registration)")
+    else:
+        clear_office_caches()
     render_and_sideload()
     if want:
         if is_mac():

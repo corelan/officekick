@@ -30,6 +30,19 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.26
+### Fixed
+- "Add-in Error" at Office startup after the https -> http transport switch:
+  Office for Mac reopens the last-open task pane from its WebKit session/page
+  cache, which still held the https-era entries, so the auto-opened pane died
+  ("Add-in Error") while re-selecting the add-in from the Add-ins menu
+  (a fresh http pane) worked. install.py now ports install.sh's
+  clear_office_caches: while no Office app is running it clears the per-app
+  WebKit/ctrlstr caches and the WEF registration store (both rebuild at
+  launch), and the sideloaded manifest <Version> is bumped to 1.0.3.0 so any
+  cached manifest copy from earlier installs is discarded outright. The clear
+  is skipped (with a note) when Office is still running.
+
 ## 0.9.25
 ### Changed
 - The server-heartbeat dot moved from the tab strip into the footer, right
