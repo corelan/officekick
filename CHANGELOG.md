@@ -30,6 +30,22 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.12
+### Added
+- **Session auto-clean (global setting)**: "auto-clean up history after X days"
+  on the Settings > General tab (Sessions group) - enabled by default with
+  120 days. Opening any add-in deletes sessions whose NEWEST message is older
+  than that (sweep throttled to once per hour); days are validated 1..3650 and
+  the setting survives reopens (projected by /api/config + writable via
+  /api/settings). Verified: 200-day-old session deleted at the default, kept
+  at a custom 1-day setting matching a 1-day-old cutoff; docs updated.
+- **Ribbon "AI" group (opt-in `--ribbon`)**: manifests now carry an AI group
+  with the add-in icon and a "Open ...Kick" button on the built-in Home tab
+  (SlideKick/DocKick; MailKick on the mail read/compose tabs via TabDefault).
+  Group label simplified to "AI". Default install stays `--no-ribbon` (the
+  16.114-era Office-Mac commands non-rendering observation); README + docs
+  updated with the flag and the revert path.
+
 ## [0.9.11] - 2026-10-31
 ### Changed - approval gate
 - A horizontal divider now separates the proposed-actions list from the

@@ -120,6 +120,14 @@ close/reopen and app restarts) and only ever stored locally.
   file per day). The log contains text content and full provider payloads -
   keep it off for sensitive work.
 
+
+- **Auto-clean up history after X days** (Sessions section, enabled by
+  default, 120 days): when opening any of the add-ins, sessions whose
+  NEWEST message is older than the number of days are deleted from
+  `~/.officekick/sessions/` (the sweep runs at most once per hour). Disable it
+  or change the days with **Save session cleanup**; the change applies at the
+  next add-in open.
+
 ### Approval policy
 
 - **Behaviour - "Auto apply approved actions (DocKick)"**: per-add-in since

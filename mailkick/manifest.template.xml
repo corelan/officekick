@@ -111,7 +111,7 @@
         <bt:Url id="Taskpane.Url" DefaultValue="__SCHEME__://localhost:8765/mailkick/static/taskpane.html"/>
       </bt:Urls>
       <bt:ShortStrings>
-        <bt:String id="CommandsGroup.Label" DefaultValue="AI actions"/>
+        <bt:String id="CommandsGroup.Label" DefaultValue="AI"/>
         <bt:String id="TaskpaneButton.Label" DefaultValue="Corelan MailKick"/>
         <bt:String id="TaskpaneButton.SupertipTitle" DefaultValue="Open MailKick"/>
       </bt:ShortStrings>

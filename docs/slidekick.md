@@ -24,11 +24,16 @@ is about how SlideKick works.
 - **macOS**: open a deck, then **Home tab -> Add-ins** (dropdown) ->
   **Developer Add-ins** -> **Corelan SlideKick**. The pane opens on the right;
   the Add-ins entry stays available every session.
-- **--https option**: the installer's `--https` flag puts the button directly
-  in the Home ribbon (an "AI actions" group with the Corelan logo) and serves
-  the task pane over https with a machine-generated loopback CA (trusted once
-  in your login keychain - one macOS prompt). Microsoft's add-in-commands
-  (ribbon) UI only registers with https URLs, which is why it is opt-in.
+- **--ribbon option**: `./install.sh --ribbon` ships the manifest's commands -
+  an **AI** group with the Corelan logo (16/32/80 px icons) and an
+  "Open SlideKick" button directly in the Home ribbon (in Word: same for
+  DocKick; in Outlook the group shows on the message read/compose tabs).
+  Microsoft's add-in-commands UI only registers with https URLs, so it exists
+  there alongside `--https` (which serves the task pane over https with a
+  machine-generated loopback CA - one macOS keychain prompt to trust). Default
+  install stays list-mode: on 16.114-era Office-Mac builds commands registered
+  without rendering; if the AI group never appears on your build, re-run the
+  installer without `--ribbon`.
 - **Windows**: quit and reopen PowerPoint, then **Insert -> My Add-ins
   (dropdown) -> SHARED FOLDER -> Corelan SlideKick -> Add** once.
 
@@ -164,6 +169,14 @@ close/reopen and app restarts) and only ever stored locally.
   document/deck/mail traces to `~/.officekick/logs/debug-YYYY-MM-DD.log` (one
   file per day). The log contains text content and full provider payloads -
   keep it off for sensitive work.
+
+
+- **Auto-clean up history after X days** (Sessions section, enabled by
+  default, 120 days): when opening any of the add-ins, sessions whose
+  NEWEST message is older than the number of days are deleted from
+  `~/.officekick/sessions/` (the sweep runs at most once per hour). Disable it
+  or change the days with **Save session cleanup**; the change applies at the
+  next add-in open.
 
 ### Approval policy
 

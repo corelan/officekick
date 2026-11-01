@@ -31,7 +31,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 APP = "OfficeKick"
-VERSION = "0.9.11"
+VERSION = "0.9.12"
 
 CONNECTION_TYPES = (
     "openai",
@@ -225,6 +225,38 @@ class SessionStore:
             n = ""   # empty = keep the stored/derived name
         return self.upsert(sid, n[:80], doc.get("exchanges"), doc)
 
+    def auto_clean(self, days, now=None):
+        """Delete sessions whose NEWEST exchange timestamp is older than `days`
+        days. Timestamps in exchanges are ms-epoch strings from the panes;
+        fall back to the session's `updated` float, then the file mtime.
+        Returns the ids of the removed sessions."""
+        now = now if now is not None else time.time()
+        cutoff = now - max(1, int(days)) * 86400.0
+        removed = []
+        for f in self.dir.glob("*.json"):
+            try:
+                data = json.loads(f.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            ts_list = []
+            for ex in data.get("exchanges") or []:
+                try:
+                    if ex and ex.get("ts"):
+                        ts_list.append(float(ex["ts"]))
+                except (TypeError, ValueError):
+                    continue
+            norm = [t / 1000.0 if t > 1e12 else t for t in ts_list]
+            newest = max(norm) if norm else None
+            if newest is None:
+                newest = data.get("updated") or f.stat().st_mtime
+            if newest < cutoff:
+                try:
+                    f.unlink()
+                    removed.append(data.get("id") or f.stem)
+                except OSError:
+                    pass
+        return {"count": len(removed), "removed": removed}
+
     def delete(self, sid):
         if not self._valid(sid):
             raise ApiError(400, "Invalid session id")
@@ -355,6 +387,8 @@ class Store:
         self.data.setdefault("autoApplyApproved", False)  # legacy global auto-apply (fallback for autoApplyByApp)
         self.data.setdefault("autoApplyByApp", {})
         self.data.setdefault("trackedChanges", False)  # DocKick revision setting  # per-add-in auto-apply: slidekick/wordkick/mailkick
+        self.data.setdefault("autoClean", True)        # delete old sessions on pane open
+        self.data.setdefault("autoCleanDays", 120)     # session older than N days -> removed
         self.data.setdefault("connections", [])
         self.data.setdefault("profiles", [])
         self.data.setdefault("defaultProfile", None)
@@ -547,6 +581,23 @@ class Store:
         self.data["approvals"] = clean
         self.save()
 
+    _marker_path_cached = None
+
+    def auto_clean_tick(self, min_interval=3600.0):
+        """Run the session auto-cleanup at most once per hour (pane opens
+        hammer /api/config). Honors the autoClean setting."""
+        if not bool(self.data.get("autoClean", True)):
+            return
+        marker = self.path.parent / ".lastautoclean"
+        try:
+            if marker.exists() and time.time() - marker.stat().st_mtime < min_interval:
+                return
+            marker.write_text(str(time.time()), encoding="utf-8")
+            os.chmod(marker, 0o600)
+            self.sessions.auto_clean(int(self.data.get("autoCleanDays", 120)))
+        except OSError:
+            pass
+
     def public(self):
         d = self.data
         return {
@@ -567,6 +618,8 @@ class Store:
             "debug": bool(d.get("debug")),
             "generateNotes": bool(d.get("generateNotes", False)),
             "trackedChanges": bool(d.get("trackedChanges", False)),
+            "autoClean": bool(d.get("autoClean", True)),
+            "autoCleanDays": int(d.get("autoCleanDays", 120)),
             "autoUpdateCheck": bool(d.get("autoUpdateCheck", True)),
             "autoApplyApproved": bool(d.get("autoApplyApproved", False)),
             "autoApplyByApp": {
@@ -1444,6 +1497,7 @@ class SlideKickHandler(BaseHTTPRequestHandler):
                     }
                 )
             elif path == "/api/config":
+                self.store.auto_clean_tick()
                 pub = self.store.public()
                 pub["port"] = self.serving_port
                 pub["connectionTypes"] = list(CONNECTION_TYPES)
@@ -1634,6 +1688,18 @@ class SlideKickHandler(BaseHTTPRequestHandler):
                     changed = True
                 if "trackedChanges" in body and body["trackedChanges"] is not None:
                     self.store.data["trackedChanges"] = bool(body["trackedChanges"])
+                    changed = True
+                if "autoClean" in body and body["autoClean"] is not None:
+                    self.store.data["autoClean"] = bool(body["autoClean"])
+                    changed = True
+                if "autoCleanDays" in body and body["autoCleanDays"] is not None:
+                    try:
+                        _acd = int(body["autoCleanDays"])
+                    except (TypeError, ValueError):
+                        raise ApiError(400, "autoCleanDays must be a number (days)")
+                    if _acd < 1 or _acd > 3650:
+                        raise ApiError(400, "autoCleanDays out of range (1-3650)")
+                    self.store.data["autoCleanDays"] = _acd
                     changed = True
                 if changed:
                     self.store.save()

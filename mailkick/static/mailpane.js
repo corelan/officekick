@@ -2614,6 +2614,21 @@ function applyOps(deck, ops, ctx) {
     }).catch(function (err) { setFormMsg($("settings-msg"), err.message); });
   }
 
+  function saveAutoClean() {
+    var days = parseInt($("settings-autoclean-days").value, 10);
+    if (!days || days < 1 || days > 3650) {
+      setFormMsg($("settings-autoclean-msg"), "Days must be between 1 and 3650.");
+      return;
+    }
+    apiJson("/api/settings", "PUT", { autoClean: $("settings-autoclean").checked, autoCleanDays: days })
+      .then(function () { return loadConfigAndRender(); })
+      .then(function () {
+        setFormMsg($("settings-autoclean-msg"),
+          SK.cfg.autoClean
+            ? "Auto-clean ON - sessions newer than " + SK.cfg.autoCleanDays + " day(s) are kept."
+            : "Auto-clean off - nothing is deleted.", true);
+      }).catch(function (err) { setFormMsg($("settings-autoclean-msg"), err.message); });
+  }
   function saveDebugOption() {
     apiJson("/api/settings", "PUT", { debug: $("settings-debug").checked }).then(function () {
       return loadConfigAndRender();
@@ -2819,6 +2834,7 @@ function applyOps(deck, ops, ctx) {
       b.addEventListener("click", function () { switchSettingsSub(b.dataset.subtab); });
     });
     $("settings-debug-save").addEventListener("click", saveDebugOption);
+    $("settings-autoclean-save").addEventListener("click", saveAutoClean);
     var updBtn = $("upd-check");
     if (updBtn) updBtn.addEventListener("click", updCheck);
     wireAutoApplySetting();
@@ -2827,6 +2843,11 @@ function applyOps(deck, ops, ctx) {
       // remember the preference (on by default); the boot check honors it
       apiJson("/api/config", "GET").then(function (cfg) {
         updAuto.checked = !(cfg && cfg.autoUpdateCheck === false);
+        var acBox = $("settings-autoclean"), acDays = $("settings-autoclean-days");
+        if (acBox && acDays) {
+          acBox.checked = !(cfg && cfg.autoClean === false);
+          acDays.value = String((cfg && cfg.autoCleanDays) || 120);
+        }
         if (updAuto.checked) updCheck();   // silent availability check at boot
       }, function () { updAuto.checked = true; updCheck(); });
       updAuto.addEventListener("change", function () {

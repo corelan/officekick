@@ -76,8 +76,9 @@ updates:
   updates. There is no automatic `git pull`, ever.
 
 Useful flags: `--port N` / `-Port N`, `--dev` / `-Dev` (serve from the repo),
-`--no-launchagent` / `-NoScheduledTask`, `--https` (macOS: ribbon button +
-local CA), `status`, `run`, `uninstall [--purge]`.
+`--no-launchagent` / `-NoScheduledTask`, `--https` (macOS: local CA; add
+`--ribbon` to keep the Home-tab AI group in the manifest), `status`, `run`,
+`uninstall [--purge]`.
 
 Config (API keys, profiles, policy) lives in `~/.officekick/config.json`
 (`%USERPROFILE%\.officekick`, chmod 600) and survives updates.
@@ -85,8 +86,8 @@ Config (API keys, profiles, policy) lives in `~/.officekick/config.json`
 ## Use it
 
 - **PowerPoint (macOS)**: Home tab -> **Add-ins** (dropdown) -> **Developer
-  Add-ins** -> **Corelan SlideKick**. With the installer's `--https` option the
-  button sits directly in the Home ribbon.
+  Add-ins** -> **Corelan SlideKick** - or, with `--ribbon` (see below), the
+  **AI** group button on the Home tab.
 - **Word (macOS)**: same route -> **Corelan DocKick**.
 - **PowerPoint/Word (Windows)**: Insert -> My Add-ins -> SHARED FOLDER ->
   Corelan SlideKick / Corelan DocKick -> Add (once).
@@ -96,9 +97,12 @@ Config (API keys, profiles, policy) lives in `~/.officekick/config.json`
   **My add-ins -> Custom Addins -> Add a custom add-in -> Add from File** - press
   **Cmd+Shift+G** in the picker and paste that folder/path. Windows: same trusted
   catalog as the other two add-ins. See [docs/mailkick.md](docs/mailkick.md).
-- Ribbon buttons (the https/commands mode) are experimental: modern Office-Mac
-  builds register them but do not render the classic commands ribbon (verified on
-  16.114); the Add-ins route always works. The detailed docs cover this.
+- **Ribbon "AI" group (opt-in)**: `./install.sh --ribbon` ships the manifest's
+  commands - an **AI** group with the add-in icon and an "Open <add-in>" button
+  on the PowerPoint/Word **Home** tab (MailKick: on the message read/compose
+  tabs). Default is `--no-ribbon` (list-mode manifest) because 16.114-era
+  Office-Mac builds registered commands without rendering them; if your ribbon
+  group never appears, re-run without `--ribbon` and use the Add-ins route.
 
 First run: **Connections** tab - add a provider (type + Base URL + optional API
 key, "Test connection" lists its models); **Profiles** tab - pick the *content

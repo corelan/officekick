@@ -88,7 +88,7 @@ __COMMANDS_BEGIN__
       <bt:ShortStrings>
         <bt:String id="GetStarted.Title" DefaultValue="Corelan SlideKick"/>
         <bt:String id="Tab.Label" DefaultValue="SlideKick"/>
-        <bt:String id="Group.Label" DefaultValue="AI actions"/>
+        <bt:String id="Group.Label" DefaultValue="AI"/>
         <bt:String id="Button.Label" DefaultValue="Corelan SlideKick"/>
       </bt:ShortStrings>
       <bt:LongStrings>
