@@ -30,6 +30,21 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.21
+### Added
+- SlideKick: **read_slide** - the model can ask for the FULL text of up to 12
+  slides in one go by replying `{"kind":"read_slide","slides":[N]}` (1-based
+  outline numbers). SlideKick reads those slides from the deck (real and
+  simulated), re-asks the model with the complete text (same flow as live web
+  lookups; max 2 read rounds per run), and the answer then uses the exact
+  content. In large decks (more than 40 slides) the compact outline now also
+  lists every shape of the SELECTED slide(s) with their complete text, so a
+  slide the user has open is fully visible without the extra step.
+### Changed
+- In "Previous requests", the request excerpt of each collapsed turn now
+  shows in blue (light blue in the dark theme) and semibold so it stands out
+  from the request/response body (all three add-ins).
+
 ## 0.9.20
 ### Changed
 - macOS server autostart moved from the LaunchAgent to a **login item**

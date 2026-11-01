@@ -90,6 +90,26 @@ window.__SK_SIM__ = true;
       }));
       return { slideCount: slides.length, slides: out, selected: selected.slice(), host: "simulator" };
     }
+    async readSlides(idxs) {
+      // read_slide: full per-shape text of the given 1-based slides
+      const uniq = Array.from(new Set(idxs || [])).sort((a, b) => a - b);
+      if (!uniq.length) throw new FriendlyError("readSlides: no slide numbers given");
+      const parts = [];
+      for (const n of uniq) {
+        const sl = slides[n - 1];
+        if (!sl) throw new FriendlyError("Slide " + n + " does not exist (deck has " + slides.length + " slide(s))");
+        const lines = ["SLIDE " + n + " (slide " + n + " in the outline):"];
+        const shs = sl.shapes || [];
+        if (!shs.length) lines.push("  (no shapes)");
+        shs.forEach((sh, j) => {
+          const txt = String(sh.text == null ? "" : sh.text).replace(/\r|\n/g, " | ");
+          const label = (sh.name || sh.type || "shape") + ", " + (sh.type || "");
+          lines.push('  shape ' + (j + 1) + ' (' + label + '): "' + txt + '"');
+        });
+        parts.push(lines.join("\n"));
+      }
+      return parts.join("\n");
+    }
     async addTable({ values, slide, geometry }) {
       const i = slide;
       if (!slides[i]) throw new FriendlyError("Slide " + i + " does not exist");

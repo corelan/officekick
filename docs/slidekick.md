@@ -121,6 +121,20 @@ With today's Office.js the add-in can create: slides (with layout), text,
 tables (PowerPointApi 1.8 `addTable`) and edit shape geometry. Charts have no
 PowerPoint.js creation API and native SmartArt is not reachable from add-ins.
 
+## Reading slide content (read_slide)
+
+In large decks (more than 40 slides) the deck outline the model sees is
+compact: slide titles plus a short text preview - with one exception: the
+SELECTED slide(s) are shown in full, every shape with its complete text.
+When the model needs the exact content of another slide (to answer
+"explain slide 70" or to rewrite it), it asks SlideKick itself by replying
+`{"kind":"read_slide","slides":[70]}` (1-based outline numbers, up to 12
+slides). SlideKick reads those slides from the deck - in real PowerPoint
+and in the simulator, plain text boxes included; speaker notes are not part
+of read_slide - and re-asks the model with the complete text, which it then
+uses to answer. Up to 2 read rounds per run keep a model from looping.
+The read itself needs no approval: it only reads, it never writes.
+
 ## Supported requests in real life
 
 - `reword the current slide` - replaces wording, keeps meaning and slide count
@@ -131,6 +145,8 @@ PowerPoint.js creation API and native SmartArt is not reachable from add-ins.
 - `add speaker notes to slides 2-5` (with notes enabled)
 - `suggest 3 design improvements for the current slide` - via the other model
 - `set the layout of slide 3 to title only`
+- `explain slide 70` - in a large deck the model asks read_slide for that
+  slide and answers from its exact text instead of guessing from the title
 
 ## Pictures (AI image generation)
 

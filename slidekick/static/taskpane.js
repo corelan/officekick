@@ -480,6 +480,7 @@
     "- Design passes ('design this deck/slide', improve alignment/balance): emit ops (apply_layout, move_shape, create_table) computed from the geometry in the outline; when the user asks only for advice, use format A.",
     "- Image requests: always return a create_image op (never generate the picture inline); SlideKick fetches it with the user's configured image model. Include a concrete, self-contained prompt in the op.",
     "- Image refinement ('refine/change the image'): write a FRESH self-contained image prompt describing the FULL desired result. Never embed previous prompts, the conversation, or op JSON into it - only the scene essentials plus the requested change. Prefer 200-600 words.",
+    "- READ SLIDES ON DEMAND: the outline shows full shape text only for small decks and for the selected slide(s) - in LARGE decks every other slide shows just its title and a short preview. When you need a slide's ACTUAL content (to answer a question about it, or before rewriting it), reply with only {\"kind\":\"read_slide\",\"slides\":[N]} (1-based outline numbers, max 12). SlideKick re-asks you with the COMPLETE text of those slides. Never guess content from a title.",
     "- LIVE WEB LOOKUPS: when the request needs up-to-date info you cannot reliably know (current events, news, prices, recent releases, rankings, live data), reply with ONLY {\"kind\":\"web_lookup\"} - nothing else. SlideKick then runs a web-enabled lookup and re-asks you with fresh citable results. Never use it for deck/document/mail edits, styling, general concepts, or what the outline/context already answers.",
 
   ].join("\n");
@@ -1772,6 +1773,76 @@ OfficeDeck.prototype.setNotes = function (i, text) {
     });
   };
 
+  // Full text read of specific 1-based slides (read_slide): every shape
+  // with its complete text, the same shape numbering (1-based) the outline
+  // uses. Unlike getContext it does not summarize - it returns the raw
+  // per-shape text so the model can quote/rewrite the slide accurately.
+  OfficeDeck.prototype.readSlides = function (ones) {
+    var self = this;
+    if (self._textApi === false)
+      return Promise.reject(new FriendlyError("Office APIs are too old in this build to read shape text"));
+    var list = [];
+    (ones || []).forEach(function (n) {
+      var i = Math.floor(Number(n));
+      if (i >= 1 && list.indexOf(i) < 0) list.push(i);
+    });
+    if (!list.length) return Promise.reject(new FriendlyError("readSlides: no slide numbers given"));
+    return this.run("readSlides", function (ctx) {
+      var slides = ctx.presentation.slides;
+      slides.load("items/id");
+      return ctx.sync().then(function () {
+        var targets = [];
+        list.forEach(function (n) {
+          if (n > slides.items.length)
+            throw new FriendlyError("Slide " + n + " does not exist (deck has " + slides.items.length + " slide(s))");
+          targets.push({ n: n, sl: slides.items[n - 1], shapes: [] });
+        });
+        targets.forEach(function (t) {
+          t.sl.shapes.load("items/type,items/name,items/id");
+        });
+        return ctx.sync().then(function () {
+          var tfs = [];
+          targets.forEach(function (t) {
+            var shpProxies = t.sl.shapes.items;
+            for (var j = 0; j < shpProxies.length; j++) {
+              var sh = shpProxies[j];
+              var entry = { idx: j, name: sh.name || "", type: sh.type || "", text: null };
+              t.shapes.push(entry);
+              var tf = sh.getTextFrameOrNullObject();
+              tf.load("isNullObject,hasText");
+              tfs.push({ tf: tf, entry: entry });
+            }
+          });
+          return ctx.sync().then(function () {
+            var trs = [];
+            tfs.forEach(function (e) {
+              if (!e.tf.isNullObject && e.tf.hasText) {
+                e.tf.textRange.load("text");
+                trs.push(e);
+              }
+            });
+            return ctx.sync().then(function () {
+              trs.forEach(function (e) { e.entry.text = e.tf.textRange.text || ""; });
+              var out = [];
+              targets.forEach(function (t) {
+                out.push("SLIDE " + t.n + " (slide " + t.n + " in the outline):");
+                if (!t.shapes.length) { out.push("  (no shapes)"); return; }
+                t.shapes.forEach(function (sh) {
+                  var txt = sh.text == null ? "(text unavailable in this Office build)" : String(sh.text);
+                  txt = txt.replace(/\r|\n/g, " | ");
+                  out.push("  shape " + (sh.idx + 1) + " (" + sh.name + ", " + sh.type + '): "' + txt + '"');
+                });
+              });
+              var total = out.join("\n");
+              if (total.length > 60000) total = total.slice(0, 60000) + "\n…[truncated]";
+              return total;
+            });
+          });
+        });
+      });
+    });
+  };
+
   OfficeDeck.prototype.applyLayout = function (i, kind) {
     if (this._textApi === false) {
       return Promise.reject(new FriendlyError("Office APIs are too old in this build to modify slides"));
@@ -2369,6 +2440,8 @@ OfficeDeck.prototype.setNotes = function (i, text) {
       if (selBits.length) lines.push("SELECTION: " + selBits.join(" | "));
     }
     if (ctx.slides.length > 40) {
+      var selMap = {};
+      (ctx.selected || []).forEach(function (x) { selMap[x] = 1; });
       var bodyPrevF = function (s2) {
         var t2 = (s2.shapes || []).filter(function (sh) { return sh.isBody && sh.text; })
           .map(function (sh) { return sh.text; }).join(" ") || "";
@@ -2382,8 +2455,20 @@ OfficeDeck.prototype.setNotes = function (i, text) {
         var line2 = "[" + (s2.idx + 1) + star2 + "] " + (tt2 && tt2.text ? tt2.text : "(no title)") + bodyPrevF(s2);
         if (line2.length > 160) line2 = line2.slice(0, 160);
         lines.push(line2);
+        if (selMap[s2.idx]) {
+          var selTxt = 0;
+          (s2.shapes || []).forEach(function (sh) {
+            if (sh.text == null || !String(sh.text).trim()) return;
+            var role = sh.isTitle ? "title" : sh.isBody ? "body" : "text";
+            var txt = String(sh.text).replace(/\r|\n/g, " | ");
+            if (txt.length > 500) txt = txt.slice(0, 500) + "…[text continues]";
+            lines.push("    shape " + (sh.idx + 1) + " (" + role + ", " + sh.name + '): "' + txt + '"');
+            selTxt++;
+          });
+          if (!selTxt) lines.push("    (the selected slide has no readable text shapes)");
+        }
       });
-      lines.push("(compact outline for a large deck - " + ctx.slides.length + " slides listed; body text is a preview)");
+      lines.push("(compact outline for a large deck - " + ctx.slides.length + " slides listed; body text is a preview; the SELECTED slide(s) marked * show every shape with its complete text; full text of any other slide: reply {\"kind\":\"read_slide\",\"slides\":[N]})");
     } else
     ctx.slides.forEach(function (s) {
       var star = ctx.selected && ctx.selected.indexOf(s.idx) >= 0 ? "*" : "";
@@ -2458,6 +2543,7 @@ OfficeDeck.prototype.setNotes = function (i, text) {
 
     ctxPromise.then(function (ctx) {
       SK.lastCtx = ctx;
+      SK.readRounds = 0;
       SK.webResults = "";
       var webPromise = Promise.resolve("");
       return webPromise.then(function () {
@@ -2494,11 +2580,51 @@ OfficeDeck.prototype.setNotes = function (i, text) {
                 return { ok: true, kind: "reply", text: "The live web lookup failed: " + ((e && e.message) || e) };
               });
             }
+            if (pre.ok && pre.kind === "read_slide") return readSlideThen(resp);
             return resp;
           });
       }
+      // read_slide: the model asked for the FULL text of specific slide(s);
+      // fetch it from the deck and re-ask with it (same flow as web_lookup),
+      // bounded to 2 read rounds per run so a model that keeps asking cannot
+      // loop forever.
+      function readSlideThen(resp) {
+        var pre = tryParse(resp.text);
+        var lim = SK.lastCtx ? SK.lastCtx.slideCount : 0;
+        var idxs = [];
+        (pre.slides || []).forEach(function (n) {
+          if (idxs.length >= 12 || idxs.indexOf(n) >= 0) return;
+          if (typeof n === "number" && Math.floor(n) === n && n >= 1 && (lim ? n <= lim : true)) idxs.push(n);
+        });
+        if (!idxs.length)
+          return { ok: true, kind: "reply",
+                   text: JSON.stringify({ kind: "reply", text: "read_slide needs 1-based slide numbers from the outline (this deck has " + lim + " slide(s)). Ask again with valid numbers, or answer from the outline." }) };
+        if ((SK.readRounds || 0) >= 2)
+          return { ok: true, kind: "reply",
+                   text: JSON.stringify({ kind: "reply", text: "Full slide text was already provided twice in this run. Answer from it now, or ask the user for specifics." }) };
+        SK.readRounds = (SK.readRounds || 0) + 1;
+        setStatus("Reading slide(s) " + idxs.join(", ") + " in full…", "busy");
+        return SK.deck.readSlides(idxs).then(function (full) {
+          dbg("read_slide", { slides: idxs, chars: full.length });
+          messages = messages.concat([
+            { role: "assistant", content: resp.text },
+            { role: "user", content: "FULL SLIDE TEXT (slide numbers are 1-based, same numbering as the outline):\n" + full +
+              "\n\nAnswer the ORIGINAL USER REQUEST now using this complete text. The required JSON format rules apply again. Do NOT reply with read_slide for these slide(s) again." }
+          ]);
+          setStatus("Answering with the full slide text…", "busy");
+          return mainAsk2();
+        }, function (err) {
+          return { ok: true, kind: "reply",
+                   text: JSON.stringify({ kind: "reply", text: "Reading slide(s) " + idxs.join(",") + " failed: " + ((err && err.message) || err) }) };
+        });
+      }
       function mainAsk2() {
-        return askRetryable(function () { return apiJson("/api/chat", "POST", { connection: ref.connection, model: ref.model, messages: messages }); });
+        return askRetryable(function () { return apiJson("/api/chat", "POST", { connection: ref.connection, model: ref.model, messages: messages }); })
+          .then(function (resp) {
+            var pre = tryParse(resp.text);
+            if (pre.ok && pre.kind === "read_slide") return readSlideThen(resp);
+            return resp;
+          });
       }
       return mainAsk().then(function (resp) {
         dbg("response", { text: resp.text, elapsedMs: resp.elapsedMs });
@@ -2547,6 +2673,14 @@ OfficeDeck.prototype.setNotes = function (i, text) {
     var obj = extractObject(stripped);
     if (obj && typeof obj === "object") {
       if (obj.kind === "reply" && typeof obj.text === "string") return { ok: true, kind: "reply", text: obj.text };
+      if (obj.kind === "read_slide") {
+        var rs = [];
+        var src = Array.isArray(obj.slides) ? obj.slides : (typeof obj.slide === "number" ? [obj.slide] : []);
+        src.forEach(function (n2) {
+          if (typeof n2 === "number" && Math.floor(n2) === n2 && n2 >= 1 && rs.length < 12 && rs.indexOf(n2) < 0) rs.push(n2);
+        });
+        if (rs.length) return { ok: true, kind: "read_slide", slides: rs, text: stripped };
+      }
       if (obj.kind === "slide_ops" && Array.isArray(obj.ops)) return { ok: true, kind: "slide_ops", ops: obj.ops };
       if (Array.isArray(obj.ops)) return { ok: true, kind: "slide_ops", ops: obj.ops }; // tolerate missing kind
     }
