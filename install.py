@@ -512,8 +512,13 @@ def clear_office_caches():
 
 def office_app_running():
     if is_mac():
+        # only the MAIN app binaries count: Office keeps extension/widget
+        # processes alive inside the .app bundles (e.g. Outlook's
+        # CalendarWidgetExtension.appex) even after every app is closed, and
+        # their command lines contain the bundle name too
         rc, o = run_quiet(["bash", "-c",
-                           "pgrep -f 'Microsoft (PowerPoint|Word|Outlook).app' >/dev/null 2>&1 && echo yes"])
+                           "pgrep -f 'Microsoft (PowerPoint|Word|Outlook)\\.app/Contents/MacOS/"
+                           "Microsoft (PowerPoint|Word|Outlook)' >/dev/null 2>&1 && echo yes"])
         return rc == 0 and "yes" in o
     return False
 

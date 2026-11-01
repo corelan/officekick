@@ -30,6 +30,14 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.28
+### Fixed
+- install.py's "is Office running?" check matched Office's widget/extension
+  processes - e.g. Outlook's CalendarWidgetExtension.appex, which macOS keeps
+  running even with every app closed - so the add-in cache clear was always
+  skipped with "Office apps are running". The check now matches only the main
+  app binaries (.../<app>.app/Contents/MacOS/Microsoft <App>).
+
 ## 0.9.27
 ### Changed
 - **install.sh and install.ps1 are removed.** install.py is the only installer
