@@ -708,4 +708,8 @@ body.dark .btn.replyneg { color: #f85149; border-color: rgba(248,81,73,.55); }
 
 /* divider between the proposed actions and the 'don't ask again' checkboxes */
 .gate-divider { border-top: 1px solid var(--line); margin: 7px 0 6px 0; }
+/* model-response timer: italic, green-tinted (dark green on light, light green on dark) */
+#chat-timer { font-style: italic; }
+body:not(.dark) #chat-timer { color: #1a7f37; }
+body.dark #chat-timer { color: #7ee787; }
 

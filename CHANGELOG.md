@@ -30,6 +30,14 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.17
+### Changed
+- The waiting-for-the-model timer now formats progressively: seconds only
+  under a minute (7s), adds minutes past it (1min 05s) and hours past an
+  hour (1h 02min 03s) - all three add-ins. Styled italic, dark green on the
+  light pane and light green on the dark pane. Verified live in both
+  branches plus the styles.
+
 ## 0.9.16
 ### Changed
 - "+ New connection" now puts the cursor in the name field when the

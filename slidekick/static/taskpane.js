@@ -2583,7 +2583,10 @@ OfficeDeck.prototype.setNotes = function (i, text) {
       var h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), s2 = t % 60;
       var mm = (m < 10 ? "0" : "") + m;
       var ss = (s2 < 10 ? "0" : "") + s2;
-      el.textContent = (h ? h + "h " : "") + mm + "min " + ss + "sec(s)";
+      // progressive: seconds only, then minutes, then hours
+      if (t < 60) { el.textContent = s2 + "s"; }
+      else if (t < 3600) { el.textContent = m + "min " + ss + "s"; }
+      else { el.textContent = h + "h " + mm + "min " + ss + "s"; }
     }
     tick();
     SK.chatTimer.iv = setInterval(tick, 500);
