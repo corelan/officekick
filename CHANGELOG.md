@@ -30,6 +30,13 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.25
+### Changed
+- The server-heartbeat dot moved from the tab strip into the footer, right
+  next to the status line where the pane reports its state (same behavior:
+  green while the local server answers, red when it does not, 5 s poll,
+  tooltip with the last check / version / fix hint). Same fix-hint tooltip.
+
 ## 0.9.24
 ### Added
 - Server heartbeat in the task panes: a small dot at the right end of the tab

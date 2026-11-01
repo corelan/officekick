@@ -714,7 +714,7 @@ body.dark .pt-text { color: #8fb8ff; }
 #chat-timer { font-style: italic; }
 /* task-pane server heartbeat: dot at the right end of the tab strip */
 #srvbeat { width: 10px; height: 10px; border-radius: 50%; display: inline-block;
-  margin-left: auto; align-self: center; cursor: default; flex: 0 0 auto; }
+  vertical-align: -1px; margin-right: 7px; cursor: default; }
 #srvbeat.ok { background: #1a7f37; }
 #srvbeat.bad { background: #b02a2a; }
 body.dark #srvbeat.ok { background: #7ee787; }
