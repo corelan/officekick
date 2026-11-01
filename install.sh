@@ -535,6 +535,11 @@ do_install() {
   # the fallback.
   if [[ "$RIBBON_MODE" != "1" ]]; then
     "${SED:-sed}" -i '' -e '/__COMMANDS_BEGIN__/,/__COMMANDS_END__/d' "$mtmp"
+  else
+    # ribbon mode: drop ONLY the placeholder marker lines - the raw text nodes
+    # inside <OfficeApp> are not valid manifest content and Office rejects the
+    # whole add-in ("this add-in is no longer available")
+    "${SED:-sed}" -i '' -e '/^__COMMANDS_BEGIN__$/d; /^__COMMANDS_END__$/d' "$mtmp"
   fi
     if command -v xmllint >/dev/null 2>&1; then
       xmllint --noout "$mtmp" || die "generated manifest $mtmp is not valid XML"

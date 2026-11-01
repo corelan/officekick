@@ -30,6 +30,14 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.14
+### Fixed
+- Ribbon manifests kept the raw `__COMMANDS_BEGIN__/__COMMANDS_END__`
+  placeholder lines inside <OfficeApp> - valid XML but not valid manifest
+  content; Office rejected the whole add-in ("Add-in Error: this add-in is no
+  longer available"). Installers now strip the marker lines in ribbon mode
+  (the commands block itself is kept).
+
 ## 0.9.13
 ### Changed
 - The ribbon "AI" group is now the default install mode (`--ribbon` inverted:
