@@ -500,6 +500,19 @@ done
 exit 0
 APPSHIM
   chmod 755 "$app_dir/Contents/MacOS/officekick-server"
+  # SMAppService registrar: an in-bundle helper so macOS attributes the
+  # login item (Settings row + the one-time "can run in the background"
+  # notification) to OfficeKickServer - the legacy System Events AppleScript
+  # path gets attributed to "System Events.app" instead. The bundle must be
+  # signed AFTER this binary is added or the registration is dropped.
+  local helper_src="$REPO_DIR/tools/officekick-register-login-item.m"
+  if command -v clang >/dev/null 2>&1 && [[ -f "$helper_src" ]]; then
+    clang -framework Foundation -framework ServiceManagement \
+      -o "$app_dir/Contents/MacOS/officekick-register-login-item" "$helper_src" 2>/dev/null \
+      && chmod 755 "$app_dir/Contents/MacOS/officekick-register-login-item" \
+      || warn "login-item registrar helper compile failed - System Events fallback stays"
+  fi
+  codesign --force --deep -s - "$app_dir" >/dev/null 2>&1 || true
   plutil -lint "$app_dir/Contents/Info.plist" >/dev/null 2>&1 && \
     ok "server app bundle ready: $app_dir" || warn "server app bundle lint failed"
 }
@@ -696,8 +709,8 @@ do_install() {
   else
     title "🚀 Server autostart (login item)"
     say "    App + autostart: $HOME/Applications/OfficeKickServer.app"
-    say "    Registered as a login item (System Events; runs in your session,"
-    say "    which is also what makes the macOS Local Network prompt grantable)."
+    say "    Registered as a login item (SMAppService; shows as OfficeKickServer,"
+    say "    runs in your session, which makes the Local Network prompt grantable)."
   "$PY" - "$PLIST" "$LAUNCH_LABEL" "$PY" "$SERVER_PY" "$PORT" "$STATIC_DIR" "$CERT_DIR" "$LOG_DIR" "$SCHEME" <<'PYPLIST'
 import os, plistlib, sys
 
@@ -726,11 +739,32 @@ PYPLIST
     # macOS builds (no prompt, no Settings row -> LAN providers get Errno 65),
     # so the agent stays installed only as a fallback and stays unloaded.
     launchctl unload "$PLIST" 2>/dev/null || true
-    osascript -e 'tell application "System Events" to delete login item "OfficeKickServer"' >/dev/null 2>&1 || true
-    if osascript -e 'tell application "System Events" to make login item at end with properties {path:"'"$HOME"'/Applications/OfficeKickServer.app", hidden:true}' >/dev/null 2>&1; then
-      ok "login item registered (starts at login, in your session)"
-    else
-      warn "login item registration failed - start the server manually with './install.sh run'"
+    # Register via the in-bundle SMAppService helper: idempotent (an already
+    # enabled item is left untouched, so repeat installs never re-toast) and
+    # attributed to "OfficeKickServer" instead of "System Events.app". If a
+    # registration is due, clear ALL System Events login items of the same
+    # name first - SMApp items appear in that list too, and deleting by name
+    # could otherwise hit the wrong row. Legacy path kept as fallback.
+    local reg_helper="" reg_done=""
+    reg_helper="$HOME/Applications/OfficeKickServer.app/Contents/MacOS/officekick-register-login-item"
+    if [[ -x "$reg_helper" ]] && "$reg_helper" --check >/dev/null 2>&1; then
+      reg_done=1
+      ok "login item already registered (SMAppService; shows as OfficeKickServer)"
+    fi
+    if [[ -z "$reg_done" && -x "$reg_helper" ]]; then
+      osascript -e 'tell application "System Events" to delete (every login item whose name is "OfficeKickServer")' >/dev/null 2>&1 || true
+      if "$reg_helper" register >/dev/null 2>&1; then
+        reg_done=1
+        ok "login item registered via SMAppService (shows as OfficeKickServer; runs in your session)"
+      fi
+    fi
+    if [[ -z "$reg_done" ]]; then
+      osascript -e 'tell application "System Events" to delete (every login item whose name is "OfficeKickServer")' >/dev/null 2>&1 || true
+      if osascript -e 'tell application "System Events" to make login item at end with properties {path:"'"$HOME"'/Applications/OfficeKickServer.app", hidden:true}' >/dev/null 2>&1; then
+        ok "login item registered (System Events fallback; starts at login, in your session)"
+      else
+        warn "login item registration failed - start the server manually with './install.sh run'"
+      fi
     fi
     # replace any running instance: `open` spawns the session-context server
     pkill -f "officekick-server" 2>/dev/null || true

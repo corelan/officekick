@@ -30,6 +30,20 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.22
+### Fixed
+- Background-items prompt: the server's login item was registered through the
+  System Events AppleScript API, so macOS named its "can run in the
+  background" notification "System Events.app" (scary, and misleading - the
+  recorded item is just the autostart app), and every install re-registered
+  the item, repeating the prompt. Registration now runs through a small
+  compiled helper inside OfficeKickServer.app (tools/
+  officekick-register-login-item.m, SMAppService): macOS attributes item and
+  notification to "OfficeKickServer", repeat installs re-register nothing (no
+  notification), leftovers from earlier installs are removed once, and the
+  bundle is ad-hoc signed after every build. Falls back to the old
+  System Events registration when clang is unavailable.
+
 ## 0.9.21
 ### Added
 - SlideKick: **read_slide** - the model can ask for the FULL text of up to 12
