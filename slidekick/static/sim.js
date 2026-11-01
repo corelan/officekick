@@ -179,6 +179,32 @@ window.__SK_SIM__ = true;
         : { kind: payload.kind, color: payload.color, transparency: payload.transparency };
       return { ok: true };
     }
+    async duplicateSlide(from) {
+      const src = slides[from];
+      if (!src) throw new FriendlyError("Slide " + (from + 1) + " does not exist");
+      const copy = JSON.parse(JSON.stringify(src));
+      slides.splice(from + 1, 0, copy);
+      return { ok: true, at: from + 1 };
+    }
+    async duplicateSlideTo(from, to) {
+      if (from === to) return { ok: true };
+      const src = slides[from], tgt = slides[to];
+      if (!src || !tgt) throw new FriendlyError("Slide does not exist");
+      slides[to] = JSON.parse(JSON.stringify(src));
+      return { ok: true };
+    }
+    async clearSlide(from) {
+      const sl = slides[from];
+      if (!sl) throw new FriendlyError("Slide " + (from + 1) + " does not exist");
+      let cleared = 0;
+      sl.shapes.forEach((sh) => {
+        if (typeof sh.text === "string") { sh.text = ""; cleared++; }
+      });
+      const before = sl.shapes.length;
+      sl.shapes = sl.shapes.filter((sh) => sh.type !== "line" || typeof sh.text === "string");
+      delete sl.background;
+      return { ok: true, cleared, removed: before - sl.shapes.length };
+    }
     async addHyperlink(slideIndex, shapeIndex, url, tip) {
       const sh = slides[slideIndex] && slides[slideIndex].shapes[shapeIndex];
       if (!sh) throw new FriendlyError("Shape " + shapeIndex + " on slide " + slideIndex + " does not exist");

@@ -30,6 +30,19 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.36
+### Added
+- Slide lifecycle ops (SlideKick, PowerPointApi 1.10):
+  - **duplicate_slide** - exact copy of one slide right after it (export +
+    `insertSlidesFromBase64`, runs alone like move_slide).
+  - **duplicate_slide_to** - copies a slide's full contents over another
+    slide (target replaced in place). This is the "insert at a position"
+    primitive: duplicate a good slide, then move it.
+  - **clear_slide** - empties a slide: all text frames cleared, text-free
+    lines removed; the slide, layout and background stay. Rebuild in the
+    same reply with create_shape/move_shape.
+- Simulator parity for all three; system-prompt explains the
+  duplicate/move/clear workflow for inserting slides at a chosen position.
 ## 0.9.35
 ### Fixed
 - Role detection: a slide with a title plus short body text no longer counts

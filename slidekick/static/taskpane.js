@@ -470,6 +470,9 @@
     '- {"type":"set_alt_text","slide":N,"shape":N,"description":"alt text","title":"optional title"} (accessibility alt text for the shape)',
     '- {"type":"set_shape_image","slide":N,"shape":N,"prompt":"detailed image description","transparency":0.3} (picture-fill ONE existing shape (panel/circle/rectangle) with an AI-generated picture; transparency optional; use for cut-out photos, side panels, badges)',
     '- {"type":"move_slide","slide":N,"to":M} (move slide N so it becomes slide M; numbers as in the outline 1..N; run it ALONE in its own reply - do not combine with other ops. PowerPoint cannot place a brand-new slide at a position: create it first (it lands last) and move_slide it in a following step)',
+    '- {"type":"duplicate_slide","slide":N} (exact copy of slide N, inserted right after it - deck grows by one; run it ALONE in its reply; the copy keeps the original\'s design)',
+    '- {"type":"duplicate_slide_to","slide":N,"to":M} (copy slide N fully OVER slide M: M keeps its position but now shows N\'s complete contents; run it ALONE; this is how a slide gets inserted at a spot you like when no empty placeholder slide exists - duplicate the layout example then move it)',
+    '- {"type":"clear_slide","slide":N} (empty slide N: clears every text frame on it; the slide, background and layout stay; combine with create_shape/move_shape/create_image in the SAME reply to rebuild it as a new design)',
     '- {"type":"delete_slide","slide":N}',
     "",
     "Rules:",
@@ -1362,6 +1365,93 @@ OfficeDeck.prototype.moveSlide = function (from, to) {
     });
   };
 
+  // Insert an exported b64 deck right after the slide with id targetIdAfter
+  // (no targetSlideId = insert at the beginning).
+  OfficeDeck.prototype._insertExported = function (ctx, b64, targetIdAfter) {
+    var opts = { formatting: "KeepSourceFormatting" };
+    if (targetIdAfter != null) opts.targetSlideId = targetIdAfter;
+    ctx.presentation.insertSlidesFromBase64(String(b64), opts);
+    return ctx.sync();
+  };
+
+  OfficeDeck.prototype.duplicateSlide = function (i) {
+    // exact copy of slide i (export + insert right after itself; deck grows)
+    return this.run("duplicateSlide", function (ctx) {
+      if (!Office.context.requirements.isSetSupported("PowerPointApi", "1.10")) {
+        throw new FriendlyError("duplicating slides needs PowerPointApi 1.10 - update PowerPoint (16.105+ on Mac).");
+      }
+      var slides = ctx.presentation.slides;
+      slides.load("items/id");
+      return ctx.sync().then(function () {
+        if (i < 0 || i >= slides.items.length) throw new FriendlyError("Slide " + (i + 1) + " does not exist");
+        return slides.exportAsBase64Presentation([slides.getItemAt(i)]).then(function (b64) {
+          ctx.presentation.insertSlidesFromBase64(String(b64),
+            { formatting: "KeepSourceFormatting", targetSlideId: slides.items[i].id });
+          return ctx.sync().then(function () { return { ok: true, at: i + 1 }; });
+        });
+      });
+    });
+  };
+
+  OfficeDeck.prototype.duplicateSlideTo = function (from, to) {
+    // copy slide from fully over slide to (both 0-based): export the source,
+    // delete the target, insert the exact copy at the target's old position.
+    return this.run("duplicateSlideTo", function (ctx) {
+      if (!Office.context.requirements.isSetSupported("PowerPointApi", "1.10")) {
+        throw new FriendlyError("copying slides needs PowerPointApi 1.10 - update PowerPoint (16.105+ on Mac).");
+      }
+      if (from === to) return Promise.resolve({ ok: true });
+      var slides = ctx.presentation.slides;
+      slides.load("items/id");
+      return ctx.sync().then(function () {
+        var count0 = slides.items.length;
+        if (from < 0 || from >= count0) throw new FriendlyError("Slide " + (from + 1) + " does not exist");
+        if (to < 0 || to >= count0) throw new FriendlyError("Slide " + (to + 1) + " does not exist");
+        return slides.exportAsBase64Presentation([slides.getItemAt(from)]).then(function (b64) {
+          slides.getItemAt(to).delete();
+          return ctx.sync().then(function () {
+            slides.load("items/id");
+            return ctx.sync().then(function () {
+              var ids = slides.items.map(function (x) { return x.id; });
+              // after deleting target 'to' the copy lands back at 0-based 'to':
+              // the API inserts AFTER targetSlideId, so target = ids[to-1]
+              // (0-based); with to == 0 there is no target = insert at top.
+              var opts = { formatting: "KeepSourceFormatting" };
+              if (ids.length && to > 0) opts.targetSlideId = ids[Math.min(to - 1, ids.length - 1)];
+              ctx.presentation.insertSlidesFromBase64(String(b64), opts);
+              return ctx.sync().then(function () { return { ok: true }; });
+            });
+          });
+        });
+      });
+    });
+  };
+
+  OfficeDeck.prototype.clearSlide = function (i) {
+    // empty slide i: wipe every text frame and drop text-free created lines.
+    // Placeholders stay in place (their layout keeps its positions).
+    return this.run("clearSlide", function (ctx) {
+      if (!Office.context.requirements.isSetSupported("PowerPointApi", "1.5")) {
+        throw new FriendlyError("clearing a slide needs PowerPointApi 1.5 - update PowerPoint (16.63+ on Mac).");
+      }
+      var shapes = ctx.presentation.slides.getItemAt(i).shapes;
+      shapes.load("items/type,items/hasTextFrame,items/textFrame");
+      return ctx.sync().then(function () {
+        var cleared = 0, removed = 0;
+        shapes.items.forEach(function (shape) {
+          if (shape.hasTextFrame && shape.textFrame) {
+            shape.textFrame.textRange.text = "";
+            cleared++;
+          } else if (shape.type === "Line") {
+            shape.delete();
+            removed++;
+          }
+        });
+        return ctx.sync().then(function () { return { ok: true, cleared: cleared, removed: removed }; });
+      });
+    });
+  };
+
 OfficeDeck.prototype.createShape = function (slideIndex, op) {
     return this.run("createShape", function (ctx) {
       if (!Office.context.requirements.isSetSupported("PowerPointApi", "1.4")) {
@@ -2160,6 +2250,16 @@ OfficeDeck.prototype.setNotes = function (i, text) {
         if (!slideOk(op.slide)) { bad("bad slide index"); return; }
         if (typeof op.to !== "number" || Math.floor(op.to) !== op.to || op.to < 1 || op.to > ctx.slideCount) { bad("to must be a slide number 1.." + ctx.slideCount); return; }
         out.slide = op.slide; out.to = Math.round(op.to);
+      } else if (t === "duplicate_slide") {
+        if (!slideOk(op.slide)) { bad("bad slide index"); return; }
+        out.slide = op.slide;
+      } else if (t === "duplicate_slide_to") {
+        if (!slideOk(op.slide)) { bad("bad source slide index"); return; }
+        if (typeof op.to !== "number" || Math.floor(op.to) !== op.to || op.to < 1 || op.to > ctx.slideCount) { bad("to must be a slide number 1.." + ctx.slideCount); return; }
+        out.slide = op.slide; out.to = Math.round(op.to);
+      } else if (t === "clear_slide") {
+        if (!slideOk(op.slide)) { bad("bad slide index"); return; }
+        out.slide = op.slide;
       } else if (t === "apply_layout") {
         if (!slideOk(op.slide)) { bad("bad slide index"); return; }
         out.slide = op.slide; out.layout = normalizeLayout(op.layout);
@@ -2169,18 +2269,17 @@ OfficeDeck.prototype.setNotes = function (i, text) {
       }
       ops.push(out);
     });
-    // move_slide reindexes the deck - it must run alone in a batch
-    var hasMove = ops.some(function (op) { return op.type === "move_slide"; });
-    if (hasMove && ops.length > 1) {
-      var moved = ops.filter(function (op) { return op.type === "move_slide"; });
+    // slide-lifecycle ops reindex the deck mid-run - they must run alone
+    var ALONE_TYPES = ["move_slide", "duplicate_slide_to"];
+    var hasAlone = ops.some(function (op) { return ALONE_TYPES.indexOf(op.type) >= 0; });
+    if (hasAlone && ops.length > 1) {
+      var moved = ops.filter(function (op) { return ALONE_TYPES.indexOf(op.type) >= 0; });
+      var others = ops.filter(function (op) { return ALONE_TYPES.indexOf(op.type) < 0; });
       moved.forEach(function (op) {
-        invalid.push({ op: op, reason: "move_slide cannot be combined with other ops - run it alone" });
+        invalid.push({ op: op, reason: op.type + " reindexes the deck - run it alone" });
       });
-      ops = ops.filter(function (op) { return op.type !== "move_slide"; });
-      if (!ops.length) {
-        // keep the move(s) alone if nothing else was validated
-        moved.forEach(function (op) { invalid.pop(); ops.push(op); });
-      }
+      ops = others.length ? others : moved.slice(); // restore if nothing else remains
+      if (others.length) moved.length = 0; else moved.forEach(function (op) { invalid.pop(); });
     }
     return { ops: ops, invalid: invalid, notesDropped: notesDropped };
   }
@@ -2196,7 +2295,8 @@ OfficeDeck.prototype.setNotes = function (i, text) {
     move_shape: "edit", move_slide: "edit", set_background: "edit", add_hyperlink: "edit",
     set_alt_text: "edit", set_categories: "edit", draft_reply: "add", style_shape: "edit", new_message: "add",
     compose_body: "edit", save_draft: "add", create_template: "add", web_lookup: "edit",
-    delete_slide: "del", delete_shape: "del"
+    delete_slide: "del", delete_shape: "del",
+    duplicate_slide: "add", duplicate_slide_to: "add", clear_slide: "edit"
   };
 
   function fmtOp(op, ctx) {
@@ -2244,6 +2344,12 @@ OfficeDeck.prototype.setNotes = function (i, text) {
         return "Slide " + op.slide + ": " + op.kind + (op.text ? " \"" + op.text + "\"" : "") +
           (gc.length ? " (" + gc.join(", ") + ")" : "");
       }
+      case "duplicate_slide":
+        return "Duplicate " + slideTitle(op.slide) + " as slide " + (op.slide + 1);
+      case "duplicate_slide_to":
+        return "Copy slide " + op.slide + slideTitle(op.slide) + " -> over slide " + op.to;
+      case "clear_slide":
+        return "Clear " + slideTitle(op.slide) + " (texts emptied, created shapes removed)";
       case "move_slide":
         return "Move slide " + op.slide + " -> slide " + op.to;
       case "set_background":
