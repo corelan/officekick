@@ -679,6 +679,13 @@ body.dark .pt-text { color: #8fb8ff; }
 .gate-divider { border-top: 1px solid var(--line); margin: 7px 0 6px 0; }
 /* model-response timer: italic, green-tinted (dark green on light, light green on dark) */
 #chat-timer { font-style: italic; }
+/* task-pane server heartbeat: dot at the right end of the tab strip */
+#srvbeat { width: 10px; height: 10px; border-radius: 50%; display: inline-block;
+  margin-left: auto; align-self: center; cursor: default; flex: 0 0 auto; }
+#srvbeat.ok { background: #1a7f37; }
+#srvbeat.bad { background: #b02a2a; }
+body.dark #srvbeat.ok { background: #7ee787; }
+body.dark #srvbeat.bad { background: #ff6b6b; }
 body:not(.dark) #chat-timer { color: #1a7f37; }
 body.dark #chat-timer { color: #7ee787; }
 

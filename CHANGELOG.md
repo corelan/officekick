@@ -30,6 +30,19 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.24
+### Added
+- Server heartbeat in the task panes: a small dot at the right end of the tab
+  strip (all three add-ins) that goes green while the local OfficeKick server
+  answers its health endpoint and red when it does not (checked every 5 s).
+  The tooltip shows the last check time (+ the running version) and, in the
+  red state, the fix hint ("start it with: python3 install.py").
+### Fixed
+- install.py: the server start commands (macOS shim, Windows task, the
+  no-autostart hint) were missing --static-dir - the server answered the API
+  but could not serve the pane/simulator pages. They now pass it exactly like
+  install.sh always did.
+
 ## 0.9.23
 ### Added
 - **install.py**: a unified, interactive, cross-platform installer

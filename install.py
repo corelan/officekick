@@ -272,7 +272,8 @@ def start_server():
             return True
         warn("server did not answer a health check on port %d" % PORT)
         return False
-    args = [pythonw_path(), server_py(), "--config", config_file(), "--port", str(PORT)]
+    args = [pythonw_path(), server_py(), "--config", config_file(),
+            "--static-dir", install_dir(), "--port", str(PORT)]
     flags = 0
     if hasattr(subprocess, "DETACHED_PROCESS"):
         flags = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
@@ -517,8 +518,8 @@ def build_app_bundle():
     shim += "# Without arguments (login item / open): launches the installed server.\n"
     shim += "if [[ $# -eq 0 ]]; then\n"
     shim += "  set -- %s \\\n" % q(sys.executable)
-    shim += "    %s --config %s --port %s\n" % (
-        q(server_py()), q(config_file()), PORT)
+    shim += "    %s --config %s --static-dir %s --port %s\n" % (
+        q(server_py()), q(config_file()), q(install_dir()), PORT)
     shim += "fi\n"
     shim += "# KeepAlive: respawn only after an abnormal exit; a graceful stop (SIGTERM\n"
     shim += "# to this wrapper = exit code 0 from the child) ends the loop\n"
@@ -592,8 +593,8 @@ def mac_login_item_register():
         ok("login item registered (System Events fallback; starts at login, in your session)")
         return True
     warn("login item registration failed - start the server manually with:")
-    warn("  %s %s --config %s --port %d" %
-         (sys.executable, server_py(), config_dir(), PORT))
+    warn("  %s %s --config %s --static-dir %s --port %d" %
+         (sys.executable, server_py(), config_file(), install_dir(), PORT))
     return False
 
 
@@ -622,8 +623,8 @@ def mac_login_item_present():
 
 # ------------------------------------------------------ autostart: windows #
 def windows_task_cmd():
-    return '"%s" "%s" --config "%s" --port %d' % (
-        pythonw_path(), server_py(), config_file(), PORT)
+    return '"%s" "%s" --config "%s" --static-dir "%s" --port %d' % (
+        pythonw_path(), server_py(), config_file(), install_dir(), PORT)
 
 
 def autostart_windows():
@@ -801,8 +802,8 @@ def install(mode_name="Install", interactive=True):
             autostart_windows()
     else:
         out("  [ok] no autostart - start the server manually when needed:")
-        out("       %s %s --config %s --port %d" %
-            (sys.executable, server_py(), config_file(), PORT))
+        out("       %s %s --config %s --static-dir %s --port %d" %
+            (sys.executable, server_py(), config_file(), install_dir(), PORT))
     start_server()
     done_note(mode_name)
 

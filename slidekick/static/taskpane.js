@@ -3829,9 +3829,47 @@ OfficeDeck.prototype.setNotes = function (i, text) {
     });
   }
 
+  // server heartbeat: a small dot at the right end of the tab strip; green
+  // while the LOCAL server answers /api/health (this pane's own origin), red
+  // when it does not - polled every 5 s, tooltip carries the last check.
+  function beatStamp() {
+    var d = new Date();
+    var p2 = function (n) { return (n < 10 ? "0" : "") + n; };
+    return p2(d.getHours()) + ":" + p2(d.getMinutes()) + ":" + p2(d.getSeconds());
+  }
+  function srvBeat() {
+    var el = $("srvbeat");
+    if (!el) return;
+    var xr;
+    try { xr = new XMLHttpRequest(); } catch (e0) { return; }
+    xr.open("GET", "/api/health", true);
+    xr.timeout = 4000;
+    var stamp = beatStamp();
+    xr.onload = function () {
+      var good = xr.status === 200, ver = "";
+      if (good) {
+        try {
+          var d = JSON.parse(xr.responseText);
+          good = !!d.ok;
+          ver = d.version || "";
+        } catch (e1) { good = false; }
+      }
+      el.className = "beat " + (good ? "ok" : "bad");
+      el.title = (good ? "Local server reachable (v" + ver + ")" : "Local server NOT reachable")
+        + " - last check " + stamp + (good ? "" : ". Start it with: python3 install.py");
+    };
+    xr.onerror = xr.ontimeout = function () {
+      el.className = "beat bad";
+      el.title = "Local server NOT reachable - last check " + stamp
+        + ". Start it with: python3 install.py";
+    };
+    try { xr.send(); } catch (e2) { xr.onerror(); }
+  }
   function finishBoot() {
     wireEvents();
     bootLoad(0);
+    srvBeat();
+    setInterval(srvBeat, 5000);
   }
 
   function bootSuccess(cfg) {
