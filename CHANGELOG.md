@@ -30,6 +30,16 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.56
+### Changed
+- Readability rules hardened in the design prompt and the make-over brief.
+  Present on EVERY request: pick text color from the surface behind it (dark
+  text on light/plain/panel fields, near-white only on deep/overlaid/strongly
+  contrasting fields), body >= 16pt on colored fields (>= 14pt anywhere,
+  never below 12pt), titles >= 28pt with an obvious title/body gap, no body
+  text directly on busy photos, no mid-tone text on mid-tone fills. In the
+  make-over brief, the quality bar adds titles 28-44 / body 16-20 /
+  captions >= 14 and a final per-slide contrast re-check.
 ## 0.9.55
 ### Changed
 - Past-request excerpts are clickable: clicking the request snippet line
