@@ -30,6 +30,14 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.15
+### Changed
+- Reverted the ribbon default to the list-mode manifest: on the tested
+  Office-Mac build a commands manifest REPLACED the Add-ins-list entry and
+  then rendered neither the AI group nor a list item (the add-in was
+  unreachable). `--ribbon` remains as the opt-in; installer messages +
+  README + docs updated with the exact symptom and the revert path.
+
 ## 0.9.14
 ### Fixed
 - Ribbon manifests kept the raw `__COMMANDS_BEGIN__/__COMMANDS_END__`

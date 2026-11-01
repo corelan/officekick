@@ -74,7 +74,8 @@ detect_scheme_from_agent() {
 if [[ "$MODE_FORCED" != "1" ]] && detect_scheme_from_agent; then
   echo "[scheme] keeping the running install's transport: $([[ $HTTPS == 1 ]] && echo https || echo http) (use --https/--http to switch)"
 fi
-RIBBON_MODE=1   # default: ships the Home-tab "AI" ribbon group; --no-ribbon = old list-mode manifest
+RIBBON_MODE=0   # default: list-mode manifest - real-host verified this Office build registers
+# commands but renders neither the AI group nor an Add-ins-list entry; --ribbon tries again
 SUB="install"
 
 say()   { printf '%s\n' "$*"; }
@@ -144,7 +145,7 @@ usage() {
   say "  --dev                   serve files directly from this repo (developer mode)"
   say "  --no-launchagent        do not install the login auto-start"
   say "  --ribbon / --no-ribbon  keep / strip the manifest's AI ribbon group"
-  say "                          (Home tab group + icons + button; default: ribbon)"
+  say "(opt-in: --ribbon; default = list mode)"
   say "  --https                 serve https + trust a local CA (ribbon commands expect https on old builds)"
   say "  status                  show current install status"
   say "  run                     run the server in the foreground"
@@ -310,7 +311,7 @@ ensure_local_certs() {
   SCHEME="http"
   if [[ "$HTTPS" != "1" ]]; then
     ok "transport: plain http://localhost (default: no certificates, no keychain changes)"
-        say "        (ribbon commands expect https - the AI group may not render in this mode)"
+        say "        (ribbon commands are not rendered in http mode; use --https + --ribbon)"
     return 0
   fi
   warn "https/ribbon mode: on current Office-Mac builds (16.114 verified) the add-in registers"
@@ -683,7 +684,7 @@ PYPLIST
   if [[ "$HTTPS" == "1" ]]; then
     say "  1. quit and reopen PowerPoint (required when it was already running)"
     say "  2. open/create a deck"
-    say "  3. the Corelan SlideKick button sits in the Home tab (AI group; --no-ribbon reverts)"
+    say "  3. with --ribbon: the Corelan SlideKick button sits in the Home tab (AI group)"
     say "     (fallback: Home -> Add-ins -> Developer Add-ins -> Corelan SlideKick)"
     say "  4. Connections tab: add a provider; Profiles tab: pick your models"
   else

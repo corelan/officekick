@@ -24,14 +24,14 @@ is about how SlideKick works.
 - **macOS**: open a deck, then **Home tab -> Add-ins** (dropdown) ->
   **Developer Add-ins** -> **Corelan SlideKick**. The pane opens on the right;
   the Add-ins entry stays available every session.
-- **Ribbon (default)**: the manifest ships the add-in commands - an **AI**
-  group with the Corelan logo (16/32/80 px icons) and an "Open SlideKick"
-  button directly in the Home ribbon (Word: the same for DocKick; Outlook:
-  the group shows on the message read/compose tabs). With `--https` the
-  server also serves the task pane over https with a machine-generated
-  loopback CA (one macOS keychain prompt to trust). Fall back with
-  `./install.sh --no-ribbon` if the AI group never appears on your Office
-  build (16.114-era and older registered commands without rendering them).
+- **Ribbon (opt-in `--ribbon`)**: `./install.sh --ribbon` keeps the manifest's
+  add-in commands - an **AI** group with the Corelan logo (16/32/80 px icons)
+  and an "Open SlideKick" button directly in the Home ribbon (Word: the same
+  for DocKick; Outlook: the group shows on the message read/compose tabs).
+  Default = list mode: on the Office-Mac build we tested, a command manifest
+  REPLACED the Add-ins-list entry and then rendered neither the group nor a
+  list item (and earlier 16.114 builds behaved the same) - the add-in was
+  unreachable until the installer was re-run without `--ribbon`.
 - **Windows**: quit and reopen PowerPoint, then **Insert -> My Add-ins
   (dropdown) -> SHARED FOLDER -> Corelan SlideKick -> Add** once.
 
