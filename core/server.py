@@ -32,7 +32,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 APP = "OfficeKick"
-VERSION = "0.9.32"
+VERSION = "0.9.34"
 
 CONNECTION_TYPES = (
     "openai",
@@ -1428,9 +1428,13 @@ class SlideKickHandler(BaseHTTPRequestHandler):
     serving_port = 0
 
     def log_message(self, fmt, *args):
-        # always-on access log: every request line + User-Agent, so pane-load
-        # problems at Office launch are visible after the fact. Paths/UA only,
-        # never request bodies (those go to the opt-in debug log).
+        # access log (debug-gated): when debug logging is on, request lines +
+        # User-Agent land in access-YYYY-MM-DD.log next to the debug log.
+        # Paths/UA only, never request bodies. Off by default.
+        if not (self.store.force_debug or (self.store.data or {}).get("debug")):
+            if self.verbose:
+                sys.stderr.write("[%s] %s\n" % (time.strftime("%H:%M:%S"), fmt % args))
+            return
         line = fmt % args
         stamp = time.strftime("%Y-%m-%d %H:%M:%S")
         ua = self.headers.get("User-Agent", "-") if hasattr(self, "headers") else "-"

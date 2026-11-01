@@ -30,6 +30,24 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.34
+### Added
+- **Role-aware make-overs (theme engine)**: the deck outline now tags every
+  slide with a detected ROLE - title (cover/section), bullets, statement,
+  table, image (picture/chart-led). The make-over prompt turns these into
+  layout blueprints: every slide with the same role gets the same treatment
+  (e.g. every title slide = background photo + dark overlay + large light
+  title), different roles get different blueprints. Palette, type scale and
+  spacing grid are fixed once per theme and applied deck-wide.
+### Changed
+- Slide outline lines now show `(role: ...)` per slide, so role-based design
+  stays consistent across requests and deck sizes (compact and full outline).
+## 0.9.33
+### Changed
+- The **access log** is no longer always-on: it is written only when debug
+  logging is enabled (Settings > General > "Debug logging" or `--debug`), and
+  then alongside the debug log in `~/.officekick/logs/access-YYYY-MM-DD.log`.
+  One flag produces both; with debug off nothing extra is written.
 ## 0.9.32
 ### Added
 - **Design make-overs** (SlideKick): a new design-system prompt layer teaches the

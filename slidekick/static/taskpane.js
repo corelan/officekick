@@ -461,13 +461,14 @@
     '- {"type":"apply_layout","slide":N,"layout":"title_content|title_only|section|blank"} (only when the user asks for layout/design changes)',
     '- {"type":"format_text","slide":N,"shape":N,"font":{"bold":true},"align":"center","bullet":true} (format ONE shape from the outline: font = {"bold","italic","color","size","name","underline","allCaps"} subset only, colors as HTML hex/red/green/...; align = left|center|right; bullet = true adds bullets; only requested properties)',
     '- Office.js cannot CREATE SmartArt, stock icons or 3D models. If the user asks for those, say so and offer shape/textbox-based alternatives (create_shape) or an AI-generated picture (create_image) instead. The outline marks existing SmartArt/model3D shapes so you can reference them.',
-    '- {"type":"create_shape","slide":N,"kind":"textbox|rectangle|ellipse|roundedRectangle|hexagon|diamond|triangle|line","text":"only for textbox","left":120,"top":200,"width":240,"height":80} (points, slide-local; line = start point left/top + width/height = endpoint offsets; other shapes: no text)',
+    '- {"type":"create_shape","slide":N,"kind":"textbox|rectangle|ellipse|roundedRectangle|hexagon|diamond|triangle|line","text":"only for textbox","left":120,"top":200,"width":240,"height":80} (points, slide-local; line = start point left/top + width/height = endpoint offsets; other shapes: no text; optional "fill":"#RRGGBB", "line":"#RRGGBB", "transparency":0.25 to style the created shape immediately)',
     '- to format only PART of a shape\'s text, add "find":"exact words appearing in that shape\'s text" (case-insensitive substring; e.g. {"type":"format_text","slide":N,"shape":N,"find":"security","font":{"bold":true}})',,
     '- {"type":"format_selection","font":{"bold":true}} (format ONLY the text the user has selected right now; same font subset; no slide/shape fields)',
-    '- {"type":"set_background","slide":N,"kind":"image","prompt":"description"} (use an AI-generated picture as the slide background) or {"type":"set_background","slide":N,"kind":"solid","color":"#RRGGBB"} (a solid background color)',
+    '- {"type":"set_background","slide":N,"kind":"image","prompt":"description","transparency":0.2} (an AI-generated picture as the slide background; transparency 0-1 optional) or {"type":"set_background","slide":N,"kind":"solid","color":"#RRGGBB","transparency":0.2} (solid color; transparency optional)',
     '- {"type":"add_hyperlink","slide":N,"shape":N,"url":"https://...","tip":"tooltip text"} (link the shape to the URL; url must be http(s) or mailto:)',
-    '- {"type":"style_shape","slide":N,"shape":N,"fill":"#RRGGBB","line":"#RRGGBB"} (solid fill and/or outline color for ONE shape; colors as HTML hex or named; PowerPointApi 1.4; at least one of fill/line)',
+    '- {"type":"style_shape","slide":N,"shape":N,"fill":"#RRGGBB","line":"#RRGGBB","transparency":0.3} (solid fill and/or outline color and optional transparency 0-1 for ONE shape; colors as HTML hex or named; at least one of fill/line/transparency)',
     '- {"type":"set_alt_text","slide":N,"shape":N,"description":"alt text","title":"optional title"} (accessibility alt text for the shape)',
+    '- {"type":"set_shape_image","slide":N,"shape":N,"prompt":"detailed image description","transparency":0.3} (picture-fill ONE existing shape (panel/circle/rectangle) with an AI-generated picture; transparency optional; use for cut-out photos, side panels, badges)',
     '- {"type":"move_slide","slide":N,"to":M} (move slide N so it becomes slide M; numbers as in the outline 1..N; run it ALONE in its own reply - do not combine with other ops. PowerPoint cannot place a brand-new slide at a position: create it first (it lands last) and move_slide it in a following step)',
     '- {"type":"delete_slide","slide":N}',
     "",
@@ -479,7 +480,10 @@
     "- LARGE DECKS: the outline lists every slide. If you cannot address all of them in one reply, work in batches of at most 20 ops and end each reply with a short note of exactly what remains.",
     "- If the request is a question/explanation/brainstorm rather than a deck change, use format A.",
     "- Design passes ('design this deck/slide', improve alignment/balance): emit ops (apply_layout, move_shape, create_table) computed from the geometry in the outline; when the user asks only for advice, use format A.",
-    "- MAKE-OVERS ('give this deck a design makeover', 'redesign slides 3-8', 'modern, original, professional'): build ONE design system first, then apply it with variation. Fix the palette (2-3 solid colors + 1 accent, as hex colors), a type scale (title vs body sizes), a spacing grid in points (slides are typically 960x540), and consistent title/body anchors - but vary each slide's composition (different accent placement, one full-bleed slide, one side-panel slide, one image-led slide). Slides must look like siblings, not twins: never copy the same full layout to every slide.",
+    "- MAKE-OVERS ('give this deck a design makeover', 'redesign slides 3-8', 'modern, original, professional'): the outline marks each slide with a ROLE (title = cover/section slide, bullets, statement, table, image). The make-over is a THEME, not font tweaks: build ONE design system, then give EVERY SLIDE OF THE SAME ROLE the SAME layout blueprint; different roles use different blueprints. This makes the deck consistent where it is the same kind of slide and varied where it is not - all title slides look like siblings; title vs content slides differ.",
+    "- Make-over design system, fixed for the whole scope: 2-3 colors + 1 accent (hex), a title size and a body size, one spacing grid (points; slides ~960x540), consistent title/body anchor positions per role. Decide the theme BEFORE emitting ops and apply it across every slide you touch in one reply.",
+    "- Role blueprints (pick per theme, keep within the slide bounds): 'title/section' slides -> ONE shared treatment, e.g. full-bleed background photo (set_background kind:image) with a dark overlay shape (create_shape rectangle, fill #000000, transparency 0.45-0.6) and the title large in light color, same anchored position on every title slide. 'bullets' -> e.g. an accent bar (thin rectangle) beside the title, body as text boxes on a clean field, OR a side panel; same side of the slide for the whole family. 'statement' -> fewer/larger elements, generous whitespace. 'table' -> keep the table, restyle surroundings (header bar shape behind the title row, soft panel behind the table). 'image' slides -> the picture as a cut panel: picture-fill an existing shape (set_shape_image) or crop-position the photo on one side; never float the photo randomly.",
+    "- NEVER give two slides with the same role different geometry patterns (that is the consistency failure). Never copy one slide's complete layout onto a different-role slide either.",
     "- Make-over building blocks: set_background (AI picture or solid color, optional transparency); create_shape with kind + geometry + fill/line/transparency for panels, accent bars, color blocks and overlays; style_shape with fill/line/transparency to restyle anything already on the slide; move_shape to reposition/resize; replace_text/format_text for the words; set_shape_image to fill an EXISTING shape (panel/circle) with an AI-generated picture. Shape kinds: textbox, rectangle, ellipse, roundedRectangle, hexagon, diamond, triangle, line.",
     "- Text over pictures: order the ops so the picture comes FIRST (set_background or a picture-filled shape), then the overlay (create_shape rectangle, fill #000000, transparency between 0.45 and 0.6), then the text (white or light via replace_text/format_text). Ops apply in the order you return them.",
     "- Make-over phase order per reply: (1) backgrounds + palette fields + overlay shapes, (2) layout moves + text restyle, (3) image generation requests. This keeps each approval batch reviewable and each design phase consistent.",
@@ -2517,6 +2521,31 @@ OfficeDeck.prototype.setNotes = function (i, text) {
     );
   }
 
+  // Slide role for design work: what the slide IS (title/section cover,
+  // bullets, statement, table, image-led). The make-over prompt assigns one
+  // layout blueprint per role so same-role slides read as one family.
+  function slideRoleOf(slide) {
+    var shapes = (slide && slide.shapes) || [];
+    var texts = shapes.filter(function (sh) { return typeof sh.text === "string" && sh.text.trim(); });
+    var words = texts.reduce(function (acc, sh) {
+      return acc + String(sh.text).trim().split(/\s+/).filter(Boolean).length;
+    }, 0);
+    var sig = shapes.map(function (sh) { return (sh.type || "") + " " + (sh.name || ""); });
+    if (sig.some(function (x) { return (/table/i).test(x); })) return "table";
+    if (sig.some(function (x) { return (/picture|image|chart|media|model3d|graphicframe/i).test(x); }) &&
+        words < 60) return "image";
+    if (slide.idx === 0 || words <= 12) return "title";
+    var bodyCount = 0;
+    shapes.forEach(function (sh) {
+      if (!sh.isBody || typeof sh.text !== "string") return;
+      var lns = String(sh.text).split(/\r|\n/).filter(function (ln) { return ln.trim(); });
+      bodyCount += Math.max(lns.length, 1);
+    });
+    if (bodyCount >= 2) return "bullets";
+    if (words <= 30) return "statement";
+    return "bullets";
+  }
+
   // ------------------------------------------------------------------ //
   // Chat / prompt flow
   // ------------------------------------------------------------------ //
@@ -2544,10 +2573,12 @@ OfficeDeck.prototype.setNotes = function (i, text) {
         return t2 ? " — " + t2 : "";
       };
       ctx.slides.forEach(function (s2) {
+        var role2 = slideRoleOf(s2);
         var star2 = ctx.selected && ctx.selected.indexOf(s2.idx) >= 0 ? "*" : "";
         var tt2 = (s2.shapes || []).filter(function (sh) { return sh.isTitle || (sh.text && /title/i.test(sh.name)); })[0];
-        var line2 = "[" + (s2.idx + 1) + star2 + "] " + (tt2 && tt2.text ? tt2.text : "(no title)") + bodyPrevF(s2);
-        if (line2.length > 160) line2 = line2.slice(0, 160);
+        var line2 = "[" + (s2.idx + 1) + star2 + "] (role: " + role2 + ") " +
+          (tt2 && tt2.text ? tt2.text : "(no title)") + bodyPrevF(s2);
+        if (line2.length > 170) line2 = line2.slice(0, 170);
         lines.push(line2);
         if (selMap[s2.idx]) {
           var selTxt = 0;
@@ -2565,9 +2596,10 @@ OfficeDeck.prototype.setNotes = function (i, text) {
       lines.push("(compact outline for a large deck - " + ctx.slides.length + " slides listed; body text is a preview; the SELECTED slide(s) marked * show every shape with its complete text; full text of any other slide: reply {\"kind\":\"read_slide\",\"slides\":[N]})");
     } else
     ctx.slides.forEach(function (s) {
+      var role = slideRoleOf(s);
       var star = ctx.selected && ctx.selected.indexOf(s.idx) >= 0 ? "*" : "";
       var title = (s.shapes || []).filter(function (sh) { return sh.isTitle || (sh.text && /title/i.test(sh.name)); })[0];
-      lines.push("[" + (s.idx + 1) + star + "] " + (title && title.text ? 'TITLE: "' + title.text + '"' : "(no title)"));
+      lines.push("[" + (s.idx + 1) + star + "] (role: " + role + ") " + (title && title.text ? 'TITLE: "' + title.text + '"' : "(no title)"));
       (s.shapes || []).forEach(function (sh) {
         if (sh.text == null) return;
         // shapes are numbered from 1 in the outline listing below
