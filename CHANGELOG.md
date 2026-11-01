@@ -30,6 +30,11 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.38
+### Fixed
+- duplicate_slide / duplicate_slide_to / clear_slide had no apply cases:
+  the gate showed them, Apply accepted them, nothing executed. They now
+  run their deck methods and report per-op result lines like the others.
 ## 0.9.37
 ### Fixed
 - duplicate_slide / duplicate_slide_to / clear_slide were missing from the

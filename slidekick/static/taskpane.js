@@ -2474,6 +2474,19 @@ OfficeDeck.prototype.setNotes = function (i, text) {
           return deck.createShape(cur, op).then(function () {
             lines.push({ ok: true, text: fmtOp(op, ctx) });
           });
+        case "duplicate_slide":
+          return deck.duplicateSlide(op.slide - 1).then(function (r) {
+            lines.push({ ok: true, text: "duplicated slide " + op.slide + " -> inserted as slide " + (r.at + 1) });
+          });
+        case "duplicate_slide_to":
+          return deck.duplicateSlideTo(op.slide - 1, op.to - 1).then(function () {
+            lines.push({ ok: true, text: "copied slide " + op.slide + " onto slide " + op.to + " (target replaced)" });
+          });
+        case "clear_slide":
+          return deck.clearSlide(op.slide - 1).then(function (r) {
+            lines.push({ ok: true, text: "cleared slide " + op.slide + ": " + r.cleared + " text(s) emptied" +
+              (r.removed ? ", " + r.removed + " line(s) removed" : "") });
+          });
         case "move_slide": {
           if (op.slide === op.to) {
             lines.push({ ok: true, text: "slide " + op.slide + " is already in place" });
