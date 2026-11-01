@@ -30,6 +30,14 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.30
+### Added
+- Always-on server **access log**: `~/.officekick/logs/access-YYYY-MM-DD.log`.
+  Every request line is written with the requesting client's User-Agent
+  (paths only, never bodies), so it shows after the fact who loaded which
+  pane/page and when - including the Office webview during a launch where an
+  "Add-in Error" appeared. Previously request lines were suppressed unless
+  debug was on.
 ## 0.9.29
 ### Documented / Changed
 - **Ribbon verdict (retest, clean state)**: with the Office cache stores wiped,

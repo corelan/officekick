@@ -32,7 +32,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 APP = "OfficeKick"
-VERSION = "0.9.29"
+VERSION = "0.9.30"
 
 CONNECTION_TYPES = (
     "openai",
@@ -1428,8 +1428,22 @@ class SlideKickHandler(BaseHTTPRequestHandler):
     serving_port = 0
 
     def log_message(self, fmt, *args):
+        # always-on access log: every request line + User-Agent, so pane-load
+        # problems at Office launch are visible after the fact. Paths/UA only,
+        # never request bodies (those go to the opt-in debug log).
+        line = fmt % args
+        stamp = time.strftime("%Y-%m-%d %H:%M:%S")
+        ua = self.headers.get("User-Agent", "-") if hasattr(self, "headers") else "-"
+        try:
+            logdir = Path.home() / ".officekick" / "logs"
+            logdir.mkdir(mode=0o700, parents=True, exist_ok=True)
+            with open(logdir / ("access-%s.log" % time.strftime("%Y-%m-%d")),
+                      "a", encoding="utf-8") as fh:
+                fh.write("%s | %s | ua=%s\n" % (stamp, line, ua))
+        except OSError:
+            pass
         if self.verbose:
-            sys.stderr.write("[%s] %s\n" % (time.strftime("%H:%M:%S"), fmt % args))
+            sys.stderr.write("[%s] %s\n" % (time.strftime("%H:%M:%S"), line))
 
     # ---------------------- plumbing ---------------------- #
     def _send_json(self, obj, status=200):
