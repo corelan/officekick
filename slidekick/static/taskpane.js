@@ -585,6 +585,12 @@
     "an empty response is a failure; if you cannot act, use format A with the " +
     "reason as text.";
 
+  var CONTINUE_ASK =
+    "Your previous reply was cut off mid-way through the op list. Reply with a " +
+    "slide_ops JSON containing ONLY the ops still needed to FINISH the redesign " +
+    "(slides not yet covered), same JSON format. If nothing is missing, reply " +
+    '{"kind":"reply","text":"done"}';
+
   var REPAIR_EMPTY_ASK =
     "Your previous reply was EMPTY. An empty response is NEVER acceptable. " +
     "Always produce something useful: the slide_ops JSON with actions for the " +
@@ -2991,6 +2997,24 @@ OfficeDeck.prototype.setNotes = function (i, text) {
         dbg("response", { text: resp.text, elapsedMs: resp.elapsedMs });
         SK.lastModelText = { text: resp.text };
         var parsed = tryParse(resp.text);
+        if (parsed.ok && parsed.recovered) {
+          // truncated reply: complete ops salvaged - ask once for the rest, merge
+          SK.lastRecovered = parsed.ops.length;
+          setStatus("Reply was cut off - recovered " + parsed.ops.length + " action(s), asking for the rest…", "busy");
+          var cont = messages.concat([
+            { role: "assistant", content: resp.text || "" },
+            { role: "user", content: CONTINUE_ASK },
+          ]);
+          return askRetryable(function () { return apiJson("/api/chat", "POST", { connection: ref.connection, model: ref.model, messages: cont }); })
+            .then(function (r3) {
+              dbg("continue.response", { text: r3.text, elapsedMs: r3.elapsedMs });
+              SK.lastModelText = { text: r3.text };
+              var p3 = tryParse(r3.text);
+              var extra = (p3.ok && !p3.recovered && p3.ops ? p3.ops : salvageOps(r3.text)) || [];
+              return { ok: true, kind: "slide_ops", ops: parsed.ops.concat(extra), recovered: true };
+            });
+        }
+
         if (parsed.ok) return parsed;
         // escalate: up to 2 repair rounds with increasingly strong nudges.
         // Empty replies get the loudest one - an empty response must never end a run.
@@ -3014,7 +3038,28 @@ OfficeDeck.prototype.setNotes = function (i, text) {
           var prevEmpty = !String(resp.text || "").trim();
           var nudge2 = (wasEmpty || prevEmpty) ? REPAIR_EMPTY_ASK : REPAIR_ASK;
           setStatus(wasEmpty || prevEmpty ? "Empty/unclear reply - re-asking firmly…" : "Still unclear - one more clean-JSON round…", "busy");
-          return repairRound(nudge2, r1.text, 2).then(function (r2b) { return r2b.parsed; });
+          return repairRound(nudge2, r1.text, 2).then(function (r2b) {
+            if (r2b.parsed.ok) return r2b.parsed;
+            // last resort: salvage complete ops from the longest truncated attempt,
+            // then ask once for the remaining ops and merge
+            var best = r2b.text && r2b.text.length > (resp.text || "").length ? r2b.text : resp.text;
+            var salv = salvageOps(best);
+            if (!salv || !salv.length) return r2b.parsed;
+            SK.lastRecovered = salv.length;
+            setStatus("Reply was cut off - recovered " + salv.length + " action(s), asking for the rest…", "busy");
+            var cont = messages.concat([
+              { role: "assistant", content: best },
+              { role: "user", content: CONTINUE_ASK },
+            ]);
+            return askRetryable(function () { return apiJson("/api/chat", "POST", { connection: ref.connection, model: ref.model, messages: cont }); })
+              .then(function (r3) {
+                dbg("continue.response", { text: r3.text, elapsedMs: r3.elapsedMs });
+                SK.lastModelText = { text: r3.text };
+                var p3 = tryParse(r3.text);
+                var extra = (p3.ok && p3.ops ? p3.ops : salvageOps(r3.text)) || [];
+                return { ok: true, kind: "slide_ops", ops: salv.concat(extra), recovered: true };
+              });
+          });
         });
       }).then(function (parsed) {
         renderParsed(parsed, ctx, instruction);
@@ -3039,6 +3084,40 @@ OfficeDeck.prototype.setNotes = function (i, text) {
     });
   }
 
+    // ---- salvage: recover complete ops from a truncated reply (JSON cut off) ----
+  function salvageOps(text) {
+    var t = String(text == null ? "" : "");
+    try { t = String(text); } catch (eT) { return null; }
+    var i = t.indexOf('"ops"');
+    if (i < 0) return null;
+    var arrStart = t.indexOf("[", i);
+    if (arrStart < 0) return null;
+    var depth = 0, inStr = false, esc = false, objStart = -1, ops = [];
+    for (var p = arrStart + 1; p < t.length; p++) {
+      var ch = t.charAt(p);
+      if (inStr) {
+        if (esc) esc = false;
+        else if (ch === "\\") esc = true;
+        else if (ch === '"') inStr = false;
+        continue;
+      }
+      if (ch === '"') { inStr = true; continue; }
+      if (ch === "{") { if (depth === 0) objStart = p; depth++; }
+      else if (ch === "}") {
+        depth--;
+        if (depth === 0 && objStart >= 0) {
+          var raw = t.slice(objStart, p + 1);
+          try {
+            var o = JSON.parse(raw);
+            if (o && o.type) ops.push(o);
+          } catch (eO) { /* skip incomplete op */ }
+          objStart = -1;
+        }
+      } else if (ch === "]" && depth === 0) break;   // array closed properly
+    }
+    return ops.length ? ops : null;
+  }
+
   function tryParse(text) {
     var stripped = stripReasoning(text);
     if (!stripped) return { ok: false, text: text };
@@ -3060,6 +3139,9 @@ OfficeDeck.prototype.setNotes = function (i, text) {
       if (obj.kind === "slide_ops" && Array.isArray(obj.ops)) return { ok: true, kind: "slide_ops", ops: obj.ops };
       if (Array.isArray(obj.ops)) return { ok: true, kind: "slide_ops", ops: obj.ops }; // tolerate missing kind
     }
+    // truncated reply: salvage every complete op from the cut-off stream
+    var salv = salvageOps(stripped);
+    if (salv) return { ok: true, kind: "slide_ops", ops: salv, recovered: true };
     return { ok: false, text: stripped };
   }
 
@@ -3217,7 +3299,9 @@ OfficeDeck.prototype.setNotes = function (i, text) {
     if (!parsed.ok) {
       var box = document.createElement("div");
       box.className = "reply-text";
-      box.textContent = parsed.text || "(empty response)";
+      var showTxt = String(parsed.text || "");
+      if (showTxt.length > 420) showTxt = showTxt.slice(0, 420) + "\u2026 (truncated preview - enable debug logging for the full raw output)";
+      box.textContent = showTxt || "(empty response)";
       out.appendChild(box);
       var note = document.createElement("div");
       note.className = "opnote";
@@ -3308,6 +3392,13 @@ OfficeDeck.prototype.setNotes = function (i, text) {
     h.textContent = "Proposed actions" + ($("chat-autoapply").checked ? " (auto-apply)" : "");
     box.appendChild(h);
 
+    if (SK.lastRecovered) {
+      var recN = document.createElement("div");
+      recN.className = "opnote";
+      recN.textContent = "Recovered " + SK.lastRecovered + " action(s) from a cut-off reply; the model was asked for the rest. If some slides are still untouched, ask to continue.";
+      box.appendChild(recN);
+      SK.lastRecovered = 0;
+    }
 
     if (!caps.text) {
       var warn = document.createElement("div");

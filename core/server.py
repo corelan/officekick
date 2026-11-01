@@ -32,7 +32,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 APP = "OfficeKick"
-VERSION = "0.9.51"
+VERSION = "0.9.52"
 
 CONNECTION_TYPES = (
     "openai",
@@ -1700,7 +1700,7 @@ class SlideKickHandler(BaseHTTPRequestHandler):
                     temperature = min(2.0, max(0.0, float(temperature)))
                 except Exception:
                     raise ApiError(400, "Invalid temperature")
-                max_tokens = body.get("maxTokens", 4000)
+                max_tokens = body.get("maxTokens", 8192)
                 try:
                     max_tokens = min(32000, max(16, int(max_tokens)))
                 except Exception:

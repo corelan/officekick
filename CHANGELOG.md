@@ -30,6 +30,25 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.52
+### Added
+- Truncated-reply recovery in all three add-ins: when a model reply is cut
+  off mid op-list, the pane salvages every complete op, automatically asks
+  the model once for the remaining ops ("only what is still missing"), and
+  merges both into one approval gate, marked "Recovered N action(s) from a
+  cut-off reply". No more raw JSON shown as chat text or silently dropped
+  redesigns. Raw unparseable replies are shown capped at 420 chars with a
+  pointer to debug logging.
+- Stability pipeline parity: word/mail panes now have the same escalated
+  repair ladder as SlideKick (2 rounds, explicit "an empty response is
+  NEVER acceptable" nudge for blank replies), the same salvage + continue
+  merge, and the same no-raw-dump display policy.
+### Changed
+- Default max_tokens for chat raised 4000 -> 8192 (server-wide); full-deck
+  redesigns no longer exhaust the cap and get cut mid-JSON as easily.
+### Fixed
+- Salvage order: a salvaged op list previously returned early and skipped
+  the continuation (only the first chunk reached the gate).
 ## 0.9.51
 ### Added
 - "Reload pane" button next to "Check now" (Settings > General): hard-reloads
