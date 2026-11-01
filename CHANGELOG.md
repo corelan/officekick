@@ -30,6 +30,15 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.19
+### Added
+- Docs: README "macOS permissions (locally hosted models)" section - the
+  Local Network grant flow for LAN providers (OfficeKickServer.app dialog,
+  System Settings > Local Network fallback, the Errno 65 symptom, the
+  terminal-session bypass) + pointers in all three add-in docs. Documents
+  that `tccutil` cannot reset the LocalNetwork service on current macOS
+  builds; no --prompt flag (would mislead).
+
 ## 0.9.18
 ### Added
 - **macOS Local Network permission, properly attributable**: the installer now

@@ -1,6 +1,9 @@
 # MailKick - the Outlook add-in
 
 AI assistance for your mailbox, running on the same local OfficeKick server,
+  Home-lab providers (Ollama/llama.cpp on a private IP) additionally need the
+  macOS **Local Network** grant for the server - see the README's "macOS permissions"
+  section ("Errno 65 / No route to host" = that grant missing).
 shared connections/profiles/approvals/sessions with SlideKick (PowerPoint) and
 DocKick (Word). **MailKick never sends email** - it drafts; you review and send.
 

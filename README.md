@@ -111,6 +111,33 @@ key, "Test connection" lists its models); **Profiles** tab - pick the *content
 model* (edits/generation) and the *other-actions model* (advice/brainstorming)
 per profile; then type instructions in the pane and Run (Cmd/Ctrl+Enter).
 
+## macOS permissions (locally hosted models)
+
+Providers on your LAN (Ollama, llama.cpp, any private-IP base URL) need one
+additional macOS consent: **Privacy & Security -> Local Network**.
+
+- **What you'll see**: the server (started by the installer via
+  `~/Applications/OfficeKickServer.app`) raises macOS's
+  "...wants to access devices on your local network" dialog the first time it
+  connects to a LAN address. Accept it once - done.
+- **If the dialog never appears**: open
+  System Settings > Privacy & Security > **Local Network** and enable the
+  **OfficeKickServer** entry (it can be listed as **"python"** - same thing).
+  The entry may only appear after one failed attempt.
+- **The symptom before granting**: Test connection says
+  "Cannot reach 192.168.x.x ... ([Errno 65] No route to host). Is the service
+  running?" - while `curl http://<ip>:11434/api/tags` from a Terminal works.
+  That mismatch IS the missing Local Network grant (0.9.16+ adds this hint to
+  the error message itself). Cloud providers (OpenAI/Anthropic/OpenRouter)
+  are not affected - only private-IP addresses are behind this wall.
+- **Restarting the server from a permitted session** (`./install.sh run` in a
+  Terminal) bypasses the grant because the terminal's permission applies.
+- Not applicable on Windows/Linux - macOS-only privacy gate.
+- Note: `tccutil reset` cannot reset the LocalNetwork service on current
+  macOS builds, and broad resets like `tccutil reset All` wipe ALL your saved
+  privacy decisions (every app re-asks) - do not use them to "re-trigger"
+  this prompt.
+
 ## Security & privacy
 
 - The local server binds to loopback only (`127.0.0.1` + `::1`); no telemetry,

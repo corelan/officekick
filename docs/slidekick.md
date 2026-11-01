@@ -17,6 +17,9 @@ is about how SlideKick works.
   message).
 - An AI provider reachable from your machine (cloud API or local
   Ollama/llama-server). Configure it in the pane's Connections tab; profiles +
+  Home-lab providers (Ollama/llama.cpp on a private IP) additionally need the
+  macOS **Local Network** grant for the server - see the README's "macOS
+  permissions" section (Errno 65 / "No route to host" = that grant missing).
   policy are shared with DocKick ([docs/dockick.md](dockick.md)).
 
 ## Using it inside PowerPoint
