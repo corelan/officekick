@@ -32,7 +32,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 APP = "OfficeKick"
-VERSION = "0.9.38"
+VERSION = "0.9.39"
 
 CONNECTION_TYPES = (
     "openai",

@@ -30,6 +30,16 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.39
+### Fixed
+- Model replies containing commentary plus a valid ops JSON are now
+  executed: the extractor scans every balanced {...} in the answer instead
+  of only the first, prefers any object that declares kind/ops, and also
+  accepts a bare ops array or a reply whose text field is not a string.
+  Plain-text answers (no JSON at all) render as text as before.
+- A reply that fails to parse no longer feeds its raw (possibly truncated)
+  JSON into the conversation history - the model would keep repeating its
+  own broken format next round; history now stores a parse-failure note.
 ## 0.9.38
 ### Fixed
 - duplicate_slide / duplicate_slide_to / clear_slide had no apply cases:

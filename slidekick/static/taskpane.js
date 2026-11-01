@@ -419,11 +419,14 @@
     for (var i = 0; i < candidates.length; i++) {
       try { return JSON.parse(candidates[i]); } catch (e) { /* continue */ }
     }
-    // scan for the first balanced { ... } (string-aware)
-    var start = t.indexOf("{");
-    if (start >= 0) {
-      var depth = 0, inStr = false, escNext = false;
-      for (var k = start; k < t.length; k++) {
+    // scan for balanced { ... } objects (string-aware); try each one -
+    // the first braces may wrap chatter, the ops JSON can sit mid-text.
+    var found = [];
+    var n2 = t.length;
+    for (var c2 = 0; c2 < n2; c2++) {
+      if (t.charAt(c2) !== "{") continue;
+      var depth = 0, inStr = false, escNext = false, end = -1;
+      for (var k = c2; k < n2; k++) {
         var c = t.charAt(k);
         if (inStr) {
           if (escNext) escNext = false;
@@ -435,13 +438,23 @@
         if (c === "{") depth++;
         else if (c === "}") {
           depth--;
-          if (depth === 0) {
-            try { return JSON.parse(t.slice(start, k + 1)); } catch (e) { break; }
-          }
+          if (depth === 0) { end = k; break; }
         }
       }
+      if (end > c2) {
+        var cut = t.slice(c2, end + 1);
+        var o2 = undefined;
+        try { o2 = JSON.parse(cut); } catch (e) { /* not JSON, keep scanning */ }
+        if (o2 && typeof o2 === "object") {
+          if (o2.kind === "slide_ops" && Array.isArray(o2.ops)) return o2;
+          if (Array.isArray(o2.ops)) return o2;   // tolerate missing kind
+          if (o2.kind === "reply" || o2.kind === "read_slide" || o2.kind === "web_lookup") return o2;
+          found.push(o2);
+        }
+        c2 = end; // skip past this object
+      }
     }
-    return undefined;
+    return found.length ? found[0] : undefined;
   }
 
   var SYSTEM_PROMPT = [
@@ -871,7 +884,12 @@
     // later request and pushes the models toward echoing blobs into new prompts)
     if (!parsed || !parsed.ok) {
       var rawT = (SK.lastModelText && SK.lastModelText.text) || "";
-      return String(rawT).slice(0, 400);
+      rawT = String(rawT);
+      // never let a broken/unparsed reply (still containing ops JSON) into
+      // history: the model would meet its own truncated JSON next round
+      var brace = rawT.indexOf("{");
+      if (brace >= 0) return "(the last answer could not be parsed as an action - it was re-asked)";
+      return rawT.slice(0, 400);
     }
     if (parsed.kind === "reply") return String(parsed.text || "").slice(0, HISTORY_MAX_CHARS);
     // store only the action types and how many per type were executed -
@@ -2922,8 +2940,12 @@ OfficeDeck.prototype.setNotes = function (i, text) {
     var stripped = stripReasoning(text);
     if (!stripped) return { ok: false, text: text };
     var obj = extractObject(stripped);
+    if (Array.isArray(obj)) obj = { ops: obj };
     if (obj && typeof obj === "object") {
-      if (obj.kind === "reply" && typeof obj.text === "string") return { ok: true, kind: "reply", text: obj.text };
+      if (obj.kind === "reply") {
+        if (typeof obj.text === "string") return { ok: true, kind: "reply", text: obj.text };
+        return { ok: true, kind: "reply", text: String(obj.text == null ? "" : JSON.stringify(obj.text)) };
+      }
       if (obj.kind === "read_slide") {
         var rs = [];
         var src = Array.isArray(obj.slides) ? obj.slides : (typeof obj.slide === "number" ? [obj.slide] : []);
@@ -3096,7 +3118,7 @@ OfficeDeck.prototype.setNotes = function (i, text) {
       out.appendChild(box);
       var note = document.createElement("div");
       note.className = "opnote";
-      note.textContent = "Shown as text: the model did not return a valid action JSON. Enable debug logging (Settings) to inspect the raw output.";
+      note.textContent = "Shown as text: no action JSON could be recovered (SlideKick re-asked once). Enable debug logging (Settings) to inspect the raw output.";
       out.appendChild(note);
       setStatus("Done (reply as text).", "ok");
       return;
