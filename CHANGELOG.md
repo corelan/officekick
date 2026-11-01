@@ -30,6 +30,12 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.42
+### Added
+- Automatic **log cleanup**: `debug-*.log` / `access-*.log` files older than
+  30 days are deleted. Runs once at server boot and together with the
+  session auto-clean tick (max once/hour when panes open). The window is a
+  setting (`logCleanDays`, 0 = never delete).
 ## 0.9.41
 ### Fixed
 - The "Generate speaker notes" checkbox previously only saved through the

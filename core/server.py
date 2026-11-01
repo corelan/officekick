@@ -32,7 +32,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 APP = "OfficeKick"
-VERSION = "0.9.41"
+VERSION = "0.9.42"
 
 CONNECTION_TYPES = (
     "openai",
@@ -390,6 +390,7 @@ class Store:
         self.data.setdefault("trackedChanges", False)  # DocKick revision setting  # per-add-in auto-apply: slidekick/wordkick/mailkick
         self.data.setdefault("autoClean", True)        # delete old sessions on pane open
         self.data.setdefault("autoCleanDays", 120)     # session older than N days -> removed
+        self.data.setdefault("logCleanDays", 30)        # debug/access logs older than N days -> removed
         self.data.setdefault("connections", [])
         self.data.setdefault("profiles", [])
         self.data.setdefault("defaultProfile", None)
@@ -584,6 +585,27 @@ class Store:
 
     _marker_path_cached = None
 
+    def clean_old_logs(self):
+        """Delete debug-*/access-* log files older than logCleanDays (default
+        30). Debug logs can contain prompt payloads, so cap their age.
+        Runs at server boot and from the auto-clean tick."""
+        days = int(self.data.get("logCleanDays", 30) or 0)
+        logdir = self.path.parent / "logs"
+        if days <= 0 or not logdir.is_dir():
+            return 0
+        cutoff = time.time() - days * 86400
+        removed = 0
+        for f in sorted(logdir.glob("*.log")):
+            if not f.name.startswith(("debug-", "access-")):
+                continue
+            try:
+                if f.stat().st_mtime < cutoff:
+                    f.unlink()
+                    removed += 1
+            except OSError:
+                pass
+        return removed
+
     def auto_clean_tick(self, min_interval=3600.0):
         """Run the session auto-cleanup at most once per hour (pane opens
         hammer /api/config). Honors the autoClean setting."""
@@ -596,6 +618,7 @@ class Store:
             marker.write_text(str(time.time()), encoding="utf-8")
             os.chmod(marker, 0o600)
             self.sessions.auto_clean(int(self.data.get("autoCleanDays", 120)))
+            self.clean_old_logs()
         except OSError:
             pass
 
@@ -1958,6 +1981,13 @@ def main(argv=None):
 
     store = Store(args.config)
     store.load()
+    try:
+        old = store.clean_old_logs()
+        if old:
+            print("Removed %d log file(s) older than %s day(s)." %
+                  (old, store.data.get("logCleanDays", 30)), flush=True)
+    except Exception:
+        pass
     store.force_debug = args.debug
     tls = (args.cert, args.key) if (args.cert and args.key) else None
 
