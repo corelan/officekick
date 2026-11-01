@@ -463,14 +463,41 @@ make_server_app() {
   <key>CFBundleIconFile</key><string>OfficeKickAdmin</string>
   <key>NSLocalNetworkUsageDescription</key>
   <string>OfficeKick reaches AI providers you run on your own network (Ollama, llama.cpp) to answer requests from your Office add-ins.</string>
+  <key>LSUIElement</key><true/>
 </dict>
 </plist>
 APPINFO
   cat > "$app_dir/Contents/MacOS/officekick-server" <<'APPSHIM'
 #!/bin/bash
-# Runs the requested command as a CHILD of this (in-bundle) wrapper so macOS
-# TCC attributes local-network access to com.corelan.officekick.server.
-"$@"
+# OfficeKickServer wrapper (com.corelan.officekick.server).
+# With arguments: runs them as a CHILD of this in-bundle process.
+# Without arguments (login item / `open`): launches the installed server.
+if [[ $# -eq 0 ]]; then
+  set -- /usr/local/bin/python3 \
+    "$HOME/Library/Application Support/OfficeKick/server.py" \
+    --config "$HOME/.officekick/config.json" \
+    --static-dir "$HOME/Library/Application Support/OfficeKick" \
+    --cert "$HOME/.officekick/certs/localhost.pem" \
+    --key "$HOME/.officekick/certs/localhost.key"
+fi
+# KeepAlive: respawn only after an abnormal exit; a graceful stop (SIGTERM
+# to this wrapper = an exit code 0 from the child) ends the loop
+stopping=0
+trap 'stopping=1' TERM INT
+child=""
+cleanup() { [[ -n "$child" ]] && kill "$child" 2>/dev/null; exit 0; }
+trap cleanup TERM INT
+until [[ $stopping == 1 ]]; do
+  "$@" &
+  child=$!
+  wait "$child"
+  rc=$?
+  child=""
+  [[ $rc -eq 0 ]] && exit 0
+  echo "officekick-server wrapper: server died (rc=$rc), restarting in 3s" >&2
+  sleep 3
+done
+exit 0
 APPSHIM
   chmod 755 "$app_dir/Contents/MacOS/officekick-server"
   plutil -lint "$app_dir/Contents/Info.plist" >/dev/null 2>&1 && \
@@ -653,7 +680,7 @@ do_install() {
 
   clear_office_caches
 
-  # ---- LaunchAgent ----
+  # ---- Server autostart ----
   make_server_app   # bundle wrapper so Local Network permission can be granted
   # remove the legacy SlideKick label so only the OfficeKick agent remains
   if launchctl print "gui/$(id -u)/$OLD_LAUNCH_LABEL" >/dev/null 2>&1; then
@@ -667,8 +694,10 @@ do_install() {
       warn "server not running - start it manually:  \"$PY\" \"$SERVER_PY\" --port $PORT"
     fi
   else
-    title "🚀 Server autostart"
-    say "    LaunchAgent: $PLIST"
+    title "🚀 Server autostart (login item)"
+    say "    App + autostart: $HOME/Applications/OfficeKickServer.app"
+    say "    Registered as a login item (System Events; runs in your session,"
+    say "    which is also what makes the macOS Local Network prompt grantable)."
   "$PY" - "$PLIST" "$LAUNCH_LABEL" "$PY" "$SERVER_PY" "$PORT" "$STATIC_DIR" "$CERT_DIR" "$LOG_DIR" "$SCHEME" <<'PYPLIST'
 import os, plistlib, sys
 
@@ -688,12 +717,26 @@ with open(plist_path, "wb") as fh:
         "KeepAlive": True,
         "StandardOutPath": os.path.join(log_dir, "server.log"),
         "StandardErrorPath": os.path.join(log_dir, "server.log"),
+        # attribute the agent's (and its children's) activity to the
+        # .app bundle -> Local Network row/prompt shows as OfficeKickServer
+        "AssociatedBundleIdentifiers": ["com.corelan.officekick.server"],
     }, fh)
 PYPLIST
+    # the LaunchAgent context IS silently denied Local Network access on current
+    # macOS builds (no prompt, no Settings row -> LAN providers get Errno 65),
+    # so the agent stays installed only as a fallback and stays unloaded.
     launchctl unload "$PLIST" 2>/dev/null || true
-    launchctl load -w "$PLIST"
-  step "restarting local server via LaunchAgent (RunAtLoad + KeepAlive)"
-    ok "LaunchAgent installed (starts at login, restarts on crash)"
+    osascript -e 'tell application "System Events" to delete login item "OfficeKickServer"' >/dev/null 2>&1 || true
+    if osascript -e 'tell application "System Events" to make login item at end with properties {path:"'"$HOME"'/Applications/OfficeKickServer.app", hidden:true}' >/dev/null 2>&1; then
+      ok "login item registered (starts at login, in your session)"
+    else
+      warn "login item registration failed - start the server manually with './install.sh run'"
+    fi
+    # replace any running instance: `open` spawns the session-context server
+    pkill -f "officekick-server" 2>/dev/null || true
+    sleep 1
+    open -g "$HOME/Applications/OfficeKickServer.app" && \
+      ok "server started from the app bundle (session context)"
   fi
 
   # ---- health check ----

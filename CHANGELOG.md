@@ -30,6 +30,18 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.20
+### Changed
+- macOS server autostart moved from the LaunchAgent to a **login item**
+  (System Events) running OfficeKickServer.app in the user session; the app
+  is LSUIElement now and the wrapper keeps a KeepAlive-style respawn loop
+  (restarts after crashes, stops cleanly on a graceful SIGTERM). The
+  LaunchAgent stays installed but unloaded as a fallback.
+### Fixed
+- The app wrapper's default launch (no arguments) forgot --static-dir, which
+  made all statics 404 ("Not found: slidekick/static/taskpane.html") after
+  the login-item switch.
+
 ## 0.9.19
 ### Added
 - Docs: README "macOS permissions (locally hosted models)" section - the
