@@ -30,6 +30,14 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.54
+### Changed
+- The apply flow now does its best to complete every step: after the main
+  pass, any action that failed (and any actions skipped by an unexpected
+  error) is retried once, in the original order, after a short pause. Each
+  retry is reported ("retrying N uncompleted action(s) once..."), successes
+  appear normally, and ops that fail a second time say so explicitly
+  instead of vanishing. Applies to slide/word/mail add-ins.
 ## 0.9.53
 ### Added
 - Past-request steps get a small copy icon (two joined squares) on their

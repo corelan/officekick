@@ -2530,6 +2530,8 @@ OfficeDeck.prototype.setNotes = function (i, text) {
   // ------------------------------------------------------------------ //
   function applyOps(deck, ops, ctx) {
     var lines = [], manualNotes = [], shift = 0;
+    var failedOps = [];      // ops that threw (retry pass re-runs these, in order)
+    var abortedIdx = -1;     // set when an unexpected error aborts the chain
     var runOne = function (op) {
       var cur = op.slide !== undefined ? op.slide - 1 - shift : undefined;
       switch (op.type) {
@@ -2759,24 +2761,42 @@ OfficeDeck.prototype.setNotes = function (i, text) {
     };
 
     var seq = Promise.resolve();
-    ops.forEach(function (op) {
+    ops.forEach(function (op, ix) {
       seq = seq.then(function () { return runOne(op); }).catch(function (err) {
         var msg = err && err.friendly ? err.message : (err && err.message) || String(err);
         lines.push({ ok: false, text: op.type + ": " + msg });
+        failedOps.push(op);
         if (!(err && err.friendly)) {
           lines.push({ ok: false, text: "unexpected error - stopping remaining ops" });
-          throw err; // aborts the chain below
+          abortedIdx = ix;
+          throw err; // aborts the chain below; remaining ops join the retry pass
         }
       });
     });
     return seq.then(
-      function () { return { lines: lines, manualNotes: manualNotes }; },
+      function () { return null; },
       function (err) {
         var msg = err && err.friendly ? err.message : (err && err.message) || String(err);
         lines.push({ ok: false, text: "aborted: " + msg });
-        return { lines: lines, manualNotes: manualNotes };
+        return msg;
       }
-    );
+    ).then(function (abortedMsg) {
+      var retryQueue = failedOps.slice();
+      if (abortedMsg && abortedIdx >= 0) retryQueue = failedOps.concat(ops.slice(abortedIdx + 1));
+      if (!retryQueue.length) return { lines: lines, manualNotes: manualNotes };
+      // do its best to complete every step: one extra pass for everything
+      // that failed (and for ops skipped by an unexpected error), same order
+      lines.push({ ok: true, text: "retrying " + retryQueue.length +
+        " uncompleted action(s) once after a short pause…" });
+      var rseq = new Promise(function (res) { setTimeout(res, 1500); });
+      retryQueue.forEach(function (op) {
+        rseq = rseq.then(function () { return runOne(op); }).catch(function (err2) {
+          var msg2 = err2 && err2.friendly ? err2.message : (err2 && err2.message) || String(err2);
+          lines.push({ ok: false, text: "retry of " + op.type + " failed again: " + msg2 });
+        });
+      });
+      return rseq.then(function () { return { lines: lines, manualNotes: manualNotes }; });
+    });
   }
 
   // Slide role for design work: what the slide IS (title/section cover,

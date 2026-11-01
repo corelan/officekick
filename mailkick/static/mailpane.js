@@ -1561,19 +1561,32 @@ function applyOps(deck, ops, ctx) {
       }
       return Promise.resolve();
     };
+    var failedOps = [];   // ops whose runOne link rejected - retried once after the pass
     var chain = Promise.resolve();
     ops.forEach(function (op) {
       chain = chain.then(function () {
         return runOne(op).catch(function (err) {
           lines.push({ ok: false, text: fmtOp(op, ctx) + " - " + ((err && err.message) || String(err)) });
+          failedOps.push(op);
         });
       }, function (err) {
         lines.push({ ok: false, text: fmtOp(op, ctx) + " - " + ((err && err.message) || String(err)) });
+        failedOps.push(op);
         return Promise.resolve();
       });
     });
     return chain.then(function () {
-      return { lines: lines, manualNotes: manualNotes };
+      if (!failedOps.length) return { lines: lines, manualNotes: manualNotes };
+      lines.push({ ok: true, text: "retrying " + failedOps.length +
+        " failed action(s) once after a short pause\u2026" });
+      var rseq = new Promise(function (res) { setTimeout(res, 1500); });
+      failedOps.forEach(function (op) {
+        rseq = rseq.then(function () { return runOne(op); }).catch(function (err2) {
+          lines.push({ ok: false, text: "retry of " + op.type + " failed again: " +
+            ((err2 && err2.message) || String(err2)) });
+        });
+      });
+      return rseq.then(function () { return { lines: lines, manualNotes: manualNotes }; });
     });
   }
 

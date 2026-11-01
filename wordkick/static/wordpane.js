@@ -1718,6 +1718,7 @@ function applyOps(deck, ops, ctx) {
       }
       return Promise.resolve();
     };
+    var failedOps = [];   // ops whose runOne link rejected - retried once after the pass
     var chain = Promise.resolve();
     ops.forEach(function (op) {
       chain = chain.then(function () {
@@ -1726,24 +1727,42 @@ function applyOps(deck, ops, ctx) {
         // final status - would never run)
         return runOne(op).catch(function (err) {
           lines.push({ ok: false, text: fmtOp(op, ctx) + " - " + ((err && err.message) || String(err)) });
+          failedOps.push(op);
         });
       }, function (err) {
         lines.push({ ok: false, text: fmtOp(op, ctx) + " - " + ((err && err.message) || String(err)) });
+        failedOps.push(op);
         return Promise.resolve();
       });
     });
     return pre.then(function () { return chain; }).then(function () {
       var res = { lines: lines, manualNotes: manualNotes };
-      if (revNote) lines.push({ ok: false, text: "revisions: " + revNote });
+      var afterRetries = Promise.resolve();
+      if (failedOps.length) {
+        lines.push({ ok: true, text: "retrying " + failedOps.length +
+          " failed action(s) once after a short pause\u2026" });
+        var rseq = new Promise(function (res2) { setTimeout(res2, 1500); });
+        failedOps.forEach(function (op) {
+          rseq = rseq.then(function () { return runOne(op); }).catch(function (err2) {
+            lines.push({ ok: false, text: "retry of " + op.type + " failed again: " +
+              ((err2 && err2.message) || String(err2)) });
+          });
+        });
+        afterRetries = rseq;
+      }
+      afterRetries.then(function () {
+        if (revNote) lines.push({ ok: false, text: "revisions: " + revNote });
       // restore whatever the change-tracking mode was before the AI-edits
       // batch (do not stomp a tracking mode the user had enabled themselves)
-      var prevTrack = String(SK.revPrevMode || "");
-      var wasOn = prevTrack.toLowerCase().indexOf("track") === 0;  // trackAll / TrackMineOnly
-      var off = (SK.cfg && SK.cfg.trackedChanges && deck.setTrackChanges)
-        ? deck.setTrackChanges(wasOn).catch(function () { return null; })
-        : Promise.resolve(null);
-      SK.revPrevMode = null;
-      return off.then(function () { return res; });
+        var prevTrack = String(SK.revPrevMode || "");
+        var wasOn = prevTrack.toLowerCase().indexOf("track") === 0;  // trackAll / TrackMineOnly
+        var off = (SK.cfg && SK.cfg.trackedChanges && deck.setTrackChanges)
+          ? deck.setTrackChanges(wasOn).catch(function () { return null; })
+          : Promise.resolve(null);
+        SK.revPrevMode = null;
+        return off.then(function () { return res; });
+      });
+      return afterRetries.then(function (r) { return r; });
     });
   }
 
