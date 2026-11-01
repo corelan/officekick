@@ -2294,6 +2294,15 @@ function applyOps(deck, ops, ctx) {
         (autoOps + denyOps + invalidOps + validation.notesDropped ? "rest not affected" : "");
       btnrow.appendChild(info);
     }
+    if (confirmOps) {
+      // make the confirm mechanics impossible to misread: unticked rows are
+      // skipped on Apply - they are not "failed", they were never approved
+      var cn = document.createElement("div");
+      cn.className = "opnote";
+      cn.textContent = "(needs approval) actions only run when their checkbox is"
+        + " ticked (or use Select all) - unticked ones are skipped on Apply.";
+      box.appendChild(cn);
+    }
     box.appendChild(btnrow);
 
     var result = document.createElement("div");

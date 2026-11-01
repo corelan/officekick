@@ -30,6 +30,12 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.31
+### Changed
+- Approval-gate clarity: when a gate contains "(needs approval)" actions, it
+  now states the mechanics in plain words - unticked actions are skipped on
+  Apply (they are not failures, they were never approved); tick their
+  checkboxes or use "Select all" to include them. All three add-ins.
 ## 0.9.30
 ### Added
 - Always-on server **access log**: `~/.officekick/logs/access-YYYY-MM-DD.log`.
