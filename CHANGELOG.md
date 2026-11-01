@@ -30,6 +30,19 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.47
+### Changed
+- Make-over brief v3 - an invention engine instead of fixed recipes. The
+  model now invents a named design concept with three rules (color trio,
+  spatial system, shape + image language), must pick a contrasting direction
+  when an earlier redesign is visible in the session, and is told to
+  re-STRUCTURE the deck first: add a real cover, insert topic dividers,
+  clear/rebuild placeholder slides, duplicate a good slide over a bad one,
+  and reorder with move_slide. Composition is free per slide (no canned
+  full-bleed-photo covers); images are used where the concept calls for
+  them (a photographic concept without generated images breaks the concept,
+  a graphic concept may stand on shapes). Hardcoded cover/panel recipes from
+  the previous brief removed.
 ## 0.9.46
 ### Changed
 - The make-over brief rewritten for zero-guidance redesign requests: it now
