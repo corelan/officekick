@@ -503,6 +503,8 @@
     "concept calls for them - a photographic concept without generated",
     "images breaks the concept; a graphic concept may stand on shapes alone.",
     "",
+    "USE THE FULL TOOLBOX: layering via op order (the last op paints on top), transparency stacking for tints and glows, rotation for diagonal compositions, gradient backgrounds for color washes, oversized numbers or keywords as graphic elements, thin accent bars, photo cut-outs inside circles, rounded or hexagon shapes - combinations of these are what make a design feel crafted.",
+    "- NEVER destroy the user's content (pictures, charts, tables). Only elements you created in this redesign session may be removed.",
     "QUALITY BAR: consistent geometry for repeated slide kinds (covers look",
     "alike, dividers look alike); readable text per contrast (light text only",
     "on overlays/deep/panel colors, nothing under 14pt on colored fields);",
@@ -558,6 +560,8 @@
     "- Role blueprints (pick per theme, keep within the slide bounds): 'title/section' slides -> ONE shared treatment, e.g. full-bleed background photo (set_background kind:image) with a dark overlay shape (create_shape rectangle, fill #000000, transparency 0.45-0.6) and the title large in light color, same anchored position on every title slide. 'bullets' -> e.g. an accent bar (thin rectangle) beside the title, body as text boxes on a clean field, OR a side panel; same side of the slide for the whole family. 'statement' -> fewer/larger elements, generous whitespace. 'table' -> keep the table, restyle surroundings (header bar shape behind the title row, soft panel behind the table). 'image' slides -> the picture as a cut panel: picture-fill an existing shape (set_shape_image) or crop-position the photo on one side; never float the photo randomly.",
     "- NEVER give two slides with the same role different geometry patterns (that is the consistency failure). Never copy one slide's complete layout onto a different-role slide either.",
     "- Make-over building blocks: set_background (AI picture or solid color, optional transparency); create_shape with kind + geometry + fill/line/transparency for panels, accent bars, color blocks and overlays; style_shape with fill/line/transparency to restyle anything already on the slide; move_shape to reposition/resize (+rotation, degrees) or rotate anything you created or moved (rotation is how diagonal/tilted compositions are made); replace_text/format_text for the words; set_shape_image to fill an EXISTING shape (panel/circle) with an AI-generated picture. Shape kinds: textbox, rectangle, ellipse, roundedRectangle, hexagon, diamond, triangle, line.",
+    "- Never remove or overwrite the user's own content: pictures, charts and tables stay. Redesign AROUND them (move, restyle, wrap in panels, put overlays above). clear_slide only on nearly-empty placeholder slides; duplicate_slide_to replaces its target completely - never aim it at a slide that still carries user content.",
+    "- A redesign pass must cover EVERY in-scope slide with its structural change in the same flow. If the op list would be very long, reply phase 1 and immediately continue with phase 2 as the next action JSON - never leave half the slides untouched.",
     "- Text over pictures: order the ops so the picture comes FIRST (set_background or a picture-filled shape), then the overlay (create_shape rectangle, fill #000000, transparency between 0.45 and 0.6), then the text (white or light via replace_text/format_text). Ops apply in the order you return them.",
     "- Make-over phase order per reply: (1) backgrounds + palette fields + overlay shapes, (2) layout moves + text restyle, (3) image generation requests. This keeps each approval batch reviewable and each design phase consistent.",
     "- Image requests: always return a create_image op (never generate the picture inline); SlideKick fetches it with the user's configured image model. Include a concrete, self-contained prompt in the op.",
@@ -577,7 +581,15 @@
     "Your previous answer did not follow the required format. " +
     "Reply again with ONLY the JSON object (format A or B) and nothing else: " +
     'either {"kind":"reply","text":"..."} or {"kind":"slide_ops","ops":[...]} - ' +
-    "no reasoning, no fences, no commentary.";
+    "no reasoning, no fences, no commentary. Never reply with nothing at all - " +
+    "an empty response is a failure; if you cannot act, use format A with the " +
+    "reason as text.";
+
+  var REPAIR_EMPTY_ASK =
+    "Your previous reply was EMPTY. An empty response is NEVER acceptable. " +
+    "Always produce something useful: the slide_ops JSON with actions for the " +
+    "user's request, or format A (reply) with the answer/reason. Respond NOW " +
+    "with the JSON object - no fences, no commentary, never an empty reply.";
 
   var HISTORY_MAX_EXCHANGES = 6; // oldest turns are dropped, newest kept
   var HISTORY_MAX_CHARS = 2000;  // per stored message
@@ -1515,14 +1527,15 @@ OfficeDeck.prototype.moveSlide = function (from, to) {
         throw new FriendlyError("clearing a slide needs PowerPointApi 1.5 - update PowerPoint (16.63+ on Mac).");
       }
       var shapes = ctx.presentation.slides.getItemAt(i).shapes;
-      shapes.load("items/type,items/hasTextFrame,items/textFrame");
+      shapes.load("items/type,items/hasTextFrame,items/textFrame,items/name");
       return ctx.sync().then(function () {
         var cleared = 0, removed = 0;
         shapes.items.forEach(function (shape) {
           if (shape.hasTextFrame && shape.textFrame) {
             shape.textFrame.textRange.text = "";
             cleared++;
-          } else if (shape.type === "Line") {
+          } else if (shape.type === "Line" && String(shape.name || "").indexOf("sk-shape") === 0) {
+            // only drop lines this add-in created - user lines stay
             shape.delete();
             removed++;
           }
@@ -1550,6 +1563,7 @@ OfficeDeck.prototype.createShape = function (slideIndex, op) {
       } else {
         created = shapes.addGeometricShape(op.kind, opts);
       }
+      try { created.name = "sk-shape-" + (op.kind || "shape"); } catch (eName) { /* naming optional */ }
       if (created && op.fill) {
         created.fill.setSolidColor(String(op.fill));
       }
@@ -2973,20 +2987,31 @@ OfficeDeck.prototype.setNotes = function (i, text) {
         dbg("response", { text: resp.text, elapsedMs: resp.elapsedMs });
         SK.lastModelText = { text: resp.text };
         var parsed = tryParse(resp.text);
-        if (!parsed.ok) {
-          setStatus("Model output unclear - silently re-asking for clean JSON…", "busy");
-          var repair = messages.concat([
-            { role: "assistant", content: resp.text },
-            { role: "user", content: REPAIR_ASK },
+        if (parsed.ok) return parsed;
+        // escalate: up to 2 repair rounds with increasingly strong nudges.
+        // Empty replies get the loudest one - an empty response must never end a run.
+        var repairRound = function (nudge, prevText, level) {
+          var repairMsgs = messages.concat([
+            { role: "assistant", content: prevText || "" },
+            { role: "user", content: nudge },
           ]);
-          dbg("repair.request", {});
-          return askRetryable(function () { return apiJson("/api/chat", "POST", { connection: ref.connection, model: ref.model, messages: repair }); }).then(function (resp2) {
-            dbg("repair.response", { text: resp2.text, elapsedMs: resp2.elapsedMs });
-            SK.lastModelText = { text: resp2.text };
-            return tryParse(resp2.text);
-          });
-        }
-        return parsed;
+          dbg("repair.request", { level: level, empty: !String(prevText || "").trim() });
+          setStatus("Model output unclear - silently re-asking for clean JSON…", "busy");
+          return askRetryable(function () { return apiJson("/api/chat", "POST", { connection: ref.connection, model: ref.model, messages: repairMsgs }); })
+            .then(function (r2) {
+              dbg("repair.response", { level: level, text: r2.text, elapsedMs: r2.elapsedMs });
+              SK.lastModelText = { text: r2.text };
+              return { text: r2.text, parsed: tryParse(r2.text) };
+            });
+        };
+        return repairRound(REPAIR_ASK, resp.text, 1).then(function (r1) {
+          if (r1.parsed.ok) return r1.parsed;
+          var wasEmpty = !String(r1.text || "").trim();
+          var prevEmpty = !String(resp.text || "").trim();
+          var nudge2 = (wasEmpty || prevEmpty) ? REPAIR_EMPTY_ASK : REPAIR_ASK;
+          setStatus(wasEmpty || prevEmpty ? "Empty/unclear reply - re-asking firmly…" : "Still unclear - one more clean-JSON round…", "busy");
+          return repairRound(nudge2, r1.text, 2).then(function (r2b) { return r2b.parsed; });
+        });
       }).then(function (parsed) {
         renderParsed(parsed, ctx, instruction);
         pushHistory(instruction, assistantHistoryText(parsed));

@@ -162,7 +162,7 @@ window.__SK_SIM__ = true;
       const g = op.geometry || {};
       sl.shapes.push({
         idx: sl.shapes.length,
-        name: op.kind,
+        name: "sk-shape-" + (op.kind || "shape"),
         type: op.kind,
         text: op.kind === "textbox" ? (op.text || "") : undefined,
         left: g.left, top: g.top, width: g.width, height: g.height,
@@ -203,7 +203,8 @@ window.__SK_SIM__ = true;
         if (typeof sh.text === "string") { sh.text = ""; cleared++; }
       });
       const before = sl.shapes.length;
-      sl.shapes = sl.shapes.filter((sh) => sh.type !== "line" || typeof sh.text === "string");
+      // only drop lines this add-in created - user lines stay (parity with real deck)
+      sl.shapes = sl.shapes.filter((sh) => sh.type !== "line" || typeof sh.text === "string" || String(sh.name || "").indexOf("sk-shape") !== 0);
       delete sl.background;
       return { ok: true, cleared, removed: before - sl.shapes.length };
     }

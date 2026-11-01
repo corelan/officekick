@@ -30,6 +30,27 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.50
+### Changed
+- Empty model replies are no longer accepted: the pane escalates with up to
+  two firm re-asks, and a blank response triggers an explicit "an empty
+  response is NEVER acceptable" nudge. A run can only end after a usable
+  JSON or a real text answer.
+- Redesign guardrails in the prompt (always-on rules + make-over brief):
+  never remove or overwrite user content (pictures/charts/tables stay -
+  redesign around them), clear_slide only on nearly-empty placeholders,
+  duplicate_slide_to never aimed at slides still carrying user content, and
+  a pass must cover every in-scope slide (phase 1 + immediate phase 2 for
+  very long op lists - never stop halfway).
+- The make-over brief now names the full toolbox explicitly: op-order
+  layering, transparency stacking, rotation diagonals, gradient washes,
+  oversized numbers/keywords, accent bars, cut-outs in circles/rounded/
+  hexagons - combinations make the design feel crafted.
+### Fixed
+- clear_slide deleted every line shape on the slide, including the user's
+  own lines. Created lines are now tagged (sk-shape-*) and only tagged
+  shapes can be removed; user lines survive a clear. Shapes created by
+  create_shape are tagged at creation.
 ## 0.9.49
 ### Fixed
 - create_shape accepted geometry only in flat form (left/top/...); when a
