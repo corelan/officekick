@@ -100,6 +100,60 @@ actual pixels from a provider with an OpenAI-style images API, and inserts them
   limitation); Word: at the end of the document.
 - If the profile has no image model, the run says so instead of failing dark.
 
+## Settings reference
+
+Open the gear tab: five sub-tabs - **General**, **Approval policy**,
+**Connections**, **Profiles**, **Inspector**. Every value lives in
+`~/.officekick/config.json`, is re-read on each pane open (settings survive
+close/reopen and app restarts) and only ever stored locally.
+
+### General
+
+- **Check for updates automatically at startup** (default on): once per boot
+  the pane reads the released VERSION from GitHub and shows "Update available"
+  with the update steps when a newer release exists (see the README section
+  "How to update"). Token-free (plain HTTPS against the public repo); nothing
+  is ever downloaded or installed automatically. "Check now" runs the same
+  check on demand.
+- **Enable debug logging** (default off): appends AI interactions and
+  document/deck/mail traces to `~/.officekick/logs/debug-YYYY-MM-DD.log` (one
+  file per day). The log contains text content and full provider payloads -
+  keep it off for sensitive work.
+
+### Approval policy
+
+- **Behaviour - "Auto apply approved actions (DocKick)"**: per-add-in since
+  0.9.0 (one value for SlideKick, one for DocKick, one for MailKick; the old
+  global value keeps working as the default until an add-in gets its own).
+  When ON, every run ticks the run's "auto-apply" box; when OFF it stays
+  manual.
+- **Approval policy per action**: one block per action - name + "what it
+  does" on top, the three modes below:
+  `auto` = apply immediately (still shown in the summary with results),
+  `confirm` = waits for the checkbox + Apply in the gate,
+  `deny` = blocked, shown with a notice.
+  After the list (behind a divider) a per-action "don't ask again for 'X'
+  this session" option may appear - ticking it auto-approves THAT action type
+  for the REST OF THE PANE SESSION only (it resets when the pane reopens; it
+  does not change the stored policy). Actions the policy denies or rejects
+  are listed but marked, and never applied. **Save policy** persists the
+  whole table.
+- The gate itself: proposed actions appear with the description below the
+  action tag, a per-action checkbox (right) and a red x to remove an action
+  from the batch (two clicks: "sure?" confirm, auto-revert after ~3.5 s). A
+  divider separates the list from the "don't ask again" checkboxes.
+
+- **AI edits land as tracked changes** (Word section, default off): when on,
+  every AI edit batch switches the DOCUMENT's Track Changes mode on before
+  applying and restores the mode the document had before the batch afterwards
+  (a tracking mode you enabled yourself stays enabled). Settle the revisions
+  afterwards with the "accept tracked changes" / "reject tracked changes"
+  actions; "set track changes" flips the document mode itself (Review-tab
+  toggle).
+
+Approval defaults for the actions are listed in the "Document actions (ops)"
+table above; anything not listed follows the pane's default policy.
+
 ## Simulator
 
 The exact task pane runs in a normal browser against an in-memory document

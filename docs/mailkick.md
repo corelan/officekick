@@ -94,6 +94,63 @@ Addins -> remove the add-in (it appears under the name Corelan MailKick).
 http://localhost:8765/mailkick/static/simulator.html exercises the whole
 pipeline in a browser (fake message + compose draft).
 
+## Settings reference
+
+Open the gear tab: five sub-tabs - **General**, **Approval policy**,
+**Connections**, **Profiles**, **Inspector**. Every value lives in
+`~/.officekick/config.json`, is re-read on each pane open (settings survive
+close/reopen and app restarts) and only ever stored locally.
+
+### General
+
+- **Check for updates automatically at startup** (default on): once per boot
+  the pane reads the released VERSION from GitHub and shows "Update available"
+  with the update steps when a newer release exists (see the README section
+  "How to update"). Token-free (plain HTTPS against the public repo); nothing
+  is ever downloaded or installed automatically. "Check now" runs the same
+  check on demand.
+- **Enable debug logging** (default off): appends AI interactions and
+  document/deck/mail traces to `~/.officekick/logs/debug-YYYY-MM-DD.log` (one
+  file per day). The log contains text content and full provider payloads -
+  keep it off for sensitive work.
+
+### Approval policy
+
+- **Behaviour - "Auto apply approved actions (MailKick)"**: per-add-in since
+  0.9.0 (one value for SlideKick, one for DocKick, one for MailKick; the old
+  global value keeps working as the default until an add-in gets its own).
+  When ON, every run ticks the run's "auto-apply" box; when OFF it stays
+  manual.
+- **Approval policy per action**: one block per action - name + "what it
+  does" on top, the three modes below:
+  `auto` = apply immediately (still shown in the summary with results),
+  `confirm` = waits for the checkbox + Apply in the gate,
+  `deny` = blocked, shown with a notice.
+  After the list (behind a divider) a per-action "don't ask again for 'X'
+  this session" option may appear - ticking it auto-approves THAT action type
+  for the REST OF THE PANE SESSION only (it resets when the pane reopens; it
+  does not change the stored policy). Actions the policy denies or rejects
+  are listed but marked, and never applied. **Save policy** persists the
+  whole table.
+- The gate itself: proposed actions appear with the description below the
+  action tag, a per-action checkbox (right) and a red x to remove an action
+  from the batch (two clicks: "sure?" confirm, auto-revert after ~3.5 s). A
+  divider separates the list from the "don't ask again" checkboxes.
+
+- MailKick has NO "never send" toggle - it never sends anything by design:
+  `draft reply` / `forward` / `new_meeting` only OPEN windows (reply /
+  reply-all / forward / meeting-invite) and `compose_body` rewrites the body
+  of the mail you are composing. Those window-opening actions default to
+  `auto`; `new_message` (from a template), `categories` (set_categories) and
+  `save_draft` use the policy table above. On the General sub-tab you still
+  have the update check and debug logging.
+
+MailKick-specific context details: the email context can include attachments
+(name + size - contents are not read), the mailbox's KNOWN CATEGORIES master
+list (when Outlook's permission level allows reading it) and the
+multi-selected items for batch triage. Named templates live on their own tab
+(not in Settings).
+
 ## Hard limits (Office.js)
 Moving/archiving/deleting messages and folder enumeration/selection are NOT
 possible for regular task-pane add-ins (the only move verb lives in the

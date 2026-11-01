@@ -21,6 +21,15 @@
 ### Added
 - Every busy status (Asking ..., collecting context, generating image, applying, model-output repair) now shows a rotating indicator character so it reads as still-working.
 
+## [0.9.11a] - docs, no release
+### Docs
+- New "Settings reference" section in all three add-in docs: the five
+  Settings sub-tabs (General / Approval policy / Connections / Profiles /
+  Inspector), what each setting does and its default (update check, debug
+  logging, per-add-in auto-apply, policy modes + session approvals, gate
+  behaviour, speaker notes on DocKick-only variants: tracked changes, and
+  MailKick's never-send rules + context extras).
+
 ## [0.9.11] - 2026-10-31
 ### Changed - approval gate
 - A horizontal divider now separates the proposed-actions list from the
