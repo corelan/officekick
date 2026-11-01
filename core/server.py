@@ -32,7 +32,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 APP = "OfficeKick"
-VERSION = "0.9.59"
+VERSION = "0.9.60"
 
 CONNECTION_TYPES = (
     "openai",
@@ -104,6 +104,19 @@ ANTHROPIC_FALLBACK_MODELS = (
 )
 
 MAX_BODY_BYTES = 2 * 1024 * 1024
+
+
+# async image-generation jobs: POST /api/image/start runs the provider call in
+# a background thread; the pane polls /api/image/status/<id> with short
+# requests so a long-lived fetch cannot be dropped by the WebView.
+IMAGE_JOBS = {}
+IMAGE_JOBS_LOCK = threading.Lock()
+IMAGE_JOBS_TTL = 900.0   # jobs older than 15 min are pruned
+
+def _prune_image_jobs():
+    now = time.time()
+    for jid in [j for j, v in IMAGE_JOBS.items() if now - v.get("at", 0) > IMAGE_JOBS_TTL]:
+        IMAGE_JOBS.pop(jid, None)
 IMAGE_TIMEOUT = 300   # image generation is slow (60-180s)
 
 
@@ -1642,6 +1655,18 @@ class SlideKickHandler(BaseHTTPRequestHandler):
             elif path.startswith("/api/templates/"):
                 tid = path[len("/api/templates/"):]
                 self._send_json(self.store.templates.get(tid))
+            elif path.startswith("/api/image/status/"):
+                # async image job polls: short-lived GETs that survive
+                # WebView suspension, unlike the old long-lived POST
+                jid = path.rsplit("/", 1)[-1]
+                with IMAGE_JOBS_LOCK:
+                    job = IMAGE_JOBS.get(jid)
+                    if job is None:
+                        raise ApiError(404, "Unknown image job")
+                    reply = {k: job.get(k) for k in ("status", "b64", "error", "model")}
+                    if job.get("status") == "done" and job.get("b64"):
+                        IMAGE_JOBS.pop(jid, None)   # consumed - free the memory
+                self._send_json({"ok": True, **reply})
             elif path.startswith("/api/"):
                 self._error(404, "Unknown API endpoint: %s" % path)
             else:
@@ -1742,6 +1767,47 @@ class SlideKickHandler(BaseHTTPRequestHandler):
                 dbg_line(self.store, "taskpane",
                          str(body.get("category") or "event"), body.get("data"))
                 self._send_json({"ok": True})
+            elif path == "/api/image/start":
+                conn_name = body.get("connection")
+                conn = self.store.find_connection(conn_name or "")
+                if not conn:
+                    raise ApiError(404, "Unknown connection: %r" % (conn_name,))
+                model = body.get("model") or ""
+                prompt = body.get("prompt") or ""
+                if not model or not prompt:
+                    raise ApiError(400, "image request needs 'model' and 'prompt'")
+                size = body.get("size") or None
+                jid = "img-%d-%d" % (time.time() * 1000, threading.get_ident())
+                with IMAGE_JOBS_LOCK:
+                    _prune_image_jobs()
+                    IMAGE_JOBS[jid] = {"status": "running", "model": model, "at": time.time()}
+                def _gen_image_job(jid2, conn2, model2, prompt2, size2):
+                    try:
+                        b64 = provider_generate_image(conn2, model2, prompt2, size2)
+                        with IMAGE_JOBS_LOCK:
+                            j = IMAGE_JOBS.get(jid2)
+                            if j is not None:
+                                j["status"] = "done"
+                                j["b64"] = b64
+                    except Exception as exc:
+                        with IMAGE_JOBS_LOCK:
+                            j = IMAGE_JOBS.get(jid2)
+                            if j is not None:
+                                j["status"] = "error"
+                                j["error"] = str(exc)
+                threading.Thread(target=_gen_image_job,
+                                 args=(jid, conn, model, prompt, size), daemon=True).start()
+                self._send_json({"ok": True, "jobId": jid, "model": model})
+            elif path.startswith("/api/image/status/") and method == "GET":
+                jid = path.rsplit("/", 1)[-1]
+                with IMAGE_JOBS_LOCK:
+                    job = IMAGE_JOBS.get(jid)
+                    if job is None:
+                        raise ApiError(404, "Unknown image job")
+                    reply = {k: job.get(k) for k in ("status", "b64", "error", "model")}
+                    if job.get("status") == "done" and job.get("b64"):
+                        IMAGE_JOBS.pop(jid, None)   # consumed - free the memory
+                self._send_json({"ok": True, **reply})
             elif path == "/api/image":
                 conn_name = body.get("connection")
                 conn = self.store.find_connection(conn_name or "")

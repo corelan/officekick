@@ -30,6 +30,21 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.60
+### Changed
+- Image generation no longer holds one WebView fetch open for the whole
+  provider wait - that is what produced the batch of "Cannot reach the
+  OfficeKick server (/api/image): Load failed" lines: the server actually
+  completed several of those generations (HTTP 200 in the access log) while
+  the pane's long-lived fetch had already been killed.
+  Server: new POST /api/image/start runs the provider call in a background
+  thread and returns a jobId; GET /api/image/status/<id> hands back the
+  result (job map is pruned by TTL, done results are consumed once).
+  Pane: the three image ops (set_background picture / set_shape_image /
+  create_image) now start the job and poll every 4 s with short requests -
+  a dropped poll costs one cycle, not the whole generation. Transport
+  hiccups during polling are tolerated; the 5-minute budget stays. The
+  fail-once retry pass from 0.9.54 remains the last line of defense.
 ## 0.9.59
 ### Added
 - Progressive action tracking in all apply paths: as each action executes it

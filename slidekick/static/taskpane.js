@@ -334,6 +334,30 @@
     });
   }
 
+  // ---- image generation as an async job: short 4s polls survive WebView
+  // suspension, a killed fetch costs one cycle instead of the whole wait ----
+  function imageJob(payload) {
+    var deadline = Date.now() + 300000;   // same 5-minute budget as before
+    function poll(jobId) {
+      if (Date.now() > deadline) {
+        throw new FriendlyError("image generation timed out after 300 s (job " + jobId + ")");
+      }
+      return apiJson("/api/image/status/" + encodeURIComponent(jobId), "GET", undefined)
+        .catch(function (err) {   // transport hiccup: keep polling - never give up early
+          return { ok: true, status: "running" };
+        })
+        .then(function (st) {
+          if (st && st.status === "done") return { ok: true, b64: st.b64 };
+          if (st && st.status === "error") throw new FriendlyError("image generation failed: " + (st.error || "unknown provider error"));
+          return new Promise(function (res) { setTimeout(res, 4000); }).then(function () { return poll(jobId); });
+        });
+    }
+    return apiJson("/api/image/start", "POST", payload).then(function (j) {
+      if (!j || !j.jobId) throw new FriendlyError("server did not start the image job");
+      return poll(j.jobId);
+    });
+  }
+  SK.imageJob = imageJob;
   function apiJson(path, method, body) {
     var t0 = Date.now();
     var verb = method || "GET";
@@ -2654,16 +2678,9 @@ OfficeDeck.prototype.setNotes = function (i, text) {
                 "' - set one in Profiles (connection + model with an images API).");
             }
             setStatus("Generating background… (often 30-90 s depending on the model)", "busy");
-            return Promise.race([
-              apiJson("/api/image", "POST", {
+            return imageJob({
                 connection: imgRefB.connection, model: imgRefB.model, prompt: op.prompt,
-              }),
-              new Promise(function (_, rej) {
-                setTimeout(function () {
-                  rej(new FriendlyError("image generation timed out after 300 s (no answer from '" + imgRefB.model + "')"));
-                }, 300000);
-              }),
-            ]).then(function (img) {
+              }).then(function (img) {
               if (!img || !img.b64) throw new FriendlyError("server returned no image data");
               return deck.setBackground(cur, { kind: "image", b64: img.b64, transparency: op.transparency }).then(function () {
                 lines.push({ ok: true, text: "slide " + op.slide + " background set (AI picture, " + imgRefB.connection + ":" + imgRefB.model + ")" });
@@ -2683,16 +2700,9 @@ OfficeDeck.prototype.setNotes = function (i, text) {
               "' - set one in Profiles (connection + model with an images API).");
           }
           setStatus("Generating picture fill\u2026 (often 30-90 s depending on the model)", "busy");
-          return Promise.race([
-            apiJson("/api/image", "POST", {
+          return imageJob({
               connection: imgRefI.connection, model: imgRefI.model, prompt: op.prompt,
-            }),
-            new Promise(function (_, rej) {
-              setTimeout(function () {
-                rej(new FriendlyError("image generation timed out after 300 s (no answer from '" + imgRefI.model + "')"));
-              }, 300000);
-            }),
-          ]).then(function (img) {
+            }).then(function (img) {
             if (!img || !img.b64) throw new FriendlyError("server returned no image data");
             return deck.setShapeImage(cur, op.shape - 1, img.b64, op.transparency).then(function () {
               lines.push({ ok: true, text: "picture-filled shape " + op.shape + " on slide " + op.slide +
@@ -2739,16 +2749,9 @@ OfficeDeck.prototype.setNotes = function (i, text) {
               "' - set one in Profiles (connection + model with an images API).");
           }
           setStatus("Generating image… (often 30-90 s depending on the model)", "busy");
-          return Promise.race([
-            apiJson("/api/image", "POST", {
+          return imageJob({
               connection: imgRef.connection, model: imgRef.model, prompt: op.prompt,
-            }),
-            new Promise(function (_, rej) {
-              setTimeout(function () {
-                rej(new FriendlyError("image generation timed out after 300 s (no answer from '" + imgRef.model + "')"));
-              }, 300000);
-            }),
-          ]).then(function (img) {
+            }).then(function (img) {
             if (!img || !img.b64) throw new FriendlyError("server returned no image data");
             return deck.addImage({ b64: img.b64, slide: cur, geometry: op.geometry }).then(function (ri) {
               var note = !SK.sim && op.slide != null && ctx && op.slide - 1 !== ctx.activeSlide
@@ -3063,10 +3066,17 @@ OfficeDeck.prototype.setNotes = function (i, text) {
             "Reply with format A (reply) holding ONLY the design concept: an " +
             "invented, bold style name; a deep/panel/accent hex trio plus which " +
             "text color goes on each surface; the type scale (title/body sizes); " +
-            "one image-style phrase used by every picture; and one DISTINCT " +
-            "composition idea per slide role. Take risks - the opposite of a " +
-            "default PowerPoint look. If a earlier redesign appears in the " +
-            "history, pick a contrasting direction. 150-300 words.",
+            "one image-style phrase used by every picture; and then ONE EXACT " +
+            "GEOMETRY TEMPLATE PER SLIDE ROLE on the 960x540-point canvas - " +
+            "for each role list every element with its concrete position and " +
+            "size in points and its fill/transparency (example: 'cover: full-bleed " +
+            "bg 0,0,960,540; overlay 0,0,960,540 fill #000 transparency 0.5; " +
+            "title box 96,210,680,110; accent bar 96,196,8,84 accent'). The " +
+            "builders will apply YOUR numbers as the design - so be precise and " +
+            "make every slide with that role come out identical in structure." +
+            "Take compositional risks - the opposite of a default PowerPoint look. " +
+            "If a earlier redesign appears in the history, pick a contrasting " +
+            "direction. 200-350 words.",
         }]);
         setStatus("Consulting the AI design director\u2026", "busy");
         return askRetryable(function () {
@@ -3094,6 +3104,10 @@ OfficeDeck.prototype.setNotes = function (i, text) {
               { role: "assistant", content: moConcept || "" },
               { role: "user",
                 content: "CONCEPT (from the design director):\n" + (moConcept || "(decide the concept yourself)") +
+                  "\n\nRealize the director's geometry templates EXACTLY: same-role slides get the " +
+                  "same template and the same numbers - apply them as-is (fill in only content and " +
+                  "small content-driven sizing tweaks). Do not invent new compositions per round - " +
+                  "consistency comes from the templates, creativity came from the director." +
                   "\n\n" + spec +
                   (x != null ? ("\n\nThis round covers slides " + x + ".." + y + " ONLY (1-based outline numbers). Slide count in the deck: " + slideN + ".") : "\n\nThis round covers the WHOLE deck.") +
                   (all.length ? ("\n\nOPS SO FAR: " + all.length + " action(s) - do not repeat them. " + coverageNote()) : "") +
@@ -3191,7 +3205,10 @@ OfficeDeck.prototype.setNotes = function (i, text) {
                 { role: "user",
                   content: "REVIEW ROUND for the make-over. CONCEPT:\n" + (moConcept || "(your concept)") +
                     "\n\nOPS SO FAR: " + all.length + " action(s) across the deck. " + coverageNote() +
-                    "\n\nAudit the redesign against the concept AND the readability law. If specific slides still lack structural design, imagery the concept promised, or readable text, reply with slide_ops fixing ONLY those slides. If the deck is complete per the concept, reply {\"kind\":\"reply\",\"text\":\"done\"}." },
+                    "\n\nAudit the redesign deck-wide: same-role slides must share one composition (the " +
+                    "director's template) - flag slides that deviate; check imagery the concept promised " +
+                    "and every text against the readability law. Reply with slide_ops fixing ONLY the " +
+                    "slides that deviate or lack something. If the deck matches the concept, reply {\"kind\":\"reply\",\"text\":\"done\"}." },
               ]);
               setStatus("Review pass " + n + " - auditing the redesign\u2026", "busy");
               return askRetryable(function () {
