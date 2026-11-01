@@ -57,6 +57,9 @@
     format_selection: { label: "format selected text", hint: "the same font changes applied to the TEXT YOU SELECTED right now." },
     create_shape: { label: "insert shape", hint: "textbox (with text) or geometric shapes (rectangle/ellipse/roundedRectangle/hexagon/diamond/triangle) and straight lines at a position." },
     move_slide: { label: "move slide", hint: "moves a slide so it becomes slide M (numbers as in the outline); runs alone in a batch." },
+    duplicate_slide: { label: "duplicate slide", hint: "exact copy of one slide, inserted right after it (runs alone in a batch)." },
+    duplicate_slide_to: { label: "copy slide over", hint: "copies one slide's full contents over another slide (target replaced); runs alone." },
+    clear_slide: { label: "clear slide", hint: "empties one slide: clears all texts; the slide, layout and background stay." },
     set_background: { label: "slide background", hint: "AI-generated picture or a solid color as the slide background (optional transparency)." },
     set_shape_image: { label: "picture-fill shape", hint: "Fills one existing shape with an AI-generated picture (optional transparency) - images inside panels, circles, cut-outs." },
     add_hyperlink: { label: "add hyperlink", hint: "links one shape (from the outline) to a URL." },
@@ -2270,7 +2273,7 @@ OfficeDeck.prototype.setNotes = function (i, text) {
       ops.push(out);
     });
     // slide-lifecycle ops reindex the deck mid-run - they must run alone
-    var ALONE_TYPES = ["move_slide", "duplicate_slide_to"];
+    var ALONE_TYPES = ["move_slide", "duplicate_slide", "duplicate_slide_to"];
     var hasAlone = ops.some(function (op) { return ALONE_TYPES.indexOf(op.type) >= 0; });
     if (hasAlone && ops.length > 1) {
       var moved = ops.filter(function (op) { return ALONE_TYPES.indexOf(op.type) >= 0; });

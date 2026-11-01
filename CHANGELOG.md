@@ -30,6 +30,12 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.37
+### Fixed
+- duplicate_slide / duplicate_slide_to / clear_slide were missing from the
+  op metadata table (the model could emit them and validation rejected them
+  as "unknown op type"). Now registered properly: gate labels, validation,
+  and the alone-in-batch rule cover all three.
 ## 0.9.36
 ### Added
 - Slide lifecycle ops (SlideKick, PowerPointApi 1.10):
