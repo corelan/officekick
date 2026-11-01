@@ -30,6 +30,20 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.46
+### Changed
+- The make-over brief rewritten for zero-guidance redesign requests: it now
+  states "FULL REDESIGN, not decoration" and that a slide receiving only a
+  font/color tweak makes the job incomplete; it fixes the theme (style +
+  3-color palette + type + one shared image style) before any op; it prescribes
+  concrete per-role blueprints (full-bleed photo + overlay + anchored large
+  title + accent bar for covers, split panel with an in-shape cut-out photo +
+  oversized number for content, restrained statement/table/image patterns);
+  and it finishes with hard completeness rules - every in-scope slide takes a
+  structural op, moves on most slides, at least 3 generated images for a
+  full-deck pass (zero images with a photographic theme = failure), and a
+  readability law (light text only on overlays/deep/panel colors, no short
+  text on bare photos, nothing under 14pt on colored fields).
 ## 0.9.45
 ### Changed
 - Partial-apply dimming refined: the Apply button dims while any confirm
