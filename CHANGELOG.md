@@ -30,6 +30,19 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.59
+### Added
+- Progressive action tracking in all apply paths: as each action executes it
+  disappears from the proposal list; a "Completed actions (n)" list grows
+  one check-mark at a time (newest on top). Actions that fail stay in the
+  proposal list and are dimmed until the retry pass resolves them. The gate
+  ends empty when every action succeeded.
+- Readability is now enforced mechanically, not just prompted: the gate
+  scans every planned op against the slide's planned background solid -
+  dark text planned on a dark surface is flipped to near-white, light text
+  on a light surface to near-black, with a "Readability guard: N text
+  color(s) automatically adjusted" note in the gate. Photo backgrounds are
+  excluded (their overlays govern contrast).
 ## 0.9.58
 ### Changed
 - The make-over orchestration is now a multi-pass, self-driving pipeline.

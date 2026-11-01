@@ -703,3 +703,9 @@ body.dark #chat-timer { color: #7ee787; }
 }
 body.dark .pt-copy { color: #FFFFFF; }   /* white in dark mode */
 .pt-copy:hover { transform: scale(1.15); }
+
+/* progressive apply: completed-actions box + failed rows */
+.opsbox.donebox { margin-top: 8px; }
+.doneline { color: #2e9e5b; font-size: 12px; }
+.doneinline { margin: 4px 0 2px 2px; max-height: 170px; overflow-y: auto; }
+.opfailrow { opacity: .55; }

@@ -2768,15 +2768,21 @@ OfficeDeck.prototype.setNotes = function (i, text) {
 
     var seq = Promise.resolve();
     ops.forEach(function (op, ix) {
-      seq = seq.then(function () { return runOne(op); }).catch(function (err) {
-        var msg = err && err.friendly ? err.message : (err && err.message) || String(err);
-        lines.push({ ok: false, text: op.type + ": " + msg });
-        failedOps.push(op);
-        if (!(err && err.friendly)) {
-          lines.push({ ok: false, text: "unexpected error - stopping remaining ops" });
-          abortedIdx = ix;
-          throw err; // aborts the chain below; remaining ops join the retry pass
-        }
+      seq = seq.then(function () {
+        var l0 = lines.length;
+        return runOne(op).then(function () {
+          if (typeof SK.opProgress === "function") SK.opProgress(op, lines.slice(l0), true);
+        }, function (err) {
+          var msg = err && err.friendly ? err.message : (err && err.message) || String(err);
+          lines.push({ ok: false, text: op.type + ": " + msg });
+          failedOps.push(op);
+          if (typeof SK.opProgress === "function") SK.opProgress(op, lines.slice(l0), false);
+          if (!(err && err.friendly)) {
+            lines.push({ ok: false, text: "unexpected error - stopping remaining ops" });
+            abortedIdx = ix;
+            throw err; // aborts the chain below; remaining ops join the retry pass
+          }
+        });
       });
     });
     return seq.then(
@@ -3532,6 +3538,7 @@ OfficeDeck.prototype.setNotes = function (i, text) {
 
   function renderParsed(parsed, ctx, instruction) {
     SK.lastInstruction = instruction;
+    SK.opProgress = null;     // a fresh run gets fresh progressive tracking
     var out = $("chat-output");
     out.innerHTML = "";
     wirePastHeader();
@@ -3563,6 +3570,7 @@ OfficeDeck.prototype.setNotes = function (i, text) {
       return;
     }
     var validation = validateOps(parsed.ops, ctx);
+    SK.contrastFixes = adjustForContrast(validation.ops);   // mechanical readability guard
     if (!validation.ops.length && !validation.invalid.length) {
       var box3 = document.createElement("div");
       box3.className = "reply-text";
@@ -3586,7 +3594,20 @@ OfficeDeck.prototype.setNotes = function (i, text) {
       autoBox.appendChild(autoH);
       var autoResult = document.createElement("div");
       autoBox.appendChild(autoResult);
+      var autoDone = document.createElement("div");
+      autoDone.className = "doneinline";
+      var autoDoneN = 0;
+      autoBox.appendChild(autoDone);
       out.appendChild(autoBox);
+      SK.opProgress = function (op, addedLines, ok) {
+        if (!ok) return;
+        autoDoneN++;
+        var dr = document.createElement("div");
+        dr.className = "oprowline1 doneline";
+        dr.textContent = "\u2713 " + ((OPS_META[op.type] || { label: op.type }).label) +
+          (op.slide != null ? " - slide " + op.slide : "");
+        autoDone.insertBefore(dr, autoDone.firstChild);
+      };
       setStatus("Auto-apply: running " + validation.ops.length + " action(s)…", "busy");
       applyOps(SK.deck, validation.ops, ctx).then(function (res) {
         renderApplyResult(autoResult, res);
@@ -3627,6 +3648,37 @@ OfficeDeck.prototype.setNotes = function (i, text) {
     }
   }
 
+  // ---- mechanical readability enforcement: no dark-on-dark / light-on-light ----
+  function hexLum(hex) {
+    var m = /^#([0-9a-fA-F]{6})$/.exec(String(hex || "").trim());
+    if (!m) return null;
+    var v = parseInt(m[1], 16);
+    var r = (v >> 16 & 255) / 255, g = (v >> 8 & 255) / 255, b = (v & 255) / 255;
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  }
+  function adjustForContrast(ops) {
+    var fixes = 0;
+    var fieldLum = {};   // 1-based slide -> luminance of the last planned solid background
+    ops.forEach(function (op) {
+      if (op.type === "set_background" && op.kind === "solid" && op.color != null) {
+        var L = hexLum(op.color);
+        if (L != null) fieldLum[op.slide] = L;
+        return;
+      }
+      if (op.type === "set_background" && op.kind != null && op.kind !== "solid") {
+        delete fieldLum[op.slide];   // photo: contrast handled by overlays, not guessing
+      }
+      if (op.type === "format_text" && op.font && op.font.color != null && op.slide != null) {
+        var field = fieldLum[op.slide];
+        var c = hexLum(op.font.color);
+        if (field == null || c == null) return;
+        if (field < 0.4 && c < 0.4) { op.font.color = "#F7F5F0"; op._contrastFix = 1; fixes++; }
+        else if (field > 0.6 && c > 0.6) { op.font.color = "#17171B"; op._contrastFix = 1; fixes++; }
+      }
+    });
+    return fixes;
+  }
+
   function renderOpsPreview(out, validation, ctx) {
     var caps = SK.deck.capabilities();
     var box = document.createElement("div");
@@ -3643,6 +3695,13 @@ OfficeDeck.prototype.setNotes = function (i, text) {
         String(SK.moConcept).slice(0, 110) + (String(SK.moConcept).length > 110 ? "\u2026" : "");
       box.appendChild(moN);
       SK.moConcept = "";
+    }
+    if (SK.contrastFixes > 0) {
+      var cfN = document.createElement("div");
+      cfN.className = "opnote";
+      cfN.textContent = "Readability guard: " + SK.contrastFixes +
+        " text color(s) automatically adjusted for contrast with their background.";
+      box.appendChild(cfN);
     }
     if (SK.moPassInfo) {
       var passN = document.createElement("div");
@@ -3680,6 +3739,7 @@ OfficeDeck.prototype.setNotes = function (i, text) {
     var tableRows = document.createElement("div");
     rows.forEach(function (row) {
       var r = document.createElement("div");
+      if (row.op) row.op._rowEl = r;          // progressive apply removes this row
       r.className = "oprow " + (OP_EFFECT[row.op.type] === "del" ? "op-del" : "op-mod") +
         (row.mode === "deny" ? " blocked" : row.mode === "invalid" ? " invalid" : "");
       // narrow pane: line 1 = action tag + checkbox + cancel (right aligned);
@@ -3881,6 +3941,31 @@ OfficeDeck.prototype.setNotes = function (i, text) {
       if (!chosen.length) { setStatus("Nothing approved - nothing applied.", ""); return; }
       dbg("ops.apply", { approved: chosen.map(function (op) { return op.type; }), count: chosen.length });
       applyBtn.disabled = true;
+      // progressive tracking: executed actions leave the proposal list and grow
+      // into a completed list one by one
+      var doneBox = document.createElement("div");
+      doneBox.className = "opsbox donebox";
+      var doneH = document.createElement("h3");
+      var doneCount = 0;
+      doneH.textContent = "Completed actions (0)";
+      doneBox.appendChild(doneH);
+      var doneList = document.createElement("div");
+      doneBox.appendChild(doneList);
+      tableRows.parentNode.insertBefore(doneBox, tableRows.nextSibling.nextSibling || tableRows.nextSibling);
+      SK.opProgress = function (op, addedLines, ok) {
+        if (ok) {
+          doneCount++;
+          doneH.textContent = "Completed actions (" + doneCount + ")";
+          var dr = document.createElement("div");
+          dr.className = "oprowline1 doneline";
+          dr.textContent = "\u2713 " + ((OPS_META[op.type] || { label: op.type }).label) +
+            (op.slide != null ? " - slide " + op.slide : "");
+          doneList.insertBefore(dr, doneList.firstChild);   // newest on top
+          if (op._rowEl && op._rowEl.parentNode) op._rowEl.parentNode.removeChild(op._rowEl);
+        } else if (op._rowEl && op._rowEl.parentNode) {
+          op._rowEl.classList.add("opfailrow");
+        }
+      };
       setStatus("Applying " + chosen.length + " op(s)…", "busy");
       applyOps(SK.deck, chosen, SK.lastCtx || ctx).then(function (res) {
         result.innerHTML = "";
