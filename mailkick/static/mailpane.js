@@ -1969,6 +1969,13 @@ function applyOps(deck, ops, ctx) {
       var isOpen = body.classList.toggle("open");
       pm.textContent = pmGlyph(isOpen);
     });
+    snip.addEventListener("click", function () {
+      // the excerpt line expands/collapses the step just like +/timestamp
+      var isOpen = body.classList.toggle("open");
+      pm.textContent = pmGlyph(isOpen);
+    });
+    snip.style.cursor = "pointer";
+    snip.title = "Click to open/close this request/response - the small icon copies it";
     grp.appendChild(head);
     grp.appendChild(snip);
     grp.appendChild(body);

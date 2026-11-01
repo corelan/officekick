@@ -726,9 +726,13 @@ body.dark #chat-timer { color: #7ee787; }
 /* small copy affordance on past-request steps */
 .pt-copy {
   cursor: pointer;
-  opacity: .55;
-  margin-left: 6px;
-  font-size: 11px;
-  color: inherit;
+  opacity: 1;
+  margin-left: 7px;
+  font-size: 15px;
+  line-height: 1;
+  font-weight: 600;
+  color: #111111;            /* black in light mode */
+  text-shadow: 0 0 0.4px currentColor;
 }
-.pt-copy:hover { opacity: 1; }
+body.dark .pt-copy { color: #FFFFFF; }   /* white in dark mode */
+.pt-copy:hover { transform: scale(1.15); }

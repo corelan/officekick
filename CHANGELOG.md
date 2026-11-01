@@ -30,6 +30,13 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.55
+### Changed
+- Past-request excerpts are clickable: clicking the request snippet line
+  expands/collapses the step exactly like the +/- and timestamp do.
+- The copy icon on those steps is larger (15px) and clearly visible:
+  black in light mode, white in dark mode (theme-aware), with a hover
+  scale-up.
 ## 0.9.54
 ### Changed
 - The apply flow now does its best to complete every step: after the main
