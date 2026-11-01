@@ -1030,9 +1030,30 @@
   // clicking a stored request reloads it into the input box, but only when
   // the input is empty (never clobber a typed draft)
   function copyRequestToInput(fullText) {
+    // always copy to the clipboard; refill the input only when it is empty
+    var txt = String(fullText || "");
+    var copied = false;
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(txt).catch(function () {});
+        copied = true;
+      }
+    } catch (eC) { /* fall through to the execCommand fallback */ }
+    if (!copied) {
+      try {
+        var ta = document.createElement("textarea");
+        ta.value = txt;
+        ta.style.position = "fixed";
+        ta.style.opacity = "0";
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand("copy");
+        document.body.removeChild(ta);
+      } catch (eF) { /* clipboard unavailable - ignore */ }
+    }
     var inp = $("chat-input");
     if (!inp || inp.value) return;
-    inp.value = String(fullText || "");
+    inp.value = txt;
     inp.focus();
   }
 
@@ -1898,15 +1919,24 @@ function applyOps(deck, ops, ctx) {
     ts1.className = "ptts";
     ts1.textContent = u.ts || "no timestamp";   // timestamp first
     head.appendChild(ts1);
+    var cpIc = document.createElement("span");
+    cpIc.className = "pt-copy";
+    cpIc.textContent = "\u29C9";               // copy icon next to the step title
+    cpIc.title = "Copy this request to the clipboard (and into the input box if it is empty)";
+    cpIc.addEventListener("click", function (ev) {
+      ev.stopPropagation();
+      copyRequestToInput(uc);
+    });
     var snip = document.createElement("div");
     snip.className = "pt-text";                // the request text BELOW the ts
     snip.textContent = uc.length > 50 ? uc.slice(0, 50) + "…" : uc;
+    snip.appendChild(cpIc);                    // copy affordance on the title line
     var body = document.createElement("div");
     body.className = "reqbody";
     var q1 = document.createElement("div");
     q1.className = "pt-req";
     q1.style.cursor = "pointer";
-    q1.title = "Click to load this request into the input box (only when the box is empty)";
+    q1.title = "Copy this request to the clipboard (and into the input box if it is empty)";
     var b1 = document.createElement("b");
     b1.textContent = "Request: ";
     q1.appendChild(b1);

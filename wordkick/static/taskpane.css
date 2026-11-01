@@ -689,3 +689,13 @@ body.dark #srvbeat.bad { background: #ff6b6b; }
 body:not(.dark) #chat-timer { color: #1a7f37; }
 body.dark #chat-timer { color: #7ee787; }
 
+
+/* small copy affordance on past-request steps */
+.pt-copy {
+  cursor: pointer;
+  opacity: .55;
+  margin-left: 6px;
+  font-size: 11px;
+  color: inherit;
+}
+.pt-copy:hover { opacity: 1; }

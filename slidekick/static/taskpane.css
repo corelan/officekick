@@ -692,3 +692,13 @@ body.dark #chat-timer { color: #7ee787; }
 
 /* partial-apply button: some confirm rows are left unticked */
 button.halfapply { opacity: .72; }
+
+/* small copy affordance on past-request steps */
+.pt-copy {
+  cursor: pointer;
+  opacity: .55;
+  margin-left: 6px;
+  font-size: 11px;
+  color: inherit;
+}
+.pt-copy:hover { opacity: 1; }

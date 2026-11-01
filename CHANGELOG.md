@@ -30,6 +30,13 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.53
+### Added
+- Past-request steps get a small copy icon (two joined squares) on their
+  title line, and clicking the request line now always copies the request
+  text to the clipboard as well; the input box is only refilled when empty
+  (so a prompt you are building is never overwritten). Works in all three
+  add-ins.
 ## 0.9.52
 ### Added
 - Truncated-reply recovery in all three add-ins: when a model reply is cut
