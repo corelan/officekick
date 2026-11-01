@@ -30,6 +30,14 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.62
+### Added
+- DocKick and MailKick get the same "Reload pane" button as SlideKick
+  (Settings > General, next to Check now): cache-busting hard reload from
+  the running server after a back-end update, plus the active-session
+  auto-resume markers - a reload resumes the session that was open, and a
+  new chat or session deletion clears it. All three add-ins now share the
+  same reload/resume behavior and the same common code shape.
 ## 0.9.61
 ### Changed
 - Gate lifecycle: when every action has been executed successfully the whole
