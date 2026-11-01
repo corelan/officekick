@@ -15,6 +15,7 @@ Runs on 127.0.0.1 only. Python 3.8+ standard library, no third-party deps.
 
 import argparse
 import base64
+import errno
 import json
 import os
 import socket
@@ -31,7 +32,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 APP = "OfficeKick"
-VERSION = "0.9.15"
+VERSION = "0.9.16"
 
 CONNECTION_TYPES = (
     "openai",
@@ -822,10 +823,11 @@ def http_request(url, method="GET", headers=None, payload=None, timeout=60):
             % (exc.code, method, _host_of(url), _snippet(body)),
         )
     except urllib.error.URLError as exc:
+        reason = getattr(exc, "reason", exc)
+        hint = _reachability_hint(reason, url)
         raise ApiError(
             502,
-            "Cannot reach %s (%s). Is the service running?"
-            % (_host_of(url), getattr(exc, "reason", exc)),
+            "Cannot reach %s (%s). Is the service running?%s" % (_host_of(url), reason, hint),
         )
     except (socket.timeout, TimeoutError):
         raise ApiError(502, "Timeout talking to %s (>%ss)" % (_host_of(url), timeout))
@@ -833,6 +835,33 @@ def http_request(url, method="GET", headers=None, payload=None, timeout=60):
         return json.loads(text)
     except Exception:
         return text
+
+
+def _reachability_hint(reason, url):
+    """macOS local-network privacy: a server process without the macOS
+    "Local Network" permission gets Errno 65 (EHOSTUNREACH / "No route to
+    host") for LAN targets even though the same request works from an
+    interactive shell. Attach a targeted hint for that case."""
+    errno_ = getattr(reason, "errno", None)
+    if errno_ is None and getattr(reason, "args", None):
+        first = reason.args[0]
+        if isinstance(first, int):
+            errno_ = first
+    if errno_ is None or errno_ != errno.EHOSTUNREACH:
+        return ""
+    try:
+        import ipaddress as _ip
+        import urllib.parse as _up
+        host = _up.urlsplit(url).hostname or ""
+        private = _ip.ip_address(host).is_private
+    except (ValueError, AttributeError):
+        private = False   # hostnames resolve via DNS, not the local-network wall
+    if not private:
+        return ""
+    return (" - macOS local-network check: give the OfficeKick server "
+            "'Local Network' access (System Settings > Privacy & Security > "
+            "Local Network) or restart the server from a permitted session "
+            "(e.g. 'officekick run' in a Terminal window)")
 
 
 def normalize_base(conn):

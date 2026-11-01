@@ -3536,7 +3536,11 @@ OfficeDeck.prototype.setNotes = function (i, text) {
       reader.readAsDataURL(f);
     });
 
-    $("conn-new").addEventListener("click", resetConnForm);
+    $("conn-new").addEventListener("click", function () {
+      resetConnForm();
+      var nf = $("conn-name");
+      if (nf) nf.focus();
+    });
     $("conn-save").addEventListener("click", saveConnection);
     $("conn-test").addEventListener("click", testConnection);
     $("conn-delete").addEventListener("click", function () {

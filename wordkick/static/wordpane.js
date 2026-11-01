@@ -2833,7 +2833,11 @@ function applyOps(deck, ops, ctx) {
     });
     $("chat-refresh-deck").addEventListener("click", function () { updateDeckSummary(); setStatus("Document refreshed.", ""); });
 
-    $("conn-new").addEventListener("click", resetConnForm);
+    $("conn-new").addEventListener("click", function () {
+      resetConnForm();
+      var nf = $("conn-name");
+      if (nf) nf.focus();
+    });
     $("conn-save").addEventListener("click", saveConnection);
     $("conn-test").addEventListener("click", testConnection);
     $("conn-delete").addEventListener("click", function () {

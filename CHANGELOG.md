@@ -30,6 +30,19 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.16
+### Changed
+- "+ New connection" now puts the cursor in the name field when the
+  connection form opens (all three add-ins). Saving still leaves the focus
+  where it was.
+
+### Fixed
+- Connection/provider test failures to LAN targets now explain the likely
+  macOS cause: a server process without macOS "Local Network" permission
+  gets Errno 65 (No route to host) for private IPs even though the same
+  URL works from a shell. The hint lists the System Settings grant and the
+  "restart the server from a permitted session" fallback.
+
 ## 0.9.15
 ### Changed
 - Reverted the ribbon default to the list-mode manifest: on the tested
