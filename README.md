@@ -1,31 +1,35 @@
 # OfficeKick
 
-AI assistant add-ins for **Microsoft Office** (macOS and Windows) on one shared
-technology stack, from Corelan:
+AI assistant add-ins for **Microsoft Office**, from Corelan. They run on macOS
+and Windows and share one technology stack.
 
-- **Corelan SlideKick** - the PowerPoint add-in (details: [docs/slidekick.md](docs/slidekick.md))
-- **Corelan DocKick** - the Word add-in (details: [docs/dockick.md](docs/dockick.md))
-- **Corelan MailKick** - the Outlook add-in: summarize/translate, draft replies (you send), categories ([docs/mailkick.md](docs/mailkick.md))
+- **Corelan SlideKick** - the PowerPoint add-in ([docs/slidekick.md](docs/slidekick.md))
+- **Corelan DocKick** - the Word add-in ([docs/dockick.md](docs/dockick.md))
+- **Corelan MailKick** - the Outlook add-in: summarize, translate, draft replies (you send), categories ([docs/mailkick.md](docs/mailkick.md))
 
-Type what you want, in plain language: `reword the current slide`,
-`make slides about threat hunting`, `add a table of the key findings`, `leave a
-review comment on this paragraph`. The add-in reads your file, sends it with
-your request to the AI model **you** configured, shows the proposed changes,
-and applies them only when your approval policy allows it.
+## How it works
 
-Every exchange is auto-saved in a resumable local session; the pane's
-**Previous-requests box** shows each run with its timestamp (+/- to expand).
-MailKick adds **reply + / reply −** one-click buttons for a drafted polite
-reply. Nothing goes through a third-party service: the add-ins talk to the providers
-*you* configure (OpenAI, Anthropic, OpenRouter, any OpenAI-compatible server,
-Ollama, llama.cpp), through one small local server on your own machine.
-Connections, model profiles and the approval policy are configured **once** and
-shared by every Office app.
+1. You type what you want, in plain language.
+   Examples: `reword the current slide`, `make slides about threat hunting`,
+   `add a table of the key findings`, `leave a review comment on this paragraph`.
+2. The add-in reads your file.
+3. The request goes to an AI model that **you** configured.
+4. The add-in shows the proposed changes.
+5. Your approval policy decides what gets applied.
 
-## Install / update
+Everything runs on your machine:
 
-macOS and Windows take the SAME unified installer (it auto-detects the
-platform):
+- One small local server serves the add-ins and the AI requests.
+- You configure providers once; every Office app shares them.
+- Supported providers: OpenAI, Anthropic, OpenRouter, any OpenAI-compatible
+  server, Ollama, llama.cpp. Nothing goes through a third-party service.
+- Every exchange is auto-saved in a resumable local session. The
+  **Previous requests** box shows each run with its timestamp.
+- MailKick adds one-click **reply+ / reply-** buttons for a drafted polite reply.
+
+## Install
+
+One installer for macOS and Windows. It detects the platform by itself.
 
 ```bash
 git clone https://github.com/corelan/officekick.git
@@ -33,133 +37,124 @@ cd officekick
 python3 install.py        # Windows: python install.py
 ```
 
-It shows an interactive menu - Install / Update / Uninstall - lists what it
-will change and which OS prompts may appear, and asks whether to autostart the
-local server (default yes: a login item via SMAppService on macOS /
-a windowless per-user scheduled task on Windows; answering no keeps the server
-manual). No admin rights are required on either platform. The add-in transport
-is plain `http://localhost:8765` (Office allows localhost over http - no
-certificates involved on any path). Non-interactive equivalents:
-`python3 install.py --install`, `--update` (= `git pull` + update),
-`--uninstall [--purge-config]`, `--dry-run` to preview.
+The installer shows a menu:
 
-The install is idempotent (re-run to update/repair): it checks `python3`
-(>= 3.8), detects the installed Office apps, deploys files to
-`~/Library/Application Support/OfficeKick` (macOS) or `%LOCALAPPDATA%\OfficeKick`
-(Windows), renders + registers/sideloads the add-in manifests (macOS WEF
-containers; Windows per-user trusted folder catalog via HKCU - Outlook on
-Windows needs a one-time "Add from File" dialog, the installer prints the
-steps), registers autostart, starts the server and health-checks it. The
-macOS server wrapper also restarts the server on crash. Platform-specific
-legacy installers remain available: `install.sh` (macOS) / `install.ps1`
-(Windows).
+1. **Install** (also repairs an existing install)
+2. **Update** (pulls the repo with git, then updates)
+3. **Uninstall**
 
-### How to update OfficeKick
+What the installer does:
 
-The server itself never runs `git` and needs no tokens. It only *detects*
-updates:
+- Checks `python3` (3.8 or newer).
+- Finds your Office apps.
+- Copies the files to `~/Library/Application Support/OfficeKick` (macOS) or
+  `%LOCALAPPDATA%\OfficeKick` (Windows).
+- Registers the add-ins with each Office app (macOS: WEF sideload; Windows:
+  a per-user trusted folder catalog. Outlook on Windows needs the one-time
+  "Add from File" dialog - the installer prints the steps).
+- Starts the local server on `http://localhost:8765` and health-checks it.
+- Asks whether to start the server at login. Default is **yes**.
+  - macOS: a login item ("OfficeKickServer" via SMAppService).
+  - Windows: a per-user scheduled task (windowless `pythonw`).
 
-- **Check**: Settings -> "Check now" (or the **Check for updates automatically
-  at startup** option, on by default). It reads this repo's `VERSION` file from
-  GitHub, compares with the running version and shows a plain-text notice.
-- **Apply** (both platforms):
+Good to know:
 
-  ```bash
-  cd officekick
-  python3 install.py --update    # Windows: python install.py --update
-  ```
+- No admin rights are needed.
+- The add-ins talk to the server over plain http. Office allows `localhost`
+  over http, so there are no certificates on any path.
+- The macOS server wrapper restarts the server if it crashes.
+- Re-running the installer is safe. It repairs and updates in place.
 
-  (--update = git pull + re-deploy + restart; equivalently: manual `git pull`,
-  then a plain `python3 install.py` run through the menu.)
+## Update
 
-- **Then**: quit and reopen the Office app(s) so the task panes load the new
-  static files. Your config (`~/.officekick/config.json`) and sessions survive
-  updates. There is no automatic `git pull`, ever (except through an explicit
-  `--update`).
+```bash
+python3 install.py --update    # Windows: python install.py --update
+```
 
-Useful flags: `--port N`, `--ribbon` (keep the commands/AI group in the
-manifest; default = list mode), `--install` / `--update` /
-`--uninstall [--purge-config]`, `--dry-run`; legacy installers keep their own
-flags (`install.sh`: `--dev`, `status`, `run`).
+This pulls the repo with git and updates the install. Then quit and reopen
+your Office apps so the task panes load the new files.
 
-Config (API keys, profiles, policy) lives in `~/.officekick/config.json`
-(`%USERPROFILE%\.officekick`, chmod 600) and survives updates.
+The pane also checks for updates itself. See **Settings -> Check now** (or the
+"Check for updates automatically at startup" option). Your config, profiles and
+sessions survive every update.
+
+Config lives in `~/.officekick/config.json` (`%USERPROFILE%\.officekick` on
+Windows, chmod 600). API keys never leave your machine except to the provider
+you configured.
 
 ## Use it
 
-- **PowerPoint (macOS)**: Home tab -> **Add-ins** (dropdown) -> **Developer
-  Add-ins** -> **Corelan SlideKick** (with `--ribbon`: the **AI** group button
-  on the Home tab instead, if your build renders it).
+- **PowerPoint (macOS)**: Home tab -> **Add-ins** (dropdown) ->
+  **Developer Add-ins** -> **Corelan SlideKick**.
 - **Word (macOS)**: same route -> **Corelan DocKick**.
-- **PowerPoint/Word (Windows)**: Insert -> My Add-ins -> SHARED FOLDER ->
-  Corelan SlideKick / Corelan DocKick -> Add (once).
+- **PowerPoint / Word (Windows)**: Insert -> My Add-ins -> **SHARED FOLDER** ->
+  the add-in -> Add (once).
 - **Outlook (MailKick)**: the installer places the manifest in Outlook's own
-  add-in folder (`~/Library/Containers/com.microsoft.Outlook/Data/Documents/wef/mailkick.xml`);
-  **quit and reopen Outlook**. If it does not appear: Outlook -> Get Add-ins ->
-  **My add-ins -> Custom Addins -> Add a custom add-in -> Add from File** - press
-  **Cmd+Shift+G** in the picker and paste that folder/path. Windows: same trusted
-  catalog as the other two add-ins. See [docs/mailkick.md](docs/mailkick.md).
-- **Ribbon "AI" group (opt-in `--ribbon`)**: `./install.sh --ribbon` keeps the
-  manifest's commands - an **AI** group with the add-in icon and an
-  "Open <add-in>" button on the PowerPoint/Word **Home** tab (MailKick: on the
-  message read/compose tabs). Default is `--no-ribbon` (list-mode manifest):
-  the Office-Mac build we tested accepts the command manifest, REPLACES the
-  Add-ins-list entry with it, and then renders neither the group nor a list
-  item - making the add-in unreachable. Verify your build renders the group
-  before staying on this mode.
+  add-in folder. Quit and reopen Outlook. If MailKick does not appear:
+  Get Add-ins -> My add-ins -> Custom Addins -> Add a custom add-in ->
+  Add from File (press Cmd+Shift+G for the path). See
+  [docs/mailkick.md](docs/mailkick.md).
 
-First run: **Connections** tab - add a provider (type + Base URL + optional API
-key, "Test connection" lists its models); **Profiles** tab - pick the *content
-model* (edits/generation) and the *other-actions model* (advice/brainstorming)
-per profile; then type instructions in the pane and Run (Cmd/Ctrl+Enter).
+First run:
+
+1. **Connections** tab: add a provider (type + Base URL + optional API key).
+   "Test connection" lists its models.
+2. **Profiles** tab: pick the content model (edits and generation) and the
+   other-actions model (advice and brainstorming).
+3. Type an instruction in the pane and hit **Run** (Cmd/Ctrl+Enter).
+
+### Ribbon (opt-in)
+
+`python3 install.py --ribbon` keeps the manifest's AI commands: an **AI** group
+with the add-in icon on the Home tab (MailKick: message read/compose tabs).
+
+- Default is the list-mode manifest (no ribbon commands).
+- Reason: our tested Office-Mac build accepts a command manifest but replaces
+  the Add-ins-list entry with it and then renders neither the group nor the
+  list item. That leaves the add-in unreachable.
+- If your build shows the AI group, you can stay on `--ribbon`.
 
 ## macOS permissions (locally hosted models)
 
-Providers on your LAN (Ollama, llama.cpp, any private-IP base URL) need one
-additional macOS consent: **Privacy & Security -> Local Network**.
+Providers on your LAN need one macOS consent:
+**System Settings -> Privacy & Security -> Local Network**.
 
-- **What you'll see**: the server (started by the installer via
-  `~/Applications/OfficeKickServer.app`) raises macOS's
-  "...wants to access devices on your local network" dialog the first time it
-  connects to a LAN address. Accept it once - done.
-- **If the dialog never appears**: open
-  System Settings > Privacy & Security > **Local Network** and enable the
-  **OfficeKickServer** entry (it can be listed as **"python"** - same thing).
-  The entry may only appear after one failed attempt.
-- **The symptom before granting**: Test connection says
-  "Cannot reach 192.168.x.x ... ([Errno 65] No route to host). Is the service
-  running?" - while `curl http://<ip>:11434/api/tags` from a Terminal works.
-  That mismatch IS the missing Local Network grant (0.9.16+ adds this hint to
-  the error message itself). Cloud providers (OpenAI/Anthropic/OpenRouter)
-  are not affected - only private-IP addresses are behind this wall.
-- **Restarting the server from a permitted session** (`./install.sh run` in a
-  Terminal) bypasses the grant because the terminal's permission applies.
-- Not applicable on Windows/Linux - macOS-only privacy gate.
-- Note: `tccutil reset` cannot reset the LocalNetwork service on current
-  macOS builds, and broad resets like `tccutil reset All` wipe ALL your saved
-  privacy decisions (every app re-asks) - do not use them to "re-trigger"
-  this prompt.
+- **When it appears**: the first time the server connects to a LAN address
+  (for example an Ollama host). macOS shows the
+  "...wants to access devices on your local network" dialog. Accept once.
+- **If the dialog never appears**: open the Local Network pane and enable the
+  **OfficeKickServer** entry. It can be listed as "python" - same thing. The
+  entry may only appear after one failed attempt.
+- **The symptom without the grant**: Test connection says
+  "Cannot reach 192.168.x.x ... ([Errno 65] No route to host)" while the same
+  provider answers from a Terminal. Only private-IP providers hit this; cloud
+  providers are not affected.
+- Windows and Linux have no such gate.
+
+Do not use `tccutil reset` to re-trigger this: on current macOS builds it
+cannot reset the LocalNetwork service, and `tccutil reset All` wipes ALL saved
+privacy decisions for every app.
 
 ## Security & privacy
 
-- The local server binds to loopback only (`127.0.0.1` + `::1`); no telemetry,
-  no phone-home, server never touches your documents.
-- API keys stay in the local config file and are attached to provider calls
-  server-side only - never shown in the pane, never returned by the API.
-- File content leaves your machine only to the provider(s) you configured.
-- Opt-in debug logging writes prompts/document text to a local daily log - keep
-  it off for sensitive work.
+- The local server binds to loopback only (`127.0.0.1` + `::1`).
+- No telemetry, no phone-home. The server never touches your documents.
+- API keys stay in the local config file. They are attached to provider calls
+  server-side only; the pane and the API never show or return them.
+- File content leaves your machine only to the providers you configured.
+- Debug logging is opt-in. It writes prompts and document text to a local
+  daily log; keep it off for sensitive work.
 
 ## Uninstall
 
 ```bash
-macOS:   ./install.sh uninstall           # keeps config
-         ./install.sh uninstall --purge   # also wipes config + logs
-Windows: .\install.ps1 -Action uninstall
-         .\install.ps1 -Action uninstall -Purge
+python3 install.py --uninstall            # keeps your config
+python3 install.py --uninstall --purge-config   # also wipes config
 ```
 
-Then quit and reopen the Office apps.
+Or pick **Uninstall** in the installer menu. Then quit and reopen your Office
+apps. The installer keeps `~/.officekick` (API keys, profiles, sessions) unless
+you pass `--purge-config` or answer yes on the config question.
 
 ## More
 
@@ -167,7 +162,7 @@ Then quit and reopen the Office apps.
   approvals, design passes, simulator, troubleshooting.
 - [docs/dockick.md](docs/dockick.md) - the Word add-in: document actions,
   comments fallback, simulator.
-- [docs/mailkick.md](docs/mailkick.md) - the Outlook add-in: summarize /
+- [docs/mailkick.md](docs/mailkick.md) - the Outlook add-in: summarize,
   translate, draft replies + forwards (you send), categories, templates,
   simulator, troubleshooting.
 - [docs/architecture.md](docs/architecture.md) - how the stack works.

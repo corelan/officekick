@@ -27,10 +27,12 @@ is about how SlideKick works.
 - **macOS**: open a deck, then **Home tab -> Add-ins** (dropdown) ->
   **Developer Add-ins** -> **Corelan SlideKick**. The pane opens on the right;
   the Add-ins entry stays available every session.
-- **Ribbon (opt-in `--ribbon`)**: `./install.sh --ribbon` keeps the manifest's
-  add-in commands - an **AI** group with the Corelan logo (16/32/80 px icons)
-  and an "Open SlideKick" button directly in the Home ribbon (Word: the same
-  for DocKick; Outlook: the group shows on the message read/compose tabs).
+- **Ribbon (opt-in)**: install with `python3 install.py --ribbon` to keep the
+  manifest's add-in commands: an **AI** group with the Corelan logo
+  (16/32/80 px icons) and an "Open SlideKick" button on the Home ribbon.
+  - Word keeps the same group for DocKick.
+  - Outlook shows the group on the message read/compose tabs.
+  - Default is list-mode (no commands). See the README for why.
   Default = list mode: on the Office-Mac build we tested, a command manifest
   REPLACED the Add-ins-list entry and then rendered neither the group nor a
   list item (and earlier 16.114 builds behaved the same) - the add-in was
@@ -226,7 +228,8 @@ close/reopen and app restarts) and only ever stored locally.
 ## Simulator & development (PowerPoint)
 
 ```bash
-./install.sh --dev                                  # serve straight from the repo
+# serve straight from a repo checkout (dev mode)
+python3 core/server.py --config ~/.officekick --static-dir "$(pwd)" --port 8765
 open http://127.0.0.1:8765/slidekick/static/simulator.html   # the exact task pane + in-memory deck
 python3 tools/mock_provider.py --flavor openai --port 8901    # mock provider for the UI
 npx -y office-addin-manifest validate "$HOME/Library/Application Support/OfficeKick/manifest/slidekick.xml"
@@ -245,14 +248,17 @@ design).
 
 ## Troubleshooting (PowerPoint)
 
-- **Add-in doesn't show** - quit all Office apps and reopen PowerPoint; check
-  `./install.sh status`; confirm
-  `~/Library/Containers/com.microsoft.Powerpoint/Data/Documents/wef/slidekick.xml`
-  exists. The installer clears Office's add-in caches + WEF registration store
-  on every run (only while PowerPoint is closed).
-- **"Cannot reach the DocKick server" in the pane** - `launchctl list | grep
-  officekick`, `tail -50 ~/Library/Logs/OfficeKick/server.log`, or re-run
-  `./install.sh`.
+- **Add-in doesn't show**:
+  1. Quit all Office apps and reopen PowerPoint.
+  2. Check the health endpoint: http://127.0.0.1:8765/api/health.
+  3. Check `~/Library/Containers/com.microsoft.Powerpoint/Data/Documents/wef/slidekick.xml` exists.
+  4. Re-run the installer (it clears Office's add-in caches and the WEF
+     registration store - only while PowerPoint is closed).
+- **"Cannot reach the server" in the pane**:
+  1. Open the About tab: "Pane build" shows the running build.
+  2. Check http://127.0.0.1:8765/api/health.
+  3. Check the log: tail -50 ~/Library/Logs/OfficeKick/server.log
+  4. Re-run the installer (it restarts the server).
 - **"lacks the text-editing APIs" / read-only pane** - update Microsoft 365
   (PowerPointApi 1.8: Mac 16.96+, Windows 2504+).
 - **401/403 from a provider** - fix the key on the Connections tab (a blank key

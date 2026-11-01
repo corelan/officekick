@@ -30,6 +30,20 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.27
+### Changed
+- **install.sh and install.ps1 are removed.** install.py is the only installer
+  (macOS + Windows, same commands and flags). Every reference was cleaned up:
+  README (restructured: lists, short sentences), docs/architecture.md,
+  docs/slidekick.md, docs/dockick.md, docs/mailkick.md, the pane's
+  "cannot reach the server" hint (now: python3 install.py) and the server's
+  update-notice text.
+- README rewritten for readability: shorter sentences and more step lists
+  (Install, Update, Use it, permissions, Uninstall).
+### Fixed
+- docs/slidekick.md dev-mode command documented for install.py-less dev runs:
+  serve straight from a checkout with python3 core/server.py
+
 ## 0.9.26
 ### Fixed
 - "Add-in Error" at Office startup after the https -> http transport switch:

@@ -3891,7 +3891,7 @@ OfficeDeck.prototype.setNotes = function (i, text) {
       setTimeout(function () { bootLoad(attempt + 1); }, 1000);
       return;
     }
-    setStatus("Cannot reach the SlideKick server: " + err.message + " Is it running? (install.sh / install.ps1 / LaunchAgent)", "error");
+    setStatus("Cannot reach the SlideKick server: " + err.message + " Is it running? (python3 install.py)", "error");
     $("statusbar").textContent = "server unreachable: " + err.message;
   }
 

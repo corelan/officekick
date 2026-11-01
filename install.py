@@ -907,8 +907,7 @@ def main():
     RIBBON = args.ribbon
 
     if not (is_mac() or is_windows()):
-        die("this installer supports macOS and Windows only (detected: %s)."
-            " On that platform use install.sh instead." % sys.platform)
+        die("this installer supports macOS and Windows only (detected: %s)." % sys.platform)
 
     if args.uninstall:
         do_uninstall(True if args.purge_config else None)

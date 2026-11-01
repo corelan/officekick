@@ -176,10 +176,12 @@ http://127.0.0.1:8765/wordkick/static/simulator.html
 
 ## Troubleshooting (Word)
 
-- **Add-in doesn't show** - quit all Office apps and reopen Word; check
-  `./install.sh status` (the DocKick manifest sideloads to
-  `~/Library/Containers/com.microsoft.Word/Data/Documents/wef/dockick.xml` on
-  macOS when `wordkick/manifest.template.xml` exists).
+- **Add-in doesn't show**:
+  1. Quit all Office apps and reopen Word.
+  2. Check that the manifest is sideloaded on macOS:
+     `~/Library/Containers/com.microsoft.Word/Data/Documents/wef/dockick.xml`.
+  3. Open http://127.0.0.1:8765/api/health - "Pane build" in the About tab
+     should match the server version.
 - **Comments unavailable** - your Word build lacks WordApi 1.4; DocKick shows
   the comment text in a copy-paste box instead.
 - **Tables unavailable** - needs WordApi 1.3 (update Microsoft 365).

@@ -15,7 +15,7 @@ officekick/
   tools/                   mock AI provider + icon generator
   tests/                   server test suite (kept LOCAL, not in the repo)
   VERSION                  current version (the update check reads this from GitHub)
-  install.sh / install.ps1 macOS / Windows installers (all three add-ins)
+  install.py               the installer for macOS and Windows (all three add-ins)
 ```
 
 ```

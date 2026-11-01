@@ -32,7 +32,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 APP = "OfficeKick"
-VERSION = "0.9.26"
+VERSION = "0.9.27"
 
 CONNECTION_TYPES = (
     "openai",
@@ -1051,10 +1051,9 @@ def update_check(force_latest=None):
     data = {"ok": True, "current": VERSION, "latest": latest,
             "upToDate": up_to_date,
             "repo": "https://github.com/corelan/officekick",
-            "howToUpdate": "To update: run git pull in your local OfficeKick clone, "
-                           "then run install.sh (macOS) or install.ps1 (Windows) again "
-                           "(it redeploys the add-ins and restarts the local server), and "
-                           "reload the task pane (reopen the add-in; restart Office if it "
+            "howToUpdate": "To update: run python3 install.py --update in your OfficeKick "
+                           "clone (it pulls with git, redeploys the add-ins and restarts the "
+                           "local server), and reload the task pane (reopen the add-in; restart Office if it "
                            "keeps showing the old UI). No automatic git pull is attempted."}
     if not force_latest:
         UPDATE_CACHE["t"] = now

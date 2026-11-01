@@ -75,22 +75,29 @@ via the profile's Image slot (insert_image -> insert the picture at the end of
 the compose body), and the About footer with license/repo links.
 
 ## Install (macOS)
-`./install.sh` renders + stages the manifest on every run:
-`~/Library/Containers/com.microsoft.Outlook/Data/Documents/wef/mailkick.xml`.
-Quit and reopen Outlook; the Corelan MailKick icon appears on selected/open
-messages (and on compose windows). If your build does not read the wef folder,
-sideload once via the dialog (Get Add-ins -> My add-ins -> Custom Addins ->
-Add from File, Cmd+Shift+G, paste the path above). If Outlook ever shows
-"Installation failed", retry after a restart of Outlook - some builds report a
-timeout although the add-in installed; the My add-ins list is the truth.
+`python3 install.py` (both platforms) renders + stages the manifest on every
+run to `~/Library/Containers/com.microsoft.Outlook/Data/Documents/wef/mailkick.xml`.
+
+1. Quit and reopen Outlook.
+2. The Corelan MailKick icon appears on selected/open messages and on compose
+   windows.
+3. If your build does not read the wef folder: sideload once via the dialog
+   (Get Add-ins -> My add-ins -> Custom Addins -> Add from File, Cmd+Shift+G,
+   paste the path above).
+4. If Outlook ever shows "Installation failed": retry after a restart of
+   Outlook. Some builds report a timeout although the add-in installed; the
+   My add-ins list is the truth.
 The manifest now carries the standard VersionOverrides (a ribbon button in
 Message-Read and Message-Compose command surfaces) and is validated with the
 official office-addin-manifest validator ("The manifest is valid").
-**Windows**: install.ps1 writes it into the trusted catalog - no manual step.
+**Windows**: install.py registers the trusted folder catalog - no manual step.
+(Outlook on Windows does not read folder catalogs: load the manifest once via
+the "Add from File" dialog - the installer prints the steps.)
 
 ## Uninstall
-`./install.sh uninstall` removes the server + add-ins; the Outlook wef copy is
-removed as well. Uninstall via Outlook: Get Add-ins -> My add-ins -> Custom
+`python3 install.py --uninstall` removes the server, the add-ins and the
+Outlook wef copy. It also removes the Office cache stores while no Office app
+is running. Uninstall via Outlook: Get Add-ins -> My add-ins -> Custom
 Addins -> remove the add-in (it appears under the name Corelan MailKick).
 
 ## Simulators
