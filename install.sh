@@ -52,7 +52,7 @@ PORT=""
 DEV=0
 NO_AGENT=0
 PURGE=0
-HTTPS=0   # default: plain http://localhost, no keychain changes, no ribbon commands
+HTTPS=0   # default: plain http://localhost, no keychain changes
 # scheme persistence: plain ./install.sh KEEPS the mode the running LaunchAgent
 # uses, so a later default reinstall does not silently undo an earlier --https.
 MODE_FORCED=0
@@ -74,7 +74,7 @@ detect_scheme_from_agent() {
 if [[ "$MODE_FORCED" != "1" ]] && detect_scheme_from_agent; then
   echo "[scheme] keeping the running install's transport: $([[ $HTTPS == 1 ]] && echo https || echo http) (use --https/--http to switch)"
 fi
-RIBBON_MODE=0   # default: list-mode manifest (16.114-era Mac builds); --ribbon opts into the Home-tab AI group
+RIBBON_MODE=1   # default: ships the Home-tab "AI" ribbon group; --no-ribbon = old list-mode manifest
 SUB="install"
 
 say()   { printf '%s\n' "$*"; }
@@ -144,8 +144,8 @@ usage() {
   say "  --dev                   serve files directly from this repo (developer mode)"
   say "  --no-launchagent        do not install the login auto-start"
   say "  --ribbon / --no-ribbon  keep / strip the manifest's AI ribbon group"
-  say "                          (Home tab group + icons + button; default: no-ribbon)"
-  say "  --https                 serve https + add the ribbon button (trusts a local CA in the login keychain)"
+  say "                          (Home tab group + icons + button; default: ribbon)"
+  say "  --https                 serve https + trust a local CA (ribbon commands expect https on old builds)"
   say "  status                  show current install status"
   say "  run                     run the server in the foreground"
   say "  uninstall [--purge]     remove everything (config too with --purge)"
@@ -310,7 +310,7 @@ ensure_local_certs() {
   SCHEME="http"
   if [[ "$HTTPS" != "1" ]]; then
     ok "transport: plain http://localhost (default: no certificates, no keychain changes)"
-    say "        (no ribbon button in this mode - opt in with: ./install.sh --https --ribbon)"
+        say "        (ribbon commands expect https - the AI group may not render in this mode)"
     return 0
   fi
   warn "https/ribbon mode: on current Office-Mac builds (16.114 verified) the add-in registers"
@@ -524,14 +524,15 @@ do_install() {
       -e "s/__SCHEME__/$SCHEME/" \
       -e "s/__PORT__/$PORT/g" \
       "$addin_dir/manifest.template.xml" > "$mtmp" || return 1
-    # Ribbon mode (default OFF): keep the VersionOverrides block so the
+    # Ribbon mode (default ON): keep the VersionOverrides block so the
   # manifest carries an "AI" group on the built-in Home tab (SlideKick /
   # DocKick, TabHome) and on the message read/compose tabs (MailKick,
   # TabDefault) with the add-in icons + a Show-taskpane button.
-  # In list mode the block is stripped: Office-Mac 16.114-era builds accept
-  # the add-in via the Add-ins dropdown but may register commands without
+  # --no-ribbon strips the block (list mode): Office-Mac 16.114-era builds
+  # accept the add-in via the Add-ins dropdown but registered commands without
   # rendering them (commands mode then REMOVES the list entry and shows
-  # nothing). Use --no-ribbon to force list mode (--ribbon = commands mode).
+  # nothing). On current builds the group renders; the Add-ins entry stays
+  # the fallback.
   if [[ "$RIBBON_MODE" != "1" ]]; then
     "${SED:-sed}" -i '' -e '/__COMMANDS_BEGIN__/,/__COMMANDS_END__/d' "$mtmp"
   fi
@@ -677,7 +678,7 @@ PYPLIST
   if [[ "$HTTPS" == "1" ]]; then
     say "  1. quit and reopen PowerPoint (required when it was already running)"
     say "  2. open/create a deck"
-    say "  3. with --ribbon: the Corelan SlideKick button sits in the Home tab (AI group)"
+    say "  3. the Corelan SlideKick button sits in the Home tab (AI group; --no-ribbon reverts)"
     say "     (fallback: Home -> Add-ins -> Developer Add-ins -> Corelan SlideKick)"
     say "  4. Connections tab: add a provider; Profiles tab: pick your models"
   else

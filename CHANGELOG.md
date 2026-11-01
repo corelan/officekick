@@ -30,6 +30,12 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.13
+### Changed
+- The ribbon "AI" group is now the default install mode (`--ribbon` inverted:
+  `--no-ribbon` restores the old list-mode manifest for 16.114-era Office-Mac
+  builds). README + slidekick.md updated; installer messages refreshed.
+
 ## 0.9.12
 ### Added
 - **Session auto-clean (global setting)**: "auto-clean up history after X days"
