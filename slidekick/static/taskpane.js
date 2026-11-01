@@ -2185,11 +2185,13 @@ OfficeDeck.prototype.setNotes = function (i, text) {
         out.slide = typeof op.slide === "number" ? op.slide : null;
         out.title = typeof op.title === "string" ? op.title : "";
         out.values = rowsT;
-        var geoT = {};
+        var geoT = {}, srcG = op.geometry && typeof op.geometry === "object" ? op.geometry : null;
         ["left", "top", "width", "height"].forEach(function (p2) {
-          if (typeof op[p2] === "number" && op[p2] >= 0) geoT[p2] = op[p2];
+          var v = srcG ? srcG[p2] : op[p2];
+          if (typeof v === "number" && v >= 0) geoT[p2] = v;
         });
-        if (typeof op.rotation === "number" && op.rotation >= -360 && op.rotation <= 360) geoT.rotation = op.rotation;
+        var rotV = srcG && srcG.rotation != null ? srcG.rotation : op.rotation;
+        if (typeof rotV === "number" && rotV >= -360 && rotV <= 360) geoT.rotation = rotV;
         out.geometry = geoT;
       } else if (t === "move_shape") {
         if (!slideOk(op.slide)) { bad("bad slide index"); return; }
@@ -2314,10 +2316,14 @@ OfficeDeck.prototype.setNotes = function (i, text) {
         var kindS = String(op.kind || "");
         kindS = Object.keys(KINDS).find(function (kk) { return kk.toLowerCase() === kindS.toLowerCase(); });
         if (!kindS) { bad("kind must be textbox, rectangle, ellipse, roundedRectangle, hexagon, diamond, triangle or line"); return; }
-        var geom = {};
+        var geom = {}, srcG = op.geometry && typeof op.geometry === "object" ? op.geometry : null;
         ["left", "top", "width", "height"].forEach(function (gk) {
-          if (typeof op[gk] === "number" && op[gk] >= -2000 && op[gk] <= 4000) geom[gk] = Math.round(op[gk]);
+          var v = srcG ? srcG[gk] : op[gk];
+          if (typeof v === "number" && v >= -2000 && v <= 4000) geom[gk] = Math.round(v);
         });
+        var rotT = srcG && srcG.rotation != null ? srcG.rotation : op.rotation;
+        if (typeof rotT === "number" && rotT >= -360 && rotT <= 360) geom.rotation = rotT;
+        else if (rotT != null) { bad("rotation must be a number between -360 and 360"); return; }
         var txtS = "";
         if (typeof op.text === "string" && op.text.trim()) {
           if (kindS !== "textbox") { bad("text applies only to the textbox kind"); return; }

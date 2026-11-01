@@ -30,6 +30,14 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.49
+### Fixed
+- create_shape accepted geometry only in flat form (left/top/...); when a
+  model nests them in a geometry object the values were silently dropped and
+  shapes landed at defaults. The validator now accepts both forms, plus the
+  rotation key for create_shape/move_shape in the live validate branch.
+- Simulator context now reports shape rotation (and move/create store it),
+  so make-over verification in the simulator sees rotated elements.
 ## 0.9.48
 ### Changed
 - Shape rotation joins the make-over vocabulary: create_shape and move_shape

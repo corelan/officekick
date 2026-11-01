@@ -85,6 +85,7 @@ window.__SK_SIM__ = true;
           top: sh.top != null ? sh.top : 20,
           width: sh.width != null ? sh.width : 300,
           height: sh.height != null ? sh.height : 50,
+          rotation: sh.rotation != null ? sh.rotation : null,
           table: sh.table || null,
         })),
       }));
