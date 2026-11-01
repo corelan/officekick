@@ -2805,9 +2805,16 @@ OfficeDeck.prototype.setNotes = function (i, text) {
         " uncompleted action(s) once after a short pause…" });
       var rseq = new Promise(function (res) { setTimeout(res, 1500); });
       retryQueue.forEach(function (op) {
-        rseq = rseq.then(function () { return runOne(op); }).catch(function (err2) {
-          var msg2 = err2 && err2.friendly ? err2.message : (err2 && err2.message) || String(err2);
-          lines.push({ ok: false, text: "retry of " + op.type + " failed again: " + msg2 });
+        rseq = rseq.then(function () {
+          var l0 = lines.length;
+          return runOne(op).then(function () {
+            // a rescued op moves to the completed list like any other success
+            if (typeof SK.opProgress === "function") SK.opProgress(op, lines.slice(l0), true);
+          }, function (err2) {
+            var msg2 = err2 && err2.friendly ? err2.message : (err2 && err2.message) || String(err2);
+            lines.push({ ok: false, text: "retry of " + op.type + " failed again: " + msg2 });
+            if (typeof SK.opProgress === "function") SK.opProgress(op, lines.slice(l0), false);
+          });
         });
       });
       return rseq.then(function () { return { lines: lines, manualNotes: manualNotes }; });
@@ -3968,7 +3975,7 @@ OfficeDeck.prototype.setNotes = function (i, text) {
       doneBox.appendChild(doneH);
       var doneList = document.createElement("div");
       doneBox.appendChild(doneList);
-      tableRows.parentNode.insertBefore(doneBox, tableRows.nextSibling.nextSibling || tableRows.nextSibling);
+      box.parentNode.insertBefore(doneBox, box.nextSibling);   // sibling: survives the proposal box closing
       SK.opProgress = function (op, addedLines, ok) {
         if (ok) {
           doneCount++;
@@ -3992,6 +3999,27 @@ OfficeDeck.prototype.setNotes = function (i, text) {
           d.textContent = l.text;
           result.appendChild(d);
         });
+        // everything executed cleanly? close the proposal section; only the
+        // completed list stays (below where the buttons used to be)
+        var leftRows = tableRows.querySelectorAll(".oprow").length;
+        if (!leftRows) {
+          if (res.manualNotes.length) {
+            var mb2 = document.createElement("div");
+            mb2.className = "manualbox";
+            mb2.appendChild(document.createElement("h4")).textContent = "Notes could not be written automatically - copy manually:";
+            res.manualNotes.forEach(function (mn) {
+              var ta = document.createElement("textarea");
+              ta.value = "Slide " + (mn.slide + 1) + ": " + mn.text;
+              mb2.appendChild(ta);
+            });
+            doneBox.appendChild(mb2);
+          }
+          box.parentNode.removeChild(box);   // box also disappears - the done box is a sibling
+          SK.opProgress = null;
+          return;
+        }
+        // some failed: keep the buttons + rows so the failed ones can be re-tried
+        applyBtn.disabled = false;   // re-arm for a retry of the survivors
         if (res.manualNotes.length) {
           var mb = document.createElement("div");
           mb.className = "manualbox";

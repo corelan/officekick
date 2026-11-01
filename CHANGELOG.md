@@ -30,6 +30,17 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.61
+### Changed
+- Gate lifecycle: when every action has been executed successfully the whole
+  "Proposed actions" section (rows + Select all/Apply/Discard) closes
+  itself; only the "Completed actions" list remains below where the buttons
+  were. Failed actions stay in the proposal list and the Apply button
+  re-arms after the pass so the failed ones can be retried with one click.
+  Actions rescued by the automatic retry pass now also move to the
+  completed list (they used to stay dimmed in the proposal list).
+- The completed list is rendered as a sibling of the proposal section, so
+  closing the section no longer removes it.
 ## 0.9.60
 ### Changed
 - Image generation no longer holds one WebView fetch open for the whole
