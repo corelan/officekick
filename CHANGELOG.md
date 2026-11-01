@@ -30,6 +30,19 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.48
+### Changed
+- Shape rotation joins the make-over vocabulary: create_shape and move_shape
+  accept an optional rotation (degrees, -360..360; positive = clockwise).
+  Applied via Shape.rotation (PowerPointApi 1.10, gated with the same
+  friendly error as the other 1.10-only ops); simulation parity included.
+  The prompt documents rotation as the primitive for diagonal/tilted
+  compositions.
+### Note
+- Decision recorded: single Office.js codebase (no VBA/COM/AppleScript
+  split) - creative make-overs are built on the existing op vocabulary
+  (shapes, picture-filled shapes, cut-outs, positions, transparency,
+  rotation).
 ## 0.9.47
 ### Changed
 - Make-over brief v3 - an invention engine instead of fixed recipes. The

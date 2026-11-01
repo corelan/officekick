@@ -165,6 +165,7 @@ window.__SK_SIM__ = true;
         type: op.kind,
         text: op.kind === "textbox" ? (op.text || "") : undefined,
         left: g.left, top: g.top, width: g.width, height: g.height,
+        rotation: g.rotation != null ? g.rotation : undefined,
         fill: op.fill || undefined,
         line: op.line || undefined,
         transparency: op.transparency != null ? op.transparency : undefined,
@@ -277,6 +278,7 @@ window.__SK_SIM__ = true;
       ["left", "top", "width", "height"].forEach((p) => {
         if (geometry[p] != null) s.shapes[shapeIndex][p] = geometry[p];
       });
+      if (geometry.rotation != null) s.shapes[shapeIndex].rotation = geometry.rotation;
       return { ok: true };
     }
     async addSlide({ layout, title, body, notes }) {

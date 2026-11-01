@@ -50,12 +50,12 @@
     replace_text: { label: "replace text", hint: "Rewrites the text of one shape in place; with a find fragment, only that fragment is replaced (rest of the list untouched)." },
     set_notes: { label: "set notes", hint: "Writes speaker notes on a slide." },
     create_table: { label: "create table", hint: "Adds a table (new slide when slide is empty; position/size in points)." },
-    move_shape: { label: "move/resize shape", hint: "Sets left/top/width/height (points) of one shape - design passes use this." },
+    move_shape: { label: "move/resize shape", hint: "Sets left/top/width/height (points) and optional rotation (degrees) of one shape - design passes use this." },
     create_image: { label: "generate + insert image", hint: "Creates an image from a description with the profile's image model (OpenAI-style images API) and inserts it - lands on the slide you have open in Office." },
     apply_layout: { label: "apply layout", hint: "Applies a different slide layout (design change, text kept)." },
     format_text: { label: "format text", hint: "bold / italic / color / size / underline / allCaps / alignment / bullets on one shape's text (the numbers from the outline)." },
     format_selection: { label: "format selected text", hint: "the same font changes applied to the TEXT YOU SELECTED right now." },
-    create_shape: { label: "insert shape", hint: "textbox (with text) or geometric shapes (rectangle/ellipse/roundedRectangle/hexagon/diamond/triangle) and straight lines at a position." },
+    create_shape: { label: "insert shape", hint: "textbox (with text) or geometric shapes (rectangle/ellipse/roundedRectangle/hexagon/diamond/triangle) and straight lines at a position; optional rotation (degrees)." },
     move_slide: { label: "move slide", hint: "moves a slide so it becomes slide M (numbers as in the outline); runs alone in a batch." },
     duplicate_slide: { label: "duplicate slide", hint: "exact copy of one slide, inserted right after it (runs alone in a batch)." },
     duplicate_slide_to: { label: "copy slide over", hint: "copies one slide's full contents over another slide (target replaced); runs alone." },
@@ -557,7 +557,7 @@
     "- Make-over design system, fixed for the whole scope: 2-3 colors + 1 accent (hex), a title size and a body size, one spacing grid (points; slides ~960x540), consistent title/body anchor positions per role. Decide the theme BEFORE emitting ops and apply it across every slide you touch in one reply.",
     "- Role blueprints (pick per theme, keep within the slide bounds): 'title/section' slides -> ONE shared treatment, e.g. full-bleed background photo (set_background kind:image) with a dark overlay shape (create_shape rectangle, fill #000000, transparency 0.45-0.6) and the title large in light color, same anchored position on every title slide. 'bullets' -> e.g. an accent bar (thin rectangle) beside the title, body as text boxes on a clean field, OR a side panel; same side of the slide for the whole family. 'statement' -> fewer/larger elements, generous whitespace. 'table' -> keep the table, restyle surroundings (header bar shape behind the title row, soft panel behind the table). 'image' slides -> the picture as a cut panel: picture-fill an existing shape (set_shape_image) or crop-position the photo on one side; never float the photo randomly.",
     "- NEVER give two slides with the same role different geometry patterns (that is the consistency failure). Never copy one slide's complete layout onto a different-role slide either.",
-    "- Make-over building blocks: set_background (AI picture or solid color, optional transparency); create_shape with kind + geometry + fill/line/transparency for panels, accent bars, color blocks and overlays; style_shape with fill/line/transparency to restyle anything already on the slide; move_shape to reposition/resize; replace_text/format_text for the words; set_shape_image to fill an EXISTING shape (panel/circle) with an AI-generated picture. Shape kinds: textbox, rectangle, ellipse, roundedRectangle, hexagon, diamond, triangle, line.",
+    "- Make-over building blocks: set_background (AI picture or solid color, optional transparency); create_shape with kind + geometry + fill/line/transparency for panels, accent bars, color blocks and overlays; style_shape with fill/line/transparency to restyle anything already on the slide; move_shape to reposition/resize (+rotation, degrees) or rotate anything you created or moved (rotation is how diagonal/tilted compositions are made); replace_text/format_text for the words; set_shape_image to fill an EXISTING shape (panel/circle) with an AI-generated picture. Shape kinds: textbox, rectangle, ellipse, roundedRectangle, hexagon, diamond, triangle, line.",
     "- Text over pictures: order the ops so the picture comes FIRST (set_background or a picture-filled shape), then the overlay (create_shape rectangle, fill #000000, transparency between 0.45 and 0.6), then the text (white or light via replace_text/format_text). Ops apply in the order you return them.",
     "- Make-over phase order per reply: (1) backgrounds + palette fields + overlay shapes, (2) layout moves + text restyle, (3) image generation requests. This keeps each approval batch reviewable and each design phase consistent.",
     "- Image requests: always return a create_image op (never generate the picture inline); SlideKick fetches it with the user's configured image model. Include a concrete, self-contained prompt in the op.",
@@ -1379,6 +1379,11 @@
       ["left", "top", "width", "height"].forEach(function (p) {
         if (geometry[p] != null) shape[p] = geometry[p];
       });
+      if (geometry.rotation != null) {
+        if (!Office.context.requirements.isSetSupported("PowerPointApi", 1.10))
+          throw new FriendlyError("rotating shapes needs PowerPointApi 1.10 - update PowerPoint (16.105+ on Mac).");
+        shape.rotation = geometry.rotation;
+      }
       return ctx.sync().then(function () { return { ok: true }; });
     });
   };
@@ -1557,6 +1562,11 @@ OfficeDeck.prototype.createShape = function (slideIndex, op) {
       if (created && op.line) {
         created.lineFormat.visible = true;
         created.lineFormat.color = String(op.line);
+      }
+      if (created && op.geometry && op.geometry.rotation != null) {
+        if (!Office.context.requirements.isSetSupported("PowerPointApi", 1.10))
+          throw new FriendlyError("rotating shapes needs PowerPointApi 1.10 - update PowerPoint (16.105+ on Mac).");
+        created.rotation = op.geometry.rotation;
       }
       return ctx.sync().then(function () { return { ok: true }; });
     });
@@ -2179,6 +2189,7 @@ OfficeDeck.prototype.setNotes = function (i, text) {
         ["left", "top", "width", "height"].forEach(function (p2) {
           if (typeof op[p2] === "number" && op[p2] >= 0) geoT[p2] = op[p2];
         });
+        if (typeof op.rotation === "number" && op.rotation >= -360 && op.rotation <= 360) geoT.rotation = op.rotation;
         out.geometry = geoT;
       } else if (t === "move_shape") {
         if (!slideOk(op.slide)) { bad("bad slide index"); return; }
@@ -2189,7 +2200,9 @@ OfficeDeck.prototype.setNotes = function (i, text) {
         ["left", "top", "width", "height"].forEach(function (p3) {
           if (typeof op[p3] === "number") { geoM[p3] = op[p3]; anyM = true; }
         });
-        if (!anyM) { bad("nothing to change (no left/top/width/height)"); return; }
+        if (typeof op.rotation === "number" && op.rotation >= -360 && op.rotation <= 360) { geoM.rotation = op.rotation; anyM = true; }
+        else if (op.rotation != null) { bad("rotation must be a number between -360 and 360"); return; }
+        if (!anyM) { bad("nothing to change (no left/top/width/height/rotation)"); return; }
         out.slide = op.slide; out.shape = op.shape; out.geometry = geoM;
       } else if (t === "create_image") {
         if (typeof op.prompt !== "string" || op.prompt.trim().length < 3) { bad("missing image prompt"); return; }
