@@ -30,6 +30,25 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.32
+### Added
+- **Design make-overs** (SlideKick): a new design-system prompt layer teaches the
+  model to build one coherent system (palette, type scale, spacing grid,
+  consistent anchors) and vary each slide's composition instead of copying one
+  layout deck-wide. Includes phased op ordering (backgrounds/palette/overlays ->
+  layout moves -> images) and text-over-picture layering (picture first, then a
+  45-60% dark overlay shape, then light text).
+- New op **set_shape_image** (SlideKick): fills an existing shape with an
+  AI-generated picture via `ShapeFill.setImage` (PowerPointApi 1.10), optional
+  transparency. Confirm-gated like other image ops; needs an image model on the
+  profile.
+- `style_shape` and `create_shape` now accept **transparency** (0-1) beside
+  fill/line colors - overlay masks/panels for text-over-image slides
+  (`ShapeFill.transparency`, PowerPointApi 1.10).
+- `style_shape` now also accepts text-less shapes (design rectangles/panels),
+  matching `move_shape`.
+- Simulator: picture-fill, per-shape fill/line/transparency parity, so make-over
+  flows are testable outside Office (fillImage/b64len in sim state).
 ## 0.9.31
 ### Changed
 - Approval-gate clarity: when a gate contains "(needs approval)" actions, it

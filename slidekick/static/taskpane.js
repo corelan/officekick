@@ -57,9 +57,10 @@
     format_selection: { label: "format selected text", hint: "the same font changes applied to the TEXT YOU SELECTED right now." },
     create_shape: { label: "insert shape", hint: "textbox (with text) or geometric shapes (rectangle/ellipse/roundedRectangle/hexagon/diamond/triangle) and straight lines at a position." },
     move_slide: { label: "move slide", hint: "moves a slide so it becomes slide M (numbers as in the outline); runs alone in a batch." },
-    set_background: { label: "slide background", hint: "AI-generated picture or a solid color as the slide background." },
+    set_background: { label: "slide background", hint: "AI-generated picture or a solid color as the slide background (optional transparency)." },
+    set_shape_image: { label: "picture-fill shape", hint: "Fills one existing shape with an AI-generated picture (optional transparency) - images inside panels, circles, cut-outs." },
     add_hyperlink: { label: "add hyperlink", hint: "links one shape (from the outline) to a URL." },
-    style_shape:  { label: "style shape", hint: "solid fill and/or outline color for one shape (PowerPointApi 1.4)." },
+    style_shape:  { label: "style shape", hint: "solid fill and/or outline color and optional transparency for one shape." },
     set_alt_text: { label: "alt text", hint: "sets the accessibility alt text of one shape." },
     delete_slide: { label: "delete slide", hint: "Removes a slide from the deck." },
   };
@@ -478,6 +479,10 @@
     "- LARGE DECKS: the outline lists every slide. If you cannot address all of them in one reply, work in batches of at most 20 ops and end each reply with a short note of exactly what remains.",
     "- If the request is a question/explanation/brainstorm rather than a deck change, use format A.",
     "- Design passes ('design this deck/slide', improve alignment/balance): emit ops (apply_layout, move_shape, create_table) computed from the geometry in the outline; when the user asks only for advice, use format A.",
+    "- MAKE-OVERS ('give this deck a design makeover', 'redesign slides 3-8', 'modern, original, professional'): build ONE design system first, then apply it with variation. Fix the palette (2-3 solid colors + 1 accent, as hex colors), a type scale (title vs body sizes), a spacing grid in points (slides are typically 960x540), and consistent title/body anchors - but vary each slide's composition (different accent placement, one full-bleed slide, one side-panel slide, one image-led slide). Slides must look like siblings, not twins: never copy the same full layout to every slide.",
+    "- Make-over building blocks: set_background (AI picture or solid color, optional transparency); create_shape with kind + geometry + fill/line/transparency for panels, accent bars, color blocks and overlays; style_shape with fill/line/transparency to restyle anything already on the slide; move_shape to reposition/resize; replace_text/format_text for the words; set_shape_image to fill an EXISTING shape (panel/circle) with an AI-generated picture. Shape kinds: textbox, rectangle, ellipse, roundedRectangle, hexagon, diamond, triangle, line.",
+    "- Text over pictures: order the ops so the picture comes FIRST (set_background or a picture-filled shape), then the overlay (create_shape rectangle, fill #000000, transparency between 0.45 and 0.6), then the text (white or light via replace_text/format_text). Ops apply in the order you return them.",
+    "- Make-over phase order per reply: (1) backgrounds + palette fields + overlay shapes, (2) layout moves + text restyle, (3) image generation requests. This keeps each approval batch reviewable and each design phase consistent.",
     "- Image requests: always return a create_image op (never generate the picture inline); SlideKick fetches it with the user's configured image model. Include a concrete, self-contained prompt in the op.",
     "- Image refinement ('refine/change the image'): write a FRESH self-contained image prompt describing the FULL desired result. Never embed previous prompts, the conversation, or op JSON into it - only the scene essentials plus the requested change. Prefer 200-600 words.",
     "- READ SLIDES ON DEMAND: the outline shows full shape text only for small decks and for the selected slide(s) - in LARGE decks every other slide shows just its title and a short preview. When you need a slide's ACTUAL content (to answer a question about it, or before rewriting it), reply with only {\"kind\":\"read_slide\",\"slides\":[N]} (1-based outline numbers, max 12). SlideKick re-asks you with the COMPLETE text of those slides. Never guess content from a title.",
@@ -1363,12 +1368,26 @@ OfficeDeck.prototype.createShape = function (slideIndex, op) {
       ["left", "top", "width", "height"].forEach(function (gk) {
         if (op.geometry && op.geometry[gk] != null) opts[gk] = op.geometry[gk];
       });
+      var created;
       if (op.kind === "textbox") {
-        shapes.addTextBox(String(op.text || ""), opts);
+        created = shapes.addTextBox(String(op.text || ""), opts);
       } else if (op.kind === "line") {
-        shapes.addLine("Straight", opts);
+        created = shapes.addLine("Straight", opts);
       } else {
-        shapes.addGeometricShape(op.kind, opts);
+        created = shapes.addGeometricShape(op.kind, opts);
+      }
+      if (created && op.fill) {
+        created.fill.setSolidColor(String(op.fill));
+      }
+      if (created && op.transparency != null) {
+        if (!Office.context.requirements.isSetSupported("PowerPointApi", "1.10")) {
+          throw new FriendlyError("fill transparency needs PowerPointApi 1.10 - update PowerPoint (16.105+ on Mac).");
+        }
+        created.fill.transparency = Number(op.transparency);
+      }
+      if (created && op.line) {
+        created.lineFormat.visible = true;
+        created.lineFormat.color = String(op.line);
       }
       return ctx.sync().then(function () { return { ok: true }; });
     });
@@ -1694,9 +1713,9 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
     });
   };
 
-  OfficeDeck.prototype.styleShape = function (slideIndex, shapeIndex, fill, line) {
+  OfficeDeck.prototype.styleShape = function (slideIndex, shapeIndex, fill, line, transparency) {
     return this.run("styleShape", function (ctx) {
-      // PowerPointApi 1.4: ShapeFill.setSolidColor + ShapeLineFormat
+      // PowerPointApi 1.4: ShapeFill.setSolidColor + ShapeLineFormat; transparency: 1.10
       var shape = ctx.presentation.slides.getItemAt(slideIndex).shapes.getItemAt(shapeIndex);
       if (fill) {
         shape.fill.setSolidColor(String(fill));
@@ -1705,6 +1724,24 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
         shape.lineFormat.visible = true;
         shape.lineFormat.color = String(line);
       }
+      if (transparency != null) {
+        if (!Office.context.requirements.isSetSupported("PowerPointApi", "1.10")) {
+          throw new FriendlyError("fill transparency needs PowerPointApi 1.10 - update PowerPoint (16.105+ on Mac).");
+        }
+        shape.fill.transparency = Number(transparency);
+      }
+      return ctx.sync().then(function () { return { ok: true }; });
+    });
+  };
+
+  OfficeDeck.prototype.setShapeImage = function (slideIndex, shapeIndex, b64, transparency) {
+    return this.run("setShapeImage", function (ctx) {
+      if (!Office.context.requirements.isSetSupported("PowerPointApi", "1.10")) {
+        throw new FriendlyError("picture-filled shapes need PowerPointApi 1.10 - update PowerPoint (16.105+ on Mac).");
+      }
+      var shape = ctx.presentation.slides.getItemAt(slideIndex).shapes.getItemAt(shapeIndex);
+      shape.fill.setImage(String(b64));
+      if (transparency != null) shape.fill.transparency = Number(transparency);
       return ctx.sync().then(function () { return { ok: true }; });
     });
   };
@@ -2033,7 +2070,10 @@ OfficeDeck.prototype.setNotes = function (i, text) {
         if (!hasAnyS) { bad("no format changes requested"); return; }
         out.font = fontS;
       } else if (t === "style_shape") {
-        if (!slideOk(op.slide) || !shapeOk(op.slide, op.shape)) { bad("shape not in the context list for that slide"); return; }
+        if (!slideOk(op.slide)) { bad("bad slide index"); return; }
+        var shapeInCtxS = ctx && ctx.slides[op.slide - 1] &&
+          (ctx.slides[op.slide - 1].shapes || []).some(function (s) { return s.idx === op.shape - 1; });
+        if (!shapeInCtxS) { bad("shape " + op.shape + " not in the context list for slide " + op.slide); return; }
         var fillS = null, lineS = null;
         if (typeof op.fill === "string" && op.fill.trim()) {
           if (!/^[\w#\(\), .%]{1,40}$/.test(op.fill.trim())) { bad("bad fill color"); return; }
@@ -2043,10 +2083,12 @@ OfficeDeck.prototype.setNotes = function (i, text) {
           if (!/^[\w#\(\), .%]{1,40}$/.test(op.line.trim())) { bad("bad line color"); return; }
           lineS = op.line.trim();
         }
-        if (!fillS && !lineS) { bad("fill or line color required"); return; }
+        var transS = (typeof op.transparency === "number" && op.transparency >= 0 && op.transparency <= 1) ? op.transparency : null;
+        if (!fillS && !lineS && transS === null) { bad("fill or line color (or transparency) required"); return; }
         out.slide = op.slide; out.shape = op.shape;
         if (fillS) out.fill = fillS;
         if (lineS) out.line = lineS;
+        if (transS !== null) out.transparency = transS;
       } else if (t === "set_background") {
         if (!slideOk(op.slide)) { bad("bad slide index"); return; }
         if (op.kind !== "image" && op.kind !== "solid" && op.kind !== "gradient") { bad("kind must be image, solid or gradient"); return; }
@@ -2059,6 +2101,15 @@ OfficeDeck.prototype.setNotes = function (i, text) {
         }
         if (typeof op.transparency === "number" && op.transparency >= 0 && op.transparency <= 1) out.transparency = op.transparency;
         out.slide = op.slide; out.kind = op.kind;
+      } else if (t === "set_shape_image") {
+        if (!slideOk(op.slide)) { bad("bad slide index"); return; }
+        var shapeInCtxI = ctx && ctx.slides[op.slide - 1] &&
+          (ctx.slides[op.slide - 1].shapes || []).some(function (sh) { return sh.idx === op.shape - 1; });
+        if (!shapeInCtxI) { bad("shape " + op.shape + " not in the context list for slide " + op.slide); return; }
+        if (typeof op.prompt !== "string" || op.prompt.trim().length < 3) { bad("missing image prompt"); return; }
+        if (op.prompt.length > 4000) { bad("image prompt too long (max 4000 chars)"); return; }
+        out.slide = op.slide; out.shape = op.shape; out.prompt = op.prompt.trim();
+        if (typeof op.transparency === "number" && op.transparency >= 0 && op.transparency <= 1) out.transparency = op.transparency;
       } else if (t === "add_hyperlink") {
         if (!slideOk(op.slide)) { bad("bad slide index"); return; }
         var shapeInCtxH = ctx && ctx.slides[op.slide - 1] &&
@@ -2092,6 +2143,15 @@ OfficeDeck.prototype.setNotes = function (i, text) {
         }
         out.slide = op.slide; out.kind = kindS; out.geometry = geom;
         if (txtS) out.text = txtS;
+        if (typeof op.fill === "string" && op.fill.trim()) {
+          if (!/^[\w#\(\), .%]{1,40}$/.test(op.fill.trim())) { bad("bad fill color"); return; }
+          out.fill = op.fill.trim();
+        }
+        if (typeof op.line === "string" && op.line.trim()) {
+          if (!/^[\w#\(\), .%]{1,40}$/.test(op.line.trim())) { bad("bad line color"); return; }
+          out.line = op.line.trim();
+        }
+        if (typeof op.transparency === "number" && op.transparency >= 0 && op.transparency <= 1) out.transparency = op.transparency;
       } else if (t === "move_slide") {
         if (!slideOk(op.slide)) { bad("bad slide index"); return; }
         if (typeof op.to !== "number" || Math.floor(op.to) !== op.to || op.to < 1 || op.to > ctx.slideCount) { bad("to must be a slide number 1.." + ctx.slideCount); return; }
@@ -2127,7 +2187,7 @@ OfficeDeck.prototype.setNotes = function (i, text) {
 
   var OP_EFFECT = {
     create_slide: "add", edit_slide: "edit", replace_text: "edit", set_notes: "edit",
-    create_table: "add", create_shape: "add", create_image: "add", insert_image: "add",
+    create_table: "add", create_shape: "add", create_image: "add", insert_image: "add", set_shape_image: "add",
     apply_layout: "edit", format_text: "edit", format_selection: "edit",
     move_shape: "edit", move_slide: "edit", set_background: "edit", add_hyperlink: "edit",
     set_alt_text: "edit", set_categories: "edit", draft_reply: "add", style_shape: "edit", new_message: "add",
@@ -2189,7 +2249,14 @@ OfficeDeck.prototype.setNotes = function (i, text) {
         return "Slide " + op.slide + ", shape " + op.shape + " -> " + op.url;
       case "style_shape":
         return "Slide " + op.slide + ", shape " + op.shape + ": " +
-          (op.fill ? "fill " + op.fill : "") + (op.fill && op.line ? ", " : "") + (op.line ? "line " + op.line : "");
+          (op.fill ? "fill " + op.fill : "") + (op.fill && (op.line || op.transparency != null) ? ", " : "") +
+          (op.line ? "line " + op.line : "") + (op.fill && op.line && op.transparency != null ? ", " : "") +
+          (op.transparency != null ? "transparency " + op.transparency : "");
+      case "set_shape_image": {
+        var prI = op.prompt.length > 50 ? op.prompt.slice(0, 50) + "\u2026" : op.prompt;
+        return "Slide " + op.slide + ", shape " + op.shape + ': picture-fill "' + prI + '"' +
+          (op.transparency != null ? " transparency " + op.transparency : "") + " (profile image model)";
+      }
       case "set_alt_text":
         return "Slide " + op.slide + ", shape " + op.shape + " alt text";
       case "format_text": {
@@ -2337,10 +2404,37 @@ OfficeDeck.prototype.setNotes = function (i, text) {
             lines.push({ ok: true, text: "slide " + op.slide + " background set (" + op.kind + (op.kind === "solid" ? " " + op.color : "") + ")" });
           });
         }
+        case "set_shape_image": {
+          var profI = currentProfile();
+          var imgRefI = profI && profI.image;
+          if (!imgRefI || !imgRefI.connection || !imgRefI.model) {
+            throw new FriendlyError(
+              "No image model on profile '" + (profI ? profI.name : "?") +
+              "' - set one in Profiles (connection + model with an images API).");
+          }
+          setStatus("Generating picture fill\u2026 (often 30-90 s depending on the model)", "busy");
+          return Promise.race([
+            apiJson("/api/image", "POST", {
+              connection: imgRefI.connection, model: imgRefI.model, prompt: op.prompt,
+            }),
+            new Promise(function (_, rej) {
+              setTimeout(function () {
+                rej(new FriendlyError("image generation timed out after 300 s (no answer from '" + imgRefI.model + "')"));
+              }, 300000);
+            }),
+          ]).then(function (img) {
+            if (!img || !img.b64) throw new FriendlyError("server returned no image data");
+            return deck.setShapeImage(cur, op.shape - 1, img.b64, op.transparency).then(function () {
+              lines.push({ ok: true, text: "picture-filled shape " + op.shape + " on slide " + op.slide +
+                " (" + imgRefI.connection + ":" + imgRefI.model + ")" });
+            });
+          });
+        }
         case "style_shape":
-          return deck.styleShape(cur, op.shape - 1, op.fill, op.line).then(function () {
+          return deck.styleShape(cur, op.shape - 1, op.fill, op.line, op.transparency).then(function () {
             lines.push({ ok: true, text: "styled shape " + op.shape + " on slide " + op.slide +
-              (op.fill ? " fill=" + op.fill : "") + (op.line ? " line=" + op.line : "") });
+              (op.fill ? " fill=" + op.fill : "") + (op.line ? " line=" + op.line : "") +
+              (op.transparency != null ? " transparency=" + op.transparency : "") });
           });
         case "add_hyperlink":
           return deck.addHyperlink(cur, op.shape - 1, op.url, op.tip).then(function () {

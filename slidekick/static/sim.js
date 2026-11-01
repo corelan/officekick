@@ -165,6 +165,9 @@ window.__SK_SIM__ = true;
         type: op.kind,
         text: op.kind === "textbox" ? (op.text || "") : undefined,
         left: g.left, top: g.top, width: g.width, height: g.height,
+        fill: op.fill || undefined,
+        line: op.line || undefined,
+        transparency: op.transparency != null ? op.transparency : undefined,
       });
       return { ok: true };
     }
@@ -199,11 +202,19 @@ window.__SK_SIM__ = true;
       }
       return { ok: true, count: 2, at: n + 1 };
     }
-    async styleShape(slideIndex, shapeIndex, fill, line) {
+    async styleShape(slideIndex, shapeIndex, fill, line, transparency) {
       const sh = slides[slideIndex] && slides[slideIndex].shapes[shapeIndex];
       if (!sh) throw new FriendlyError("Shape " + shapeIndex + " on slide " + slideIndex + " does not exist");
       if (fill) sh.fill = String(fill);
       if (line) sh.line = String(line);
+      if (transparency != null) sh.transparency = Number(transparency);
+      return { ok: true };
+    }
+    async setShapeImage(slideIndex, shapeIndex, b64, transparency) {
+      const sh = slides[slideIndex] && slides[slideIndex].shapes[shapeIndex];
+      if (!sh) throw new FriendlyError("Shape " + shapeIndex + " on slide " + slideIndex + " does not exist");
+      sh.fillImage = { b64len: (b64 || "").length };
+      if (transparency != null) sh.transparency = Number(transparency);
       return { ok: true };
     }
     async setAltText(slideIndex, shapeIndex, description, title) {

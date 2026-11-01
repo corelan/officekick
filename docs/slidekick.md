@@ -113,6 +113,32 @@ land after the last slide; the deck then refreshes automatically.
 shape in the outline, including textboxes and the shapes created by
 `create_shape`.
 
+### Design make-overs (0.9.32)
+
+For "give this deck a makeover", "redesign slides 3-8", "make it modern and
+professional" - SlideKick now instructs the model to work like a design system,
+not a font changer:
+
+- one **coherent system**: palette (2-3 colors + accent), type scale, spacing
+  grid, consistent title/body anchors
+- **variation per slide**: different compositions (full-bleed, side-panel,
+  image-led, accent bar) that still read as the same family
+- **images**: AI background pictures (`set_background`), AI pictures inside
+  existing shapes (panels/circles) via picture-fill, dark overlay shapes
+  (45-60% transparency) so light text stays legible on photos
+
+New/extended ops:
+
+| Op | What it does |
+|---|---|
+| `set_shape_image` | fills one existing shape with an AI-generated picture (optional transparency) |
+| `style_shape` | fill + outline color + **transparency** (also on text-less shapes) |
+| `create_shape` | rectangles/ellipses/rounded panels with fill, outline and transparency |
+
+Picture fills and transparency need PowerPointApi 1.10 (PowerPoint Mac
+16.105+). Image ops stay confirm-gated: each generated picture is a paid call
+on the image-model connection.
+
 ## Design on demand
 
 Use the **Design this deck** chip (or type e.g. "design this deck",
