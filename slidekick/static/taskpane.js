@@ -630,6 +630,7 @@
       createPromise = apiJson("/api/sessions", "POST", payload).then(function (res) {
         if (res && res.session) {
           SK.sessionId = res.session.id;
+          try { sessionStorage.setItem("sk-resume-session", SK.sessionId); } catch (eS) {}
           SK.sessionName = res.session.name;
           aiNameSession(SK.sessionId);
         }
@@ -693,6 +694,7 @@
     apiJson("/api/sessions/" + sessId, "GET").then(function (doc) {
       SK.history = (doc.exchanges || []).slice(-HISTORY_MAX_EXCHANGES * 2);
       SK.sessionId = doc.id;
+      try { sessionStorage.setItem("sk-resume-session", doc.id); } catch (eS) {}
       SK.sessionName = doc.name || "";
       var inp1 = $("chat-input");
       if (inp1) { inp1.disabled = false; inp1.value = ""; }
@@ -738,7 +740,8 @@
 
   function deleteSession(sessId) {
     apiJson("/api/sessions/" + sessId, "DELETE").then(function () {
-      if (SK.sessionId === sessId) { SK.sessionId = null; SK.sessionName = ""; }
+      if (SK.sessionId === sessId) { SK.sessionId = null; SK.sessionName = "";
+        try { sessionStorage.removeItem("sk-resume-session"); } catch (eS) {} }
       renderSessions();
       setStatus("Session deleted.", "ok");
     }).catch(function (err) {
@@ -1006,6 +1009,7 @@
   function resetHistory() {
     SK.history = [];
     SK.sessionId = null;      // the next exchange saves as a NEW session
+    try { sessionStorage.removeItem("sk-resume-session"); } catch (eS) {}
     SK.sessionName = "";
     updateChatMeta();
     updateSessionLabel();
@@ -4188,6 +4192,13 @@ OfficeDeck.prototype.setNotes = function (i, text) {
     $("settings-autoclean-save").addEventListener("click", saveAutoClean);
     var updBtn = $("upd-check");
     if (updBtn) updBtn.addEventListener("click", updCheck);
+    var relBtn = $("pane-reload");
+    if (relBtn) relBtn.addEventListener("click", function () {
+      dbg("pane.reload", {});
+      // hard reload of the pane from the running server, busting any cache
+      var qs = String(location.search || "").replace(/cb=\d+(&|$)/g, "").replace(/^\?/, "");
+      location.replace(location.pathname + "?" + (qs ? qs + "&" : "") + "cb=" + Date.now());
+    });
     wireAutoApplySetting();
     var updAuto = $("upd-auto");
     if (updAuto) {
@@ -4205,6 +4216,10 @@ OfficeDeck.prototype.setNotes = function (i, text) {
         apiJson("/api/settings", "PUT", { autoUpdateCheck: !!updAuto.checked });
       });
     }
+    // a pane reload (or back-end restart) resumes the session that was active
+    var bootResume = null;
+    try { bootResume = sessionStorage.getItem("sk-resume-session"); } catch (eS) {}
+    if (bootResume) resumeSession(bootResume);
     updateSessionLabel();
     wireSessions();
     $("req-clear").addEventListener("click", clearRequests);

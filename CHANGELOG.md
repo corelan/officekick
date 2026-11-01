@@ -30,6 +30,13 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.51
+### Added
+- "Reload pane" button next to "Check now" (Settings > General): hard-reloads
+  the task pane from the running server with a cache-buster, so a back-end
+  update lands without reopening PowerPoint. The active session is remembered
+  (in-session storage) and automatically resumed after the reload; starting a
+  new chat or deleting the session clears it.
 ## 0.9.50
 ### Changed
 - Empty model replies are no longer accepted: the pane escalates with up to
