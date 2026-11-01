@@ -75,7 +75,8 @@ via the profile's Image slot (insert_image -> insert the picture at the end of
 the compose body), and the About footer with license/repo links.
 
 ## Install (macOS)
-`python3 install.py` (both platforms) renders + stages the manifest on every
+`python3 install.py` (Windows: `py -3 install.py`) renders + stages the
+manifest on every
 run to `~/Library/Containers/com.microsoft.Outlook/Data/Documents/wef/mailkick.xml`.
 
 1. Quit and reopen Outlook.
@@ -95,7 +96,8 @@ official office-addin-manifest validator ("The manifest is valid").
 the "Add from File" dialog - the installer prints the steps.)
 
 ## Uninstall
-`python3 install.py --uninstall` removes the server, the add-ins and the
+`python3 install.py --uninstall` (Windows: `py -3 install.py --uninstall`)
+removes the server, the add-ins and the
 Outlook wef copy. It also removes the Office cache stores while no Office app
 is running. Uninstall via Outlook: Get Add-ins -> My add-ins -> Custom
 Addins -> remove the add-in (it appears under the name Corelan MailKick).

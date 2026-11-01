@@ -34,7 +34,7 @@ One installer for macOS and Windows. It detects the platform by itself.
 ```bash
 git clone https://github.com/corelan/officekick.git
 cd officekick
-python3 install.py        # Windows: python install.py
+python3 install.py        # Windows: py -3 install.py
 ```
 
 The installer shows a menu:
@@ -59,6 +59,9 @@ What the installer does:
 
 Good to know:
 
+- On Windows, run the installer with `py -3` (the installed Python launcher)
+  instead of `python` - `python` alone is often the Store alias that opens
+  the Microsoft Store instead of running your script.
 - No admin rights are needed.
 - The add-ins talk to the server over plain http. Office allows `localhost`
   over http, so there are no certificates on any path.
@@ -68,7 +71,7 @@ Good to know:
 ## Update
 
 ```bash
-python3 install.py --update    # Windows: python install.py --update
+python3 install.py --update    # Windows: py -3 install.py --update
 ```
 
 This pulls the repo with git and updates the install. Then quit and reopen
@@ -150,6 +153,7 @@ privacy decisions for every app.
 ```bash
 python3 install.py --uninstall            # keeps your config
 python3 install.py --uninstall --purge-config   # also wipes config
+# Windows: py -3 install.py --uninstall [--purge-config]
 ```
 
 Or pick **Uninstall** in the installer menu. Then quit and reopen your Office

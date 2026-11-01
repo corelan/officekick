@@ -13,6 +13,9 @@ MailKick (Outlook). Works on macOS and Windows; auto-detects the platform.
     python3 install.py --ribbon       opt-in: render the AI ribbon commands
                                       (experimental on this Office build)
 
+On Windows use: py -3 install.py (the py launcher; plain `python` is often
+the Microsoft Store alias that does not run scripts).
+
 Design notes:
 - the add-in transport is plain http://localhost:<port>: Office allows localhost
   over http, so there is NO certificate, NO trusted CA, NO keychain step;
@@ -890,8 +893,8 @@ def main():
     ap = argparse.ArgumentParser(
         description="OfficeKick cross-platform installer (macOS + Windows)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="Examples:  python3 install.py  |  python3 install.py --update  |  "
-               "python3 install.py --uninstall --purge-config")
+        epilog="Examples:  python3 install.py  (Windows: py -3 install.py)  |  "
+               "python3 install.py --update  |  python3 install.py --uninstall --purge-config")
     ap.add_argument("--install", action="store_true", help="interactive install now")
     ap.add_argument("--update", action="store_true", help="git pull + update (non-interactive)")
     ap.add_argument("--uninstall", action="store_true", help="remove the add-ins + server")
