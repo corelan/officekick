@@ -2534,13 +2534,16 @@ OfficeDeck.prototype.setNotes = function (i, text) {
     if (sig.some(function (x) { return (/table/i).test(x); })) return "table";
     if (sig.some(function (x) { return (/picture|image|chart|media|model3d|graphicframe/i).test(x); }) &&
         words < 60) return "image";
-    if (slide.idx === 0 || words <= 12) return "title";
+    var bodyTexts = shapes.filter(function (sh) {
+      return sh.isBody && typeof sh.text === "string" && sh.text.trim();
+    });
     var bodyCount = 0;
-    shapes.forEach(function (sh) {
-      if (!sh.isBody || typeof sh.text !== "string") return;
+    bodyTexts.forEach(function (sh) {
       var lns = String(sh.text).split(/\r|\n/).filter(function (ln) { return ln.trim(); });
       bodyCount += Math.max(lns.length, 1);
     });
+    // cover/section = slide 1, or any slide without real body content
+    if (slide.idx === 0 || (!bodyTexts.length && words <= 40)) return "title";
     if (bodyCount >= 2) return "bullets";
     if (words <= 30) return "statement";
     return "bullets";

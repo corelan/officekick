@@ -30,6 +30,12 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.35
+### Fixed
+- Role detection: a slide with a title plus short body text no longer counts
+  as a cover. Only slide 1 and slides without actual body content (cover /
+  section dividers) get the "title" role; everything with bullet text is
+  "bullets"/"statement" as before.
 ## 0.9.34
 ### Added
 - **Role-aware make-overs (theme engine)**: the deck outline now tags every
