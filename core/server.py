@@ -32,7 +32,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 APP = "OfficeKick"
-VERSION = "0.9.39"
+VERSION = "0.9.40"
 
 CONNECTION_TYPES = (
     "openai",
@@ -825,6 +825,19 @@ def http_request(url, method="GET", headers=None, payload=None, timeout=60):
     except urllib.error.URLError as exc:
         reason = getattr(exc, "reason", exc)
         hint = _reachability_hint(reason, url)
+        lb = _loopback_fallback_url(reason, url)
+        if lb:
+            # one transparent retry: a LAN host that only answers on loopback
+            try:
+                return http_request(lb, method, headers, payload, timeout)
+            except Exception as exc2:
+                lbmsg = (getattr(exc2, "message", None) or str(exc2))
+                raise ApiError(
+                    502,
+                    "Cannot reach %s (%s). Is the service running?%s "
+                    "(loopback fallback %s also failed: %s)"
+                    % (_host_of(url), reason, hint, lb, _snippet(str(lbmsg), 120)),
+                )
         raise ApiError(
             502,
             "Cannot reach %s (%s). Is the service running?%s" % (_host_of(url), reason, hint),
@@ -835,6 +848,37 @@ def http_request(url, method="GET", headers=None, payload=None, timeout=60):
         return json.loads(text)
     except Exception:
         return text
+
+
+def _loopback_fallback_url(reason, url):
+    """Errno 65 on a numeric private-LAN host = the request never left the
+    box (macOS local-network wall or a firewall silently dropping). Local AI
+    servers like Ollama almost always listen on loopback too - retry once
+    against 127.0.0.1 with the same port/path. Public hosts and hostnames
+    never qualify (rerouting those would send the request somewhere else)."""
+    errno_ = getattr(reason, "errno", None)
+    if errno_ is None and getattr(reason, "args", None):
+        first = reason.args[0]
+        if isinstance(first, int):
+            errno_ = first
+    if errno_ is None or errno_ != errno.EHOSTUNREACH:
+        return None
+    try:
+        import ipaddress as _ip
+        import urllib.parse as _up
+        parts = _up.urlsplit(url)
+        host = parts.hostname or ""
+        if not host or not parts.scheme.startswith("http"):
+            return None
+        ip = _ip.ip_address(host)          # numeric hosts only
+        if ip.is_loopback or ip.is_global:  # loopback already; public = never
+            return None
+        if not ip.is_private:
+            return None
+        port = parts.port or (443 if parts.scheme == "https" else 80)
+        return "http://127.0.0.1:%d%s" % (port, parts.path or "")
+    except (ValueError, AttributeError):
+        return None
 
 
 def _reachability_hint(reason, url):

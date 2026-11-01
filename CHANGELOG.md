@@ -30,6 +30,17 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.40
+### Changed
+- **Loopback fallback for local AI servers**: when a request to a numeric
+  private-LAN host fails with Errno 65 (the request never left the box -
+  macOS Local Network wall or a silent firewall drop), the server retries
+  once against 127.0.0.1 on the same port/path. Local Ollama/llama.cpp
+  setups that listen on loopback keep working even when the LAN route is
+  blocked. Public hosts and DNS names are never rerouted; when the
+  loopback retry also fails the error mentions both attempts.
+### Fixed
+- The reachability hint is only attached for Errno 65, not any URL error.
 ## 0.9.39
 ### Fixed
 - Model replies containing commentary plus a valid ops JSON are now
