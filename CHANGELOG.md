@@ -30,6 +30,21 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.58
+### Changed
+- The make-over orchestration is now a multi-pass, self-driving pipeline.
+  After the design-director round: PASS 1 (STRUCTURE, chunked over the deck)
+  lays out backgrounds, panels, bars and repositioning with per-slide
+  completeness forcing top-up rounds; PASS 2 (POLISH, whole deck) applies the
+  concept's typography and readability; PASS 3 (ART, whole deck) adds the
+  concept's imagery (still approval-gated since image generation bills);
+  PASS 4 (REVIEW) makes the model audit its own redesign against the concept
+  and the readability law and fix specific slides, looping until it replies
+  "done" (max 2 review rounds). Every pass builds on the accumulated op list
+  ("OPS SO FAR - do not repeat"), and the final single approval gate carries
+  the director's concept plus a "built in AI-driven passes" note. All passes
+  merge in order: 64 verified ops across a 15-slide E2E deck, every slide
+  covered structurally, polished, and where the concept asked, imaged.
 ## 0.9.57
 ### Added
 - AI-talks-to-AI make-over orchestration: a whole-deck redesign now runs in

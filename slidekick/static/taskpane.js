@@ -3050,6 +3050,7 @@ OfficeDeck.prototype.setNotes = function (i, text) {
       function makeOverFlow() {
         var slideN = ctx.slides.length;
         var MO_CHUNK = 4, MO_MAX = 24;
+        var STRUCT_TYPES = { set_background: 1, create_shape: 1, move_shape: 1, create_slide: 1, set_shape_image: 1, style_shape: 1, duplicate_slide: 1, duplicate_slide_to: 1, create_table: 1, insert_image: 1 };
         var director = messages.concat([{
           role: "user",
           content: "You are the DESIGN DIRECTOR for this deck. Do NOT emit ops. " +
@@ -3074,28 +3075,30 @@ OfficeDeck.prototype.setNotes = function (i, text) {
         }).then(function (straightOps) {
           if (straightOps && straightOps.length) return { ok: true, kind: "slide_ops", ops: straightOps, orchestrated: 1 };
           var total = Math.min(slideN, MO_MAX);
-          var all = [];
-          var topUpWork = [];
-          function builderFor(x, y) {
-            var rng = "slides " + x + ".." + y;
+          var all = [];   // every op emitted so far (passes append in order)
+          function coverageNote() {
+            var have = {};
+            all.forEach(function (op) { if (op && op.slide != null && STRUCT_TYPES[op.type]) have[op.slide] = 1; });
+            var missing = [];
+            for (var i = 1; i <= total; i++) if (!have[i]) missing.push(i);
+            return missing.length ? "Slides still without structural design: " + missing.join(", ") + "." : "All slides have structural design.";
+          }
+          function passAsk(passName, spec, x, y) {
             var bm = messages.concat([
-              { role: "assistant", content: moConcept || "(director produced no text)" },
+              { role: "assistant", content: moConcept || "" },
               { role: "user",
                 content: "CONCEPT (from the design director):\n" + (moConcept || "(decide the concept yourself)") +
-                  "\n\nTranslate the concept into slide_ops ONLY for " + rng +
-                  " (1-based outline numbers). Follow the concept exactly - it is the design you must realize. " +
-                  "Cover EVERY slide in " + rng + " completely (each gets at least one structural op plus " +
-                  "composition moves). Slide count in the deck: " + slideN + ". Reply with the slide_ops JSON only." },
+                  "\n\n" + spec +
+                  (x != null ? ("\n\nThis round covers slides " + x + ".." + y + " ONLY (1-based outline numbers). Slide count in the deck: " + slideN + ".") : "\n\nThis round covers the WHOLE deck.") +
+                  (all.length ? ("\n\nOPS SO FAR: " + all.length + " action(s) - do not repeat them. " + coverageNote()) : "") +
+                  "\nReply with the slide_ops JSON only." },
             ]);
-            setStatus("Designing " + rng + " with the concept\u2026", "busy");
-            var ask1 = function () {
-              return apiJson("/api/chat", "POST", { connection: ref.connection, model: ref.model, messages: bm });
-            };
-            return askRetryable(ask1).then(function (b1) {
+            setStatus(passName + (x != null ? " (slides " + x + ".." + y + ")" : "") + "\u2026", "busy");
+            var fire = function () { return apiJson("/api/chat", "POST", { connection: ref.connection, model: ref.model, messages: bm }); };
+            return askRetryable(fire).then(function (b1) {
               SK.lastModelText = { text: b1.text };
               var p1 = tryParse(b1.text);
               if (p1.ok) return p1;
-              // one firm repair round, then salvage
               var rep1 = bm.concat([
                 { role: "assistant", content: b1.text || "" },
                 { role: "user", content: REPAIR_ASK },
@@ -3106,67 +3109,104 @@ OfficeDeck.prototype.setNotes = function (i, text) {
                 SK.lastModelText = { text: b2.text };
                 return tryParse(b2.text);
               });
-            }).then(function (pk) {
-              var ops = (pk && pk.ok && pk.ops) ? pk.ops.filter(function (op) {
-                return op && (op.slide == null || (op.slide >= x && op.slide <= y)) && op.type !== "web_lookup";
-              }) : [];
-              if (!ops.length) {
-                return { ops: [], missing: [], x: x, y: y };
-              }
-              // completeness: which slides in range got no structural op?
-              var STRUCT = { set_background: 1, create_shape: 1, move_shape: 1, create_slide: 1, set_shape_image: 1, style_shape: 1, duplicate_slide: 1, duplicate_slide_to: 1, create_table: 1, insert_image: 1 };
-              var have = {};
-              ops.forEach(function (op) { if (op.slide != null && STRUCT[op.type]) have[op.slide] = 1; });
-              var missing = [];
-              for (var sv = x; sv <= y; sv++) if (!have[sv]) missing.push(sv);
-              return { ops: ops, missing: missing, x: x, y: y };
             });
           }
-          function topUp(tu) {
-            if (!tu.missing.length) return Promise.resolve([]);   // chunk fully covered - nothing to add
-            var tmsg = messages.concat([
-              { role: "assistant", content: moConcept || "" },
-              { role: "user",
-                content: "Slide(s) " + tu.missing.join(", ") + " received no design ops. " +
-                  "CONCEPT:\n" + (moConcept || "(your concept)") +
-                  "\n\nEmit slide_ops covering ONLY slide(s) " + tu.missing.join(", ") +
-                  " - follow the concept, each with at least one structural op plus moves. Slide_ops JSON only." },
-            ]);
-            setStatus("Completing slide(s) " + tu.missing.join(", ") + "\u2026", "busy");
-            return askRetryable(function () {
-              return apiJson("/api/chat", "POST", { connection: ref.connection, model: ref.model, messages: tmsg });
-            }).then(function (t2) {
-              SK.lastModelText = { text: t2.text };
-              var tp = tryParse(t2.text);
-              var tops = (tp.ok && tp.ops) ? tp.ops : (salvageOps(t2.text) || []);
-              // return ONLY the new top-up ops - the chunk ops are already merged
-              return tops.filter(function (op) {
-                return op && op.slide != null && tu.missing.indexOf(op.slide) >= 0;
-              });
-            });
+          function collect(pk, x, y) {
+            return (pk && pk.ok && pk.ops) ? pk.ops.filter(function (op) {
+              return op && op.type !== "web_lookup" && (x == null || op.slide == null || (op.slide >= x && op.slide <= y));
+            }) : [];
           }
-          var seq = Promise.resolve([]);
-          for (var cs = 1; cs <= total; cs += MO_CHUNK) {
-            (function (x) {
-              var y = Math.min(x + MO_CHUNK - 1, total);
-              seq = seq.then(function (acc) {
-                return builderFor(x, y).then(function (r) {
-                  topUpWork.push(r);
-                  return acc.concat(r.ops);
+          function chunkRangePass(passName, spec) {
+            var seq = Promise.resolve([]);
+            for (var cs = 1; cs <= total; cs += MO_CHUNK) {
+              (function (x) {
+                var y = Math.min(x + MO_CHUNK - 1, total);
+                seq = seq.then(function (acc) {
+                  return passAsk(passName, spec, x, y).then(function (pk) {
+                    var ops = collect(pk, x, y);
+                    var have = {};
+                    ops.forEach(function (op) { if (op.slide != null && STRUCT_TYPES[op.type]) have[op.slide] = 1; });
+                    var miss2 = [];
+                    for (var sv = x; sv <= y; sv++) if (!have[sv]) miss2.push(sv);
+                    if (!miss2.length) return acc.concat(ops);
+                    // loop until done: slides with no structural design get their own round
+                    setStatus("Completing slide(s) " + miss2.join(", ") + "\u2026", "busy");
+                    return askRetryable(function () {
+                      return apiJson("/api/chat", "POST", { connection: ref.connection, model: ref.model, messages: messages.concat([
+                        { role: "assistant", content: moConcept || "" },
+                        { role: "user",
+                          content: "Slide(s) " + miss2.join(", ") + " received no design ops. CONCEPT:\n" + (moConcept || "(your concept)") +
+                            "\n\nEmit slide_ops covering ONLY slide(s) " + miss2.join(", ") + " - follow the concept, each with at least one structural op plus moves. Slide_ops JSON only." },
+                      ]) });
+                    }).then(function (t2) {
+                      SK.lastModelText = { text: t2.text };
+                      var tp = tryParse(t2.text);
+                      var tops = (tp.ok && tp.ops) ? tp.ops : (salvageOps(t2.text) || []);
+                      return acc.concat(ops, tops.filter(function (op) {
+                        return op && op.slide != null && miss2.indexOf(op.slide) >= 0;
+                      }));
+                    });
+                  });
                 });
-              });
-            })(cs);
+              })(cs);
+            }
+            return seq;
           }
-          return seq.then(function (acc) {
-            // top-ups run after the main sweep (bounded, one pass each)
-            var tseq = Promise.resolve(acc);
-            topUpWork.forEach(function (r) {
-              tseq = tseq.then(function (a2) { return topUp(r).then(function (more) { return a2.concat(more); }); });
+          function wholePass(passName, spec) {
+            return passAsk(passName, spec, null, null).then(function (pk) { return collect(pk, null, null); });
+          }
+          // PASS 1 - STRUCTURE: the skeleton, chunked, completeness enforced
+          var p1 = chunkRangePass("STRUCTURE PASS",
+            "STRUCTURE PASS - build the skeleton following the concept: backgrounds (solid/gradient), panels, accent bars, overlays, split compositions, repositioning and rotation. NO image generation, NO text formatting yet (exception: set a text color when the text would otherwise sit unreadably on a new dark field).");
+          // PASS 2 - POLISH: typography + readability on the existing structure
+          var p2 = p1.then(function (acc) {
+            all = acc;
+            return wholePass("POLISH PASS",
+            "POLISH PASS - typography and readability on the structure that now exists: format_text titles/body per the concept's scale, keep every text above the readability law, strengthen accents and hierarchy. NO new structural shapes, NO images, no repeating existing ops.").then(function (more) {
+              all = all.concat(more);
+              return all;
             });
-            return tseq.then(function (finalOps) {
-              if (!finalOps.length) return null;
-              return { ok: true, kind: "slide_ops", ops: finalOps, orchestrated: (total > MO_CHUNK ? Math.ceil(total / MO_CHUNK) : 1) };
+          });
+          // PASS 3 - ART: imagery only where the concept calls for it
+          var p3 = p2.then(function () {
+            return wholePass("ART PASS",
+            "ART PASS - imagery only where the concept calls for it: AI picture backgrounds for cover and section slides, cut-out picture fills inside shapes for content slides, always in the concept's one image style. Use set_background kind:image and set_shape_image. Quality over quantity.").then(function (more) {
+              all = all.concat(more);
+              return all;
             });
+          });
+          // PASS 4 - REVIEW LOOP: the model audits its own redesign and keeps
+          // fixing until it declares the deck done (max 2 fix rounds)
+          var p4 = p3.then(function (acc3) {
+            all = acc3;
+            function reviewRound(n) {
+              var rm = messages.concat([
+                { role: "assistant", content: moConcept || "" },
+                { role: "user",
+                  content: "REVIEW ROUND for the make-over. CONCEPT:\n" + (moConcept || "(your concept)") +
+                    "\n\nOPS SO FAR: " + all.length + " action(s) across the deck. " + coverageNote() +
+                    "\n\nAudit the redesign against the concept AND the readability law. If specific slides still lack structural design, imagery the concept promised, or readable text, reply with slide_ops fixing ONLY those slides. If the deck is complete per the concept, reply {\"kind\":\"reply\",\"text\":\"done\"}." },
+              ]);
+              setStatus("Review pass " + n + " - auditing the redesign\u2026", "busy");
+              return askRetryable(function () {
+                return apiJson("/api/chat", "POST", { connection: ref.connection, model: ref.model, messages: rm });
+              }).then(function (rp) {
+                SK.lastModelText = { text: rp.text };
+                var pp = tryParse(rp.text);
+                if (pp.ok && pp.kind === "reply") return all;   // the auditor says done
+                var fixes = (pp.ok && pp.ops) ? pp.ops : (salvageOps(rp.text) || []);
+                if (!fixes.length) return all;
+                all = all.concat(fixes);
+                if (n >= 2) return all;
+                return reviewRound(n + 1);
+              });
+            }
+            return reviewRound(1);
+          });
+          return p4.then(function (finalOps) {
+            if (!finalOps || !finalOps.length) return null;
+            SK.moPassInfo = "built in AI-driven passes: structure -> polish -> art, then review rounds to completion (" + finalOps.length + " actions)";
+            return { ok: true, kind: "slide_ops", ops: finalOps, orchestrated: 1 };
           });
         });
       }
@@ -3603,6 +3643,13 @@ OfficeDeck.prototype.setNotes = function (i, text) {
         String(SK.moConcept).slice(0, 110) + (String(SK.moConcept).length > 110 ? "\u2026" : "");
       box.appendChild(moN);
       SK.moConcept = "";
+    }
+    if (SK.moPassInfo) {
+      var passN = document.createElement("div");
+      passN.className = "opnote";
+      passN.textContent = SK.moPassInfo;
+      box.appendChild(passN);
+      SK.moPassInfo = "";
     }
     if (SK.lastRecovered) {
       var recN = document.createElement("div");
