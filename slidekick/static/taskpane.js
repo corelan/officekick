@@ -3040,6 +3040,138 @@ OfficeDeck.prototype.setNotes = function (i, text) {
             return resp;
           });
       }
+      // AI-talks-to-AI make-over: a design-director round invents the concept
+      // (no ops), then builder rounds translate it into ops chunk by chunk so
+      // a full-deck redesign can never silently stop after slide N.
+      var fullMo = MAKEOVER_RE.test(instruction) &&
+        !/\bslides?\s*\d+\b/i.test(instruction) &&
+        !!(ctx && ctx.slides && ctx.slides.length);
+      var moConcept = "";
+      function makeOverFlow() {
+        var slideN = ctx.slides.length;
+        var MO_CHUNK = 4, MO_MAX = 24;
+        var director = messages.concat([{
+          role: "user",
+          content: "You are the DESIGN DIRECTOR for this deck. Do NOT emit ops. " +
+            "Reply with format A (reply) holding ONLY the design concept: an " +
+            "invented, bold style name; a deep/panel/accent hex trio plus which " +
+            "text color goes on each surface; the type scale (title/body sizes); " +
+            "one image-style phrase used by every picture; and one DISTINCT " +
+            "composition idea per slide role. Take risks - the opposite of a " +
+            "default PowerPoint look. If a earlier redesign appears in the " +
+            "history, pick a contrasting direction. 150-300 words.",
+        }]);
+        setStatus("Consulting the AI design director\u2026", "busy");
+        return askRetryable(function () {
+          return apiJson("/api/chat", "POST", { connection: ref.connection, model: ref.model, messages: director });
+        }).then(function (dResp) {
+          SK.lastModelText = { text: dResp.text };
+          var dParsed = tryParse(dResp.text);
+          moConcept = (dParsed.ok && dParsed.kind === "reply" && dParsed.text) ? String(dParsed.text) : String(dResp.text || "");
+          SK.moConcept = moConcept;   // the approval gate shows the director's concept
+          if (dParsed.ok && dParsed.kind === "slide_ops" && dParsed.ops) return dParsed.ops; // director ignored the format: treat its ops as the design
+          return null;
+        }).then(function (straightOps) {
+          if (straightOps && straightOps.length) return { ok: true, kind: "slide_ops", ops: straightOps, orchestrated: 1 };
+          var total = Math.min(slideN, MO_MAX);
+          var all = [];
+          var topUpWork = [];
+          function builderFor(x, y) {
+            var rng = "slides " + x + ".." + y;
+            var bm = messages.concat([
+              { role: "assistant", content: moConcept || "(director produced no text)" },
+              { role: "user",
+                content: "CONCEPT (from the design director):\n" + (moConcept || "(decide the concept yourself)") +
+                  "\n\nTranslate the concept into slide_ops ONLY for " + rng +
+                  " (1-based outline numbers). Follow the concept exactly - it is the design you must realize. " +
+                  "Cover EVERY slide in " + rng + " completely (each gets at least one structural op plus " +
+                  "composition moves). Slide count in the deck: " + slideN + ". Reply with the slide_ops JSON only." },
+            ]);
+            setStatus("Designing " + rng + " with the concept\u2026", "busy");
+            var ask1 = function () {
+              return apiJson("/api/chat", "POST", { connection: ref.connection, model: ref.model, messages: bm });
+            };
+            return askRetryable(ask1).then(function (b1) {
+              SK.lastModelText = { text: b1.text };
+              var p1 = tryParse(b1.text);
+              if (p1.ok) return p1;
+              // one firm repair round, then salvage
+              var rep1 = bm.concat([
+                { role: "assistant", content: b1.text || "" },
+                { role: "user", content: REPAIR_ASK },
+              ]);
+              return askRetryable(function () {
+                return apiJson("/api/chat", "POST", { connection: ref.connection, model: ref.model, messages: rep1 });
+              }).then(function (b2) {
+                SK.lastModelText = { text: b2.text };
+                return tryParse(b2.text);
+              });
+            }).then(function (pk) {
+              var ops = (pk && pk.ok && pk.ops) ? pk.ops.filter(function (op) {
+                return op && (op.slide == null || (op.slide >= x && op.slide <= y)) && op.type !== "web_lookup";
+              }) : [];
+              if (!ops.length) {
+                return { ops: [], missing: [], x: x, y: y };
+              }
+              // completeness: which slides in range got no structural op?
+              var STRUCT = { set_background: 1, create_shape: 1, move_shape: 1, create_slide: 1, set_shape_image: 1, style_shape: 1, duplicate_slide: 1, duplicate_slide_to: 1, create_table: 1, insert_image: 1 };
+              var have = {};
+              ops.forEach(function (op) { if (op.slide != null && STRUCT[op.type]) have[op.slide] = 1; });
+              var missing = [];
+              for (var sv = x; sv <= y; sv++) if (!have[sv]) missing.push(sv);
+              return { ops: ops, missing: missing, x: x, y: y };
+            });
+          }
+          function topUp(tu) {
+            if (!tu.missing.length) return Promise.resolve([]);   // chunk fully covered - nothing to add
+            var tmsg = messages.concat([
+              { role: "assistant", content: moConcept || "" },
+              { role: "user",
+                content: "Slide(s) " + tu.missing.join(", ") + " received no design ops. " +
+                  "CONCEPT:\n" + (moConcept || "(your concept)") +
+                  "\n\nEmit slide_ops covering ONLY slide(s) " + tu.missing.join(", ") +
+                  " - follow the concept, each with at least one structural op plus moves. Slide_ops JSON only." },
+            ]);
+            setStatus("Completing slide(s) " + tu.missing.join(", ") + "\u2026", "busy");
+            return askRetryable(function () {
+              return apiJson("/api/chat", "POST", { connection: ref.connection, model: ref.model, messages: tmsg });
+            }).then(function (t2) {
+              SK.lastModelText = { text: t2.text };
+              var tp = tryParse(t2.text);
+              var tops = (tp.ok && tp.ops) ? tp.ops : (salvageOps(t2.text) || []);
+              // return ONLY the new top-up ops - the chunk ops are already merged
+              return tops.filter(function (op) {
+                return op && op.slide != null && tu.missing.indexOf(op.slide) >= 0;
+              });
+            });
+          }
+          var seq = Promise.resolve([]);
+          for (var cs = 1; cs <= total; cs += MO_CHUNK) {
+            (function (x) {
+              var y = Math.min(x + MO_CHUNK - 1, total);
+              seq = seq.then(function (acc) {
+                return builderFor(x, y).then(function (r) {
+                  topUpWork.push(r);
+                  return acc.concat(r.ops);
+                });
+              });
+            })(cs);
+          }
+          return seq.then(function (acc) {
+            // top-ups run after the main sweep (bounded, one pass each)
+            var tseq = Promise.resolve(acc);
+            topUpWork.forEach(function (r) {
+              tseq = tseq.then(function (a2) { return topUp(r).then(function (more) { return a2.concat(more); }); });
+            });
+            return tseq.then(function (finalOps) {
+              if (!finalOps.length) return null;
+              return { ok: true, kind: "slide_ops", ops: finalOps, orchestrated: (total > MO_CHUNK ? Math.ceil(total / MO_CHUNK) : 1) };
+            });
+          });
+        });
+      }
+
+      var baseChain = function () {
       return mainAsk().then(function (resp) {
         dbg("response", { text: resp.text, elapsedMs: resp.elapsedMs });
         SK.lastModelText = { text: resp.text };
@@ -3108,6 +3240,15 @@ OfficeDeck.prototype.setNotes = function (i, text) {
               });
           });
         });
+      });
+      };
+      var parsedChain = fullMo ? makeOverFlow() : baseChain();
+      return parsedChain.then(function (parsed) {
+        if (parsed === null) {
+          // orchestration produced nothing usable - fall back to the plain chain
+          return baseChain();
+        }
+        return parsed;
       }).then(function (parsed) {
         renderParsed(parsed, ctx, instruction);
         pushHistory(instruction, assistantHistoryText(parsed));
@@ -3455,6 +3596,14 @@ OfficeDeck.prototype.setNotes = function (i, text) {
     h.textContent = "Proposed actions" + ($("chat-autoapply").checked ? " (auto-apply)" : "");
     box.appendChild(h);
 
+    if (SK.moConcept) {
+      var moN = document.createElement("div");
+      moN.className = "opnote";
+      moN.textContent = "AI design director concept applied: " +
+        String(SK.moConcept).slice(0, 110) + (String(SK.moConcept).length > 110 ? "\u2026" : "");
+      box.appendChild(moN);
+      SK.moConcept = "";
+    }
     if (SK.lastRecovered) {
       var recN = document.createElement("div");
       recN.className = "opnote";

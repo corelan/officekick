@@ -30,6 +30,21 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.57
+### Added
+- AI-talks-to-AI make-over orchestration: a whole-deck redesign now runs in
+  two stages. First a DESIGN DIRECTOR round invents the concept (style name,
+  palette + text-color pairing, type scale, image language, a distinct
+  composition idea per role) with ops forbidden. Then builder rounds
+  translate the concept into concrete ops - chunk by chunk (4 slides at a
+  time), so a 13-slide deck can never silently stop at slide 9. Slides that
+  came back without design ops get one automatic top-up round. Everything
+  is merged into a single approval gate, headed by the director's concept.
+  Requests that name specific slides keep the single-pass path.
+### Fixed
+- Orchestration merge bugs found by E2E: chunk ops were doubled for fully
+  covered ranges and the concept note never surfaced (local vs stored
+  variable). The plain parse chain no longer races the orchestrated flow.
 ## 0.9.56
 ### Changed
 - Readability rules hardened in the design prompt and the make-over brief.
