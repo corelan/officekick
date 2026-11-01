@@ -112,10 +112,13 @@ First run:
 with the add-in icon on the Home tab (MailKick: message read/compose tabs).
 
 - Default is the list-mode manifest (no ribbon commands).
-- Reason: our tested Office-Mac build accepts a command manifest but replaces
-  the Add-ins-list entry with it and then renders neither the group nor the
-  list item. That leaves the add-in unreachable.
-- If your build shows the AI group, you can stay on `--ribbon`.
+- Verdict on this build (retested on a clean state, 0.9.29): the Office-Mac
+  16.114.3 build accepts a command manifest, renders nothing, and drops the
+  Add-ins-list entry. The add-in then shows "Add-in Error". This is a build
+  limitation for developer file-sideloads, not a stale cache.
+- If your build shows the AI group, you can stay on `--ribbon`. After any
+  `--ribbon` attempt, restore with a plain install re-run (it ships a fresh
+  manifest Version, so Office discards the cached broken registration).
 
 ## macOS permissions (locally hosted models)
 

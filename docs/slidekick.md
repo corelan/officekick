@@ -32,7 +32,11 @@ is about how SlideKick works.
   (16/32/80 px icons) and an "Open SlideKick" button on the Home ribbon.
   - Word keeps the same group for DocKick.
   - Outlook shows the group on the message read/compose tabs.
-  - Default is list-mode (no commands). See the README for why.
+  - Default is list-mode (no commands).
+  - Retested on a clean state (0.9.29): the 16.114.3 Office-Mac build accepts
+    the commands manifest, renders nothing and drops the Add-ins entry - a
+    build limitation for developer file-sideloads, not a cache artifact.
+    Restore with a plain install re-run (it bumps the manifest Version).
   Default = list mode: on the Office-Mac build we tested, a command manifest
   REPLACED the Add-ins-list entry and then rendered neither the group nor a
   list item (and earlier 16.114 builds behaved the same) - the add-in was

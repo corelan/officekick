@@ -30,6 +30,24 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.29
+### Documented / Changed
+- **Ribbon verdict (retest, clean state)**: with the Office cache stores wiped,
+  manifest Version 1.0.3.0 and the server live, the tested Office-Mac build
+  (16.114.3) still registers the commands manifest without rendering the AI
+  group and without keeping the Add-ins list entry - the add-in shows an
+  "Add-in Error" and disappears from the list. Confirmed on a CLEAN state this
+  time: this is a build limitation for developer file-sideloaded commands, not
+  a stale-cache artifact. `--ribbon` stays opt-in; **list-mode is the only
+  working manifest mode on this build**. After any `--ribbon` attempt, restore
+  with a plain install re-run (it also bumps the manifest Version to
+  1.0.4.0 here, so Office discards the cached commands registration outright).
+### Fixed
+- After a failed ribbon attempt, re-running a plain install used the SAME
+  manifest Version (cached instances are keyed by id+version) - Office could
+  keep the broken commands registration. Every install pass that switches
+  modes now ships a fresh manifest Version; 1.0.4.0 = current.
+
 ## 0.9.28
 ### Fixed
 - install.py's "is Office running?" check matched Office's widget/extension
