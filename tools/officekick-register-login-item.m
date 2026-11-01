@@ -11,8 +11,9 @@
 // "System Events.app" instead and fires that notification again on every
 // re-registration, which reads like a scare prompt.
 //
-// --check : exit 0 iff the service is already enabled (prints STATUS <n>).
-// register: exit 0 if already enabled or registration succeeded.
+// --check     : exit 0 iff the service is already enabled (prints STATUS <n>).
+// --unregister: remove the login item (exit 0 if gone or absent).
+// register    : exit 0 if already enabled or registration succeeded.
 //
 // Build: clang -framework Foundation -framework ServiceManagement \
 //          -o officekick-register-login-item officekick-register-login-item.m
@@ -28,6 +29,16 @@ int main(int argc, const char * const argv[]) {
     if ([mode isEqualToString:@"--check"]) {
       fprintf(stdout, "STATUS %ld\n", (long)st);
       return st == SMAppServiceStatusEnabled ? 0 : 1;
+    }
+    if ([mode isEqualToString:@"--unregister"]) {
+      NSError *derr = nil;
+      if ([svc status] == SMAppServiceStatusEnabled) {
+        if ([svc unregisterAndReturnError:&derr]) { fprintf(stdout, "UNREGISTERED\n"); return 0; }
+        fprintf(stderr, "ERR %s\n", derr.localizedDescription.UTF8String ?: "unregister failed");
+        return 1;
+      }
+      fprintf(stdout, "NOT-REGISTERED\n");
+      return 0;
     }
     if (st == SMAppServiceStatusEnabled) { fprintf(stdout, "ALREADY\n"); return 0; }
     NSError *err = nil;

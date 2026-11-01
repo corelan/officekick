@@ -30,6 +30,25 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.23
+### Added
+- **install.py**: a unified, interactive, cross-platform installer
+  (macOS + Windows, auto-detected) that replaces install.sh as the
+  recommended install path. Menu: Install / Update / Uninstall; also
+  --install (non-interactive), --update (git pull + update), --uninstall
+  (--purge-config optional), --port, --ribbon (still opt-in: the ribbon
+  commands remain experimental on this Office build), --dry-run. The
+  autostart question (default Yes) explains what it registers: macOS login
+  item via the in-bundle SMAppService helper (System Events fallback) /
+  Windows per-user scheduled task (HKCU Run-key fallback). The transport is
+  plain http://localhost:<port> only - Office allows localhost over http, so
+  the installer no longer touches certificates at all; expected OS popups are
+  listed up front. Windows sideload = HKCU trusted folder catalog (no admin);
+  Outlook (Windows) needs the once-per-workstation "Add from File" dialog.
+  Uninstall removes manifests, autostart and the installed files but keeps
+  ~/.officekick (config + sessions) by default. install.sh remains for
+  macOS-specific use.
+
 ## 0.9.22
 ### Fixed
 - Background-items prompt: the server's login item was registered through the

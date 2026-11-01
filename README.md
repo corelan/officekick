@@ -24,28 +24,35 @@ shared by every Office app.
 
 ## Install / update
 
-macOS:
+macOS and Windows take the SAME unified installer (it auto-detects the
+platform):
 
 ```bash
 git clone https://github.com/corelan/officekick.git
 cd officekick
-./install.sh
+python3 install.py        # Windows: python install.py
 ```
 
-Windows (PowerShell, no admin needed):
+It shows an interactive menu - Install / Update / Uninstall - lists what it
+will change and which OS prompts may appear, and asks whether to autostart the
+local server (default yes: a login item via SMAppService on macOS /
+a windowless per-user scheduled task on Windows; answering no keeps the server
+manual). No admin rights are required on either platform. The add-in transport
+is plain `http://localhost:8765` (Office allows localhost over http - no
+certificates involved on any path). Non-interactive equivalents:
+`python3 install.py --install`, `--update` (= `git pull` + update),
+`--uninstall [--purge-config]`, `--dry-run` to preview.
 
-```powershell
-git clone https://github.com/corelan/officekick.git
-cd officekick
-.\install.ps1
-```
-
-Both installers are idempotent (re-run to update): they check `python3` (>= 3.8),
-detect the installed Office apps, deploy files to
+The install is idempotent (re-run to update/repair): it checks `python3`
+(>= 3.8), detects the installed Office apps, deploys files to
 `~/Library/Application Support/OfficeKick` (macOS) or `%LOCALAPPDATA%\OfficeKick`
-(Windows), register the manifests into each Office app, set the auto-start
-service (LaunchAgent / Scheduled Task; the server also restarts on crash), start
-the server and health-check it.
+(Windows), renders + registers/sideloads the add-in manifests (macOS WEF
+containers; Windows per-user trusted folder catalog via HKCU - Outlook on
+Windows needs a one-time "Add from File" dialog, the installer prints the
+steps), registers autostart, starts the server and health-checks it. The
+macOS server wrapper also restarts the server on crash. Platform-specific
+legacy installers remain available: `install.sh` (macOS) / `install.ps1`
+(Windows).
 
 ### How to update OfficeKick
 
@@ -55,30 +62,25 @@ updates:
 - **Check**: Settings -> "Check now" (or the **Check for updates automatically
   at startup** option, on by default). It reads this repo's `VERSION` file from
   GitHub, compares with the running version and shows a plain-text notice.
-- **Apply** (macOS):
+- **Apply** (both platforms):
 
   ```bash
   cd officekick
-  git pull
-  ./install.sh     # re-deploys + restarts the server, stays idempotent
+  python3 install.py --update    # Windows: python install.py --update
   ```
 
-- **Apply** (Windows):
-
-  ```powershell
-  cd officekick
-  git pull
-  .\install.ps1
-  ```
+  (--update = git pull + re-deploy + restart; equivalently: manual `git pull`,
+  then a plain `python3 install.py` run through the menu.)
 
 - **Then**: quit and reopen the Office app(s) so the task panes load the new
   static files. Your config (`~/.officekick/config.json`) and sessions survive
-  updates. There is no automatic `git pull`, ever.
+  updates. There is no automatic `git pull`, ever (except through an explicit
+  `--update`).
 
-Useful flags: `--port N` / `-Port N`, `--dev` / `-Dev` (serve from the repo),
-`--no-launchagent` / `-NoScheduledTask`, `--https` (macOS: local CA),
-`--ribbon` (keep the commands/AI group in the manifest; default = list mode),
-`status`, `run`, `uninstall [--purge]`.
+Useful flags: `--port N`, `--ribbon` (keep the commands/AI group in the
+manifest; default = list mode), `--install` / `--update` /
+`--uninstall [--purge-config]`, `--dry-run`; legacy installers keep their own
+flags (`install.sh`: `--dev`, `status`, `run`).
 
 Config (API keys, profiles, policy) lives in `~/.officekick/config.json`
 (`%USERPROFILE%\.officekick`, chmod 600) and survives updates.
