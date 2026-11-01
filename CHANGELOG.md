@@ -30,6 +30,18 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.18
+### Added
+- **macOS Local Network permission, properly attributable**: the installer now
+  creates `~/Applications/OfficeKickServer.app` and runs the LaunchAgent's
+  server THROUGH it, so macOS can raise the "wants to access devices on your
+  local network" prompt for the server process (a bare launchd-spawned python
+  is silently denied and LAN providers get Errno 65). Grant it once in the
+  prompt or System Settings > Privacy & Security > Local Network.
+- Manifest `<Version>` bumped to 1.0.2.0 in all three add-ins: Office keys the
+  parsed-manifest cache by id+version, so an unchanged version keeps a stale
+  registration (one more reason a ribbon attempt could look like a no-op).
+
 ## 0.9.17
 ### Changed
 - The waiting-for-the-model timer now formats progressively: seconds only

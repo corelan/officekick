@@ -443,6 +443,41 @@ clear_office_caches() {
 }
 
 # --------------------------------------------------------------------- #
+# server .app bundle (macOS): keeps the LaunchAgent-run server attributed to a
+# bundle id so macOS RAISES the "Local Network" permission prompt on the first
+# LAN connect (a bare launchd-spawned python is silently denied -> Errno 65).
+# --------------------------------------------------------------------- #
+make_server_app() {
+  local app_dir="$HOME/Applications/OfficeKickServer.app"
+  mkdir -p "$app_dir/Contents/MacOS" "$app_dir/Contents/Resources"
+  cat > "$app_dir/Contents/Info.plist" <<'APPINFO'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleIdentifier</key><string>com.corelan.officekick.server</string>
+  <key>CFBundleName</key><string>OfficeKickServer</string>
+  <key>CFBundleDisplayName</key><string>OfficeKick Server</string>
+  <key>CFBundleExecutable</key><string>officekick-server</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleIconFile</key><string>OfficeKickAdmin</string>
+  <key>NSLocalNetworkUsageDescription</key>
+  <string>OfficeKick reaches AI providers you run on your own network (Ollama, llama.cpp) to answer requests from your Office add-ins.</string>
+</dict>
+</plist>
+APPINFO
+  cat > "$app_dir/Contents/MacOS/officekick-server" <<'APPSHIM'
+#!/bin/bash
+# Runs the requested command as a CHILD of this (in-bundle) wrapper so macOS
+# TCC attributes local-network access to com.corelan.officekick.server.
+"$@"
+APPSHIM
+  chmod 755 "$app_dir/Contents/MacOS/officekick-server"
+  plutil -lint "$app_dir/Contents/Info.plist" >/dev/null 2>&1 && \
+    ok "server app bundle ready: $app_dir" || warn "server app bundle lint failed"
+}
+
+# --------------------------------------------------------------------- #
 # install / update
 # --------------------------------------------------------------------- #
 do_install() {
@@ -619,6 +654,7 @@ do_install() {
   clear_office_caches
 
   # ---- LaunchAgent ----
+  make_server_app   # bundle wrapper so Local Network permission can be granted
   # remove the legacy SlideKick label so only the OfficeKick agent remains
   if launchctl print "gui/$(id -u)/$OLD_LAUNCH_LABEL" >/dev/null 2>&1; then
     launchctl remove "$OLD_LAUNCH_LABEL" 2>/dev/null && ok "legacy LaunchAgent label removed"
@@ -637,7 +673,8 @@ do_install() {
 import os, plistlib, sys
 
 plist_path, label, py_bin, server_py, port, static_dir, cert_dir, log_dir, scheme = sys.argv[1:10]
-args = [py_bin, server_py, "--port", port,
+args = [os.path.expanduser("~/Applications/OfficeKickServer.app/Contents/MacOS/officekick-server"),
+            py_bin, server_py, "--port", port,
             "--config", os.path.expanduser("~/.officekick/config.json"),
             "--static-dir", static_dir]
 if scheme == "https":
