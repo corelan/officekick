@@ -3835,6 +3835,14 @@ OfficeDeck.prototype.setNotes = function (i, text) {
             : "Auto-clean off - nothing is deleted.", true);
       }).catch(function (err) { setFormMsg($("settings-autoclean-msg"), err.message); });
   }
+  function saveNotesOnly() {
+    var on = !!$("settings-notes").checked;
+    apiJson("/api/settings", "PUT", { generateNotes: on }).then(function () {
+      if (SK.cfg) SK.cfg.generateNotes = on;
+      setStatus("Notes setting: " + (on ? "speaker notes ON" : "speaker notes OFF"), "ok");
+    }).catch(function (e) { setStatus("Could not save the notes setting: " + ((e && e.message) || e), "error"); });
+  }
+
   function saveDebugOption() {
     apiJson("/api/settings", "PUT", { debug: $("settings-debug").checked }).then(function () {
       return loadConfigAndRender();
@@ -4061,6 +4069,7 @@ OfficeDeck.prototype.setNotes = function (i, text) {
       b.addEventListener("click", function () { switchSettingsSub(b.dataset.subtab); });
     });
     $("settings-debug-save").addEventListener("click", saveDebugOption);
+    $("settings-notes-save").addEventListener("click", saveNotesOnly);
     $("settings-autoclean-save").addEventListener("click", saveAutoClean);
     var updBtn = $("upd-check");
     if (updBtn) updBtn.addEventListener("click", updCheck);

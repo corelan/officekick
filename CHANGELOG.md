@@ -30,6 +30,12 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.41
+### Fixed
+- The "Generate speaker notes" checkbox previously only saved through the
+  "Save policy" button on the Approvals sub-tab - there was no visible Save
+  for it where it sits (General). It now has its own "Save notes setting"
+  button next to the checkbox.
 ## 0.9.40
 ### Changed
 - **Loopback fallback for local AI servers**: when a request to a numeric
