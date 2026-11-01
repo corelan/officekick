@@ -457,6 +457,62 @@
     return found.length ? found[0] : undefined;
   }
 
+  // MAKE-OVER MODE: the creative director brief. Injected into the system
+  // prompt when the instruction asks for a design make-over. Models default
+  // to low-effort font tweaks; this brief forces a theme, original layouts
+  // per role, image treatments (backgrounds, cut-out shapes, overlays) and
+  // op-count minimums so the result reads as a redesign.
+  var MAKEOVER_RE = /\b(make\s*over|makeover|reskin|restyle|redesign|re-?style|new (design|theme|look)|design (the|this) (deck|whole)|modern|professional|clean up the design|fresh look)\b/i;
+  var MAKEOVER_BRIEF = [
+    "",
+    "MAKE-OVER MODE (design director): the user asked you to redesign. You are",
+    "now the CREATIVE DIRECTOR of this deck - never a font-fixer. A make-over",
+    "that only changes colors and font sizes is a FAILURE: it looks untouched.",
+    "Before emitting any ops, mentally define a CONCRETE THEME:",
+    "- STYLE NAME + mood, e.g. 'dark editorial tech', 'warm humanist keynote',",
+    "  'flat corporate with bold accents'. Commit to it.",
+    "- PALETTE: deep background color (hex), one panel color, one accent color",
+    "  used sparingly for bars/shapes, light text colors for dark fields.",
+    "- TYPE: a title size (28-44pt) and a body size (14-18pt) in points.",
+    "- IMAGE LANGUAGE: one consistent photo style for the whole deck (e.g.",
+    "  'editorial studio shots', 'flat vector scenes'). Reference it in EVERY",
+    "  generated image prompt so the deck's pictures belong together.",
+    "",
+    "Then design each slide's LAYOUT from its role (the outline marks roles:",
+    "title = cover/section, bullets, statement, table, image). Every slide",
+    "with the same role gets the SAME blueprint; roles differ from each other.",
+    "Aim for layouts like a designer would draw them, e.g.:",
+    "- title/section slides: a full-bleed AI photo (set_background kind:image)",
+    "  + a dark overlay rectangle (fill #000000, transparency 0.45-0.6) over it",
+    "  + the title BIG (36-44pt), light color, top-left or third-anchored, plus",
+    "  a thin accent bar next to it. Same anchor on every title slide.",
+    "- content slides: split the canvas asymmetrically - e.g. a colored side",
+    "  panel (create_shape rectangle/roundedRectangle + fill, transparency",
+    "  where it must not block text) holding a cut-out photo (set_shape_image),",
+    "  with the title + body on the open two-thirds; OR bold color blocks,",
+    "  accent bars under titles, a number badge per section. Keep body text on",
+    "  the plain field - never text over busy photo without an overlay.",
+    "- statement slides: fewer, larger elements, generous whitespace, one",
+    "  pull-quote treatment (light text on a panel or accent bar).",
+    "- table slides: keep the table; add a header bar shape behind the title",
+    "  row, a soft panel behind the table, light alternating row text.",
+    "",
+    "CREATIVITY MINIMUMS (they are requirements, not suggestions):",
+    "- Touch EVERY slide in scope with a structural element (background,",
+    "  panel, accent bar or overlay), not only its text.",
+    "- Reposition or resize something on most slides (move_shape) - reflow",
+    "  the composition; do not only recolor in place.",
+    "- Generate images: for a full-deck make-over usually 2-5 create_image/",
+    "  set_shape_image ops (a cover background, at least one cut-out photo in",
+    "  a shape, section art). Zero images in an image-heavy request = failure.",
+    "- Vary composition BETWEEN roles (full-bleed vs side-panel vs split),",
+    "  and keep identical geometry WITHIN a role.",
+    "",
+    "Op order per reply: (1) backgrounds + palette shapes + overlays, (2)",
+    "layout moves + text restyle, (3) image generation ops last. Full text",
+    "and bullets: keep the user's wording unless they asked for copy edits.",
+  ].join("\n");
+
   var SYSTEM_PROMPT = [
     "You are SlideKick, an AI assistant inside a PowerPoint task pane.",
     "You get the current deck outline and a user request. Reply with ONLY one",
@@ -2818,6 +2874,7 @@ OfficeDeck.prototype.setNotes = function (i, text) {
       return webPromise.then(function () {
       var sys = SYSTEM_PROMPT + "\nHost: " + (SK.sim ? "SlideKick simulator" : SK.deck.capabilities().host);
       if (!(SK.cfg && SK.cfg.generateNotes)) sys += "\n" + NOTES_OFF_RULE;
+      if (MAKEOVER_RE.test(instruction)) sys += "\n" + MAKEOVER_BRIEF;
       var user = (ctx ? formatContext(ctx) : "(no deck context requested)") + "\n\nUSER REQUEST:\n" + instruction;
       if (SK.webResults) user += "\n\nWEB RESULTS (live lookup, cite them when relevant):\n" + SK.webResults;
       var messages = [

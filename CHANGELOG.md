@@ -30,6 +30,19 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.43
+### Added
+- **Make-over mode as a skill**: when the request asks for a design
+  make-over (makeover / make over / redesign / new design, theme or look /
+  modern / professional / restyle), SlideKick injects a full
+  creative-director brief into the system prompt: pick a concrete theme and
+  palette first, an image language shared by every generated picture, one
+  layout blueprint per slide role, and hard creativity minimums (a
+  structural element on every slide, repositioning on most, 2-5 generated
+  images per full-deck pass with at least one cut-out in a shape). A
+  reply that only changes colors/sizes is explicitly named a failure to
+  the model. Normal edit requests are unaffected (brief absent,
+  verified).
 ## 0.9.42
 ### Added
 - Automatic **log cleanup**: `debug-*.log` / `access-*.log` files older than
