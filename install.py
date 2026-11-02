@@ -413,10 +413,55 @@ def render_and_sideload():
         return
     if not is_mac():
         sideload_windows_catalog()
+        sideload_windows_developer()
         out("  note: Outlook on Windows does not use folder catalogs - load MailKick once:")
         out("        Outlook -> Get Add-ins (or the ellipsis overflow) -> My add-ins ->")
         out("        Custom Add-ins -> Add a custom add-in -> Add from File ->")
         out("        " + os.path.join(manifest_dir(), "mailkick.xml"))
+    else:
+        out("  mac tip: if a saved deck throws the 'Add-in Error' toast on open,")
+        out("           the deck's pane reference carries the unresolvable store stamp.")
+        out("           Heal: python3 tools/repair_paneref.py <file.pptx | .docx | folder>")
+        out("           (backs the originals up to orig/ next to the deck(s), then patches in place)")
+
+
+def sideload_windows_developer():
+    """
+    Per-add-in dev sideload on Windows: the new "Apps" dialog on current
+    builds (16.0.19x) ignores Trust Center folder catalogs, but every Office
+    app reloads the add-ins registered under HKCU ...\\Wef\\Developer at
+    launch. Register each add-in there (default value = manifest path) and
+    set RefreshAddins so the host re-reads on the next start.
+    """
+    import winreg
+    base = r"Software\Microsoft\Office\16.0\Wef\Developer"
+    try:
+        with winreg.CreateKeyEx(winreg.HKEY_CURRENT_USER, base, 0, winreg.KEY_SET_VALUE) as k:
+            winreg.SetValueEx(k, "RefreshAddins", 0, winreg.REG_DWORD, 1)
+        n = 0
+        for (folder, _name, mfname) in OURS:
+            mpath = os.path.join(manifest_dir(), mfname)
+            if not os.path.isfile(mpath):
+                continue
+            aid = id_of_manifest(mpath)
+            if not aid:
+                warn("no <Id> in %s - dev sideload skipped" % mfname)
+                continue
+            with winreg.CreateKeyEx(winreg.HKEY_CURRENT_USER, base + "\\" + aid, 0, winreg.KEY_SET_VALUE) as k:
+                winreg.SetValueEx(k, "", 0, winreg.REG_SZ, mpath)
+            n += 1
+        ok("dev sideload registered (HKCU %s): %d add-in(s) load at launch" % (base, n))
+    except OSError as e:
+        warn("dev sideload could not be written: %s" % e)
+
+
+def id_of_manifest(path):
+    try:
+        with open(path, encoding="utf-8") as fh:
+            m = re.search(r"<Id[^>]*>\s*([0-9A-Za-z\-]+)\s*</Id>", fh.read())
+        return m.group(1).strip("{}") if m else None
+    except OSError:
+        return None
 
 
 def sideload_mac(folder, mfname, present):

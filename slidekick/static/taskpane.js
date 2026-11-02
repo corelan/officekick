@@ -1674,25 +1674,28 @@ OfficeDeck.prototype.moveSlide = function (from, to) {
   OfficeDeck.prototype.clearSlide = function (i) {
     // empty slide i: wipe every text frame and drop text-free created lines.
     // Placeholders stay in place (their layout keeps its positions).
+    // NOTE: load strings must stay scalar-only. A nested "items/textFrame"
+    // deep-load is rejected with InvalidArgument on Windows hosts (16.0.19x).
     return this.run("clearSlide", function (ctx) {
       if (!Office.context.requirements.isSetSupported("PowerPointApi", "1.5")) {
         throw new FriendlyError("clearing a slide needs PowerPointApi 1.5 - update PowerPoint (16.63+ on Mac).");
       }
       var shapes = ctx.presentation.slides.getItemAt(i).shapes;
-      shapes.load("items/type,items/hasTextFrame,items/textFrame,items/name");
+      shapes.load("items/type,items/hasTextFrame,items/name");
       return ctx.sync().then(function () {
-        var cleared = 0, removed = 0;
+        var cleared = 0, removed = 0, tfs = [];
         shapes.items.forEach(function (shape) {
           if (shape.hasTextFrame && shape.textFrame) {
-            shape.textFrame.textRange.text = "";
-            cleared++;
+            try { shape.textFrame.load("textRange"); tfs.push(shape); cleared++; } catch (eTf) { /* skip this frame */ }
           } else if (shape.type === "Line" && String(shape.name || "").indexOf("sk-shape") === 0) {
             // only drop lines this add-in created - user lines stay
-            shape.delete();
-            removed++;
+            try { shape.delete(); removed++; } catch (eLine) { /* keep the line */ }
           }
         });
-        return ctx.sync().then(function () { return { ok: true, cleared: cleared, removed: removed }; });
+        return ctx.sync().then(function () {
+          tfs.forEach(function (shape) { shape.textFrame.textRange.text = ""; });
+          return ctx.sync().then(function () { return { ok: true, cleared: cleared, removed: removed }; });
+        });
       });
     });
   };

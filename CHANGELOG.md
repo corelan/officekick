@@ -30,6 +30,19 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.97
+### Fixed
+- clear_slide: the "items/textFrame" deep-load was rejected with
+  InvalidArgument on Windows hosts (16.0.19x) - the only non-scalar load
+  string in the pane. Rewritten as scalar loads + per-shape lazy
+  textFrame/textRange loads + guarded line deletion; identical behavior
+  on macOS.
+### Changed
+- install.py on Windows now also registers each add-in in the
+  HKCU ...\Wef\Developer dev-sideload key (default value = manifest
+  path, RefreshAddins=1): current Windows "Apps" dialog builds ignore
+  Trust Center folder catalogs, and every Office app reloads Developer
+  entries at launch. Outlook still needs Add from File once.
 ## 0.9.96
 ### Changed
 - Renamed tools/repair_deck_paneref.py to tools/repair_paneref.py now that
