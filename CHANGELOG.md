@@ -30,6 +30,18 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.73
+### Added
+- A Cancel button next to Run (all three add-ins), visible and enabled only
+  while a run is in progress. Clicking it interrupts the run as fast as
+  possible: it aborts the in-flight request immediately (AbortController -
+  the fetch dies the same moment) and the run stops at the very next step
+  boundary - ask retries, make-over passes/chunks/top-up/review rounds,
+  image-job poll cycles, and between apply ops (the remaining ops report
+  "cancel - remaining op(s) not executed" and stay untouched). Aborted
+  shows as "Run cancelled." with no error styling on the input, so the user
+  can fire a new request right away. Cancelled runs are not stored as
+  completed exchanges.
 ## 0.9.72
 ### Added
 - Delete a request/response pair from "Previous requests": expanding a

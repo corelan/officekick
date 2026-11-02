@@ -21,6 +21,8 @@
     deck: null,
     cfg: null,
     busy: false,
+    runCancelled: false,     // cancel button: interrupt the current run
+    activeFetch: null,       // AbortController of the in-flight pane request
     modelsCache: {},     // connName -> {list:[...], at:ms}
     sessionApprovals: {},// opType -> 'auto' when approved for this session
     history: [],         // conversation turns shown to the model (session-only)
@@ -339,6 +341,7 @@
   function imageJob(payload) {
     var deadline = Date.now() + 300000;   // same 5-minute budget as before
     function poll(jobId) {
+      if (SK.runCancelled) throw new FriendlyError("Run cancelled.");
       if (Date.now() > deadline) {
         throw new FriendlyError("image generation timed out after 300 s (job " + jobId + ")");
       }
@@ -369,6 +372,11 @@
       opts.body = bodyStr;
     }
     var fetchPromise;
+    SK.activeFetch = (typeof AbortController !== "undefined") ? new AbortController() : null;
+    if (SK.activeFetch) {
+      opts.signal = SK.activeFetch.signal;
+      SK.activeFetch.path = path;
+    }
     try {
       fetchPromise = fetch(path, opts);
     } catch (syncErr) {
@@ -377,6 +385,8 @@
         req: bodyStr.slice(0, 1600) });
       throw new FriendlyError("Cannot reach the OfficeKick server (" + path + ")");
     }
+    var settleClear = function () { SK.activeFetch = null; };
+    fetchPromise.then(settleClear, settleClear);
     return fetchPromise.then(function (resp) {
       return resp.text().then(function (text) {
         var data = null;
@@ -401,6 +411,9 @@
         conn: body && body.connection || null, model: body && body.model || null,
         err: "network: " + String(fetchErr && fetchErr.message || fetchErr),
         req: bodyStr.slice(0, 1600) });
+      if (SK.runCancelled || (fetchErr && fetchErr.name === "AbortError") ||
+          /abort/i.test(String(fetchErr && fetchErr.name || "")))
+        throw new FriendlyError("Run cancelled.");
       throw new FriendlyError("Cannot reach the OfficeKick server (" + path + "): " +
         String(fetchErr && fetchErr.message || fetchErr));
     });
@@ -2790,6 +2803,10 @@ OfficeDeck.prototype.setNotes = function (i, text) {
     var seq = Promise.resolve();
     ops.forEach(function (op, ix) {
       seq = seq.then(function () {
+        if (SK.runCancelled) {
+          lines.push({ ok: false, text: "cancel - remaining op(s) not executed (" + op.type + " skipped)" });
+          return null;
+        }
         var l0 = lines.length;
         return runOne(op).then(function () {
           if (typeof SK.opProgress === "function") SK.opProgress(op, lines.slice(l0), true);
@@ -2945,6 +2962,18 @@ OfficeDeck.prototype.setNotes = function (i, text) {
     return (SK.cfg.profiles || []).find(function (p) { return p.name === def; }) || (SK.cfg.profiles || [])[0] || null;
   }
 
+  // ---- cancel the current run: flips the flag (checked between steps) and
+  // aborts the in-flight request for an immediate interrupt ----
+  function cancelRun() {
+    if (!SK.busy) return;
+    SK.runCancelled = true;
+    if (SK.activeFetch && SK.activeFetch.abort) {
+      try { SK.activeFetch.abort(); } catch (eA) { /* already settled */ }
+    }
+    setStatus("Cancelling\u2026", "busy");
+    dbg("run.cancel", {});
+  }
+
   function setRunEnabled(on) {
     $("chat-run").disabled = !on || SK.busy;
   }
@@ -2964,6 +2993,7 @@ OfficeDeck.prototype.setNotes = function (i, text) {
     }
     filePreviousRun();  // the previous request/response moves into the history box NOW
     SK.busy = true;
+    SK.runCancelled = false;
     input.disabled = true;   // the text stays visible but locked while working
     setRunEnabled(false);
     chatTimerStart();
@@ -3125,6 +3155,7 @@ OfficeDeck.prototype.setNotes = function (i, text) {
             return missing.length ? "Slides still without structural design: " + missing.join(", ") + "." : "All slides have structural design.";
           }
           function passAsk(passName, spec, x, y) {
+            if (SK.runCancelled) throw new FriendlyError("Run cancelled.");
             var bm = messages.concat([
               { role: "assistant", content: moConcept || "" },
               { role: "user",
@@ -3242,6 +3273,7 @@ OfficeDeck.prototype.setNotes = function (i, text) {
           var p4 = p3.then(function (acc3) {
             all = acc3;
             function reviewRound(n) {
+              if (SK.runCancelled) throw new FriendlyError("Run cancelled.");
               var rm = messages.concat([
                 { role: "assistant", content: moConcept || "" },
                 { role: "user",
@@ -3444,7 +3476,10 @@ OfficeDeck.prototype.setNotes = function (i, text) {
   // errors/server hiccups only (4xx business errors fail immediately) ----
   function askRetryable(askFn, attempt) {
     attempt = attempt || 1;
+    if (SK.runCancelled) return Promise.reject(new FriendlyError("Run cancelled."));
     return askFn().catch(function (err) {
+      if (SK.runCancelled || (err && (err.name === "AbortError" || /abort/i.test(String(err && err.message)))))
+        return Promise.reject(new FriendlyError("Run cancelled."));
       var status = err && err.status;
       var retries_429 = status === 429;
       var serverish = !status || status >= 500 || retries_429;
@@ -4608,6 +4643,8 @@ OfficeDeck.prototype.setNotes = function (i, text) {
     });
 
     $("chat-run").addEventListener("click", runPrompt);
+    var cancelBtn = $("chat-cancel");
+    if (cancelBtn) cancelBtn.addEventListener("click", cancelRun);
     $("chat-input").addEventListener("keydown", function (ev) {
       if ((ev.metaKey || ev.ctrlKey) && ev.key === "Enter") { ev.preventDefault(); runPrompt(); }
     });

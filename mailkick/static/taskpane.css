@@ -773,3 +773,6 @@ body.dark .pt-delrow:hover { color: #e07066; }
   margin-right: 5px;
   vertical-align: middle;
 }
+
+#chat-cancel { color: #b03a2e; }
+body.dark #chat-cancel { color: #e07066; }
