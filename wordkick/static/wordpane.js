@@ -1937,6 +1937,100 @@ function applyOps(deck, ops, ctx) {
       dbg("prompt", { profile: prof.name, route: route, model: ref.model, connection: ref.connection, instruction: instruction, hadContext: !!ctx, messages: messages });
       setStatus("Asking " + ref.model + " (via " + ref.connection + ")…", "busy");
       var askedLookup = false;
+      function MO_SYS(extra) {
+        return "You build Word-document make-over actions. Reply ONLY with a JSON object " +
+          '{\"kind\":\"slide_ops\",\"ops\":[...]} - no prose, no markdown fences. Word op schema: ' +
+          '{"type":"format_text","para":N,"font":{"bold":true|false,"italic":true|false,"name":"..","size":N,"color":"#RRGGBB"},"align":"left|center|right|justify"}, ' +
+          '{"type":"edit_paragraph","para":N,"text":".."}, {"type":"set_header","text":".."}, {"type":"set_footer","text":".."}, ' +
+          '{"type":"add_hyperlink","para":N,"find":"exact text in that paragraph","url":"https://.."}, ' +
+          '{"type":"insert_paragraphs","items":[{"text":"..","style":".."}]} (appends at the document end; use sparingly). ' +
+          "para = the 1-based paragraph number from the outline. NEVER invent paragraph numbers outside the outline. " + (extra || "");
+      }
+      function wordMakeOverFlow() {
+        var paras = (ctx && ctx.paragraphs) || [];
+        var outline = [];
+        paras.forEach(function (p) {
+          var t = String(p.text || "").replace(/\s+/g, " ").trim();
+          if (!t) return;
+          outline.push("[" + (p.idx + 1) + "] " + ((p.style || "Normal") === "Normal" ? "" : (p.style + " | ")) + t.slice(0, 90));
+        });
+        var paraN = paras.length;
+        // phantom guard: make-over ops only touch real, 1-based paragraphs
+        function validOp(o) {
+          if (!o || typeof o !== "object") return false;
+          if (o.type === "format_text" || o.type === "edit_paragraph" || o.type === "add_hyperlink")
+            return typeof o.para === "number" && o.para >= 1 && o.para <= paraN;
+          if (o.type === "insert_paragraphs") return true;
+          if (o.type === "set_header" || o.type === "set_footer")
+            return typeof o.text === "string" && !!o.text.trim();
+          return false;   // make-overs stay in the safe vocabulary
+        }
+        function mergeFrom(r) {
+          var pre = tryParse(r && r.text || "");
+          var got = (pre.ok && pre.ops) || (salvageOps(r && r.text || "") || []);
+          return got.filter(validOp);
+        }
+        var askBrief = "ORIGINAL USER REQUEST:\n" + String(instruction || "").slice(0, 400) +
+          "\nDOCUMENT OUTLINE (1-based paragraph numbers; op.para uses these):\n" + outline.slice(0, 220).join("\n");
+        var DIR_SYS = "You are the creative director for Word document make-overs. Invent a REAL design strategy - not font tweaks: " +
+          "give the document an editorial identity. Reply ONLY with the strategy in short sections:\n" +
+          "CONCEPT: the design idea with a memorable name (one paragraph)\n" +
+          "THEME: heading font + body font (real font names), exact sizes for H1/H2/lead-in/body, 2-3 colors + 1 accent as #RRGGBB\n" +
+          "STRUCTURE: how headings vs lead-ins vs body vs quotes are visually shaped (weights, allCaps, italics, alignment, spacing feel)\n" +
+          "EXTRAS: exact page header text, table/link treatment if the document has any, and whether a pull-quote/summary block adds value";
+        function passAsk(passName, userMsg) {
+          return askRetryable(function () {
+            return apiJson("/api/chat", "POST", {
+              connection: ref.connection, model: ref.model,
+              temperature: 0.5, maxTokens: 2600,
+              messages: [{ role: "system", content: MO_SYS("This round: " + passName + ".") },
+                         { role: "user", content: userMsg }],
+            });
+          }).then(function (r) {
+            dbg("makeover.pass", { pass: passName, len: String(r.text || "").length, elapsedMs: r.elapsedMs });
+            return r;
+          });
+        }
+        setStatus("AI director is inventing the document make-over…", "busy");
+        return passAsk("DIRECTOR", "Design a make-over strategy for this document.\n\n" + askBrief).then(function (dr) {
+          var concept = String(dr.text || "").slice(0, 2400);
+          setStatus("Builder pass 1/3 - structure…", "busy");
+          var b1 = "BUILDER PASS 1 - STRUCTURE. Follow the strategy below and emit ONLY ops that give the document a real hierarchy: " +
+            "format_text (weights/italic/name + align) for headings, lead-ins and quotes; edit_paragraph only when a heading text must be tightened. " +
+            "Use the exact 1-based paragraph numbers from the outline. Never repeat an op for the same paragraph.\n\n" +
+            "DIRECTOR STRATEGY:\n" + concept + "\n\n" + askBrief;
+          var ops = [];
+          return passAsk("BUILD1-STRUCTURE", b1).then(function (r1) {
+            ops = ops.concat(mergeFrom(r1));
+            setStatus("Builder pass 2/3 - typography & colors…", "busy");
+            var b2 = "BUILDER PASS 2 - STYLE. ONLY format_text ops with the EXACT theme values from the strategy " +
+              "(font name/size/color for every body paragraph, lead-ins and quotes). Cover EVERY content paragraph of the outline " +
+              "that the ops list below does not already handle. Use the exact 1-based numbers.\n\n" +
+              "OPS ALREADY COVERED:\n" + JSON.stringify(ops) + "\n\nDIRECTOR STRATEGY:\n" + concept + "\n\n" + askBrief;
+            return passAsk("BUILD2-STYLE", b2).then(function (r2) {
+              ops = ops.concat(mergeFrom(r2));
+              setStatus("Builder pass 3/3 - extras…", "busy");
+              var b3 = "BUILDER PASS 3 - EXTRAS. From the strategy: set_header with the exact header text (and set_footer if the strategy wants one), " +
+                "add_hyperlink for real links, insert_paragraphs ONLY for a pull-quote/summary block the strategy explicitly asks for. " +
+                'If none apply, reply {"kind":"slide_ops","ops":[]}.\n\nDIRECTOR STRATEGY:\n' + concept + "\n\n" + askBrief;
+              return passAsk("BUILD3-EXTRAS", b3).then(function (r3) {
+                ops = ops.concat(mergeFrom(r3));
+                setStatus("Reviewing make-over coverage…", "busy");
+                var rev = "REVIEW ROUND. Every content paragraph in the outline must be covered by a format_text op in the ops list below " +
+                  "per the strategy. Emit ONLY the missing format_text ops (exact 1-based numbers). " +
+                  'If the coverage is complete, reply {"kind":"slide_ops","ops":[]}.\n\n' +
+                  "OPS SO FAR:\n" + JSON.stringify(ops) + "\n\nDIRECTOR STRATEGY:\n" + concept + "\n\nOUTLINE:\n" + outline.slice(0, 220).join("\n");
+                return passAsk("REVIEW", rev).then(function (r4) {
+                  ops = ops.concat(mergeFrom(r4));
+                  dbg("makeover.merged", { ops: ops.length });
+                  return { text: JSON.stringify({ kind: "slide_ops", ops: ops,
+                           note: "AI document make-over: " + ops.length + " action(s) built in passes - structure -> style -> extras, then review rounds" }) };
+                });
+              });
+            });
+          });
+        });
+      }
       function mainAsk() {
         return askRetryable(function () { return apiJson("/api/chat", "POST", { connection: ref.connection, model: ref.model, messages: messages }); })
           .then(function (resp) {
@@ -1983,6 +2077,22 @@ function applyOps(deck, ops, ctx) {
       }
       function mainAsk2() {
         return askRetryable(function () { return apiJson("/api/chat", "POST", { connection: ref.connection, model: ref.model, messages: messages }); });
+      }
+      // ------------------------------------------------------------------
+      // FULL DOCUMENT make-over: AI-driven strategy (like SlideKick's
+      // orchestrated redesign). A creative-director round invents a design
+      // strategy for THIS document, three builder passes translate it into
+      // Word ops (structure -> style -> extras), a review round tops up
+      // anything missed, then the usual validation + gate take over.
+      // ------------------------------------------------------------------
+      var WMAKEOVER_RE = /\b(make\s*over|makeover|redesign|re-?style|restyle|new (design|theme|look)|full design|design (the|this) (document|doc|word|whole)|modern|professional|fresh look|creative)\b/i;
+      var wmoWanted = WMAKEOVER_RE.test(instruction || "") &&
+        !!(ctx && ctx.paragraphs && ctx.paragraphs.length > 1);
+      if (wmoWanted) {
+        return wordMakeOverFlow().then(function (mr) { return mr; }, function (eMo) {
+          dbg("makeover.failed", { msg: String(eMo && eMo.message || eMo) });
+          return mainAsk().then(function (resp2) { return resp2; });
+        });
       }
       return mainAsk().then(function (resp) {
         dbg("response", { text: resp.text, elapsedMs: resp.elapsedMs });

@@ -30,6 +30,20 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.78
+### Added
+- AI-driven document make-over in DocKick (the Word counterpart of the
+  SlideKick orchestrated redesign). A creative-director round invents a
+  real design strategy for THIS document (CONCEPT/THEME/STRUCTURE/EXTRAS
+  - fonts, exact sizes, 2-3 colors + accent as hex, hierarchy rules,
+  header text), then three builder passes turn it into ops with enforced
+  op types per pass (1 structure: heading/lead-in/quote hierarchy, 2
+  style: typography and colors for EVERY content paragraph, 3 extras:
+  header/footer, links, pull-quote), and a review round emits any format
+  ops still missing before the normal validation + gate take over.
+  Merged ops pass the phantom guard (only real 1-based paragraphs) and
+  the whole make-over falls back to the normal single ask if any pass
+  fails.
 ## 0.9.77
 ### Fixed
 - DocKick real-Word crash wave on a redesign ("Applied with 10 error(s)"):
