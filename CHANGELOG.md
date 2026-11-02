@@ -30,6 +30,13 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.67
+### Changed
+- The config refresh affordance moved from a small button next to Route
+  into the "Profile / route" legend title itself (all three add-ins): a
+  clear 13px bold refresh glyph, black in light mode / white in dark mode,
+  hover scale-up; clicking it re-reads connections and profiles from the
+  config files.
 ## 0.9.66
 ### Changed
 - Saving a connection clears the form immediately (back to "New connection"

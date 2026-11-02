@@ -28,12 +28,13 @@
     <!-- ============================ CHAT ============================ -->
     <section id="tab-chat" class="tab active">
       <fieldset class="groupbox" id="gb-routing">
-        <legend>Profile / route</legend>
+        <legend>Profile / route
+          <span id="cfg-refresh" class="legend-refresh" title="Re-read connections and profiles from the config files">&#x27F3;</span>
+        </legend>
         <div class="row row-wrap">
           <label class="field-inline">Profile
             <select id="chat-profile"></select>
           </label>
-          <button id="cfg-refresh" class="btn subtle" type="button" title="Re-read connections and profiles from the config files">&#x27F3;</button>
           <label class="field-inline">Route
             <select id="chat-route">
               <option value="auto" title="Document-related requests go to the Content model, everything else to the Other model">auto</option>

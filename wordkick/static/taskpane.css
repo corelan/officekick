@@ -709,3 +709,18 @@ body.dark .pt-copy { color: #FFFFFF; }   /* white in dark mode */
 .doneline { color: #2e9e5b; font-size: 12px; }
 .doneinline { margin: 4px 0 2px 2px; max-height: 170px; overflow-y: auto; }
 .opfailrow { opacity: .55; }
+
+/* refresh affordance built into the fieldset legend - click the legend title */
+legend.legend-refresh-host { cursor: pointer; }
+.legend-refresh {
+  cursor: pointer;
+  display: inline-block;
+  font-size: 13px;
+  font-weight: 700;
+  margin-left: 7px;
+  color: #111111;
+  opacity: .85;
+  vertical-align: middle;
+}
+body.dark .legend-refresh { color: #FFFFFF; }
+.legend-refresh:hover { opacity: 1; transform: scale(1.12); }
