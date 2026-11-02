@@ -140,14 +140,29 @@
   }
 
   function dbg(category, data) {
+    // boot-time lines (pane.boot, theme) fire BEFORE /api/config arrives ---
+    // queue them and replay once the config (and its debug flag) lands, so
+    // early diagnostics never get swallowed
     try {
-      if (!SK.cfg || !SK.cfg.debug) return;
-      fetch("/api/debug", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ category: "ui." + category, data: data }),
-      }).catch(function () {});
+      if (!SK.cfg || !SK.cfg.debug) {
+        SK.dbgQueue = SK.dbgQueue || [];
+        if (SK.dbgQueue.length < 16) SK.dbgQueue.push({ category: category, data: data });
+        return;
+      }
+      if (SK.dbgQueue && SK.dbgQueue.length) {
+        var q = SK.dbgQueue.splice(0);
+        SK.dbgQueue = null;
+        q.forEach(function (qe2) { dbgFlush(qe2.category, qe2.data); });
+      }
+      dbgFlush(category, data);
     } catch (e) { /* never break the pane over logging */ }
+  }
+  function dbgFlush(category, data) {
+    fetch("/api/debug", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ category: "ui." + category, data: data }),
+    }).catch(function () {});
   }
 
   function logApi(entry) {

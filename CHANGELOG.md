@@ -30,6 +30,13 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.84
+### Fixed
+- Boot diagnostics were silent: dbg() bails before /api/config delivers
+  the debug flag, which swallowed exactly the lines we needed (pane.boot,
+  theme). dbg() now queues pre-config entries (max 16) and replays them
+  once logging is on - pane.boot and the theme decision are always
+  captured in all three panes.
 ## 0.9.83
 ### Fixed
 - CRITICAL: the 0.9.80 pane.boot beacon edit dropped "var params" from
