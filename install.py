@@ -380,7 +380,8 @@ def render_and_sideload():
     step("rendering add-in manifests (http://localhost:%d, %s)" %
          (PORT, "ribbon commands" if RIBBON else "list-mode"))
     if is_mac() and not DRY_RUN:
-        purge_stale_wef_manifests()   # before sideloading, or this eats the fresh copies
+        if purge_stale_wef_manifests() < 0:   # Office running - dangling registrations win
+            die("quit Office completely (Cmd+Q), then re-run install.py --update/--install")
     apps = office_apps_present()
     rendered = []
     for (folder, name, mfname) in OURS:
@@ -438,7 +439,31 @@ def sideload_mac(folder, mfname, present):
         warn("could not sideload %s: %s" % (mfname, e))
 
 
+def office_apps_running():
+    import subprocess as _sp
+    try:
+        r = _sp.run(["pgrep", "-x", "Microsoft PowerPoint"], stdout=_sp.PIPE)
+        ppt = r.returncode == 0
+        r = _sp.run(["pgrep", "-x", "Microsoft Word"], stdout=_sp.PIPE)
+        word = r.returncode == 0
+        r = _sp.run(["pgrep", "-x", "Microsoft Outlook"], stdout=_sp.PIPE)
+        outlook = r.returncode == 0
+        return ppt, word, outlook
+    except OSError:
+        return (False, False, False)
+
+
 def purge_stale_wef_manifests():
+    # removing WEF manifests while a host is running leaves the host with a
+    # dangling registration - documents that had the pane open then throw
+    # "This add-in is no longer available" on every open until the add-in is
+    # refreshed. Refuse loudly instead.
+    ppt, word, outlook = office_apps_running()
+    running = [n for n, gone in (("PowerPoint", ppt), ("Word", word), ("Outlook", outlook)) if gone]
+    if running:
+        warn("Office is running (%s) - NOT purging/sideloading WEF manifests. "
+             "Quit Office completely (Cmd+Q) and run the install again." % ", ".join(running))
+        return -1
     base_dir = hp("Library", "Containers")
     if not os.path.isdir(base_dir):
         return 0

@@ -30,6 +30,21 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.87
+### Fixed
+- The recurring "Add-in Error: This add-in is no longer available" on deck
+  open is a host-side stale registration: install.py purged the WEF folder
+  and re-sideloaded while Office was running (or the 1.0.4.0 -> 1.0.5.0
+  version bump orphaned decks' pinned pane registrations - PowerPoint Mac
+  re-opens task panes a document had open, and a missing/changed identity
+  throws exactly that toast). Server panes were never implicated: every
+  logged boot is healthy.
+  1. install.py now refuses to purge/sideload WEF manifests while
+     PowerPoint/Word/Outlook is running and tells you to quit Office
+     first, so no update can ever create a dangling registration again.
+  2. The manifest version is policy-locked at 1.0.5.0 (comment in the
+     templates): the (Id, Version) pair is the host's registration
+     identity - it stays stable so remembered panes always resolve.
 ## 0.9.86
 ### Fixed
 - Cancel-button hardening requested before the test rounds - a code audit
