@@ -373,6 +373,32 @@
         info.className = "opnote updavail";   // bold; gold/purple per theme
         info.textContent = "UPDATE AVAILABLE: " + data.latest + " (you run " + data.current + "). " +
           (data.howToUpdate || "");
+        if (data.pullAvailable) {
+          var pullBtn = document.createElement("button");
+          pullBtn.className = "btn";
+          pullBtn.textContent = "Pull update from git now (this pane can run git pull)";
+          pullBtn.style.display = "block";
+          pullBtn.style.marginTop = "6px";
+          pullBtn.addEventListener("click", function () {
+            pullBtn.disabled = true;
+            info.textContent = "Pulling…";
+            apiJson("/api/repo-update", "POST", {}).then(function (pr) {
+              if (pr && pr.ok) {
+                info.className = "opnote";
+                info.textContent = "Pulled into " + (pr.repoPath || "the clone") + ". " +
+                  ((pr.stdout || "").split("\n").filter(function (l) { return l; })[0] || "") +
+                  " - now run the installer (python3 install.py --update / py -3 install.py --update) to redeploy + restart the server, then reload this pane.";
+              } else {
+                info.className = "opnote updavail";
+                info.textContent = "Pull failed: " + ((pr && (pr.stderr || pr.stdout || pr.error)) || "git error");
+              }
+            }).catch(function (e2) {
+              info.className = "opnote updavail";
+              info.textContent = "Pull failed: " + ((e2 && e2.message) || e2);
+            });
+          });
+          info.appendChild(pullBtn);
+        }
       }
     }).catch(function (e) {
       btn.disabled = false;

@@ -30,6 +30,18 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.110
+### Added
+- Local-clone update checks: the installer records the checkout folder
+  (repoPath + origin URL) into the config; the server then answers
+  "check for updates" from the clone itself (git fetch + compare HEAD vs
+  origin + read the repo's VERSION), no GitHub call needed. Without a
+  recorded clone or without git, it falls back to the GitHub raw VERSION
+  file. When the local clone shows a newer origin, the pane shows a
+  "Pull update from git now" button (POST /api/repo-update runs
+  git pull --ff-only; nothing pulls automatically).
+- Windows update checks on this VM used to fail (no outbound result);
+  with the local clone they work again.
 ## 0.9.109
 ### Fixed
 - Behaviour group box: the remaining dead tail under the checkbox removed

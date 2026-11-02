@@ -32,7 +32,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 APP = "OfficeKick"
-VERSION = "0.9.109"
+VERSION = "0.9.110"
 
 CONNECTION_TYPES = (
     "openai",
@@ -1129,7 +1129,75 @@ def _version_tuple(v):
     return tuple(int(x) for x in parts) or (0,)
 
 
-def update_check(force_latest=None):
+def git_update_probe(store=None):
+    """Local-clone update probe: compares HEAD with the fetched origin ref
+    and reads the repo's VERSION file (no GitHub call when this works).
+    Never raises; missing git/repo/network -> usable=False + reason."""
+    out = {"usable": False}
+    repo = (store.data.get("repoPath") if store is not None else None)
+    if not repo or not os.path.isdir(repo):
+        out["reason"] = "no repo recorded at install time"
+        return out
+    out["repoPath"] = repo
+    if not os.path.isdir(os.path.join(repo, ".git")):
+        out["reason"] = "not a git checkout"
+        return out
+    git = shutil.which("git")
+    if not git:
+        out["reason"] = "git not installed"
+        return out
+    out["git"] = git
+    def run(args, timeout=20):
+        try:
+            p = subprocess.run([git, "-C", repo] + args, capture_output=True,
+                               text=True, timeout=timeout)
+            return p.returncode, (p.stdout or "").strip(), (p.stderr or "").strip()
+        except Exception as exc:
+            return 1, "", str(exc)
+    rc, _, err = run(["fetch", "origin", "--quiet"], timeout=25)
+    if rc != 0:
+        out["reason"] = "fetch failed: %s" % (err or "offline")
+        return out
+    rc, branch, _ = run(["rev-parse", "--abbrev-ref", "HEAD"])
+    if rc != 0 or not branch or branch == "HEAD":
+        branch = "main"
+    rc, local, _ = run(["rev-parse", "HEAD"])
+    rc2, remote, _ = run(["rev-parse", "origin/" + branch])
+    rc3, remote_ver, _ = run(["show", "origin/%s:VERSION" % branch])
+    rc4, local_ver, _ = run(["show", "HEAD:VERSION"])
+    if rc2 != 0 or rc3 != 0:
+        out["reason"] = "could not read the origin branch"
+        return out
+    out.update({"usable": True, "branch": branch, "behind": (local != remote),
+                "localVer": local_ver or VERSION, "remoteVer": remote_ver})
+    return out
+
+
+def git_pull(store):
+    """POST /api/repo-update: run git pull --ff-only in the recorded clone.
+    Returns a report; never auto-runs on its own."""
+    if store is None:
+        raise ApiError(500, "no config store")
+    repo = store.data.get("repoPath")
+    if not repo or not os.path.isdir(repo):
+        raise ApiError(400, "no repo folder recorded at install time - run install.py from the clone")
+    if not shutil.which("git"):
+        raise ApiError(400, "git is not installed")
+    try:
+        p = subprocess.run(["git", "-C", repo, "pull", "--ff-only"],
+                           capture_output=True, text=True, timeout=180)
+    except subprocess.TimeoutExpired:
+        raise ApiError(500, "git pull timed out after 180 s")
+    out = {"ok": p.returncode == 0, "repoPath": repo,
+           "stdout": (p.stdout or "").strip()[-800:],
+           "stderr": (p.stderr or "").strip()[-800:]}
+    out["versionNow"] = git_update_probe().get("localVer", "")
+    if p.returncode == 0:
+        dbg_line(store, "update", "repo.pull", out)
+    return out
+
+
+def update_check(force_latest=None, store=None):
     """Compare the running VERSION with the latest in the GitHub repo.
 
     Reads the VERSION file from GitHub (contents API, raw fallback; no git
@@ -1143,9 +1211,18 @@ def update_check(force_latest=None):
         if cached and now - UPDATE_CACHE["t"] < 600:
             return cached
     latest = force_latest or None
+    source = "github"
+    pull_available = False
+    repo_info = None
     if latest is None:
-        headers = {"User-Agent": "officekick/" + VERSION,
-                   "Accept": "application/vnd.github.raw"}
+        repo_info = git_update_probe(store)
+        if repo_info.get("usable") and repo_info.get("remoteVer"):
+            latest = repo_info["remoteVer"]
+            source = "git clone (%s)" % repo_info.get("repoPath", "")
+            pull_available = True
+        else:
+            headers = {"User-Agent": "officekick/" + VERSION,
+                       "Accept": "application/vnd.github.raw"}
         raw_url = "https://raw.githubusercontent.com/corelan/officekick/main/VERSION"
         try:
             req = urllib.request.Request(raw_url, headers=headers)
@@ -1161,10 +1238,15 @@ def update_check(force_latest=None):
     data = {"ok": True, "current": VERSION, "latest": latest,
             "upToDate": up_to_date,
             "repo": "https://github.com/corelan/officekick",
-            "howToUpdate": "To update: run python3 install.py --update in your OfficeKick "
-                           "clone (it pulls with git, redeploys the add-ins and restarts the "
-                           "local server), and reload the task pane (reopen the add-in; restart Office if it "
-                           "keeps showing the old UI). No automatic git pull is attempted."}
+            "howToUpdate": ("Pull it here (the pane can run git pull now - click the update "
+                            "notice), or run python3 install.py --update in %s and reload the "
+                            "task pane." % (repo_info or {}).get("repoPath", "your OfficeKick clone")
+                            if pull_available else
+                            "To update: run python3 install.py --update in your OfficeKick "
+                            "clone (it pulls with git, redeploys the add-ins and restarts the "
+                            "local server), and reload the task pane (reopen the add-in; restart Office if it "
+                            "keeps showing the old UI). No automatic git pull is attempted."),
+            "source": source, "pullAvailable": pull_available}
     if not force_latest:
         UPDATE_CACHE["t"] = now
         UPDATE_CACHE["data"] = data
@@ -1732,7 +1814,7 @@ class SlideKickHandler(BaseHTTPRequestHandler):
                 result = test_connection(self.store, name)
                 self._send_json(result)
             elif path == "/api/update-check":
-                self._send_json(update_check((query.get("latest") or [""])[0] or None))
+                self._send_json(update_check((query.get("latest") or [""])[0] or None, self.store))
             elif path == "/api/templates":
                 self._send_json({"templates": self.store.templates.list()})
             elif path.startswith("/api/templates/"):
@@ -1772,6 +1854,9 @@ class SlideKickHandler(BaseHTTPRequestHandler):
                 name, ctype, base, key = validate_connection_body(body)
                 self.store.upsert_connection(name, ctype, base, key)
                 self._send_json({"ok": True, "name": name})
+            elif path == "/api/repo-update":
+                self._send_json(git_pull(self.store))
+
             elif path == "/api/profiles":
                 name, content, other, image = validate_profile_body(self.store, body)
                 self.store.upsert_profile(name, content, other, image)

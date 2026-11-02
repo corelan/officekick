@@ -331,7 +331,45 @@ def deploy_files():
             os.chmod(cfgjson, 0o600)
         except OSError:
             pass
+    record_repo_info()
     ok((" + ".join(deployed) if deployed else "server") + " deployed")
+
+
+def record_repo_info():
+    """Remember where this checkout lives (git clone or zip copy) in the
+    config so the server can offer a real git-pull update check. Falls back
+    gracefully: no .git and no git binary = the server uses its GitHub
+    raw-VERSION check."""
+    import json
+    cfgjson = config_file()
+    try:
+        with open(cfgjson, "r", encoding="utf-8") as fh:
+            data = json.load(fh)
+    except Exception:
+        data = {}
+    gitdir = os.path.join(REPO_DIR, ".git")
+    is_repo = os.path.isdir(gitdir) or os.path.isfile(gitdir)   # worktree file counts
+    if is_repo and DRY_RUN:
+        out("  [..]  [dry-run] would record repoPath=%s" % REPO_DIR)
+        return
+    data["repoPath"] = REPO_DIR if is_repo else None
+    url = None
+    if is_repo:
+        rc, o = run_quiet(["git", "-C", REPO_DIR, "remote", "get-url", "origin"])
+        if rc == 0 and o.strip():
+            url = o.strip().splitlines()[0]
+    data["repoUrl"] = url
+    try:
+        with open(cfgjson, "w", encoding="utf-8") as fh:
+            json.dump(data, fh, indent=1)
+        if os.name != "nt":
+            os.chmod(cfgjson, 0o600)
+        if is_repo:
+            ok("repo recorded for update checks: %s%s" % (REPO_DIR, (" (" + url + ")") if url else ""))
+        else:
+            warn("no git checkout at %s - update checks use the GitHub VERSION file" % REPO_DIR)
+    except OSError as e:
+        warn("could not record the repo path: %s" % e)
 
 
 # --------------------------------------------------------------- manifests #
