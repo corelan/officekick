@@ -30,6 +30,16 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.105
+### Fixed
+- Pane reload now resumes the active session reliably (all three
+  add-ins): the resume id moved from sessionStorage to localStorage -
+  sessionStorage does not survive a pane reload in the Office WebViews,
+  which is why a refresh used to drop back to a brand-new session. Keys
+  are app-qualified (sk-resume-session-<app>) so panes never inherit
+  another add-in's session, and deleting the current session also clears
+  its resume id (Word/MailKick). The boot resume (id or newest session)
+  happens before the first render.
 ## 0.9.104
 ### Added
 - The pane footer text (next to the heartbeat dot) now shows server

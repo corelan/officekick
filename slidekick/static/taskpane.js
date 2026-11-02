@@ -721,7 +721,7 @@
       createPromise = apiJson("/api/sessions", "POST", payload).then(function (res) {
         if (res && res.session) {
           SK.sessionId = res.session.id;
-          try { sessionStorage.setItem("sk-resume-session", SK.sessionId); } catch (eS) {}
+          try { localStorage.setItem("sk-resume-session-slidekick", SK.sessionId); } catch (eS) {}
           SK.sessionName = res.session.name;
           aiNameSession(SK.sessionId);
         }
@@ -815,7 +815,7 @@
     apiJson("/api/sessions/" + sessId, "GET").then(function (doc) {
       SK.history = (doc.exchanges || []).slice(-HISTORY_MAX_EXCHANGES * 2);
       SK.sessionId = doc.id;
-      try { sessionStorage.setItem("sk-resume-session", doc.id); } catch (eS) {}
+      try { localStorage.setItem("sk-resume-session-slidekick", doc.id); } catch (eS) {}
       SK.sessionName = doc.name || "";
       var inp1 = $("chat-input");
       if (inp1) { inp1.disabled = false; inp1.value = ""; }
@@ -862,7 +862,7 @@
   function deleteSession(sessId) {
     apiJson("/api/sessions/" + sessId, "DELETE").then(function () {
       if (SK.sessionId === sessId) { SK.sessionId = null; SK.sessionName = "";
-        try { sessionStorage.removeItem("sk-resume-session"); } catch (eS) {} }
+        try { localStorage.removeItem("sk-resume-session-slidekick"); } catch (eS) {} }
       renderSessions();
       setStatus("Session deleted.", "ok");
     }).catch(function (err) {
@@ -1179,7 +1179,7 @@
   function resetHistory() {
     SK.history = [];
     SK.sessionId = null;      // the next exchange saves as a NEW session
-    try { sessionStorage.removeItem("sk-resume-session"); } catch (eS) {}
+    try { localStorage.removeItem("sk-resume-session-slidekick"); } catch (eS) {}
     SK.sessionName = "";
     updateChatMeta();
     updateSessionLabel();
@@ -5013,7 +5013,7 @@ OfficeDeck.prototype.setNotes = function (i, text) {
     }
     // a pane reload (or back-end restart) resumes the session that was active
     var bootResume = null;
-    try { bootResume = sessionStorage.getItem("sk-resume-session"); } catch (eS) {}
+    try { bootResume = localStorage.getItem("sk-resume-session-slidekick"); } catch (eS) {}
     if (bootResume) resumeSession(bootResume);
     updateSessionLabel();
     wireSessions();
