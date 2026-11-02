@@ -30,6 +30,15 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.64
+### Fixed
+- DocKick: "undefined is not an object (evaluating 'res.lines')" after a
+  successful auto-apply. The apply result chain was mis-wired: the
+  change-tracking restore ran as a detached promise and the return handed
+  back the (empty) retry promise's own resolution instead of the result
+  object whenever no action needed a retry. The chain is single again and
+  always returns the result. MailKick's equivalent path was already
+  correct.
 ## 0.9.63
 ### Fixed
 - ART pass: set_shape_image ops no longer reference hallucinated shape

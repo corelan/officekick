@@ -1753,7 +1753,7 @@ function applyOps(deck, ops, ctx) {
         });
         afterRetries = rseq;
       }
-      afterRetries.then(function () {
+      return afterRetries.then(function () {
         if (revNote) lines.push({ ok: false, text: "revisions: " + revNote });
       // restore whatever the change-tracking mode was before the AI-edits
       // batch (do not stomp a tracking mode the user had enabled themselves)
@@ -1765,7 +1765,6 @@ function applyOps(deck, ops, ctx) {
         SK.revPrevMode = null;
         return off.then(function () { return res; });
       });
-      return afterRetries.then(function (r) { return r; });
     });
   }
 
