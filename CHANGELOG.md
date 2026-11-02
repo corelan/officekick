@@ -30,6 +30,16 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.85
+### Fixed
+- Word make-over hardening (from the log forensics of a real run):
+  1. make-over pass merges dedupe set_header / set_footer /
+     insert_paragraphs across passes - an eager builder that repeats an
+     earlier extra no longer doubles it in the merged list.
+  2. A disobedient director that answers with ops JSON instead of a
+     strategy no longer propagates as "strategy": its ops are kept as
+     seed results, and the builders receive a concise editorial fallback
+     strategy to plan with.
 ## 0.9.84
 ### Fixed
 - Boot diagnostics were silent: dbg() bails before /api/config delivers

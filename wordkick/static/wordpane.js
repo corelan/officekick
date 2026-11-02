@@ -1980,11 +1980,23 @@ function applyOps(deck, ops, ctx) {
             return typeof o.text === "string" && !!o.text.trim();
           return false;   // make-overs stay in the safe vocabulary
         }
+        var moSeen = {};   // dedupe across passes (header/footer repeated by eager builders)
         function mergeFrom(r) {
           var pre = tryParse(r && r.text || "");
           var got = (pre.ok && pre.ops) || (salvageOps(r && r.text || "") || []);
-          return got.filter(validOp);
+          return got.filter(function (o) {
+            if (!validOp(o)) return false;
+            var sig = null;
+            if (o.type === "set_header" || o.type === "set_footer") sig = o.type + "|" + String(o.text || "");
+            if (o.type === "insert_paragraphs") sig = o.type + "|append";
+            if (sig) {
+              if (moSeen[sig]) return false;      // a later pass repeats an earlier extra - keep the first
+              moSeen[sig] = true;
+            }
+            return true;
+          });
         }
+        var ops0FromDirector = null;
         var askBrief = "ORIGINAL USER REQUEST:\n" + String(instruction || "").slice(0, 400) +
           "\nDOCUMENT OUTLINE (1-based paragraph numbers; op.para uses these):\n" + outline.slice(0, 220).join("\n");
         var DIR_SYS = "You are the creative director for Word document make-overs. Invent a REAL design strategy - not font tweaks: " +
@@ -2009,12 +2021,26 @@ function applyOps(deck, ops, ctx) {
         setStatus("AI director is inventing the document make-over…", "busy");
         return passAsk("DIRECTOR", "Design a make-over strategy for this document.\n\n" + askBrief).then(function (dr) {
           var concept = String(dr.text || "").slice(0, 2400);
+          var preDr = tryParse(dr && dr.text || "");
+          if (preDr.ok && preDr.ops && preDr.ops.length) {
+            // disobedient director: answered with ops instead of a strategy -
+            // keep its ops as the first results and give the builders a generic
+            // editorial fallback strategy so their prompts still carry a plan
+            ops0FromDirector = preDr.ops.filter(validOp);
+            concept = "CONCEPT: Editorial refresh - one clean typography system. "
+              + "THEME: system heading font on headings, regular body font, body 11-12pt, " +
+              "headings one step larger; 1 accent color used sparingly. "
+              + "STRUCTURE: headings bold and larger, lead-ins bold, quotes italic. "
+              + "EXTRAS: a modest page header, no footer duplication.";
+          }
           setStatus("Builder pass 1/3 - structure…", "busy");
           var b1 = "BUILDER PASS 1 - STRUCTURE. Follow the strategy below and emit ONLY ops that give the document a real hierarchy: " +
             "format_text (weights/italic/name + align) for headings, lead-ins and quotes; edit_paragraph only when a heading text must be tightened. " +
             "Use the exact 1-based paragraph numbers from the outline. Never repeat an op for the same paragraph.\n\n" +
             "DIRECTOR STRATEGY:\n" + concept + "\n\n" + askBrief;
-          var ops = [];
+          var ops = (typeof ops0FromDirector !== "undefined" ? (ops0FromDirector || []) : []);
+          ops0FromDirector = null;
+          if (ops.length) dbg("makeover.directorOps", { count: ops.length });
           return passAsk("BUILD1-STRUCTURE", b1).then(function (r1) {
             ops = ops.concat(mergeFrom(r1));
             setStatus("Builder pass 2/3 - typography & colors…", "busy");
