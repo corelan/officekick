@@ -30,6 +30,16 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.92
+### Changed
+- Update protocol documented as verified end-to-end: repair a deck once
+  (tools/repair_deck_paneref.py) -> save anytime with the pane open ->
+  reopen by double-clicking the deck in Finder -> the pane auto-loads and
+  no toast appears. The repaired pane reference survives pane-open saves;
+  PowerPoint re-stamps the unresolvable Registry form only on decks that
+  still carry it. Opening through the in-app open dialog skips pane
+  restore silently (no error) - Finder double-click is the verified path.
+  Installer's mac tip now states the verified behavior.
 ## 0.9.91
 ### Added
 - Deck pane-reference repair tool (tools/repair_deck_paneref.py): removes

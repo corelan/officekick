@@ -6,8 +6,12 @@ store="developer" storeType="Registry"; the Mac host's launch-hydration
 cannot resolve a wef-folder-sideloaded add-in from that store, so opening
 the deck throws the "Add-in Error: New Office Add-in" toast. Removing the
 two attributes makes the host resolve purely by add-in id (the path the
-manual Ribbon open uses and that always works). The pane then simply does
-not auto-open; open it from the ribbon with one click.
+manual Ribbon open uses and that always works). Verified end-to-end (2026-11-02, PowerPoint 16.114.1027.3): after the
+repair, decks open via Finder double-click WITH the pane auto-loading and
+no toast, and pane-open saves keep working (the repaired reference
+survives re-saves). Note: opening via PowerPoint's in-app open dialog
+skips pane restore silently (no error) - Finder double-click is the
+verified-good launch path.
 
 Usage:
     python3 repair_deck_paneref.py deck.pptx [more.pptx ...]
