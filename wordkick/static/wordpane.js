@@ -1810,6 +1810,9 @@ function applyOps(deck, ops, ctx) {
     };
     var failedOps = [];   // ops whose runOne link rejected - retried once after the pass
     var chain = Promise.resolve();
+    var progress = function (op, l0, ok) {
+      if (typeof SK.opProgress === "function") SK.opProgress(op, lines.slice(l0), ok);
+    };
     ops.forEach(function (op) {
       chain = chain.then(function () {
         // cancel = stop at the very next op boundary
@@ -1820,9 +1823,13 @@ function applyOps(deck, ops, ctx) {
         // per-op error capture INSIDE the link: a rejection from the last
         // op must not reject the whole chain (the tail - tracking restore +
         // final status - would never run)
-        return runOne(op).catch(function (err) {
+        var l0 = lines.length;
+        return runOne(op).then(function () {
+          progress(op, l0, true);
+        }, function (err) {
           lines.push({ ok: false, text: fmtOp(op, ctx) + " - " + ((err && err.message) || String(err)) });
           failedOps.push(op);
+          progress(op, l0, false);
         });
       }, function (err) {
         lines.push({ ok: false, text: fmtOp(op, ctx) + " - " + ((err && err.message) || String(err)) });
@@ -1838,9 +1845,13 @@ function applyOps(deck, ops, ctx) {
           " failed action(s) once after a short pause\u2026" });
         var rseq = new Promise(function (res2) { setTimeout(res2, 1500); });
         failedOps.forEach(function (op) {
-          rseq = rseq.then(function () { return runOne(op); }).catch(function (err2) {
-            lines.push({ ok: false, text: "retry of " + op.type + " failed again: " +
-              ((err2 && err2.message) || String(err2)) });
+          rseq = rseq.then(function () {
+            var l0 = lines.length;
+            return runOne(op).then(function () { progress(op, l0, true); }, function (err2) {
+              lines.push({ ok: false, text: "retry of " + op.type + " failed again: " +
+                ((err2 && err2.message) || String(err2)) });
+              progress(op, l0, false);
+            });
           });
         });
         afterRetries = rseq;
@@ -2612,6 +2623,7 @@ function applyOps(deck, ops, ctx) {
     var tableRows = document.createElement("div");
     rows.forEach(function (row) {
       var r = document.createElement("div");
+      row.op._rowEl = r; row.op._gateRow = row;   // progressive apply removes done rows
       r.className = "oprow " + (OP_EFFECT[row.op.type] === "del" ? "op-del" : "op-mod") +
         (row.mode === "deny" ? " blocked" : row.mode === "invalid" ? " invalid" : "");
       // narrow pane: line 1 = action tag + checkbox + cancel (right aligned);
@@ -2678,7 +2690,7 @@ function applyOps(deck, ops, ctx) {
           return;
         }
         row.removed = true;
-        r.style.display = "none";
+        if (r.parentNode) r.parentNode.removeChild(r);
         updateApplyLabel();
       });
       line1.appendChild(x);
@@ -2721,10 +2733,10 @@ function applyOps(deck, ops, ctx) {
     applyBtn.className = "btn primary";
     var updateApplyLabel = function () {
       // removed actions (X) no longer count towards the apply totals
-      var liveAuto = rows.filter(function (r) { return !r.removed && r.mode === "auto"; }).length;
-      var liveConfirm = rows.filter(function (r) { return !r.removed && r.mode === "confirm"; }).length;
+      var liveAuto = rows.filter(function (r) { return !r.removed && !r.done && r.mode === "auto"; }).length;
+      var liveConfirm = rows.filter(function (r) { return !r.removed && !r.done && r.mode === "confirm"; }).length;
       var approved = rows.filter(function (r) {
-        return !r.removed && r.mode === "confirm" && r._cb && r._cb.checked;
+        return !r.removed && !r.done && r.mode === "confirm" && r._cb && r._cb.checked;
       }).length;
       applyBtn.textContent = "Apply " + liveAuto + " auto" +
         (liveConfirm ? " + " + approved + "/" + liveConfirm + " approved" : "");
@@ -2741,7 +2753,7 @@ function applyOps(deck, ops, ctx) {
       selectAllBtn.addEventListener("click", function (ev) {
         ev.preventDefault();
         rows.forEach(function (r) {
-          if (r.removed) return;
+          if (r.removed || r.done) return;
           if (r.mode === "confirm" && r._cb && !r._cb.checked) {
             r._cb.checked = true;
             r._cb.dispatchEvent(new Event("change"));
@@ -2787,7 +2799,7 @@ function applyOps(deck, ops, ctx) {
     applyBtn.addEventListener("click", function () {
       var chosen = [];
       rows.forEach(function (row) {
-        if (row.removed) return;   // removed with the X icon
+        if (row.removed || row.done) return;   // X-ed away / already completed
         if (row.mode === "auto") chosen.push(row.op);
         else if (row.mode === "confirm" && row._cb && row._cb.checked) chosen.push(row.op);
       });
@@ -2797,29 +2809,65 @@ function applyOps(deck, ops, ctx) {
         }
       });      // unapproved confirm rows would silently vanish - ask before skipping
       var skips = rows.filter(function (row) {
-        return !row.removed && row.mode === "confirm" && row._cb && !row._cb.checked;
+        return !row.removed && !row.done && row.mode === "confirm" && row._cb && !row._cb.checked;
       });
       var counts = {};
       skips.forEach(function (row) { counts[OPS_META[row.op.type].label] = (counts[OPS_META[row.op.type].label] || 0) + 1; });
       var skipList = Object.keys(counts).map(function (l) { return counts[l] + " " + l; }).join(", ");
-      if (skipList && chosen.length) {
-        var okApply = window.confirm(
-          skips.length + " (needs approval) action(s) are NOT approved and will be skipped: " +
-          skipList + ". Apply the other " + chosen.length + " action(s) anyway?");
-        if (!okApply) return;
-      }
+      var skipNote = (skipList && chosen.length) ? skips.length + " action(s) skipped - not approved: " + skipList : "";
       if (!chosen.length) { setStatus("Nothing approved - nothing applied.", ""); return; }
       dbg("ops.apply", { approved: chosen.map(function (op) { return op.type; }), count: chosen.length });
       applyBtn.disabled = true;
+      // progressive tracking: executed actions leave the proposal list and
+      // grow into a completed list one by one; failed actions stay in the
+      // list above (numbers + Apply re-arm track the survivors)
+      var doneBox = document.createElement("div");
+      doneBox.className = "opsbox donebox";
+      var doneH = document.createElement("h3");
+      var doneCount = 0;
+      doneH.textContent = "Completed actions (0)";
+      doneBox.appendChild(doneH);
+      var doneList = document.createElement("div");
+      doneBox.appendChild(doneList);
+      box.parentNode.insertBefore(doneBox, box.nextSibling);   // sibling: survives the proposal box closing
+      SK.opProgress = function (op, addedLines, ok) {
+        if (ok) {
+          doneCount++;
+          doneH.textContent = "Completed actions (" + doneCount + ")";
+          var dr = document.createElement("div");
+          dr.className = "oprowline1 doneline";
+          dr.textContent = "\u2713 " + ((OPS_META[op.type] || { label: op.type }).label);
+          doneList.insertBefore(dr, doneList.firstChild);
+          if (op._rowEl && op._rowEl.parentNode) op._rowEl.parentNode.removeChild(op._rowEl);
+          if (op._gateRow) op._gateRow.done = true;
+        } else if (op._rowEl && op._rowEl.parentNode) {
+          op._rowEl.classList.add("opfailrow");
+        }
+        updateApplyLabel();
+      };
       setStatus("Applying " + chosen.length + " op(s)…", "busy");
       applyOps(SK.deck, chosen, SK.lastCtx || ctx).then(function (res) {
         result.innerHTML = "";
+        if (skipNote) {
+          var sn = document.createElement("div");
+          sn.className = "opnote";
+          sn.textContent = skipNote + " - tick them and Apply again to run them.";
+          result.appendChild(sn);
+        }
         res.lines.forEach(function (l) {
           var d = document.createElement("div");
           d.className = "resultline " + (l.ok ? "ok" : "fail");
           d.textContent = l.text;
           result.appendChild(d);
         });
+        var liveRows = rows.filter(function (r) { return !r.removed && !r.done; }).length;
+        if (!liveRows) {
+          box.parentNode.removeChild(box);   // all done: the completed list remains
+          SK.opProgress = null;
+        } else {
+          applyBtn.disabled = false;
+          updateApplyLabel();
+        }
         if (res.manualNotes.length) {
           var mb = document.createElement("div");
           mb.className = "manualbox";

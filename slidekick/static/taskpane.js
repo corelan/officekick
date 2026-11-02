@@ -3974,7 +3974,7 @@ OfficeDeck.prototype.setNotes = function (i, text) {
     var tableRows = document.createElement("div");
     rows.forEach(function (row) {
       var r = document.createElement("div");
-      if (row.op) row.op._rowEl = r;          // progressive apply removes this row
+      if (row.op) { row.op._rowEl = r; row.op._gateRow = row; }   // progressive apply removes this row
       r.className = "oprow " + (OP_EFFECT[row.op.type] === "del" ? "op-del" : "op-mod") +
         (row.mode === "deny" ? " blocked" : row.mode === "invalid" ? " invalid" : "");
       // narrow pane: line 1 = action tag + checkbox + cancel (right aligned);
@@ -4042,7 +4042,7 @@ OfficeDeck.prototype.setNotes = function (i, text) {
           return;
         }
         row.removed = true;
-        r.style.display = "none";
+        if (r.parentNode) r.parentNode.removeChild(r);
         updateApplyLabel();
       });
       line1.appendChild(x);
@@ -4085,10 +4085,10 @@ OfficeDeck.prototype.setNotes = function (i, text) {
     applyBtn.className = "btn primary";
     var updateApplyLabel = function () {
       // removed actions (X) no longer count towards the apply totals
-      var liveAuto = rows.filter(function (r) { return !r.removed && r.mode === "auto"; }).length;
-      var liveConfirm = rows.filter(function (r) { return !r.removed && r.mode === "confirm"; }).length;
+      var liveAuto = rows.filter(function (r) { return !r.removed && !r.done && r.mode === "auto"; }).length;
+      var liveConfirm = rows.filter(function (r) { return !r.removed && !r.done && r.mode === "confirm"; }).length;
       var approved = rows.filter(function (r) {
-        return !r.removed && r.mode === "confirm" && r._cb && r._cb.checked;
+        return !r.removed && !r.done && r.mode === "confirm" && r._cb && r._cb.checked;
       }).length;
       applyBtn.textContent = "Apply " + liveAuto + " auto" +
         (liveConfirm ? " + " + approved + "/" + liveConfirm + " approved" : "");
@@ -4105,7 +4105,7 @@ OfficeDeck.prototype.setNotes = function (i, text) {
       selectAllBtn.addEventListener("click", function (ev) {
         ev.preventDefault();
         rows.forEach(function (r) {
-          if (r.removed) return;
+          if (r.removed || r.done) return;
           if (r.mode === "confirm" && r._cb && !r._cb.checked) {
             r._cb.checked = true;
             r._cb.dispatchEvent(new Event("change"));
@@ -4151,7 +4151,7 @@ OfficeDeck.prototype.setNotes = function (i, text) {
     applyBtn.addEventListener("click", function () {
       var chosen = [];
       rows.forEach(function (row) {
-        if (row.removed) return;   // removed with the X icon
+        if (row.removed || row.done) return;   // X-ed away / already completed
         if (row.mode === "auto") chosen.push(row.op);
         else if (row.mode === "confirm" && row._cb && row._cb.checked) chosen.push(row.op);
       });
@@ -4162,17 +4162,12 @@ OfficeDeck.prototype.setNotes = function (i, text) {
       });
       // unapproved confirm rows would silently vanish - ask before skipping
       var skips = rows.filter(function (row) {
-        return !row.removed && row.mode === "confirm" && row._cb && !row._cb.checked;
+        return !row.removed && !row.done && row.mode === "confirm" && row._cb && !row._cb.checked;
       });
       var counts = {};
       skips.forEach(function (row) { counts[OPS_META[row.op.type].label] = (counts[OPS_META[row.op.type].label] || 0) + 1; });
       var skipList = Object.keys(counts).map(function (l) { return counts[l] + " " + l; }).join(", ");
-      if (skipList && chosen.length) {
-        var okApply = window.confirm(
-          skips.length + " (needs approval) action(s) are NOT approved and will be skipped: " +
-          skipList + ". Apply the other " + chosen.length + " action(s) anyway?");
-        if (!okApply) return;
-      }
+      var skipNote = (skipList && chosen.length) ? skips.length + " action(s) skipped - not approved: " + skipList : "";
       if (!chosen.length) { setStatus("Nothing approved - nothing applied.", ""); return; }
       dbg("ops.apply", { approved: chosen.map(function (op) { return op.type; }), count: chosen.length });
       applyBtn.disabled = true;
@@ -4197,13 +4192,21 @@ OfficeDeck.prototype.setNotes = function (i, text) {
             (op.slide != null ? " - slide " + op.slide : "");
           doneList.insertBefore(dr, doneList.firstChild);   // newest on top
           if (op._rowEl && op._rowEl.parentNode) op._rowEl.parentNode.removeChild(op._rowEl);
+          if (op._gateRow) op._gateRow.done = true;
         } else if (op._rowEl && op._rowEl.parentNode) {
           op._rowEl.classList.add("opfailrow");
         }
+        updateApplyLabel();   // numbers track the live (not-yet-done) rows
       };
       setStatus("Applying " + chosen.length + " op(s)…", "busy");
       applyOps(SK.deck, chosen, SK.lastCtx || ctx).then(function (res) {
         result.innerHTML = "";
+        if (skipNote) {
+          var sn = document.createElement("div");
+          sn.className = "opnote";
+          sn.textContent = skipNote + " - tick them and Apply again to run them.";
+          result.appendChild(sn);
+        }
         res.lines.forEach(function (l) {
           var d = document.createElement("div");
           d.className = "resultline " + (l.ok ? "ok" : "fail");
@@ -4212,8 +4215,8 @@ OfficeDeck.prototype.setNotes = function (i, text) {
         });
         // everything executed cleanly? close the proposal section; only the
         // completed list stays (below where the buttons used to be)
-        var leftRows = tableRows.querySelectorAll(".oprow").length;
-        if (!leftRows) {
+        var liveRows = rows.filter(function (r) { return !r.removed && !r.done; }).length;
+        if (!liveRows) {
           if (res.manualNotes.length) {
             var mb2 = document.createElement("div");
             mb2.className = "manualbox";
@@ -4237,6 +4240,7 @@ OfficeDeck.prototype.setNotes = function (i, text) {
         }
         // some failed: keep the buttons + rows so the failed ones can be re-tried
         applyBtn.disabled = false;   // re-arm for a retry of the survivors
+        updateApplyLabel();
         if (res.manualNotes.length) {
           var mb = document.createElement("div");
           mb.className = "manualbox";

@@ -30,6 +30,21 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.98
+### Changed
+- Proposal gate (all three add-ins): executed actions leave the "Proposed
+  actions" list into "Completed actions"; when every action finished
+  successfully the proposal box closes and its buttons (Apply / Select
+  all / Discard) and the "don't ask again" checkboxes disappear with it.
+  Failed actions keep their row (marked failed), the counts and the
+  re-armed Apply only track the not-yet-done actions - Apply retries
+  exactly the survivors. Actions removed with the X now leave the list
+  properly (they counted as phantom leftovers before and kept the box
+  open on success). Removed the dead window.confirm before applying with
+  unapproved rows (it never fired in the Office WebView and silently
+  blocked Apply): the approved actions run, the skipped ones are listed
+  in the results with a hint. Word and MailKick gain the same progressive
+  gate (completed box, live counts, survivor retry) they lacked.
 ## 0.9.97
 ### Fixed
 - clear_slide: the "items/textFrame" deep-load was rejected with
