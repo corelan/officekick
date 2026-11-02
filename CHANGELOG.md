@@ -30,6 +30,16 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.65
+### Added
+- A small refresh button (circular arrows) next to the Profile/Route
+  selector in all three add-ins: re-reads connections and profiles from the
+  config files (loadConfigAndRender) without reloading the pane - useful
+  after editing ~/.officekick/config.json by hand.
+### Changed
+- Asset cache-busting is now <version>-<mtime-ms> instead of version-only:
+  fixes within one release no longer serve the stale cached pane scripts
+  (this exact trap hit testing the refresh button itself).
 ## 0.9.64
 ### Fixed
 - DocKick: "undefined is not an object (evaluating 'res.lines')" after a

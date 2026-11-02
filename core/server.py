@@ -32,7 +32,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 APP = "OfficeKick"
-VERSION = "0.9.64"
+VERSION = "0.9.65"
 
 CONNECTION_TYPES = (
     "openai",
@@ -1467,6 +1467,43 @@ _ASSET_RE = re.compile(
 )
 
 
+_ASSET_MTIMES = {}
+
+class _DecoState:
+    static_dir = None
+    base_dir = None
+
+_DECORATE_STATE = _DecoState()
+
+def _asset_cache_id(asset_path):
+    """<VERSION>-<mtime-ms>: same-version edits still get fresh URLs."""
+    t2 = _ASSET_MTIMES.get(asset_path)
+    if t2 is None:
+        try:
+            sd = getattr(_DECORATE_STATE, "static_dir", None)
+        except NameError:
+            sd = None
+        t2 = 0
+        bd = getattr(_DECORATE_STATE, "base_dir", None)
+        if bd and "/" not in asset_path.split("?")[0]:
+            try:
+                t2 = (Path(bd) / asset_path.split("?")[0]).stat().st_mtime
+            except OSError:
+                t2 = 0
+        if not t2 and sd:
+            base = Path(sd)
+            if str(asset_path).startswith("static/"):
+                t2 = (base / asset_path).stat().st_mtime
+            else:
+                # asset_path like "slidekick/static/taskpane.js" or "sim.js"
+                for cand in (base / asset_path, base / asset_path.split("/")[-1]):
+                    if cand.is_file():
+                        t2 = cand.stat().st_mtime
+                        break
+        _ASSET_MTIMES[asset_path] = t2
+    return "%s-%d" % (VERSION, t2 * 1000)
+
+
 def _decorate_html(html_bytes):
     """Append ?v=<VERSION> to relative js/css asset refs in served HTML.
 
@@ -1480,7 +1517,9 @@ def _decorate_html(html_bytes):
         html = html_bytes.decode("utf-8")
     except UnicodeDecodeError:
         return html_bytes
-    html = _ASSET_RE.sub(lambda m: '%s="%s?v=%s"' % (m.group(1), m.group(2), VERSION), html)
+    html = _ASSET_RE.sub(
+        lambda m: '%s="%s?v=%s"' % (m.group(1), m.group(2), _asset_cache_id(m.group(2))),
+        html)
     tag = '<script>window.__SK_BUILD = "%s";</script>' % VERSION
     if "<head" in html:
         html = html.replace("<head>", "<head>" + tag, 1) if html.count("<head>") else html
@@ -1594,6 +1633,8 @@ class SlideKickHandler(BaseHTTPRequestHandler):
         else:
             data = target.read_bytes()
         if suffix == ".html":
+            _DECORATE_STATE.static_dir = self.static_dir
+            _DECORATE_STATE.base_dir = str(target.parent)
             data = _decorate_html(data)
         self.send_response(200)
         self.send_header("Content-Type", ctype)

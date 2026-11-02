@@ -3125,6 +3125,18 @@ function applyOps(deck, ops, ctx) {
     $("settings-autoclean-save").addEventListener("click", saveAutoClean);
     var updBtn = $("upd-check");
     if (updBtn) updBtn.addEventListener("click", updCheck);
+    var cfgBtn = $("cfg-refresh");
+    if (cfgBtn) cfgBtn.addEventListener("click", function () {
+      cfgBtn.disabled = true;
+      setStatus("Re-reading connections and profiles…", "busy");
+      loadConfigAndRender().then(function () {
+        cfgBtn.disabled = false;
+        setStatus("Config re-read: connections and profiles refreshed.", "ok");
+      }).catch(function (e2) {
+        cfgBtn.disabled = false;
+        setStatus("Config re-read failed: " + ((e2 && e2.message) || e2), "error");
+      });
+    });
     var relBtn = $("pane-reload");
     if (relBtn) relBtn.addEventListener("click", function () {
       dbg("pane.reload", {});
