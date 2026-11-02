@@ -1650,6 +1650,10 @@ function applyOps(deck, ops, ctx) {
     var chain = Promise.resolve();
     ops.forEach(function (op) {
       chain = chain.then(function () {
+        if (SK.runCancelled) {
+          lines.push({ ok: false, text: "cancel - remaining op(s) not executed (" + (op && op.type ? op.type : "unknown") + " skipped)" });
+          return Promise.resolve();
+        }
         return runOne(op).catch(function (err) {
           lines.push({ ok: false, text: fmtOp(op, ctx) + " - " + ((err && err.message) || String(err)) });
           failedOps.push(op);
@@ -1732,6 +1736,11 @@ function applyOps(deck, ops, ctx) {
 
   function setRunEnabled(on) {
     $("chat-run").disabled = !on || SK.busy;
+    var cb = $("chat-cancel");
+    if (cb) {
+      cb.disabled = !SK.busy;                          // only meaningful mid-run
+      cb.style.display = SK.busy ? "" : "none";        // appears only while a run is in progress
+    }
   }
 
   function runQuickReply(stance) {

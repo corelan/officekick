@@ -1812,6 +1812,11 @@ function applyOps(deck, ops, ctx) {
     var chain = Promise.resolve();
     ops.forEach(function (op) {
       chain = chain.then(function () {
+        // cancel = stop at the very next op boundary
+        if (SK.runCancelled) {
+          lines.push({ ok: false, text: "cancel - remaining op(s) not executed (" + (op && op.type ? op.type : "unknown") + " skipped)" });
+          return Promise.resolve();
+        }
         // per-op error capture INSIDE the link: a rejection from the last
         // op must not reject the whole chain (the tail - tracking restore +
         // final status - would never run)
@@ -1903,6 +1908,11 @@ function applyOps(deck, ops, ctx) {
 
   function setRunEnabled(on) {
     $("chat-run").disabled = !on || SK.busy;
+    var cb = $("chat-cancel");
+    if (cb) {
+      cb.disabled = !SK.busy;                          // only meaningful mid-run
+      cb.style.display = SK.busy ? "" : "none";        // appears only while a run is in progress
+    }
   }
 
   function runPrompt() {
@@ -2006,6 +2016,7 @@ function applyOps(deck, ops, ctx) {
           "STRUCTURE: how headings vs lead-ins vs body vs quotes are visually shaped (weights, allCaps, italics, alignment, spacing feel)\n" +
           "EXTRAS: exact page header text, table/link treatment if the document has any, and whether a pull-quote/summary block adds value";
         function passAsk(passName, userMsg) {
+          if (SK.runCancelled) return Promise.reject(new FriendlyError("Run cancelled."));
           return askRetryable(function () {
             return apiJson("/api/chat", "POST", {
               connection: ref.connection, model: ref.model,

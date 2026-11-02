@@ -30,6 +30,23 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.86
+### Fixed
+- Cancel-button hardening requested before the test rounds - a code audit
+  found three gaps and closed them in all three panes:
+  1. The Cancel button existed but was never shown: setRunEnabled did not
+     toggle its visibility, so the html-hidden button stayed invisible
+     during runs. It now appears + enables only while a run is in
+     progress and hides when the run ends.
+  2. Word/Mail apply loops lacked the per-op boundary check: cancel mid-
+     apply now stops at the very next op ("cancel - remaining op(s) not
+     executed", failed/retry pass skipped) instead of reeling through
+     every remaining action.
+  3. The Word make-over passes (director/build/review) now refuse to
+     start the next pass once a cancel is pending.
+  Unchanged and verified present everywhere: instant transport abort
+  (AbortController on the in-flight request), abort mapped to "Run
+  cancelled.", retry-before-each-attempt checks, arm/disarm of the flag.
 ## 0.9.85
 ### Fixed
 - Word make-over hardening (from the log forensics of a real run):

@@ -3046,6 +3046,11 @@ OfficeDeck.prototype.setNotes = function (i, text) {
 
   function setRunEnabled(on) {
     $("chat-run").disabled = !on || SK.busy;
+    var cb = $("chat-cancel");
+    if (cb) {
+      cb.disabled = !SK.busy;                          // only meaningful mid-run
+      cb.style.display = SK.busy ? "" : "none";        // appears only while a run is in progress
+    }
   }
 
   function runPrompt() {
