@@ -30,6 +30,11 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.96
+### Changed
+- Renamed tools/repair_deck_paneref.py to tools/repair_paneref.py now that
+  it covers Word documents as well as PowerPoint decks; docs and the
+  installer tip updated to the new name (no behavior change).
 ## 0.9.95
 ### Changed
 - tools/repair_deck_paneref.py is universal: accepts Word documents

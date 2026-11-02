@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Strip the broken pane reference stamp from Office files (macOS 16.114).
+"""Strip the broken task-pane reference stamp from Office files (macOS 16.114).
 
 Office stamps a file's reopened task-pane reference with
 store="developer" storeType="Registry"; the Mac host's launch-hydration
@@ -15,11 +15,11 @@ opening via an Office app's in-app open dialog skips pane restore silently
 launch path. Covers PowerPoint decks (.pptx) and Word documents (.docx).
 
 Usage:
-    python3 repair_deck_paneref.py deck.pptx [more files ...]
-    python3 repair_deck_paneref.py /folder/with/decks        (non-recursive)
-    python3 repair_deck_paneref.py -r /folder/with/decks     (subfolders too)
-    python3 repair_deck_paneref.py file1.pptx d.docx /folder mixed  (any mix)
-    python3 repair_deck_paneref.py --dry-run deck.pptx /folder
+    python3 repair_paneref.py deck.pptx [more files ...]
+    python3 repair_paneref.py /folder/with/files        (non-recursive)
+    python3 repair_paneref.py -r /folder/with/files     (subfolders too)
+    python3 repair_paneref.py file1.pptx d.docx /folder mixed  (any mix)
+    python3 repair_paneref.py --dry-run deck.pptx /folder
 
 Accepts PowerPoint decks (.pptx) and Word documents (.docx); a folder
 argument processes every such file inside it. Before the first change the

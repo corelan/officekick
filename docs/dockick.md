@@ -180,7 +180,7 @@ http://127.0.0.1:8765/wordkick/static/simulator.html
   document** - heal the document once with the repair tool; it covers Word
   documents (`.docx`) and PowerPoint decks (`.pptx`) the same way:
 
-      python3 tools/repair_deck_paneref.py <document.docx | folder> [-r] [--dry-run]
+      python3 tools/repair_paneref.py <document.docx | folder> [-r] [--dry-run]
 
   The original is backed up to an `orig/` subfolder next to the file(s) as
   `<name>.docx.<YYYYMMDD_HHMMSS>.bak`, then the document is patched in

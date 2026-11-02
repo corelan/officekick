@@ -286,7 +286,7 @@ design).
   launch-time restore cannot resolve, so the deck throws the toast on every
   open. Heal the deck once with the repair tool:
 
-      python3 tools/repair_deck_paneref.py <deck.pptx | folder> [-r] [--dry-run]
+      python3 tools/repair_paneref.py <deck.pptx | document.docx | folder> [-r] [--dry-run]
 
     - `<deck.pptx | folder>`: any mix of files and folders; a folder heals
       every `.pptx` in it, `-r`/`--recursive` includes subfolders.
