@@ -3461,8 +3461,9 @@ OfficeDeck.prototype.setNotes = function (i, text) {
         }
         return parsed;
       }).then(function (parsed) {
-        renderParsed(parsed, ctx, instruction);
+        var waitApply = renderParsed(parsed, ctx, instruction);
         pushHistory(instruction, assistantHistoryText(parsed));
+        return Promise.resolve(waitApply);   // timer/busy wait for the auto-apply to finish
         });
       });
     }).catch(function (err) {
@@ -3819,7 +3820,7 @@ OfficeDeck.prototype.setNotes = function (i, text) {
         autoDone.insertBefore(dr, autoDone.firstChild);
       };
       setStatus("Auto-apply: running " + validation.ops.length + " action(s)…", "busy");
-      applyOps(SK.deck, validation.ops, ctx).then(function (res) {
+      return applyOps(SK.deck, validation.ops, ctx).then(function (res) {
         renderApplyResult(autoResult, res);
         var fails = res.lines.filter(function (l) { return !l.ok; }).length;
         setStatus(fails ? "Auto-applied with " + fails + " error(s)." : "Auto-applied " + validation.ops.length + " action(s).", fails ? "error" : "ok");
@@ -3827,9 +3828,8 @@ OfficeDeck.prototype.setNotes = function (i, text) {
         updateDeckSummary();
         dbg("ops.applied", { lines: res.lines, autoapply: true });
       }).catch(function (err) {
-        setStatus((err && err.message) || String(err), "error");
-      });
-      return;
+          setStatus((err && err.message) || String(err), "error");
+        });
     }
     renderOpsPreview(out, validation, ctx);
   }

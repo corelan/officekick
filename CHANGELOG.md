@@ -30,6 +30,15 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.79
+### Fixed
+- The run timer froze and Run re-enabled while auto-apply was still
+  executing: renderParsed kicked off the auto-apply without returning it,
+  so the run chain finished (timer stopped, "busy" cleared) while long
+  applies kept running - very visible on orchestrated make-over applies.
+  renderParsed now returns the apply chain (auto-apply only; a parked
+  gate still ends the run immediately) and all three run chains wait for
+  it before freezing the timer / clearing busy.
 ## 0.9.78
 ### Added
 - AI-driven document make-over in DocKick (the Word counterpart of the
