@@ -30,6 +30,12 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.66
+### Changed
+- Saving a connection clears the form immediately (back to "New connection"
+  defaults); the success message stays so you still see what was saved. The
+  form is ready for the next connection without manual cleanup. Applied in
+  all three add-ins.
 ## 0.9.65
 ### Added
 - A small refresh button (circular arrows) next to the Profile/Route

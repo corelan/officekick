@@ -2560,9 +2560,17 @@ function applyOps(deck, ops, ctx) {
       req = apiJson("/api/connections", "POST", body);
     }
     req.then(function () {
-      setFormMsg($("conn-formmsg"), "Saved connection '" + v.name + "'.", true);
-      SK.editingConn = v.name;
+      setFormMsg($("conn-formmsg"), "Saved connection '" + v.name + "'. Ready for the next one.", true);
+      // fields cleared right after saving - the form is fresh for the next connection
+      SK.editingConn = null;
       SK.connBaseDirty = false;
+      $("conn-form-title").textContent = "New connection";
+      $("conn-name").value = "";
+      $("conn-type").value = "openai";
+      $("conn-base").value = CONN_TYPE_BY_ID["openai"].base;
+      $("conn-key").value = "";
+      $("conn-key").placeholder = "";
+      $("conn-testout").innerHTML = "";
       return loadConfigAndRender();
     }).catch(function (err) { setFormMsg($("conn-formmsg"), err.message); });
   }
