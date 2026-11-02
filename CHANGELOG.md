@@ -30,6 +30,12 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.82
+### Fixed
+- The 0.9.81 media-query conversion produced malformed CSS (missing rule
+  braces, an explanatory comment parsed as a selector). The three dark
+  blocks are now hand-verified valid: body.dark-scoped subtabs, group
+  legends, context chips and request lines.
 ## 0.9.81
 ### Fixed
 - Theme detection desync: the subtab titles / group legends / context

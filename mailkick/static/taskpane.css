@@ -550,10 +550,9 @@ button.armed { border-color: #b00020 !important; color: #fff !important; backgro
 
   /* dark mode follows the pane's own body.dark detection - the Office WebView
      does not evaluate the OS media query, those blocks used to desync */
-body.dark .subtabs button { color: #9be87f; 
-  body.dark /* lime: readable on the dark Office theme */
-  .subtabs button.active { color: #c3f79d; border-bottom-color: #9be87f; 
-  
+body.dark .subtabs button { color: #9be87f; }            /* lime: readable on the dark theme */
+body.dark .subtabs button.active { color: #c3f79d; border-bottom-color: #9be87f; }
+
 .subpanel { display: none; }
 .subpanel.active { display: block; }
 
@@ -565,10 +564,8 @@ body.dark .subtabs button { color: #9be87f;
 
   /* dark mode follows the pane's own body.dark detection - the Office WebView
      does not evaluate the OS media query, those blocks used to desync */
-body.dark .groupbox > legend { color: #9be87f; 
-  body.dark .ctxinfo { background: rgba(0,205,229,.12); color: #6ee7f5; border-color: rgba(0,205,229,.3); 
-  
-
+body.dark .groupbox > legend { color: #9be87f; }
+body.dark .ctxinfo { background: rgba(0,205,229,.12); color: #6ee7f5; border-color: rgba(0,205,229,.3); }
 /* Chat thread: clickable request line above each response */
 .reqline { cursor: pointer; padding: 6px 10px; margin: 0 0 6px; border-radius: 8px;
   background: rgba(127,127,127,.10); border-left: 3px solid rgba(30,125,70,.6); word-break: break-word; }
@@ -576,8 +573,7 @@ body.dark .groupbox > legend { color: #9be87f;
 
   /* dark mode follows the pane's own body.dark detection - the Office WebView
      does not evaluate the OS media query, those blocks used to desync */
-body.dark .reqline { background: rgba(127,127,127,.14); border-left-color: rgba(155,232,127,.6); 
-   
+body.dark .reqline { background: rgba(127,127,127,.14); border-left-color: rgba(155,232,127,.6); }
 
 /* Inspector inside Settings: grouped request/response boxes, newest on top */
 .reqgrp { border: 1px solid rgba(127,127,127,.35); border-radius: 8px; margin: 0 0 8px; overflow: hidden; }
