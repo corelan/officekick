@@ -3542,6 +3542,7 @@ function applyOps(deck, ops, ctx) {
     dbg("pane.boot", { href: String(window.location.href).slice(0, 160),
       ua: String(navigator.userAgent).slice(0, 140),
       lang: navigator.language, office: (typeof Office !== "undefined") });
+    var params = new URLSearchParams(String(window.location.search || ""));
     SK.sim = window.__SK_SIM__ === true || params.has("sim");
 
     // internal test-run flag: simulator runs and ?nosave=1 never write

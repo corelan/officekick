@@ -30,6 +30,15 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.83
+### Fixed
+- CRITICAL: the 0.9.80 pane.boot beacon edit dropped "var params" from
+  boot() in all three panes - every boot since 0.9.80 threw
+  "params is not defined" the moment the pane JavaScript started: no API
+  calls, no debug lines, no theme detection (pane stuck light in a dark
+  Office), and the Add-in Error toast on pane open. This is the
+  reproducible cause of the reported update->relaunch Add-in Error.
+  params is restored; the beacon now fires on every healthy boot.
 ## 0.9.82
 ### Fixed
 - The 0.9.81 media-query conversion produced malformed CSS (missing rule
