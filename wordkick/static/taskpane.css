@@ -193,6 +193,14 @@ body.dark .opsbox { background: #16241c; border-color: rgba(155,232,127,.35); }
 body.dark .reply-text, body.dark table.list,
 body.dark form#conn-form, body.dark form#prof-form, body.dark .sim-deck,
 body.dark .sk-header, body.dark .sk-footer { background: var(--panel); }
+
+/* server-reachability footer text: green when up, red + pulsing when down */
+#statusbar { color: #1a7f37; }
+body.dark #statusbar { color: #7ee787; }
+#statusbar.bad { color: #b02a2a; animation: sbpulse 1.6s ease-in-out infinite; }
+body.dark #statusbar.bad { color: #ff6b6b; }
+@keyframes sbpulse { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
+
 body.dark label input[type="text"], body.dark label input[type="password"],
 body.dark label select, body.dark textarea#chat-input { background: #1f232c; color: var(--ink); }
 body.dark .btn { background: var(--panel); color: var(--ink); }

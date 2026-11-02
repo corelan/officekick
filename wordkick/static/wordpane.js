@@ -3404,6 +3404,7 @@ function applyOps(deck, ops, ctx) {
       $("statusbar").textContent = "DocKick v" + (cfg.version || "0.1.0") +
         (window.location && window.location.protocol === "https:" ? " - \u{1F512} " : " - ") +
         "server 127.0.0.1:" + cfg.port + (cfg.debug ? " - debug ON" : "");
+      if ($("statusbar")) $("statusbar").className = "";   // reachable = green
       return cfg;
     });
   }
@@ -3635,6 +3636,17 @@ function applyOps(deck, ops, ctx) {
     var p2 = function (n) { return (n < 10 ? "0" : "") + n; };
     return p2(d.getHours()) + ":" + p2(d.getMinutes()) + ":" + p2(d.getSeconds());
   }
+  function paintStatusbar(good, ver, stamp) {
+    var el = $("statusbar");
+    if (!el) return;
+    if (good) {
+      el.className = "";
+      el.title = "Local server reachable (v" + (ver || "?") + ") - checked " + (stamp || "");
+    } else {
+      el.className = "bad";   // red + pulsing (css)
+      el.title = "Local server NOT reachable - last check " + (stamp || "");
+    }
+  }
   function srvBeat() {
     var el = $("srvbeat");
     if (!el) return;
@@ -3655,11 +3667,13 @@ function applyOps(deck, ops, ctx) {
       el.className = "beat " + (good ? "ok" : "bad");
       el.title = (good ? "Local server reachable (v" + ver + ")" : "Local server NOT reachable")
         + " - last check " + stamp + (good ? "" : ". Start it with: python3 install.py");
+      paintStatusbar(good, ver, stamp);
     };
     xr.onerror = xr.ontimeout = function () {
       el.className = "beat bad";
       el.title = "Local server NOT reachable - last check " + stamp
         + ". Start it with: python3 install.py";
+      paintStatusbar(false, "", stamp);
     };
     try { xr.send(); } catch (e2) { xr.onerror(); }
   }
@@ -3691,6 +3705,7 @@ function applyOps(deck, ops, ctx) {
     }
     setStatus("Cannot reach the DocKick server: " + err.message + " Is it running? (python3 install.py)", "error");
     $("statusbar").textContent = "server unreachable: " + err.message;
+    $("statusbar").className = "bad";
   }
 
   function boot() {

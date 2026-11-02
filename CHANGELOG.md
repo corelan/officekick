@@ -30,6 +30,12 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.104
+### Added
+- The pane footer text (next to the heartbeat dot) now shows server
+  reachability too: green while the local server answers, red and gently
+  pulsing while it does not (both themes), verified live through a
+  server stop/start cycle on the same pane.
 ## 0.9.103
 ### Fixed
 - clear_slide on Windows: the host accepted the text-wipe writes but
