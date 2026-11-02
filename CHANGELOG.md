@@ -30,6 +30,25 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.74
+### Fixed
+- Web lookups no longer stall on "I tried to run the live web lookup, but
+  the lookup channel isn't available..." - three changes, in all add-ins:
+  1. The pane now OWNS the lookup: when a reply is prose that says the
+     model can't verify/search and the request wants live data (rankings,
+     prices, news, dates...), the pane runs the web lookup itself (instead
+     of waiting for the model to volunteer {"kind":"web_lookup"}) and
+     re-asks once with the fresh results.
+  2. Lookup capability ladder: the profile's model first (OpenRouter
+     gets the :online web plugin), then ANY OpenRouter connection with
+     "openai/gpt-4o-mini:online" as a guaranteed web-enabled fallback -
+     so a no-web profile model (e.g. through a plain generic-openai or
+     cheaper-inference route) can still serve a live lookup if an
+     OpenRouter connection exists. A failed attempt is skipped, not fatal.
+  3. The system prompt stops the hallucination at the source: the model
+     is told it has no web access of its own, the channel belongs to the
+     pane, and it must never claim it tried a lookup or that the channel
+     is unavailable - either {"kind":"web_lookup"} or answer.
 ## 0.9.73
 ### Added
 - A Cancel button next to Run (all three add-ins), visible and enabled only

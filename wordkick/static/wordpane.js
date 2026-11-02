@@ -251,25 +251,49 @@
   // NO_WEB_ACCESS and the pane says so in the status. ----
   function webLookup(prof, instruction) {
     var ref = prof.other && prof.other.connection && prof.other.model ? prof.other : prof.content;
-    var model = ref.model;
-    var conn = (SK.cfg.connections || []).filter(function (c) { return c.name === ref.connection; })[0] || {};
-    if (conn.type === "openrouter") model = model + ":online";
     var sys = "You have LIVE WEB ACCESS. Research the user's request with web search now. " +
       "Return 4-8 short facts that help answer it; after EACH fact put its source URL in ( ): " +
       "like \"fact text (https://source.example/page)\". Be current; mention dates when known. " +
       "If you actually cannot access the web, reply with exactly NO_WEB_ACCESS.";
-    return askRetryable(function () {
-      return apiJson("/api/chat", "POST", {
-        connection: ref.connection, model: model,
-        messages: [{ role: "system", content: sys },
-                   { role: "user", content: instruction.slice(0, 600) }],
-      });
-    }).then(function (resp) {
-      var t = String(resp.text || "").trim();
-      if (!t || /^NO_WEB_ACCESS\b/i.test(t) || /cannot access (the )?web/i.test(t) ||
-          /can'?t browse/i.test(t) || /no web access/i.test(t)) return "";
-      return "MODEL-SIDE WEB LOOKUP via " + model + ":\n" + t.slice(0, 5000);
+    var connOf = function (name) {
+      return (SK.cfg.connections || []).filter(function (c) { return c.name === name; })[0] || {};
+    };
+    // capability ladder: try the profile's own model first (with OpenRouter's
+    // :online web plugin when the connection is OpenRouter); if this profile's
+    // connection has no web plugin, fall back to ANY OpenRouter connection
+    // with a cheap always-available web-enabled model. The pane owns the
+    // lookup channel - the model the user chats with often has none.
+    var attempts = [];
+    if (connOf(ref.connection).type === "openrouter") {
+      attempts.push({ connection: ref.connection, model: ref.model + ":online" });
+    }
+    (SK.cfg.connections || []).forEach(function (c) {
+      if (c.type !== "openrouter") return;
+      var dup = attempts.some(function (a) { return a.connection === c.name; });
+      if (dup) return;
+      attempts.push({ connection: c.name, model: "openai/gpt-4o-mini:online" });
     });
+    var webNoHit = function (t) {
+      return !t || /^NO_WEB_ACCESS\b/i.test(t) || /cannot access (the )?web/i.test(t) ||
+        /can'?t browse/i.test(t) || /no web access/i.test(t) ||
+        /lookup channel isn'?t available/i.test(t);
+    };
+    var one = function (a) {
+      return askRetryable(function () {
+        return apiJson("/api/chat", "POST", {
+          connection: a.connection, model: a.model,
+          messages: [{ role: "system", content: sys },
+                     { role: "user", content: instruction.slice(0, 600) }],
+        });
+      }).then(function (resp) {
+        var t = String(resp.text || "").trim();
+        if (webNoHit(t)) return "";
+        return "MODEL-SIDE WEB LOOKUP via " + a.model + ":\n" + t.slice(0, 5000);
+      }).catch(function () { return ""; });  // this model can't serve a lookup - try the next
+    };
+    return attempts.reduce(function (acc, a) {
+      return acc.then(function (got) { return got ? got : one(a); });
+    }, Promise.resolve(""));
   }
 
   function autoApplyWanted() {
@@ -490,7 +514,7 @@
     "- If the request is a question/explanation/brainstorm rather than a document change, use format A.",
     "- Image requests: always return an insert_image op (never generate the picture inline); DocKick fetches it with the user's configured image model. Include a concrete, self-contained prompt in the op.",
     "- Image refinement ('refine/change the image'): write a FRESH self-contained image prompt describing the FULL desired result. Never embed previous prompts, the conversation, or op JSON into it - only the scene essentials plus the requested change. Prefer 200-600 words.",
-    "- LIVE WEB LOOKUPS: when the request needs up-to-date info you cannot reliably know (current events, news, prices, recent releases, rankings, live data), reply with ONLY {\"kind\":\"web_lookup\"} - nothing else. SlideKick then runs a web-enabled lookup and re-asks you with fresh citable results. Never use it for deck/document/mail edits, styling, general concepts, or what the outline/context already answers.",
+    "- LIVE WEB LOOKUPS: when the request needs up-to-date info you cannot reliably know (current events, news, prices, recent releases, rankings, live data), reply with ONLY {\"kind\":\"web_lookup\"} - nothing else. SlideKick then runs a web-enabled lookup and re-asks you with fresh citable results. Never use it for deck/document/mail edits, styling, general concepts, or what the outline/context already answers. You have no web access yourself and cannot run a search; the lookup channel belongs to SlideKick - never claim you tried a lookup or that the lookup channel is unavailable, and never refuse for lack of live data: reply with {\"kind\":\"web_lookup\"} instead.",
 
     "- Picture placement: 'here / at the cursor / current position' = the image lands at the caret (the pane's 'insert at cursor' checkbox); default = end of document. Keep insert_image minimal (type + prompt only).",
   ].join("\n");
@@ -1881,6 +1905,25 @@ function applyOps(deck, ops, ctx) {
         return askRetryable(function () { return apiJson("/api/chat", "POST", { connection: ref.connection, model: ref.model, messages: messages }); })
           .then(function (resp) {
             var pre = tryParse(resp.text);
+            var txt0 = String(resp.text || "");
+            if (!askedLookup && !pre.ok && !SK.noLookupRedo &&
+                /lookup channel|don'?t have (web|live)|no (web|live|internet) (access|connection)|can'?t (access|browse|search|pull|verify|run|do) [a-z ]{0,24}(web|internet|search|lookup|online|current|fresh|live)|stale\b/i.test(txt0) &&
+                /(rankings?|current|latest|today|news|price|prices|release|releases|live|up[- ]?to[- ]?date|fresh|who is|what happened)/i.test(instruction || "")) {
+              // The model believes IT must search and refuses. The pane owns
+              // the lookup channel - run the web lookup HERE and re-ask once
+              // with the results.
+              askedLookup = true;
+              setStatus("Model said it can't search - doing the pane-side web lookup\u2026", "busy");
+              return webLookup(prof, instruction).then(function (ws) {
+                if (!ws) return resp;   // nothing to add - show the original answer
+                SK.webResults = ws;
+                messages = messages.concat([{ role: "assistant", content: txt0.slice(0, 4000) },
+                                            { role: "user", content: "WEB LOOKUP RESULTS:\n" + ws +
+                                              "\n\nAnswer the ORIGINAL USER REQUEST now using these results (cite sources); the required JSON format rules apply again." }]);
+                setStatus("Answering with the fresh web results\u2026", "busy");
+                return mainAsk2();
+              }).catch(function (e) { return resp; });
+            }
             if (pre.ok && pre.kind === "web_lookup" && !askedLookup) {
               askedLookup = true;
               setStatus("Doing a live web lookup through the model…", "busy");
