@@ -5,11 +5,11 @@
            xmlns:ov="http://schemas.microsoft.com/office/taskpaneappversionoverrides"
            xsi:type="TaskPaneApp">
   <Id>c7b1f2a9-86d3-4e58-9a4b-2f6d5e0c3b81</Id>
-  <!-- manifest version participates in the host's add-in identity:
-       bumping it orphans documents' pinned pane registrations ("This add-in is
-       no longer available" on next open). Keep 1.0.5.0 unless a release note
-       explicitly schedules the migration. -->
-  <Version>1.0.5.0</Version>
+  <!-- manifest version = the host's add-in identity: NEVER bump it
+       (documents remember panes under the registered version; a bump makes
+       their saved pane references fail to re-hydrate: "This add-in is no
+       longer available"). Frozen at 1.0.4.0 -->
+  <Version>1.0.4.0</Version>
   <ProviderName>Corelan Consulting bv</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>
   <DisplayName DefaultValue="Corelan SlideKick"/>

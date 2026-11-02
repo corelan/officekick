@@ -30,6 +30,18 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.89
+### Fixed
+- Restore save-anytime + auto-reopen (user requirement: the pane must
+  re-hydrate on deck open, as before 0.9.80):
+  1. Manifest identity REVERTED to 1.0.4.0 - the 1.0.5.0 bump (0.9.80,
+     a diagnostic-only change) is the prime suspect for the saved-pane
+     hydration regression: decks saved under 1.0.4.0 fail to re-hydrate
+     after a bump, while the Ribbon path tolerates it. Frozen permanently.
+  2. The 0.9.88 boot-time AutoShowTaskpaneWithDocument removal is gone -
+     it fought auto-reopen instead of supporting it.
+  Install note: quit Office completely, run install.py --install (the
+  WEF guard requires it), reopen.
 ## 0.9.88
 ### Fixed
 - The deck-open "This add-in is no longer available" toast proven

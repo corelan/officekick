@@ -3247,27 +3247,6 @@ function applyOps(deck, ops, ctx) {
   }
 
 
-  // ---- stale auto-open prevention ------------------------------ //
-  // Decks/documents saved with the pane open remember the task-pane
-  // reference. After add-in updates that reference may no longer resolve
-  // and the host throws "This add-in is no longer available" on open.
-  // Clearing the auto-open marker makes documents stop remembering the
-  // pane (open it via the ribbon - that path always works); opening the
-  // affected deck once with this pane active + saving repairs it.
-  function clearAutoShowMarker() {
-    try {
-      if (SK.sim) return;
-      if (typeof Office === "undefined" || !Office.context ||
-          !Office.context.document || !Office.context.document.settings) return;
-      var st = Office.context.document.settings;
-      st.remove("Office.AutoShowTaskpaneWithDocument");
-      st.saveAsync(function () {
-        dbg("pane.autoShowCleared", {});
-      });
-    } catch (eC) {
-      dbg("pane.autoShowClearFailed", { msg: String(eC && eC.message || eC) });
-    }
-  }
 
   function bootOffice() {
     var badge = $("host-badge");
@@ -3283,7 +3262,6 @@ function applyOps(deck, ops, ctx) {
       SK.deck = new MailDeck();
       applyTheme();
       watchTheme();
-      clearAutoShowMarker();   // mail: guard no-ops (no document.settings there)
       finishBoot();
     });
   }
