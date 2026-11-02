@@ -4033,6 +4033,12 @@ OfficeDeck.prototype.setNotes = function (i, text) {
           }
           box.parentNode.removeChild(box);   // box also disappears - the done box is a sibling
           SK.opProgress = null;
+          setStatus("Applied " + chosen.length + " op(s).", "ok");
+          var f0 = res && res.lines ? res.lines.filter(function (l) { return !l.ok; }).length : 0;
+          if (f0) setStatus("Applied with " + f0 + " error(s).", "error");
+          renderSimDeck();
+          updateDeckSummary();
+          dbg("ops.applied", { lines: res.lines, closedGate: true });
           return;
         }
         // some failed: keep the buttons + rows so the failed ones can be re-tried

@@ -30,6 +30,12 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.69
+### Fixed
+- The status bar no longer stays on "Applying N op(s)…" when the gate closes
+  itself after a fully successful apply: that path skipped the final status
+  update, so the bar kept the apply message. It now reads "Applied N op(s)."
+  (green) - or "Applied with N error(s)." when some failed.
 ## 0.9.68
 ### Changed
 - The Profile / route refresh glyph is bigger (13px -> 17px).
