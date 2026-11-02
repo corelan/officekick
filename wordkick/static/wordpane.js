@@ -819,7 +819,35 @@
   }
 
   SK.sessionNames = {};
+  function setupMissingNote() {
+    // the sessions tab is meaningless until a connection + profile exist;
+    // return a guidance string when still unconfigured, null when usable
+    var cfg = SK.cfg || {};
+    var hasConn = (cfg.connections || []).length > 0;
+    var hasProf = (cfg.profiles || []).length > 0;
+    if (hasConn && hasProf) return null;
+    if (!hasConn) return "No setup yet. Create a connection in Settings first (Connections tab), then a profile in Settings (Profiles tab). Sessions become available once a profile exists.";
+    return "No profile yet. Create one in Settings (Profiles tab: add or pick models). Sessions become available once a profile exists.";
+  }
   function renderSessions() {
+    var list0 = $("sess-list");
+    if (!list0) return;
+    var missing = setupMissingNote();
+    if (missing) {
+      // unconfigured: nothing interactive - guidance instead of the list
+      list0.innerHTML = "";
+      var note2 = document.createElement("div");
+      note2.className = "opnote";
+      note2.textContent = missing;
+      list0.appendChild(note2);
+      var head2 = $("sess-head");
+      var tail = "";
+      if (typeof updatePastBox === "function") { /* keep counters untouched */ }
+      if (SK.cfg && SK.cfg._sessCounts) tail = "";
+      list0.className = "sesslist disabled";
+      return;
+    }
+    list0.className = "sesslist";
     apiJson("/api/sessions?app=" + encodeURIComponent(SK.app), "GET").then(function (res) {
       var rows = (res.sessions || []);
       var list = $("sess-list");

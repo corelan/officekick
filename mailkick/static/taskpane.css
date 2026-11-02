@@ -769,3 +769,6 @@ body.dark .legend-refresh { color: #FFFFFF; }
 body.dark #chat-cancel { color: #e07066; }
 
 .pt-delbtn { margin: 0 0 8px 0; }
+
+/* unconfigured state: the sessions list shows only guidance */
+.sesslist.disabled { opacity: .72; }

@@ -30,6 +30,12 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.100
+### Changed
+- Sessions tab (all three add-ins): while no connection or no profile
+  exists, the list is replaced by guidance ("Create a connection in
+  Settings first (Connections tab), then a profile in Settings (Profiles
+  tab)") and every interactive element is gone until a profile exists.
 ## 0.9.99
 ### Added
 - Pane text size in Settings -> General (Display group): 85% / 100% /
