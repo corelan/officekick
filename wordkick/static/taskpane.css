@@ -539,7 +539,8 @@ body.dark .subtabs button.active { color: #c3f79d; border-bottom-color: #9be87f;
 .subpanel.active { display: block; }
 
 /* Chat tab: grouped layout */
-.groupbox { border: 1px solid rgba(127,127,127,.35); border-radius: 10px; padding: 8px 12px 10px; margin: 0 0 12px 0; }
+.groupbox { border: 1px solid rgba(127,127,127,.35); border-radius: 10px; padding: 3px 12px 10px; margin: 0 0 12px 0; }
+.groupbox > .row:first-of-type { margin-top: 2px; }   /* legend sits close above the first control row */
 .groupbox > legend { font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; padding: 0 6px; color: #0078d4; }
 .chat-div { border: 0; border-top: 1px dashed rgba(127,127,127,.4); margin: 10px 0 8px; }
 .ctxinfo { display: inline-block; padding: 5px 10px; border-radius: 8px; background: rgba(122,75,208,.10); color: #5b3aa8; border: 1px solid rgba(122,75,208,.25); font-size: 12px; }

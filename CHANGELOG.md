@@ -30,6 +30,11 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.101
+### Changed
+- Group boxes: tighter top spacing so the group header (e.g. "PROFILE /
+  ROUTE") sits close above the first control row (gap 16px -> 5px, all
+  three add-ins).
 ## 0.9.100
 ### Changed
 - Sessions tab (all three add-ins): while no connection or no profile
