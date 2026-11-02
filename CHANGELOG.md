@@ -30,6 +30,16 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.72
+### Added
+- Delete a request/response pair from "Previous requests": expanding a
+  step reveals a wastebasket row; clicking it asks for confirmation and
+  then removes the whole exchange pair everywhere at once - the pane's
+  session history (so future prompts no longer carry it), the shown list,
+  and the persisted server session (new PUT /api/sessions/remove-pair/<id>
+  endpoint, which deliberately bypasses the keep-longer upsert rule so the
+  deletion survives reloads). Cancel keeps everything. In all three
+  add-ins.
 ## 0.9.71
 ### Fixed
 - move_slide / duplicate_slide / duplicate_slide_to in real PowerPoint:

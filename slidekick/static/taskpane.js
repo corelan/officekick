@@ -3486,6 +3486,28 @@ OfficeDeck.prototype.setNotes = function (i, text) {
 
   function pmGlyph(open) { return open ? "\u2212" : "+"; }   // boxed minus / plus
 
+
+  // ---- delete one request/response pair from the session ----
+  function removeHistoryPair(ts, grpEl) {
+    var n0 = SK.history.length;
+    var ts2 = String(ts || "");
+    SK.history = SK.history.filter(function (e) { return String(e.ts || "") !== ts2; });
+    var removed = n0 - SK.history.length;
+    if (grpEl && grpEl.parentNode) grpEl.parentNode.removeChild(grpEl);
+    updateChatMeta();
+    updatePastBox();
+    updateSessionLabel();
+    // persist NOW: the server session is rewritten WITHOUT this pair - it
+    // will not come back after a reload and future prompts do not include it
+    if (SK.sessionId && removed) {
+      apiJson("/api/sessions/remove-pair/" + encodeURIComponent(SK.sessionId), "PUT", { ts: ts2 })
+        .then(function (r) { dbg("session.pairRemoved", { ts: ts2, removed: r.removed }); })
+        .catch(function (e2) { dbg("session.pairRemoveFailed", { ts: ts2, err: String(e2 && e2.message || e2) }); setStatus("Pair removed locally; server sync failed: " + ((e2 && e2.message) || e2), "error"); });
+    }
+    setStatus(removed ? ("Removed " + (removed / 2) + " exchange(s). Future prompts will not include them.") :
+      "No matching exchange found (nothing removed).", removed ? "ok" : "");
+  }
+
   function pastTurnRow(u, a) {
     // one collapsible turn box: header = +/- and timestamp + the request
     // snippet; inside = the full request (clickable to refill the input)
@@ -3516,8 +3538,25 @@ OfficeDeck.prototype.setNotes = function (i, text) {
     snip.className = "pt-text";                // the request text BELOW the ts
     snip.textContent = uc.length > 50 ? uc.slice(0, 50) + "…" : uc;
     snip.appendChild(cpIc);                    // copy affordance on the title line
+    var delRow = document.createElement("div");
+    delRow.className = "pt-delrow";
+    var delIc = document.createElement("span");
+    delIc.className = "pt-bin";
+    delIc.textContent = "\uD83D\uDDD1\uFE0E";   // wastebasket glyph
+    delRow.appendChild(delIc);
+    var delTx = document.createElement("span");
+    delTx.textContent = "Delete this request/response pair";
+    delRow.appendChild(delTx);
+    delRow.title = "Remove this pair from the session (it will not be sent to the model again)";
+    delRow.addEventListener("click", function (ev) {
+      ev.stopPropagation();
+      var okDel = window.confirm("Remove this request/response pair from the session history?" +
+        " Future prompts will no longer include it.");
+      if (okDel) removeHistoryPair(u.ts, grp);
+    });
     var body = document.createElement("div");
     body.className = "reqbody";
+    body.appendChild(delRow);
     var q1 = document.createElement("div");
     q1.className = "pt-req";
     q1.style.cursor = "pointer";

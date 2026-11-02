@@ -32,7 +32,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 APP = "OfficeKick"
-VERSION = "0.9.71"
+VERSION = "0.9.72"
 
 CONNECTION_TYPES = (
     "openai",
@@ -238,6 +238,29 @@ class SessionStore:
         if not n:
             n = ""   # empty = keep the stored/derived name
         return self.upsert(sid, n[:80], doc.get("exchanges"), doc)
+
+    def remove_pair(self, sid, ts):
+        """Explicitly remove the exchange pair stamped `ts` (user + assistant
+        share one stamp from the panes). Unlike upsert this SHRINKS the stored
+        list on purpose - an intentional deletion."""
+        self._valid(sid)
+        f = self.dir / (sid + ".json")
+        if not f.is_file():
+            raise ApiError(404, "Session not found: %s" % sid)
+        doc = json.loads(f.read_text(encoding="utf-8"))
+        ex = doc.get("exchanges") or []
+        before = len(ex)
+        ex2 = [e for e in ex if str(e.get("ts") or "") != str(ts)]
+        if len(ex2) == before:
+            raise ApiError(404, "No exchange pair matches that timestamp")
+        doc["exchanges"] = ex2
+        doc["updated"] = time.time()
+        f.write_text(json.dumps(doc, indent=1), encoding="utf-8")
+        try:
+            os.chmod(f, 0o600)
+        except OSError:
+            pass
+        return {"ok": True, "removed": before - len(ex2), "messages": len(ex2)}
 
     def auto_clean(self, days, now=None):
         """Delete sessions whose NEWEST exchange timestamp is older than `days`
@@ -1924,6 +1947,10 @@ class SlideKickHandler(BaseHTTPRequestHandler):
                 if changed:
                     self.store.save()
                 self._send_json({"ok": True, "approvals": self.store.data["approvals"]})
+            elif path.startswith("/api/sessions/remove-pair/"):
+                sid = urllib.parse.unquote(path[len("/api/sessions/remove-pair/"):])
+                r = self.store.sessions.remove_pair(sid, str(body.get("ts") or ""))
+                self._send_json(r)
             elif path.startswith("/api/sessions/"):
                 sid = urllib.parse.unquote(path[len("/api/sessions/"):])
                 try:
