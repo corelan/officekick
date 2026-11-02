@@ -30,6 +30,14 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.80
+### Changed
+- Add-in Error investigation build: every pane now emits a pane.boot
+  debug line the moment its JavaScript boots (URL, user agent, Office.js
+  presence) - when the toast fires, the log will show whether the pane
+  ever got this far or died before loading. Manifests bumped to 1.0.5.0
+  so the update cycle matches the reported repro (update -> quit ->
+  relaunch).
 ## 0.9.79
 ### Fixed
 - The run timer froze and Run re-enabled while auto-apply was still

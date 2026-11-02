@@ -3307,7 +3307,11 @@ function applyOps(deck, ops, ctx) {
   }
 
   function boot() {
-    var params = new URLSearchParams(String(window.location.search || ""));
+    // Add-in Error diagnostics: proves the pane JS booted at all (the Office
+    // toast fires when the pane never gets this far). Debug logging only.
+    dbg("pane.boot", { href: String(window.location.href).slice(0, 160),
+      ua: String(navigator.userAgent).slice(0, 140),
+      lang: navigator.language, office: (typeof Office !== "undefined") });
     SK.sim = window.__MAILKICK_SIM__ === true || window.__SK_SIM__ === true || params.has("sim");
     SK.forceSave = /[?&]save=1/.test(window.location.search);
     SK.testMode = (SK.sim || /\?.*nosave=1/.test(window.location.search)) && !SK.forceSave;

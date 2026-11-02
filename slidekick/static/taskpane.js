@@ -5011,7 +5011,11 @@ OfficeDeck.prototype.setNotes = function (i, text) {
   }
 
   function boot() {
-    var params = new URLSearchParams(String(window.location.search || ""));
+    // Add-in Error diagnostics: proves the pane JS booted at all (the Office
+    // toast fires when the pane never gets this far). Debug logging only.
+    dbg("pane.boot", { href: String(window.location.href).slice(0, 160),
+      ua: String(navigator.userAgent).slice(0, 140),
+      lang: navigator.language, office: (typeof Office !== "undefined") });
     SK.sim = window.__SK_SIM__ === true || params.has("sim");
     // internal test-run flag: simulator runs and ?nosave=1 never write
     // to the session history (and skip AI-naming); force with &save=1
