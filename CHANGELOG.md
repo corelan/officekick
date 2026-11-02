@@ -30,6 +30,15 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.94
+### Docs
+- docs/slidekick.md: full troubleshooting section for the "Add-in Error"
+  toast - cause (host-stamped deck reference), the repair tool with all
+  its modes (--dry-run, folders, -r), the orig/ backup scheme, idempotency
+  and the verified reopen behavior (Finder double-click auto-loads the
+  pane; in-app open dialog skips restore silently).
+- README.md Update section: quit-Office-before-install guidance and a
+  pointer to the toast healing docs.
 ## 0.9.93
 ### Changed
 - tools/repair_deck_paneref.py: --folder/--file ergonomics. Accepts any mix

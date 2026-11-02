@@ -74,8 +74,15 @@ Good to know:
 python3 install.py --update    # Windows: py -3 install.py --update
 ```
 
-This pulls the repo with git and updates the install. Then quit and reopen
-your Office apps so the task panes load the new files.
+This pulls the repo with git and updates the install. Quit your Office apps
+**before** running it (on macOS the installer refuses to touch the add-in
+registration while an Office app is running), then reopen them so the task
+panes load the new files.
+
+If a deck or document ever greets you with an
+"Add-in Error / This add-in is no longer available" toast on open, heal it
+once with the repair tool - see the troubleshooting section in
+[docs/slidekick.md](docs/slidekick.md).
 
 The pane also checks for updates itself. See **Settings -> Check now** (or the
 "Check for updates automatically at startup" option). Your config, profiles and

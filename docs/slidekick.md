@@ -278,6 +278,35 @@ design).
 
 ## Troubleshooting (PowerPoint)
 
+- **"Add-in Error / This add-in is no longer available" toast when opening a
+  deck** - the deck (not the add-in) is the problem. When PowerPoint saves
+  with the pane open, it stamps the deck's saved pane reference with a
+  store hint (`store="developer" storeType="Registry"`) that this build's
+  launch-time restore cannot resolve, so the deck throws the toast on every
+  open. Heal the deck once with the repair tool:
+
+      python3 tools/repair_deck_paneref.py <deck.pptx | folder> [-r] [--dry-run]
+
+    - `<deck.pptx | folder>`: any mix of files and folders; a folder heals
+      every `.pptx` in it, `-r`/`--recursive` includes subfolders.
+    - The original is preserved first: an `orig/` subfolder is created next
+      to the deck(s) and each original is copied in as
+      `<name>.pptx.<YYYYMMDD_HHMMSS>.bak`. The deck is then patched in
+      place, keeping the same filename (atomic write + replace).
+    - `--dry-run` prints what it would do and touches nothing (no `orig/`
+      is created).
+    - Idempotent: decks without the stamp report `ok`; re-runs create no
+      additional backups (a backup is written only the first time a deck
+      changes). PowerPoint lock files (`~$*.pptx`) are reported as
+      `locked` and skipped automatically.
+  Verified with PowerPoint 16.114.1027.3 on macOS: after healing, decks
+  opened by double-clicking in Finder show the pane automatically with no
+  toast, and saving with the pane open keeps working (the healed reference
+  survives re-saves). Note: opening through PowerPoint's in-app open dialog
+  skips pane restore silently (no error) - double-clicking the deck in
+  Finder is the verified-good way to open it. The tool covers PowerPoint
+  decks (`.pptx`); DocKick/MailKick documents use the same mechanism and
+  get the same one-ribbon-click behavior.
 - **Add-in doesn't show**:
   1. Quit all Office apps and reopen PowerPoint.
   2. Check the health endpoint: http://127.0.0.1:8765/api/health.
