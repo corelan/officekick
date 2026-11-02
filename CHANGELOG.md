@@ -30,6 +30,18 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.93
+### Changed
+- tools/repair_deck_paneref.py: --folder/--file ergonomics. Accepts any mix
+  of .pptx files and folders; folders patch every .pptx inside (non-default
+  recursion with -r / --recursive). Originals are copied to an orig/
+  subfolder next to the deck(s) as <name>.pptx.<YYYYMMDD_HHMMSS>.bak, then
+  the deck is patched in place keeping the same filename (atomic
+  write-temp + os.replace). --dry-run touches nothing (no orig/ created).
+  PowerPoint lock files (~$*.pptx) are reported as locked and skipped;
+  non-deck files in a folder scan are listed and ignored; backups are
+  written only on the first change (idempotent re-runs add no new .bak).
+- Installer mac tip now shows the folder form.
 ## 0.9.92
 ### Changed
 - Update protocol documented as verified end-to-end: repair a deck once

@@ -15,14 +15,23 @@ verified-good launch path.
 
 Usage:
     python3 repair_deck_paneref.py deck.pptx [more.pptx ...]
-    python3 repair_deck_paneref.py --dry-run deck.pptx
+    python3 repair_deck_paneref.py /folder/with/decks        (non-recursive)
+    python3 repair_deck_paneref.py -r /folder/with/decks     (subfolders too)
+    python3 repair_deck_paneref.py file1.pptx /folder mixed  (any mix)
+    python3 repair_deck_paneref.py --dry-run deck.pptx /folder
 
-A .bak backup of each deck is written next to it before the first change.
+Before the first change the original is copied to an ``orig/`` subfolder next
+to the deck(s) as ``<origfilename>.pptx.<YYYYMMDD_HHMMSS>.bak``; the deck is
+then patched in place, keeping the same filename. Decks are always patched
+atomically (write-to-temp + os.replace).
 """
 import argparse
+import glob
+import os
 import re
 import shutil
 import sys
+import time
 import zipfile
 
 
@@ -31,8 +40,8 @@ def repair(path, dry_run=False):
         return (path, "skip (not a .pptx)")
     try:
         z = zipfile.ZipFile(path)
-    except OSError as e:
-        return (path, "skip (unreadable: %s)" % e)
+    except (OSError, zipfile.BadZipFile) as e:
+        return (path, "skip (unreadable: %s)" % str(e).replace(chr(10), " ")[:80])
     changed = False
     entries = []
     for it in z.infolist():
@@ -49,26 +58,80 @@ def repair(path, dry_run=False):
         return (path, "ok (no broken pane reference)")
     if dry_run:
         return (path, "would repair")
-    bak = path + ".bak"
+    folder = os.path.dirname(os.path.abspath(path))
+    base = os.path.basename(path)
+    orig_dir = os.path.join(folder, "orig")
+    os.makedirs(orig_dir, exist_ok=True)
+    ts = time.strftime("%Y%m%d_%H%M%S")
+    bak = os.path.join(orig_dir, base + "." + ts + ".bak")
     shutil.copyfile(path, bak)
-    out = zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED)
+    tmp = path + ".tmp_repair"
+    out = zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED)
     for name, data in entries:
         out.writestr(name, data)
     out.close()
-    return (path, "repaired (backup: %s)" % bak)
+    os.replace(tmp, path)  # patch in place, same filename, atomic
+    return (path, "repaired (original kept: %s)" % bak)
 
 
+def collect(args):
+    """Returns (decks, notes): decks = real .pptx to process (-r includes subfolders),
+    notes = lines printed for anything in the scan that is not processed."""
+    decks, notes = [], []
+    seen = set()
+    for item in args.files:
+        if os.path.isdir(item):
+            if args.recursive:
+                for root, _dirs, files in os.walk(item):
+                    for f in sorted(files):
+                        p = os.path.join(root, f)
+                        classify(p, f, decks, notes, seen)
+            else:
+                for f in sorted(os.listdir(item)):
+                    classify(os.path.join(item, f), f, decks, notes, seen)
+        elif os.path.basename(item).startswith("~$"):
+            notes.append(("locked", item))
+        elif item.lower().endswith(".pptx"):
+            classify(item, os.path.basename(item), decks, notes, seen)
+        else:
+            notes.append(("skip", item))
+    return decks, notes
+
+
+def classify(path, name, decks, notes, seen):
+    if path in seen:
+        return
+    seen.add(path)
+    if name.startswith("~$"):
+        notes.append(("locked", path))
+    elif name.lower().endswith(".pptx"):
+        decks.append(path)
+    elif name.lower().endswith(".bak"):
+        notes.append(("bak", path))
+    else:
+        notes.append(("not-deck", path))
 def main():
     ap = argparse.ArgumentParser(description="Remove the unresolvable pane-reference stamp from decks")
-    ap.add_argument("decks", nargs="+", help="deck.pptx file(s) to repair")
+    ap.add_argument("files", nargs="*", help="deck.pptx file(s) and/or folder(s)")
+    ap.add_argument("-r", "--recursive", action="store_true",
+                    help="when a folder is given: include .pptx in subfolders too")
     ap.add_argument("--dry-run", action="store_true", help="report without writing")
     a = ap.parse_args()
+    if not a.files:
+        ap.error("give at least one .pptx file or folder (-- recursive with -r)")
     rc = 0
-    for deck in a.decks:
+    decks, notes = collect(a)
+    for kind, path in notes:
+        print("%-10s %s" % (kind, path))
+    if not decks:
+        print("no .pptx found in the given path(s)")
+        sys.exit(1)
+    for deck in decks:
         _p, msg = repair(deck, a.dry_run)
         print("%-10s %s" % (msg.split()[0], deck), "-", msg)
         if msg.startswith("skip"):
             rc = 1
+    print("%d deck(s) processed" % len(decks))
     sys.exit(rc)
 
 
