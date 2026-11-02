@@ -30,7 +30,18 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
-## 0.9.74
+## 0.9.75
+### Added
+- Living session titles: as a session continues, every save now runs one
+  cheap background AI call that reviews the current title against the
+  session's recent requests and either replies with a new 2-4 word title
+  (what the session is NOW about, which can drift far from the opening
+  ask) or exactly KEEP. New titles are junk-filtered like first names,
+  persisted via the rename endpoint and reflected live in the pane label
+  and the sessions list; a user-set title stays in the loop the same way
+  (the model always sees the current one). One update in flight at a
+  time (titleBusy guard) in all three add-ins.
+ ## 0.9.74
 ### Fixed
 - Web lookups no longer stall on "I tried to run the live web lookup, but
   the lookup channel isn't available..." - three changes, in all add-ins:

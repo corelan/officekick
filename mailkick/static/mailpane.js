@@ -22,6 +22,7 @@
     cfg: null,
     busy: false,
     runCancelled: false,     // cancel button: interrupt the current run
+    titleBusy: false,        // a session-title AI update is in flight
     activeFetch: null,       // AbortController of the in-flight pane request
     modelsCache: {},     // connName -> {list:[...], at:ms}
     sessionApprovals: {},// opType -> 'auto' when approved for this session
@@ -577,44 +578,74 @@
         return up;
       });
     }
+    var wasFirstSave = !SK.sessionIdBeforeName;
     return createPromise.then(function () {
       dbg("session.saved", { id: SK.sessionId, name: SK.sessionName, messages: SK.history.length });
+      maybeUpdateSessionTitle();
     }).catch(function (err) {
       dbg("session.saveFailed", { msg: (err && err.message) || String(err) });
     });
   }
 
-  function aiNameSession(sid) {
+  function aiNameSession(sid, updateMode) {
     if (SK.testMode) return;   // no AI calls for test sessions
     // one tiny call through the profile's other slot; the derived name stays
     // if anything fails, and the server repairs/cleans what the model returns
     var prof = currentProfile();
     if (!prof || !prof.other || !prof.other.connection || !prof.other.model) return;
+    if (SK.titleBusy) return;   // a title update is already running
+    SK.titleBusy = true;
     var first = derivedSessionName();
     var renameFallback = function () {
       apiJson("/api/sessions/rename/" + sid, "POST", { name: first.slice(0, 48) });
     };
+    var sysPrompt = "You generate very short chat-session titles. Reply with ONLY the title: 2-4 words, no quotes, no punctuation at the end.";
+    var userMsg = "Session start: " + first.slice(0, 120);
+    if (updateMode) {
+      // the session moved on - the title must follow what it is NOW about
+      userMsg = "Current title: " + String(SK.sessionName || first).slice(0, 60) +
+        "\nRecent requests (oldest first):";
+      SK.history.slice(-HISTORY_MAX_EXCHANGES * 2).forEach(function (h) {
+        if (h.role === "user") userMsg += "\n- " + String(h.content || "").replace(/\s+/g, " ").slice(0, 90);
+      });
+      userMsg += "\nReply with ONLY the new 2-4 word title that matches what the session is now about" +
+        "(not necessarily the opening ask), or reply with exactly KEEP if the current title still fits.";
+      sysPrompt += " As sessions evolve the title may change to follow the session's new focus. If the current title still fits, reply with exactly KEEP.";
+    }
     apiJson("/api/chat", "POST", {
       connection: prof.other.connection, model: prof.other.model,
       temperature: 0.2, maxTokens: 300,
       messages: [
-        { role: "system", content: "You generate very short chat-session titles. Reply with ONLY the title: 2-4 words, no quotes, no punctuation at the end." },
-        { role: "user", content: "Session start: " + first.slice(0, 120) },
+        { role: "system", content: sysPrompt },
+        { role: "user", content: userMsg },
       ],
     }).then(function (resp) {
       var name = stripReasoning(resp.text || "").replace(/"/g, "").replace(/^[:\- ]+/, "").trim().slice(0, 48);
       // reject non-title junk (models that ignore the instruction and echo ops/json)
       var junk = /^[{\[]/.test(name) || /"(kind|ops|type)"/.test(name) || name.length < 2 || name.length > 60;
-      if (junk) { renameFallback(); return; }
+      if (junk) { renameFallback(); SK.titleBusy = false; return; }
       return apiJson("/api/sessions/rename/" + sid, "POST", { name: name }).then(function () {
         SK.sessionName = name;
         dbg("session.named", { id: sid, name: name });
+        SK.titleBusy = false;
         updateSessionLabel();
         if (SK.activeTab === "sessions") renderSessions();
       });
     }).catch(function () {
       dbg("session.namingFailed", { id: sid });   // derived name stays
+      SK.titleBusy = false;
     });
+  }
+
+  // as the session continues, keep the AI title in line with what the
+  // session is now about (bounded: one update in flight, cheap calls)
+  function maybeUpdateSessionTitle() {
+    if (SK.testMode || !SK.sessionId) return;
+    if (SK.titleBusy) return;
+    if (!SK.history || SK.history.length < 4) return;   // nothing meaningful yet
+    try {
+      aiNameSession(SK.sessionId, true);
+    } catch (eT) { /* naming stays */ }
   }
 
   function resumeSession(sessId) {
