@@ -22,6 +22,16 @@ Install + uninstall basics: see the top-level [README](../README.md).
 
 ## Using it inside Word
 
+### Opening the pane on Windows
+
+Home tab -> **Add-ins** -> **Advanced** (the link next to Manage) -> the
+classic **Office Add-ins** dialog -> **SHARED FOLDER** at the top ->
+**Corelan SlideKick** -> **Add** (once). The add-in stays in your Add-ins
+list afterwards. Note: the newer "Apps" dialog (Add-ins -> **Manage**)
+lists Microsoft Store and organization add-ins only - local trusted folder
+catalogs never appear there.
+
+
 - **macOS**: open a document, then **Home tab -> Add-ins** (dropdown) ->
   **Developer Add-ins** -> **Corelan DocKick**.
 - **Windows**: **Insert -> My Add-ins (dropdown) -> SHARED FOLDER -> Corelan

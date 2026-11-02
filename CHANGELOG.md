@@ -30,6 +30,17 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.99
+### Added
+- Pane text size in Settings -> General (Display group): 85% / 100% /
+  115% / 130% - scales the whole pane immediately (zoom), saved in the
+  shared config so all three add-ins follow it (server: paneFontSize,
+  clamped 80-160).
+### Docs
+- README + slidekick/dockick docs now document the verified Windows path:
+  Home -> Add-ins -> Advanced -> the classic Office Add-ins dialog ->
+  SHARED FOLDER; the new "Apps" dialog (Manage) lists store/organization
+  add-ins only.
 ## 0.9.98
 ### Changed
 - Proposal gate (all three add-ins): executed actions leave the "Proposed

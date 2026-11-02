@@ -3256,6 +3256,8 @@ function applyOps(deck, ops, ctx) {
         "</div>");
     });
     table.innerHTML = blocks.join("");
+    var fsSel = $("settings-fontsize");
+    if (fsSel) fsSel.value = String(parseInt(SK.cfg.paneFontSize, 10) || 100);
     $("settings-debug").checked = !!SK.cfg.debug;
     $("settings-trackedchanges").checked = !!SK.cfg.trackedChanges;
         $("debug-path").textContent = SK.cfg.configPath.replace(/config\.json$/, "logs") + "/debug-YYYY-MM-DD.log";
@@ -3337,9 +3339,17 @@ function applyOps(deck, ops, ctx) {
     sel.innerHTML = opts.join("");
   }
 
+  function applyPaneFontSize(pct) {
+    // scale the whole pane (text, inputs, paddings) - zoom works in the
+    // Office WebViews (Chromium/ WKWebView), px-based CSS would ignore a
+    // root font-size change
+    var v = Math.max(80, Math.min(160, parseInt(pct, 10) || 100));
+    document.body.style.zoom = (v / 100);
+  }
   function loadConfigAndRender() {
     return apiJson("/api/config", "GET").then(function (cfg) {
       SK.cfg = cfg;
+      applyPaneFontSize(cfg.paneFontSize || 100);
       // the auto-apply checkbox was wired before the config arrived - keep it
       // in sync with the stored setting from now on (the "off after reopen" bug)
       var sap2 = $("set-autoapply");
@@ -3496,6 +3506,19 @@ function applyOps(deck, ops, ctx) {
     });
     $("settings-debug-save").addEventListener("click", saveDebugOption);
     $("settings-autoclean-save").addEventListener("click", saveAutoClean);
+    var fsSel2 = $("settings-fontsize");
+    if (fsSel2) fsSel2.addEventListener("change", function () {
+      var v = parseInt(fsSel2.value, 10) || 100;
+      apiJson("/api/settings", "PUT", { paneFontSize: v }).then(function () {
+        if (SK.cfg) SK.cfg.paneFontSize = v;
+        applyPaneFontSize(v);
+        var msg = $("settings-fontsize-msg");
+        if (msg) setFormMsg(msg, "Text size saved (" + v + "%).", true);
+      }).catch(function () {
+        var msg2 = $("settings-fontsize-msg");
+        if (msg2) setFormMsg(msg2, "Could not save the text size.", false);
+      });
+    });
     var updBtn = $("upd-check");
     if (updBtn) updBtn.addEventListener("click", updCheck);
     var cfgBtn = $("cfg-refresh");

@@ -121,6 +121,24 @@
       <p class="opnote" id="settings-autoclean-msg" role="status"></p>
       </div>
 
+
+      <div class="setgroup"><h2 class="setgh">Display</h2>
+      <div class="row">
+        <label class="field-inline">Pane text size:
+          <select id="settings-fontsize">
+            <option value="85">85% - compact</option>
+            <option value="100">100% - default</option>
+            <option value="115">115% - large</option>
+            <option value="130">130% - extra large</option>
+          </select>
+        </label>
+        <button id="settings-fontsize-save" class="btn" type="button" style="display:none"></button>
+      </div>
+      <p class="muted" style="margin:0 0 4px 0">Scales all text and controls in this pane. The
+        change applies immediately and is saved automatically.</p>
+      <p class="opnote" id="settings-fontsize-msg" role="status"></p>
+      </div>
+
       <div class="setgroup"><h2 class="setgh">Word-specific</h2>
             <p class="muted">When AI edits as tracked changes is on (default), every AI edit lands
         as a Word revision you can accept or reject like a human editor.</p>

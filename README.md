@@ -97,8 +97,12 @@ you configured.
 - **PowerPoint (macOS)**: Home tab -> **Add-ins** (dropdown) ->
   **Developer Add-ins** -> **Corelan SlideKick**.
 - **Word (macOS)**: same route -> **Corelan DocKick**.
-- **PowerPoint / Word (Windows)**: Insert -> My Add-ins -> **SHARED FOLDER** ->
-  the add-in -> Add (once).
+- **PowerPoint / Word (Windows)**: Home tab -> **Add-ins** ->
+  **Advanced** -> the classic "Office Add-ins" dialog ->
+  **SHARED FOLDER** (top of the dialog) -> the add-in -> **Add** (once per
+  application; the classic dialog lists the trusted catalog - the newer
+  "Apps" dialog, opened via Add-ins -> Manage, only shows store and
+  organization add-ins and does not list local folder catalogs).
 - **Outlook (MailKick)**: the installer places the manifest in Outlook's own
   add-in folder. Quit and reopen Outlook. If MailKick does not appear:
   Get Add-ins -> My add-ins -> Custom Addins -> Add a custom add-in ->

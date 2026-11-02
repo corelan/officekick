@@ -24,6 +24,16 @@ is about how SlideKick works.
 
 ## Using it inside PowerPoint
 
+### Opening the pane on Windows
+
+Home tab -> **Add-ins** -> **Advanced** (the link next to Manage) -> the
+classic **Office Add-ins** dialog -> **SHARED FOLDER** at the top ->
+**Corelan SlideKick** -> **Add** (once). The add-in stays in your Add-ins
+list afterwards. Note: the newer "Apps" dialog (Add-ins -> **Manage**)
+lists Microsoft Store and organization add-ins only - local trusted folder
+catalogs never appear there.
+
+
 - **macOS**: open a deck, then **Home tab -> Add-ins** (dropdown) ->
   **Developer Add-ins** -> **Corelan SlideKick**. The pane opens on the right;
   the Add-ins entry stays available every session.
@@ -208,6 +218,9 @@ close/reopen and app restarts) and only ever stored locally.
 
 ### General
 
+- **Pane text size** (Display group): scales the whole pane - 85% compact,
+  100% default, 115% large, 130% extra large. Applies immediately, saved
+  automatically, shared by all three add-ins.
 - **Check for updates automatically at startup** (default on): once per boot
   the pane reads the released VERSION from GitHub and shows "Update available"
   with the update steps when a newer release exists (see the README section

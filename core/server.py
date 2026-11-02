@@ -32,7 +32,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 APP = "OfficeKick"
-VERSION = "0.9.98"
+VERSION = "0.9.99"
 
 CONNECTION_TYPES = (
     "openai",
@@ -436,6 +436,8 @@ class Store:
         self.data.setdefault("debug", False)
         # speaker-notes generation is opt-in (off by default)
         self.data.setdefault("generateNotes", False)
+        # pane text size in percent (80..160, 100 = default)
+        self.data.setdefault("paneFontSize", 100)
         # AI edits as tracked changes (Word; opt-in)
         self.data.setdefault("trackedChanges", True)
         self.save()
@@ -677,6 +679,7 @@ class Store:
             "approvals": d.get("approvals") or dict(DEFAULT_APPROVALS),
             "debug": bool(d.get("debug")),
             "generateNotes": bool(d.get("generateNotes", False)),
+            "paneFontSize": int(d.get("paneFontSize", 100)),
             "trackedChanges": bool(d.get("trackedChanges", False)),
             "autoClean": bool(d.get("autoClean", True)),
             "autoCleanDays": int(d.get("autoCleanDays", 120)),
@@ -1928,6 +1931,13 @@ class SlideKickHandler(BaseHTTPRequestHandler):
                     changed = True
                 if "generateNotes" in body and body["generateNotes"] is not None:
                     self.store.data["generateNotes"] = bool(body["generateNotes"])
+                    changed = True
+                if "paneFontSize" in body and body["paneFontSize"] is not None:
+                    try:
+                        _fs = int(round(float(body["paneFontSize"])))
+                    except (TypeError, ValueError):
+                        raise ApiError(400, "paneFontSize must be a number")
+                    self.store.data["paneFontSize"] = max(80, min(160, _fs))
                     changed = True
                 if "autoApplyApproved" in body and body["autoApplyApproved"] is not None:
                     self.store.data["autoApplyApproved"] = bool(body["autoApplyApproved"])
