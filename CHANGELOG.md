@@ -30,6 +30,17 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.88
+### Fixed
+- The deck-open "This add-in is no longer available" toast proven
+  document-local (fresh deck: no toast; the long-lived test deck: toast,
+  across reinstalls): decks saved with the pane open remember the
+  task-pane reference, and after manifest churn the host fails to resolve
+  it. All three panes now clear the auto-open marker
+  (Office.AutoShowTaskpaneWithDocument) on boot: decks stop remembering
+  the pane (it is opened via the ribbon, which always resolves), and
+  opening the affected deck once with the add-in active and saving again
+  repairs it permanently. Mail no-ops (no document settings there).
 ## 0.9.87
 ### Fixed
 - The recurring "Add-in Error: This add-in is no longer available" on deck

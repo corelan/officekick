@@ -124,6 +124,30 @@
     dbg("theme", SK.theme);
   }
 
+  // ---- stale auto-open prevention ------------------------------ //
+  // Decks/documents saved with the pane open remember the task-pane
+  // reference. After add-in updates that reference may no longer resolve
+  // and the host throws "This add-in is no longer available" on open.
+  // Clearing the auto-open marker makes documents stop remembering the
+  // pane (open it via the ribbon - that path always works), and opens the
+  // affected deck once with the add-in and saves it again permanently
+  // repairs it.
+  function clearAutoShowMarker() {
+    try {
+      if (SK.sim) return;
+      if (typeof Office === "undefined" || !Office.context ||
+          !Office.context.document || !Office.context.document.settings) return;
+      var st = Office.context.document.settings;
+      st.remove("Office.AutoShowTaskpaneWithDocument");
+      st.saveAsync(function () {
+        dbg("pane.autoShowCleared", {});
+      });
+    } catch (eC) {
+      dbg("pane.autoShowClearFailed", { msg: String(eC && eC.message || eC) });
+    }
+  }
+
+
   function watchTheme() {
     try {
       Office.context.addHandlerAsync(Office.EventType.OfficeThemeChanged, function () {
@@ -4960,6 +4984,7 @@ OfficeDeck.prototype.setNotes = function (i, text) {
       SK.deck = new OfficeDeck();
       applyTheme();
       watchTheme();
+      clearAutoShowMarker();
       finishBoot();
     });
   }
