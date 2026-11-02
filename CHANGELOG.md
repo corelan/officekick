@@ -30,6 +30,13 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.107
+### Changed
+- Windows installs include the ribbon commands by default now
+  (--no-ribbon opts out; --ribbon force-includes). macOS stays list-mode
+  by default (Office-Mac renders nothing from commands manifests) with
+  --ribbon still available as a forced opt-in. Docs updated to point at
+  the ribbon button first and the Shared Folder dialog as fallback.
 ## 0.9.106
 ### Changed
 - "Update available" notice is printed bold and colored: gold in the dark

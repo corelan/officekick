@@ -60,7 +60,7 @@ MAC_APP_REL = ("Applications", "OfficeKickServer.app")
 REPO_DIR = os.path.dirname(os.path.abspath(__file__))
 PORT = DEFAULT_PORT
 DRY_RUN = False
-RIBBON = False
+RIBBON = False     # set per-platform in main(): default ON on Windows, OFF on macOS
 
 
 def is_windows():
@@ -995,12 +995,17 @@ def main():
                     help="with --uninstall: also wipe ~/.officekick")
     ap.add_argument("--port", type=int, default=DEFAULT_PORT, help="server port (default %d)" % DEFAULT_PORT)
     ap.add_argument("--ribbon", action="store_true",
-                    help="opt-in: render the AI ribbon commands (experimental on this Office build)")
+                    help="force-include the AI ribbon commands")
+    ap.add_argument("--no-ribbon", action="store_true",
+                    help="Windows: leave the commands out (list-mode only)")
     ap.add_argument("--dry-run", action="store_true", help="print the actions, run none")
     args = ap.parse_args()
     PORT = args.port if 1024 <= args.port <= 65535 else DEFAULT_PORT
     DRY_RUN = args.dry_run
-    RIBBON = args.ribbon
+    # ribbon commands: default ON on Windows (fully supported there, and the
+    # add-ins then sit in the ribbon as buttons), always OFF on macOS
+    # (Office-Mac renders nothing from a commands manifest - 0.9.29 verdict).
+    RIBBON = ((is_windows() and (not args.no_ribbon)) or bool(args.ribbon))
 
     if not (is_mac() or is_windows()):
         die("this installer supports macOS and Windows only (detected: %s)." % sys.platform)

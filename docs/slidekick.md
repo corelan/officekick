@@ -26,12 +26,15 @@ is about how SlideKick works.
 
 ### Opening the pane on Windows
 
-Home tab -> **Add-ins** -> **Advanced** (the link next to Manage) -> the
-classic **Office Add-ins** dialog -> **SHARED FOLDER** at the top ->
-**Corelan SlideKick** -> **Add** (once). The add-in stays in your Add-ins
-list afterwards. Note: the newer "Apps" dialog (Add-ins -> **Manage**)
-lists Microsoft Store and organization add-ins only - local trusted folder
-catalogs never appear there.
+The install registers the ribbon command by default on Windows: open the
+pane from the **Corelan SlideKick** button in the Home tab ribbon
+(the button's menu also carries **New session**). If the button is not
+there yet: Home tab -> **Add-ins** -> **Advanced** (the link next to
+Manage) -> the classic **Office Add-ins** dialog -> **SHARED FOLDER** at
+the top -> **Corelan SlideKick** -> **Add** (once). Note: the newer
+"Apps" dialog (Add-ins -> **Manage**) lists Microsoft Store and
+organization add-ins only - local trusted folder catalogs never appear
+there.
 
 
 - **macOS**: open a deck, then **Home tab -> Add-ins** (dropdown) ->
