@@ -30,6 +30,11 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.106
+### Changed
+- "Update available" notice is printed bold and colored: gold in the dark
+  theme, purple in the light theme (all three add-ins, manual check and
+  the startup check).
 ## 0.9.105
 ### Fixed
 - Pane reload now resumes the active session reliably (all three

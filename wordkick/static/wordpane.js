@@ -363,9 +363,11 @@
         return;
       }
       if (data.upToDate) {
+        info.className = "opnote";
         info.textContent = "You are up to date (" + data.current + ", latest " + data.latest + ").";
       } else {
-        info.textContent = "Update available: " + data.latest + " (you run " + data.current + "). " +
+        info.className = "opnote updavail";   // bold; gold/purple per theme
+        info.textContent = "UPDATE AVAILABLE: " + data.latest + " (you run " + data.current + "). " +
           (data.howToUpdate || "");
       }
     }).catch(function (e) {

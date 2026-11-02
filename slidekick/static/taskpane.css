@@ -751,3 +751,8 @@ body.dark #chat-cancel { color: #e07066; }
 
 /* unconfigured state: the sessions list shows only guidance */
 .sesslist.disabled { opacity: .72; }
+
+/* update-available notice: prominent - gold in dark theme, purple in light */
+#upd-info.updavail { font-weight: 700; color: #c8961e; }
+body.dark #upd-info.updavail { color: #e6b646; }
+
