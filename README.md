@@ -97,15 +97,13 @@ you configured.
 - **PowerPoint (macOS)**: Home tab -> **Add-ins** (dropdown) ->
   **Developer Add-ins** -> **Corelan SlideKick**.
 - **Word (macOS)**: same route -> **Corelan DocKick**.
-- **PowerPoint / Word (Windows)**: the install includes the ribbon
-  commands by default (Windows renders commands fine) - the add-in opens
-  from its own button in the **Home** tab (SlideKick / DocKick group);
-  **New session** lives under the same button as a menu. If the button is
-  not there yet, pick once from the dialog instead: Home -> **Add-ins** ->
-  **Advanced** -> the classic "Office Add-ins" dialog -> **SHARED FOLDER**
-  (top of the dialog) -> the add-in -> **Add** (once per application).
-  The newer "Apps" dialog (Add-ins -> Manage) only lists store and
-  organization add-ins and never shows local folder catalogs.
+- **PowerPoint / Word (Windows)**: Home -> **Add-ins** -> **Advanced** ->
+  the classic "Office Add-ins" dialog -> **SHARED FOLDER** (top) -> the
+  add-in -> **Add** (once per application). Note: the newer "Apps" dialog
+  (Add-ins -> Manage) only lists store and organization add-ins - it never
+  shows local folder catalogs, and on current Windows builds (16.0.19x) a
+  ribbon-commands manifest makes the add-in vanish from BOTH dialogs
+  (ribbon commands therefore stay opt-in: --ribbon, list-mode = default).
 - **Outlook (MailKick)**: the installer places the manifest in Outlook's own
   add-in folder. Quit and reopen Outlook. If MailKick does not appear:
   Get Add-ins -> My add-ins -> Custom Addins -> Add a custom add-in ->

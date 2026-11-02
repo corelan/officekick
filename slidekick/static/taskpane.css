@@ -647,7 +647,7 @@ table.list td { word-break: break-word; }
 table.list .muted, .setgroup .muted, .setgroup label { word-break: break-word; white-space: normal; }
 
 /* Behaviour group: let the checkbox label shrink + wrap in a narrow pane */
-.setgroup .field-inline.check { flex: 1 1 auto; min-width: 0; }
+.setgroup .field-inline.check { flex: 0 0 auto; min-width: 0; max-width: 100%; }
 
 /* the Previous-requests box: titled container, ALWAYS open; only the
    individual run boxes open/close (+/-) */
@@ -756,3 +756,5 @@ body.dark #chat-cancel { color: #e07066; }
 #upd-info.updavail { font-weight: 700; color: #7030a0; }   /* light theme: purple */
 body.dark #upd-info.updavail { color: #e6b646; }           /* dark theme: gold */
 
+/* empty feedback rows must not add dead height inside group boxes */
+.formmsg:empty, .opnote:empty { display: none; margin: 0; padding: 0; }

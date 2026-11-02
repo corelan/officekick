@@ -1002,10 +1002,12 @@ def main():
     args = ap.parse_args()
     PORT = args.port if 1024 <= args.port <= 65535 else DEFAULT_PORT
     DRY_RUN = args.dry_run
-    # ribbon commands: default ON on Windows (fully supported there, and the
-    # add-ins then sit in the ribbon as buttons), always OFF on macOS
-    # (Office-Mac renders nothing from a commands manifest - 0.9.29 verdict).
-    RIBBON = ((is_windows() and (not args.no_ribbon)) or bool(args.ribbon))
+    # ribbon commands: opt-in on both platforms. macOS: 16.114 renders
+    # nothing from a commands manifest (0.9.29). Windows 16.0.19x (new Apps
+    # dialog era): a commands manifest vanishes the add-in from BOTH the
+    # Apps dialog and the classic dialog (proven on the VM, 2026-11-02) -
+    # list-mode + the Shared Folder dialog = the working path.
+    RIBBON = bool(args.ribbon)   # opt-in on BOTH platforms now (see 0.9.107 revert note below)
 
     if not (is_mac() or is_windows()):
         die("this installer supports macOS and Windows only (detected: %s)." % sys.platform)

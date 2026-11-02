@@ -30,6 +30,19 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.108
+### Changed
+- REVERTS 0.9.107 on Windows: ribbon commands are opt-in again
+  (--ribbon, both platforms default list-mode). Proven on PowerPoint
+  16.0.19725: with a commands manifest the add-in disappears from the
+  new Apps dialog AND the classic Shared Folder dialog; list-mode keeps
+  the working Add-ins -> Advanced -> Shared Folder flow.
+### Fixed
+- Settings -> Approval policy: the Behaviour group box no longer renders
+  a tall empty area under "Auto apply approved actions" (empty feedback
+  rows collapse; group snugs to its content; checkbox row no longer
+  stretches full width).
+- Pane text size options now run 75% through 130%.
 ## 0.9.107
 ### Changed
 - Windows installs include the ribbon commands by default now
