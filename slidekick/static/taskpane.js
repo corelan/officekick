@@ -552,7 +552,7 @@
     '{"kind":"slide_ops","ops":[ ... ]}',
     "",
     "Allowed op types:",
-    '- {"type":"create_slide","layout":"title_content|title_only|section|blank","title":"...","body":["bullet",...],"notes":"..."} (body/notes optional; new slides are appended at the end of the deck)',
+    '- {"type":"create_slide","layout":"title_content|title_only|section|blank","title":"...","body":["bullet",...],"notes":"...","after":N} (body/notes optional; "after" optional: the 1-based slide number to place the NEW slide after - after:0 = at the very start. The pane moves the new slide into that position automatically)',
     '- {"type":"edit_slide","slide":N,"title":"..."|null,"body":[...]|null,"notes":"..."|null} (null means: leave unchanged)',
     '- {"type":"replace_text","slide":N,"shape":N,"text":"..."} (reword one shape; N refers to the shape numbers listed for that slide). PREFERRED for a bullet/list item edit: add "find":"<the exact current text of that one bullet/fragment from the outline>" and make "text" the REPLACEMENT for only that fragment - the rest of the shape\'s text is preserved. Without "find" the op replaces the shape\'s WHOLE text, so only do that when the outline shows the entire text (no …[text continues]) or you really want to rewrite it all',
     '- {"type":"set_notes","slide":N,"notes":"..."}',
@@ -570,7 +570,7 @@
     '- {"type":"style_shape","slide":N,"shape":N,"fill":"#RRGGBB","line":"#RRGGBB","transparency":0.3} (solid fill and/or outline color and optional transparency 0-1 for ONE shape; colors as HTML hex or named; at least one of fill/line/transparency)',
     '- {"type":"set_alt_text","slide":N,"shape":N,"description":"alt text","title":"optional title"} (accessibility alt text for the shape)',
     '- {"type":"set_shape_image","slide":N,"shape":N,"prompt":"detailed image description","transparency":0.3} (picture-fill ONE existing shape (panel/circle/rectangle) with an AI-generated picture; transparency optional; use for cut-out photos, side panels, badges)',
-    '- {"type":"move_slide","slide":N,"to":M} (move slide N so it becomes slide M; numbers as in the outline 1..N; run it ALONE in its own reply - do not combine with other ops. PowerPoint cannot place a brand-new slide at a position: create it first (it lands last) and move_slide it in a following step)',
+    '- {"type":"move_slide","slide":N,"to":M} (move slide N so it becomes slide M; numbers as in the outline 1..N; run it ALONE in its own reply - do not combine with other ops. PowerPoint cannot place a brand-new slide at a position: create it first (it lands last) and the pane moves it into place automatically)',
     '- {"type":"duplicate_slide","slide":N} (exact copy of slide N, inserted right after it - deck grows by one; run it ALONE in its reply; the copy keeps the original\'s design)',
     '- {"type":"duplicate_slide_to","slide":N,"to":M} (copy slide N fully OVER slide M: M keeps its position but now shows N\'s complete contents; run it ALONE; this is how a slide gets inserted at a spot you like when no empty placeholder slide exists - duplicate the layout example then move it)',
     '- {"type":"clear_slide","slide":N} (empty slide N: clears every text frame on it; the slide, background and layout stay; combine with create_shape/move_shape/create_image in the SAME reply to rebuild it as a new design)',
@@ -1494,9 +1494,11 @@ OfficeDeck.prototype.moveSlide = function (from, to) {
       return ctx.sync().then(function () {
         var count0 = slides.items.length;
         if (from < 0 || from >= count0) throw new FriendlyError("Slide " + (from + 1) + " does not exist");
-        return slides.exportAsBase64Presentation([slides.getItemAt(from)]).then(function (b64) {
-          slides.getItemAt(from).delete();
+        var expRes = slides.exportAsBase64Presentation([slides.getItemAt(from)]);   // ClientResult - value after sync
           return ctx.sync().then(function () {
+            var b64 = expRes.value;
+            slides.getItemAt(from).delete();
+            return ctx.sync().then(function () {
             if (to <= 0) {
               ctx.presentation.insertSlidesFromBase64(String(b64), { formatting: "KeepSourceFormatting" });
               return ctx.sync().then(function () { return { ok: true }; });
@@ -1537,7 +1539,9 @@ OfficeDeck.prototype.moveSlide = function (from, to) {
       slides.load("items/id");
       return ctx.sync().then(function () {
         if (i < 0 || i >= slides.items.length) throw new FriendlyError("Slide " + (i + 1) + " does not exist");
-        return slides.exportAsBase64Presentation([slides.getItemAt(i)]).then(function (b64) {
+        var expRes = slides.exportAsBase64Presentation([slides.getItemAt(i)]);   // ClientResult - value after sync
+        return ctx.sync().then(function () {
+          var b64 = expRes.value;
           ctx.presentation.insertSlidesFromBase64(String(b64),
             { formatting: "KeepSourceFormatting", targetSlideId: slides.items[i].id });
           return ctx.sync().then(function () { return { ok: true, at: i + 1 }; });
@@ -1560,7 +1564,9 @@ OfficeDeck.prototype.moveSlide = function (from, to) {
         var count0 = slides.items.length;
         if (from < 0 || from >= count0) throw new FriendlyError("Slide " + (from + 1) + " does not exist");
         if (to < 0 || to >= count0) throw new FriendlyError("Slide " + (to + 1) + " does not exist");
-        return slides.exportAsBase64Presentation([slides.getItemAt(from)]).then(function (b64) {
+        var expRes = slides.exportAsBase64Presentation([slides.getItemAt(from)]);   // ClientResult - value after sync
+        return ctx.sync().then(function () {
+          var b64 = expRes.value;
           slides.getItemAt(to).delete();
           return ctx.sync().then(function () {
             slides.load("items/id");
@@ -2567,17 +2573,29 @@ OfficeDeck.prototype.setNotes = function (i, text) {
       switch (op.type) {
         case "create_slide":
           return deck.addSlide({ layout: op.layout, title: op.title, body: op.body }).then(function (r) {
-            var note = "";
-            if (!SK.sim && ctx && op.after != null && op.after <= ctx.slideCount - 1) {
-              note = " (requested position not supported - appended at end)";
-            }
-            lines.push({ ok: true, text: "create slide -> appended at index " + r.index + note });
-            if (op.notes && op.notes.trim()) {
-              return deck.setNotes(r.index, op.notes).then(function (nr) {
-                if (nr && nr.manual) manualNotes.push({ slide: r.index, text: op.notes, reason: nr.reason });
-                else lines.push({ ok: true, text: "set notes on new slide " + r.index });
+            // honor the requested position: 0-based index the new slide should END UP at
+            var wantIdx = Math.min(Math.max(op.after, 0), r.index);   // after:N (1-based slide) => 0-based N
+            var doNotes = function () {
+              if (op.notes && op.notes.trim()) {
+                return deck.setNotes(r.index, op.notes).then(function (nr) {
+                  if (nr && nr.manual) manualNotes.push({ slide: r.index, text: op.notes, reason: nr.reason });
+                  else lines.push({ ok: true, text: "set notes on new slide " + (r.index + 1) });
+                });
+              }
+              return null;
+            };
+            if ((op.after != null) && r.index !== wantIdx) {
+              return deck.moveSlide(r.index, wantIdx).then(function () {
+                lines.push({ ok: true, text: "create slide -> inserted at position " + (wantIdx + 1) });
+                return doNotes();
+              }, function (eMove) {
+                var note = " (requested position failed: " + ((eMove && eMove.message) || eMove) + " - left at end)";
+                lines.push({ ok: true, text: "create slide -> appended at index " + (r.index + 1) + note });
+                return doNotes();
               });
             }
+            lines.push({ ok: true, text: "create slide -> appended at index " + (r.index + 1) });
+            return doNotes();
           });
         case "edit_slide": {
           var chain = Promise.resolve();

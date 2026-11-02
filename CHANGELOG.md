@@ -30,6 +30,21 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.71
+### Fixed
+- move_slide / duplicate_slide / duplicate_slide_to in real PowerPoint:
+  exportAsBase64Presentation returns OfficeExtension.ClientResult (the
+  value is read as .value after a ctx.sync()), not a promise - our code
+  chained .then() on it and died with "...then is not a function" before
+  touching the deck. All three paths now follow the documented contract
+  (verified against Microsoft's API reference). The 0.9.54 retry pass even
+  retried the broken op and reported it twice - the op itself was the bug.
+- create_slide now honors "after": the pane documents "after":N in the
+  prompt (N = 1-based slide number to place the new slide after; 0 = very
+  start) and MOVES the fresh slide into that position automatically right
+  after creating it (with a fallback note if the move fails). Previously
+  the prompt even told the model a two-step create-then-move workaround
+  that models skipped - inserting "somewhere" silently meant "at the end".
 ## 0.9.70
 ### Changed
 - The Profile / route refresh glyph is bigger again (17px -> 20px). The
