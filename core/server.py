@@ -32,7 +32,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 APP = "OfficeKick"
-VERSION = "0.9.89"
+VERSION = "0.9.90"
 
 CONNECTION_TYPES = (
     "openai",
@@ -1690,6 +1690,18 @@ class SlideKickHandler(BaseHTTPRequestHandler):
                 self.store.auto_clean_tick()
                 pub = self.store.public()
                 pub["port"] = self.serving_port
+                # deployed manifest identity versions (About diagnostics; the
+                # (Id, Version) pair = the host's registration identity)
+                mvs = {}
+                try:
+                    mroot = Path(self.static_dir or Path.cwd()) / "manifest"
+                    for f in sorted(mroot.glob("*.xml")):
+                        t = f.read_text(encoding="utf-8")
+                        mm = re.search(r"<Version>([^<]+)</Version>", t)
+                        mvs[f.stem] = mm.group(1) if mm else "?"
+                except Exception:
+                    pass
+                pub["manifests"] = mvs
                 pub["connectionTypes"] = list(CONNECTION_TYPES)
                 pub["defaultBases"] = DEFAULT_BASES
                 pub["approvalModes"] = list(APPROVAL_MODES)

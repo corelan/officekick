@@ -30,6 +30,19 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.90
+### Added
+- Version transparency on both surfaces:
+  1. The installer now prints, per add-in, the manifest identity version
+     it renders + sideloads ("slidekick (id v1.0.4.0)") and the pane
+     build in the manifest-written line, so update cycles log the exact
+     identities in flight.
+  2. The About tab in all three panes now lists every version number:
+     Pane build (JS, window.__SK_BUILD), the pane's own manifest
+     identity version, ALL deployed manifest identities, the Office
+     host + version (Office.context.diagnostics), plus the server build
+     it already showed. /api/config carries the manifest versions
+     (deployed manifest dir) for this.
 ## 0.9.89
 ### Fixed
 - Restore save-anytime + auto-reopen (user requirement: the pane must
