@@ -30,6 +30,21 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.91
+### Added
+- Deck pane-reference repair tool (tools/repair_deck_paneref.py): removes
+  the store="developer" storeType="Registry" stamp PowerPoint writes into
+  decks saved with the pane open. On the Mac host (16.114) that stamp
+  cannot be resolved at launch-hydration, so reopening any such deck
+  throws the "Add-in Error: New Office Add-in" toast; without the stamp
+  the host resolves the pane purely by add-in id (the path the manual
+  ribbon open always used). Decks open cleanly afterwards; the pane does
+  not auto-open (open it from the ribbon - one click, always works).
+  Writes a .bak backup next to each deck, idempotent, --dry-run support.
+  The installer prints the reminder + tool path after the sideload step.
+  (Evidence: both a stale deck and a fresh deck stamped identically -
+  same id, same 1.0.4.0, same broken store form - and the host build
+  confirmed unchanged across the regression window.)
 ## 0.9.90
 ### Added
 - Version transparency on both surfaces:

@@ -403,6 +403,10 @@ def render_and_sideload():
             sideload_mac(folder, mfname, apps.get(folder))
     if rendered:
         ok("manifests rendered: " + ", ".join(rendered))
+        if is_mac():
+            out("  mac tip: if a saved deck throws the 'Add-in Error' toast on open,");
+            out("           the deck's pane reference carries the unresolvable store stamp.");
+            out("           Heal once per deck: python3 tools/repair_deck_paneref.py deck.pptx")
     if DRY_RUN:
         out("  [..]  [dry-run] sideloading skipped")
         return
