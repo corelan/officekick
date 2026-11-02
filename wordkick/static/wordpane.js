@@ -1196,7 +1196,7 @@
       if (font.name) rf.name = font.name;
       if (font.size) rf.size = font.size;
       if (font.highlightColor) rf.highlightColor = font.highlightColor;
-        if (font.align) para.alignment = { left: "Left", center: "Center", right: "Right", justify: "Justified" }[font.align];
+        if (font.align) para.alignment = { left: "Left", center: "Centered", right: "Right", justify: "Justified" }[font.align];
         return ctx.sync().then(function () { return { ok: true }; });
       });
     });
@@ -1300,7 +1300,7 @@
       if (font.highlightColor) sel.font.highlightColor = font.highlightColor;
       if (font.name) sel.font.name = font.name;
       if (font.size) sel.font.size = font.size;
-      if (font.align) sel.paragraphFormat.alignment = { left: "Left", center: "Center", right: "Right", justify: "Justified" }[font.align];
+      if (font.align) sel.paragraphFormat.alignment = { left: "Left", center: "Centered", right: "Right", justify: "Justified" }[font.align];
       return ctx.sync().then(function () { return { ok: true }; });
     });
   };
@@ -1323,14 +1323,19 @@
       if (!Office.context.requirements.isSetSupported("WordApi", "1.1")) {
         throw new FriendlyError("headers/footers need WordApi 1.1 - unsupported host.");
       }
-      var section = ctx.document.sections.getItemAt(0);
-      var hf = isFooter ? section.getFooter("primary") : section.getHeader("primary");
-      if (typeof hf.insertText !== "function" || typeof hf.clear !== "function") {
-        throw new FriendlyError("this Word build does not allow editing the " + (isFooter ? "footer" : "header") + " here.");
-      }
-      hf.clear();
-      hf.insertText(String(text), "End");
-      return ctx.sync().then(function () { return { ok: true }; });
+      var sections = ctx.document.sections;
+      sections.load("items");
+      return ctx.sync().then(function () {
+        var section = sections.items[0];
+        if (!section) throw new FriendlyError("no section found in this document.");
+        var hf = isFooter ? section.getFooter("primary") : section.getHeader("primary");
+        if (typeof hf.insertText !== "function" || typeof hf.clear !== "function") {
+          throw new FriendlyError("this Word build does not allow editing the " + (isFooter ? "footer" : "header") + " here.");
+        }
+        hf.clear();
+        hf.insertText(String(text), "End");
+        return ctx.sync().then(function () { return { ok: true }; });
+      });
     });
   };
 

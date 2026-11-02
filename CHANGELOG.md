@@ -30,6 +30,17 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.77
+### Fixed
+- DocKick real-Word crash wave on a redesign ("Applied with 10 error(s)"):
+  1. format_text InvalidArgument - Word.js uses the "Centered" alignment
+     token, not PowerPoint's "Center"; both alignment maps (paragraph and
+     selection formatting) now use the Word enum, so align=center ops
+     apply instead of failing (and burning the retry pass).
+  2. set_header "sections.getItemAt is not a function" - Word.js
+     collections have no getItemAt; header/footer now loads the sections
+     collection (load + sync + .items[0]), matching the documented
+     collection contract used elsewhere in the pane.
 ## 0.9.76
 ### Fixed
 - Pair delete in "Previous requests" never asked and never deleted in the
