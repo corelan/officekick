@@ -527,30 +527,39 @@ button.armed { border-color: #b00020 !important; color: #fff !important; backgro
 
 /* Settings sub-tabs (General / Approval policy / Connections / Profiles) */
 .subtabs { display: flex; flex-wrap: wrap; gap: 4px; margin: 2px 0 12px 0; border-bottom: 1px solid rgba(128,128,128,.35); }
-.subtabs button { padding: 7px 12px; white-space: nowrap; border: none; background: none; cursor: pointer; font-weight: 600; border-bottom: 2px solid transparent; color: #1e7d46; }
-.subtabs button.active { color: #14603a; border-bottom-color: #1e7d46; }
-@media (prefers-color-scheme: dark) {
-  .subtabs button { color: #9be87f; }            /* lime: readable on the dark Office theme */
-  .subtabs button.active { color: #c3f79d; border-bottom-color: #9be87f; }
-}
+.subtabs button { padding: 7px 12px; white-space: nowrap; border: none; background: none; cursor: pointer; font-weight: 600; border-bottom: 2px solid transparent; color: #0078d4; }
+.subtabs button.active { color: #005a9e; border-bottom-color: #0078d4; }
+
+  /* dark mode follows the pane's own body.dark detection - the Office WebView
+     does not evaluate the OS media query, those blocks used to desync */
+body.dark .subtabs button { color: #9be87f; 
+  body.dark /* lime: readable on the dark Office theme */
+  .subtabs button.active { color: #c3f79d; border-bottom-color: #9be87f; 
+  
 .subpanel { display: none; }
 .subpanel.active { display: block; }
 
 /* Chat tab: grouped layout */
 .groupbox { border: 1px solid rgba(127,127,127,.35); border-radius: 10px; padding: 8px 12px 10px; margin: 0 0 12px 0; }
-.groupbox > legend { font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; padding: 0 6px; color: #1e7d46; }
+.groupbox > legend { font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; padding: 0 6px; color: #0078d4; }
 .chat-div { border: 0; border-top: 1px dashed rgba(127,127,127,.4); margin: 10px 0 8px; }
 .ctxinfo { display: inline-block; padding: 5px 10px; border-radius: 8px; background: rgba(122,75,208,.10); color: #5b3aa8; border: 1px solid rgba(122,75,208,.25); font-size: 12px; }
-@media (prefers-color-scheme: dark) {
-  .groupbox > legend { color: #9be87f; }
-  .ctxinfo { background: rgba(0,205,229,.12); color: #6ee7f5; border-color: rgba(0,205,229,.3); }
-}
+
+  /* dark mode follows the pane's own body.dark detection - the Office WebView
+     does not evaluate the OS media query, those blocks used to desync */
+body.dark .groupbox > legend { color: #9be87f; 
+  body.dark .ctxinfo { background: rgba(0,205,229,.12); color: #6ee7f5; border-color: rgba(0,205,229,.3); 
+  
 
 /* Chat thread: clickable request line above each response */
 .reqline { cursor: pointer; padding: 6px 10px; margin: 0 0 6px; border-radius: 8px;
   background: rgba(127,127,127,.10); border-left: 3px solid rgba(30,125,70,.6); word-break: break-word; }
 .reqline:hover { background: rgba(127,127,127,.18); }
-@media (prefers-color-scheme: dark) { .reqline { background: rgba(127,127,127,.14); border-left-color: rgba(155,232,127,.6); } }
+
+  /* dark mode follows the pane's own body.dark detection - the Office WebView
+     does not evaluate the OS media query, those blocks used to desync */
+body.dark .reqline { background: rgba(127,127,127,.14); border-left-color: rgba(155,232,127,.6); 
+   
 
 /* Inspector inside Settings: grouped request/response boxes, newest on top */
 .reqgrp { border: 1px solid rgba(127,127,127,.35); border-radius: 8px; margin: 0 0 8px; overflow: hidden; }

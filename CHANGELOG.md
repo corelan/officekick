@@ -30,6 +30,16 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.81
+### Fixed
+- Theme detection desync: the subtab titles / group legends / context
+  chips used @media (prefers-color-scheme: dark) blocks, which the Office
+  WebView evaluates independently of the pane's own body.dark logic -
+  OS-dark + pane-light produced lime-on-light (unreadable), the reverse
+  dark green-on-dark. All such blocks now follow body.dark like every
+  other theme rule, so dark/light can never disagree again.
+- Light-mode titles are azure blue (#0078d4, active #005a9e) instead of
+  the saturated green; lime stays in dark mode only, where it reads.
 ## 0.9.80
 ### Changed
 - Add-in Error investigation build: every pane now emits a pane.boot
