@@ -30,6 +30,9 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.68
+### Changed
+- The Profile / route refresh glyph is bigger (13px -> 17px).
 ## 0.9.67
 ### Changed
 - The config refresh affordance moved from a small button next to Route
