@@ -32,7 +32,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 APP = "OfficeKick"
-VERSION = "0.9.101"
+VERSION = "0.9.102"
 
 CONNECTION_TYPES = (
     "openai",
@@ -141,7 +141,10 @@ class SessionStore:
     def __init__(self, base_dir):
         self.dir = Path(base_dir) / "sessions"
         try:
-            self.dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+            if os.name == "nt":
+                self.dir.mkdir(parents=True, exist_ok=True)
+            else:
+                self.dir.mkdir(mode=0o700, parents=True, exist_ok=True)
             os.chmod(self.dir, 0o700)
         except OSError:
             pass
@@ -217,7 +220,8 @@ class SessionStore:
         }
         f = self.dir / (sid + ".json")
         f.write_text(json.dumps(doc, indent=1), encoding="utf-8")
-        os.chmod(f, 0o600)
+        if os.name != "nt":
+            os.chmod(f, 0o600)   # Windows: chmod maps to ACL quirks and can fail under task tokens
         return {"id": sid, "name": doc["name"], "updated": doc["updated"], "messages": len(ex)}
 
     def rename(self, sid, name):

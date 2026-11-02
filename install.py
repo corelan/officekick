@@ -408,9 +408,19 @@ def render_and_sideload():
             out("           the deck's pane reference carries the unresolvable store stamp.");
             out("           Heal: python3 tools/repair_paneref.py <file.pptx | .docx | folder>")
             out("           (backs the originals up to orig/ next to the deck(s), then patches in place)")
-    if DRY_RUN:
-        out("  [..]  [dry-run] sideloading skipped")
+def relax_windows_config_acl():
+    """ssh-created config dirs can carry restrictive, non-inherited ACLs;
+    hand the current user full control over the whole tree (per-user data)."""
+    import subprocess as sp2
+    d = config_dir()
+    if not os.path.isdir(d):
         return
+    user = "%s\\%s" % (os.environ.get("COMPUTERNAME", ""), os.environ.get("USERNAME", ""))
+    rc, o = run_quiet(["icacls", d, "/grant", user + ":(OI)(CI)F", "/T", "/C"])
+    ok("config ACL relaxed: %s (%s)" % (d, "icacls rc %d" % rc))
+
+
+def sideload_windows_developer():
     if not is_mac():
         sideload_windows_catalog()
         sideload_windows_developer()
@@ -918,6 +928,8 @@ def install(mode_name="Install", interactive=True):
             want = True
     stop_server()
     deploy_files()
+    if is_windows():
+        relax_windows_config_acl()
     if office_app_running():
         warn("Office apps are running - skipping the add-in cache clear"
              " (quit Office, re-run this install, reopen the apps to fully flush"

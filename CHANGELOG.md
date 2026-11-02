@@ -30,6 +30,14 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.102
+### Fixed
+- Windows session persistence: saves could die with "Permission denied"
+  on the sessions dir when its ACL was restrictive/non-inherited
+  (ssh-created dirs running under the logon task token). The server now
+  skips chmod on Windows and the installer grants the current user full
+  control over the config dir tree after deploy (icacls /grant, per-user
+  data only). Verified: 4/4 live-server saves succeed after the ACL fix.
 ## 0.9.101
 ### Changed
 - Group boxes: tighter top spacing so the group header (e.g. "PROFILE /
