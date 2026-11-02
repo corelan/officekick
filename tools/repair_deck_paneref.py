@@ -1,29 +1,32 @@
 #!/usr/bin/env python3
-"""Strip the broken pane reference stamp from Office decks (macOS 16.114).
+"""Strip the broken pane reference stamp from Office files (macOS 16.114).
 
-PowerPoint stamps a deck's reopened task-pane reference with
+Office stamps a file's reopened task-pane reference with
 store="developer" storeType="Registry"; the Mac host's launch-hydration
 cannot resolve a wef-folder-sideloaded add-in from that store, so opening
-the deck throws the "Add-in Error: New Office Add-in" toast. Removing the
+the file throws the "Add-in Error: New Office Add-in" toast. Removing the
 two attributes makes the host resolve purely by add-in id (the path the
-manual Ribbon open uses and that always works). Verified end-to-end (2026-11-02, PowerPoint 16.114.1027.3): after the
-repair, decks open via Finder double-click WITH the pane auto-loading and
-no toast, and pane-open saves keep working (the repaired reference
-survives re-saves). Note: opening via PowerPoint's in-app open dialog
-skips pane restore silently (no error) - Finder double-click is the
-verified-good launch path.
+manual Ribbon open uses and that always works). Verified end-to-end
+(2026-11-02, PowerPoint 16.114.1027.3): after the repair, decks open via
+Finder double-click WITH the pane auto-loading and no toast, and pane-open
+saves keep working (the repaired reference survives re-saves). Note:
+opening via an Office app's in-app open dialog skips pane restore silently
+(no error) - double-clicking the file in Finder is the verified-good
+launch path. Covers PowerPoint decks (.pptx) and Word documents (.docx).
 
 Usage:
-    python3 repair_deck_paneref.py deck.pptx [more.pptx ...]
+    python3 repair_deck_paneref.py deck.pptx [more files ...]
     python3 repair_deck_paneref.py /folder/with/decks        (non-recursive)
     python3 repair_deck_paneref.py -r /folder/with/decks     (subfolders too)
-    python3 repair_deck_paneref.py file1.pptx /folder mixed  (any mix)
+    python3 repair_deck_paneref.py file1.pptx d.docx /folder mixed  (any mix)
     python3 repair_deck_paneref.py --dry-run deck.pptx /folder
 
-Before the first change the original is copied to an ``orig/`` subfolder next
-to the deck(s) as ``<origfilename>.pptx.<YYYYMMDD_HHMMSS>.bak``; the deck is
-then patched in place, keeping the same filename. Decks are always patched
-atomically (write-to-temp + os.replace).
+Accepts PowerPoint decks (.pptx) and Word documents (.docx); a folder
+argument processes every such file inside it. Before the first change the
+original is copied to an ``orig/`` subfolder next to the file(s) as
+``<origfilename>.<YYYYMMDD_HHMMSS>.bak``; the file is then patched in
+place, keeping the same filename. Files are always patched atomically
+(write-to-temp + os.replace).
 """
 import argparse
 import glob
@@ -36,8 +39,8 @@ import zipfile
 
 
 def repair(path, dry_run=False):
-    if not path.lower().endswith(".pptx"):
-        return (path, "skip (not a .pptx)")
+    if not path.lower().endswith((".pptx", ".docx")):
+        return (path, "skip (not a .pptx/.docx)")
     try:
         z = zipfile.ZipFile(path)
     except (OSError, zipfile.BadZipFile) as e:
@@ -75,7 +78,7 @@ def repair(path, dry_run=False):
 
 
 def collect(args):
-    """Returns (decks, notes): decks = real .pptx to process (-r includes subfolders),
+    """Returns (decks, notes): decks = files to process (-r includes subfolders),
     notes = lines printed for anything in the scan that is not processed."""
     decks, notes = [], []
     seen = set()
@@ -91,7 +94,7 @@ def collect(args):
                     classify(os.path.join(item, f), f, decks, notes, seen)
         elif os.path.basename(item).startswith("~$"):
             notes.append(("locked", item))
-        elif item.lower().endswith(".pptx"):
+        elif item.lower().endswith((".pptx", ".docx")):
             classify(item, os.path.basename(item), decks, notes, seen)
         else:
             notes.append(("skip", item))
@@ -104,34 +107,34 @@ def classify(path, name, decks, notes, seen):
     seen.add(path)
     if name.startswith("~$"):
         notes.append(("locked", path))
-    elif name.lower().endswith(".pptx"):
+    elif name.lower().endswith((".pptx", ".docx")):
         decks.append(path)
     elif name.lower().endswith(".bak"):
         notes.append(("bak", path))
     else:
         notes.append(("not-deck", path))
 def main():
-    ap = argparse.ArgumentParser(description="Remove the unresolvable pane-reference stamp from decks")
-    ap.add_argument("files", nargs="*", help="deck.pptx file(s) and/or folder(s)")
+    ap = argparse.ArgumentParser(description="Remove the unresolvable pane-reference stamp from .pptx/.docx files")
+    ap.add_argument("files", nargs="*", help=".pptx/.docx file(s) and/or folder(s)")
     ap.add_argument("-r", "--recursive", action="store_true",
-                    help="when a folder is given: include .pptx in subfolders too")
+                    help="when a folder is given: include subfolders too")
     ap.add_argument("--dry-run", action="store_true", help="report without writing")
     a = ap.parse_args()
     if not a.files:
-        ap.error("give at least one .pptx file or folder (-- recursive with -r)")
+        ap.error("give at least one .pptx/.docx file or folder (-r for subfolders)")
     rc = 0
     decks, notes = collect(a)
     for kind, path in notes:
         print("%-10s %s" % (kind, path))
     if not decks:
-        print("no .pptx found in the given path(s)")
+        print("no .pptx/.docx found in the given path(s)")
         sys.exit(1)
     for deck in decks:
         _p, msg = repair(deck, a.dry_run)
         print("%-10s %s" % (msg.split()[0], deck), "-", msg)
         if msg.startswith("skip"):
             rc = 1
-    print("%d deck(s) processed" % len(decks))
+    print("%d file(s) processed" % len(decks))
     sys.exit(rc)
 
 

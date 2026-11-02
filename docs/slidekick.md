@@ -279,8 +279,9 @@ design).
 ## Troubleshooting (PowerPoint)
 
 - **"Add-in Error / This add-in is no longer available" toast when opening a
-  deck** - the deck (not the add-in) is the problem. When PowerPoint saves
-  with the pane open, it stamps the deck's saved pane reference with a
+  deck or document** - the file (not the add-in) is the problem. When an
+  Office app saves
+  with the pane open, it stamps the file's saved pane reference with a
   store hint (`store="developer" storeType="Registry"`) that this build's
   launch-time restore cannot resolve, so the deck throws the toast on every
   open. Heal the deck once with the repair tool:
@@ -305,8 +306,8 @@ design).
   survives re-saves). Note: opening through PowerPoint's in-app open dialog
   skips pane restore silently (no error) - double-clicking the deck in
   Finder is the verified-good way to open it. The tool covers PowerPoint
-  decks (`.pptx`); DocKick/MailKick documents use the same mechanism and
-  get the same one-ribbon-click behavior.
+  decks (`.pptx`) and Word documents (`.docx`) alike - the same stamp and
+  the same fix.
 - **Add-in doesn't show**:
   1. Quit all Office apps and reopen PowerPoint.
   2. Check the health endpoint: http://127.0.0.1:8765/api/health.

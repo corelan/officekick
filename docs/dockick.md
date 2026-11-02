@@ -176,6 +176,19 @@ http://127.0.0.1:8765/wordkick/static/simulator.html
 
 ## Troubleshooting (Word)
 
+- **"Add-in Error / This add-in is no longer available" toast when opening a
+  document** - heal the document once with the repair tool; it covers Word
+  documents (`.docx`) and PowerPoint decks (`.pptx`) the same way:
+
+      python3 tools/repair_deck_paneref.py <document.docx | folder> [-r] [--dry-run]
+
+  The original is backed up to an `orig/` subfolder next to the file(s) as
+  `<name>.docx.<YYYYMMDD_HHMMSS>.bak`, then the document is patched in
+  place keeping the same filename. `--dry-run` touches nothing; re-runs are
+  idempotent (no new backups). Open the healed document by double-clicking
+  it in Finder to get the pane restored automatically (the in-app open
+  dialog skips pane restore silently). Details in
+  [slidekick.md](slidekick.md#troubleshooting-powerpoint).
 - **Add-in doesn't show**:
   1. Quit all Office apps and reopen Word.
   2. Check that the manifest is sideloaded on macOS:

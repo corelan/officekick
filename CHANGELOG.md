@@ -30,6 +30,15 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.95
+### Changed
+- tools/repair_deck_paneref.py is universal: accepts Word documents
+  (.docx) alongside PowerPoint decks (.pptx) - same stamp, same orig/
+  timestamped-backup + in-place repair. Folder scans pick up both kinds;
+  other extensions still reported and ignored.
+### Docs
+- docs/dockick.md: Word troubleshooting entry for the "Add-in Error" toast
+  with the tool usage; slidekick.md scope line updated to .pptx/.docx.
 ## 0.9.94
 ### Docs
 - docs/slidekick.md: full troubleshooting section for the "Add-in Error"
