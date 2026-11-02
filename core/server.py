@@ -15,7 +15,9 @@ Runs on 127.0.0.1 only. Python 3.8+ standard library, no third-party deps.
 
 import argparse
 import base64
+import shutil
 import errno
+import subprocess
 import json
 import os
 import socket
@@ -1214,15 +1216,19 @@ def update_check(force_latest=None, store=None):
     source = "github"
     pull_available = False
     repo_info = None
+    out_unusable_reason = None
     if latest is None:
         repo_info = git_update_probe(store)
+        if repo_info and not repo_info.get("usable"):
+            out_unusable_reason = repo_info.get("reason") or "unknown"
         if repo_info.get("usable") and repo_info.get("remoteVer"):
             latest = repo_info["remoteVer"]
             source = "git clone (%s)" % repo_info.get("repoPath", "")
             pull_available = True
-        else:
-            headers = {"User-Agent": "officekick/" + VERSION,
-                       "Accept": "application/vnd.github.raw"}
+    if latest is None:
+        # fall back to the GitHub raw VERSION file (no local clone usable)
+        headers = {"User-Agent": "officekick/" + VERSION,
+                   "Accept": "application/vnd.github.raw"}
         raw_url = "https://raw.githubusercontent.com/corelan/officekick/main/VERSION"
         try:
             req = urllib.request.Request(raw_url, headers=headers)
@@ -1246,7 +1252,8 @@ def update_check(force_latest=None, store=None):
                             "clone (it pulls with git, redeploys the add-ins and restarts the "
                             "local server), and reload the task pane (reopen the add-in; restart Office if it "
                             "keeps showing the old UI). No automatic git pull is attempted."),
-            "source": source, "pullAvailable": pull_available}
+            "source": source, "pullAvailable": pull_available,
+            "probeReason": out_unusable_reason}
     if not force_latest:
         UPDATE_CACHE["t"] = now
         UPDATE_CACHE["data"] = data
