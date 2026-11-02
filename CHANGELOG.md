@@ -30,6 +30,16 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.76
+### Fixed
+- Pair delete in "Previous requests" never asked and never deleted in the
+  real Office pane: the wastebasket row relied on window.confirm, which
+  the Office WebView silently swallows (it only worked in the simulator).
+- The delete is now the SAME two-stage button as the sessions list: an
+  expanded step shows a small "Delete" button; the first click arms it to
+  "Really delete?" for 3.5 s (stays deletable only then), the second click
+  removes the pair everywhere (pane list, future model context, persisted
+  session). The bin icon row is gone. All three add-ins, no dialog needed.
 ## 0.9.75
 ### Added
 - Living session titles: as a session continues, every save now runs one

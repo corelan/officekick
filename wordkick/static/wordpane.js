@@ -2218,25 +2218,28 @@ function applyOps(deck, ops, ctx) {
     snip.className = "pt-text";                // the request text BELOW the ts
     snip.textContent = uc.length > 50 ? uc.slice(0, 50) + "…" : uc;
     snip.appendChild(cpIc);                    // copy affordance on the title line
-    var delRow = document.createElement("div");
-    delRow.className = "pt-delrow";
-    var delIc = document.createElement("span");
-    delIc.className = "pt-bin";
-    delIc.textContent = "\uD83D\uDDD1\uFE0E";   // wastebasket glyph
-    delRow.appendChild(delIc);
-    var delTx = document.createElement("span");
-    delTx.textContent = "Delete this request/response pair";
-    delRow.appendChild(delTx);
-    delRow.title = "Remove this pair from the session (it will not be sent to the model again)";
-    delRow.addEventListener("click", function (ev) {
-      ev.stopPropagation();
-      var okDel = window.confirm("Remove this request/response pair from the session history?" +
-        " Future prompts will no longer include it.");
-      if (okDel) removeHistoryPair(u.ts, grp);
-    });
     var body = document.createElement("div");
     body.className = "reqbody";
-    body.appendChild(delRow);
+    // delete = the same two-stage button as the sessions list (real Office
+    // WebViews swallow window.confirm, so the dialog form never appeared)
+    var delBtn = document.createElement("button");
+    delBtn.className = "btn subtle danger pt-delbtn";
+    delBtn.textContent = "Delete";
+    delBtn.title = "Remove this request/response pair from the session - a second click within 3.5 s confirms (future prompts will no longer include it)";
+    delBtn.addEventListener("click", function (ev) {
+      ev.stopPropagation();
+      if (delBtn.dataset.armed !== "1") {
+        delBtn.dataset.armed = "1";
+        delBtn.textContent = "Really delete?";
+        delBtn.classList.add("armed");
+        setTimeout(function () {
+          if (delBtn.parentNode) { delBtn.dataset.armed = "0"; delBtn.textContent = "Delete"; delBtn.classList.remove("armed"); }
+        }, 3500);
+        return;
+      }
+      removeHistoryPair(u.ts, grp);
+    });
+    body.appendChild(delBtn);
     var q1 = document.createElement("div");
     q1.className = "pt-req";
     q1.style.cursor = "pointer";

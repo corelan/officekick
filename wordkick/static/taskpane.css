@@ -726,20 +726,8 @@ body.dark .legend-refresh { color: #FFFFFF; }
 .legend-refresh:hover { opacity: 1; transform: scale(1.12); }
 
 /* delete row inside expanded past-request steps */
-.pt-delrow {
-  cursor: pointer;
-  font-size: 12px;
-  opacity: .75;
-  margin-bottom: 4px;
-}
-.pt-delrow:hover { opacity: 1; color: #c0392b; }
-body.dark .pt-delrow:hover { color: #e07066; }
-.pt-bin {
-  font-family: "Apple Symbols", "Segoe UI Emoji", sans-serif;
-  font-size: 14px;
-  margin-right: 5px;
-  vertical-align: middle;
-}
 
 #chat-cancel { color: #b03a2e; }
 body.dark #chat-cancel { color: #e07066; }
+
+.pt-delbtn { margin: 0 0 8px 0; }
