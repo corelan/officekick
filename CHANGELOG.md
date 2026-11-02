@@ -30,6 +30,11 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.109
+### Fixed
+- Behaviour group box: the remaining dead tail under the checkbox removed
+  (empty feedback rows vanish, last row drops its bottom margin, group
+  padding tightened) - 109px -> 69px, verified by measurement + screenshot.
 ## 0.9.108
 ### Changed
 - REVERTS 0.9.107 on Windows: ribbon commands are opt-in again
