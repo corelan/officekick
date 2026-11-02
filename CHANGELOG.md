@@ -30,6 +30,11 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.70
+### Changed
+- The Profile / route refresh glyph is bigger again (17px -> 20px). The
+  Profile and Route selectors sit side by side as before (the refresh
+  affordance lives only in the legend title).
 ## 0.9.69
 ### Fixed
 - The status bar no longer stays on "Applying N op(s)…" when the gate closes
