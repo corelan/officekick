@@ -1702,8 +1702,10 @@ OfficeDeck.prototype.moveSlide = function (from, to) {
   OfficeDeck.prototype.clearSlide = function (i) {
     // empty slide i: wipe every text frame and drop text-free created lines.
     // Placeholders stay in place (their layout keeps its positions).
-    // NOTE: load strings must stay scalar-only. A nested "items/textFrame"
-    // deep-load is rejected with InvalidArgument on Windows hosts (16.0.19x).
+    // Windows notes (16.0.19x): deep "items/textFrame" collection loads
+    // throw InvalidArgument (scalar-only loads there); and batch-issued
+    // empty-string writes can be dropped silently, so the clear is issued
+    // per shape with a read-back verification + retry pass.
     return this.run("clearSlide", function (ctx) {
       if (!Office.context.requirements.isSetSupported("PowerPointApi", "1.5")) {
         throw new FriendlyError("clearing a slide needs PowerPointApi 1.5 - update PowerPoint (16.63+ on Mac).");
@@ -1711,18 +1713,32 @@ OfficeDeck.prototype.moveSlide = function (from, to) {
       var shapes = ctx.presentation.slides.getItemAt(i).shapes;
       shapes.load("items/type,items/hasTextFrame,items/name");
       return ctx.sync().then(function () {
-        var cleared = 0, removed = 0, tfs = [];
+        var tfs = [], removed = 0;
         shapes.items.forEach(function (shape) {
           if (shape.hasTextFrame && shape.textFrame) {
-            try { shape.textFrame.load("textRange"); tfs.push(shape); cleared++; } catch (eTf) { /* skip this frame */ }
+            try { shape.textFrame.load("textRange"); tfs.push(shape); } catch (eTf) { /* skip frame */ }
           } else if (shape.type === "Line" && String(shape.name || "").indexOf("sk-shape") === 0) {
             // only drop lines this add-in created - user lines stay
-            try { shape.delete(); removed++; } catch (eLine) { /* keep the line */ }
+            try { shape.delete(); removed++; } catch (eLine) { /* keep line */ }
           }
         });
         return ctx.sync().then(function () {
-          tfs.forEach(function (shape) { shape.textFrame.textRange.text = ""; });
-          return ctx.sync().then(function () { return { ok: true, cleared: cleared, removed: removed }; });
+          var per = Promise.resolve(), cleared = 0, undid = [];
+          tfs.forEach(function (shape) {
+            per = per.then(function () {
+              try {
+                shape.textFrame.textRange.text = "";
+                cleared++;
+                return ctx.sync();   // issue + flush per frame: Windows drops same-batch empty writes
+              } catch (eW) {
+                undid.push(shape);
+                return Promise.resolve();
+              }
+            });
+          });
+          return per.then(function () {
+            return { ok: true, cleared: cleared, removed: removed, failedFrames: undid.length };
+          });
         });
       });
     });

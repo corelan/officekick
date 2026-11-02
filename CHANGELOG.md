@@ -30,6 +30,14 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.103
+### Fixed
+- clear_slide on Windows: the host accepted the text-wipe writes but
+  silently dropped same-batch empty-string writes - slides reported
+  "cleared" while every frame kept its text. The clear is now issued per
+  shape with a sync after each write (Windows drops same-batch empty
+  writes), deleted-lines handled in the first pass, and the success line
+  reports any frames that had to be skipped.
 ## 0.9.102
 ### Fixed
 - Windows session persistence: saves could die with "Permission denied"
