@@ -247,38 +247,24 @@ def stop_server():
 
 
 def _hard_task_settings(name):
-    """schtasks-idle/battery settings kill long-running servers; edit the
-    task XML to keep the server running (no idle-stop, no battery-stop,
-    no 72h execution limit, restart on failure)"""
-    import tempfile as tf2
-    rc, xml = run_quiet(["schtasks", "/query", "/tn", name, "/xml"])
-    if rc != 0 or not xml:
+    """schtasks default settings (stop-on-idle, stop-on-batteries, 72h
+    execution limit) end long-running servers silently; every install
+    re-applies the hard settings so the server runs until shutdown."""
+    if DRY_RUN:
         return
-    import re as re2
-    xml = re2.sub(r"<DisallowStartIfOnBatteries>[^<]*</DisallowStartIfOnBatteries>",
-                  "<DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>", xml)
-    xml = re2.sub(r"<StopIfGoingOnBatteries>[^<]*</StopIfGoingOnBatteries>",
-                  "<StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>", xml)
-    xml = re2.sub(r"<StopOnIdleEnd>[^<]*</StopOnIdleEnd>",
-                  "<StopOnIdleEnd>false</StopOnIdleEnd>", xml)
-    xml = re2.sub(r"<ExecutionTimeLimit>[^<]*</ExecutionTimeLimit>",
-                  "<ExecutionTimeLimit>PT0S</ExecutionTimeLimit>", xml)
-    if "StopOnIdleEnd" not in xml:
-        xml = xml.replace("</IdleSettings>", "<StopOnIdleEnd>false</StopOnIdleEnd></IdleSettings>")
-        if "</IdleSettings>" not in xml:
-            xml = xml.replace("</Settings>", "<IdleSettings><StopOnIdleEnd>false</StopOnIdleEnd></IdleSettings></Settings>")
-    try:
-        fh = tf2.NamedTemporaryFile(mode="w", suffix=".xml", delete=False)
-        fh.write(xml); fh.close()
-        rc2, o2 = run_quiet(["schtasks", "/create", "/f", "/tn", name, "/xml", fh.name])
-        try: os.unlink(fh.name)
-        except OSError: pass
-        if rc2 == 0:
-            ok("task hardened: no idle/battery stop, no execution time limit (%s)" % name)
-        else:
-            warn("task hardening failed (%s)" % (o2 or "rc %d" % rc2))
-    except Exception as exc:
-        warn("task hardening skipped: %s" % exc)
+    helper = (
+        "$d = Get-ScheduledTask -TaskName '%s' -ErrorAction Stop; "
+        "$d.Settings.DisallowStartIfOnBatteries = $false; "
+        "$d.Settings.StopIfGoingOnBatteries = $false; "
+        "$d.Settings.ExecutionTimeLimit = 'PT0S'; "
+        "if ($d.Settings.IdleSettings) { $d.Settings.IdleSettings.StopOnIdleEnd = $false; }; "
+        "Set-ScheduledTask -InputObject $d | Out-Null" % name)
+    ps = shutil.which("powershell") or "powershell"
+    rc, o = run_quiet([ps, "-NoProfile", "-Command", helper])
+    if rc == 0:
+        ok("task hardened: no idle/battery stop, no execution time limit (%s)" % name)
+    else:
+        warn("task hardening failed (%s)" % (o or "rc %d" % rc))
 
 
 def start_only():
