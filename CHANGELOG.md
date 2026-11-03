@@ -30,6 +30,10 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.111
+### Changed
+- The "enable debug logging" explanation shortened to two lines: the log
+  folder + the fact that the logs contain slide/document/message contents.
 ## 0.9.110
 ### Added
 - Local-clone update checks: the installer records the checkout folder
