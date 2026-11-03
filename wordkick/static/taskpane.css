@@ -758,3 +758,7 @@ body.dark #upd-info.updavail { color: #e6b646; }           /* dark theme: gold *
 
 /* empty feedback rows must not add dead height inside group boxes */
 .formmsg:empty, .opnote:empty { display: none; margin: 0; padding: 0; }
+
+/* the how-to-restart hint shown under the footer text while the server is down */
+.sb-hint { font-size: 10.5px; color: #b02a2a; white-space: normal; padding: 0 10px 4px; }
+body.dark .sb-hint { color: #ff6b6b; }

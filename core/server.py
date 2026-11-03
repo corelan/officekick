@@ -34,7 +34,18 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 APP = "OfficeKick"
-VERSION = "0.9.112"
+VERSION = "0.9.113"
+# how to start the server again when it is down (per OS / setup, shown by the panes).
+# Windows: prefer the registered logon task (starts it detached+hidden); else the clone's installer.
+def _start_hint():
+    import os as _os
+    if _os.name != "nt":
+        return ("python3 install.py --start   (in your OfficeKick clone - usually "
+                "~/Dropbox (Corelan)/Dev/Git/officekick)")
+        return ("schtasks /run /tn OfficeKickServer   (or: py -3 install.py --start  "
+            "in your OfficeKick clone, e.g. C:\\tools\\officekick)")
+
+START_HINT = _start_hint()
 
 CONNECTION_TYPES = (
     "openai",
@@ -671,6 +682,8 @@ class Store:
         return {
             "version": VERSION,
             "configPath": str(self.path),
+            "platform": ("windows" if os.name == "nt" else "macos"),
+            "startCommand": START_HINT,
             "connections": [
                 {
                     "name": c["name"],

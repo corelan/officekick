@@ -30,6 +30,13 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.113
+### Added
+- When the server is down, the pane footer shows an OS/setup-specific
+  restart hint under the red status text: Windows = "schtasks /run /tn
+  OfficeKickServer (or in your clone: py -3 install.py --start)", macOS =
+  "python3 install.py --start (in your OfficeKick clone)". It hides again
+  the moment the server answers.
 ## 0.9.112
 ### Added
 - install.py --start / --stop / --status: bring the local server up (or

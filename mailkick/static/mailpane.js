@@ -3388,10 +3388,30 @@ function applyOps(deck, ops, ctx) {
     if (good) {
       el.className = "";
       el.title = "Local server reachable (v" + (ver || "?") + ") - checked " + (stamp || "");
+      var hintEl2 = $("statusbar-hint");
+      if (hintEl2) { hintEl2.style.display = "none"; hintEl2.textContent = ""; }
     } else {
       el.className = "bad";   // red + pulsing (css)
       el.title = "Local server NOT reachable - last check " + (stamp || "");
+      var hintEl = $("statusbar-hint");
+      if (!hintEl) {
+        hintEl = document.createElement("div");
+        hintEl.id = "statusbar-hint";
+        var foot2 = document.querySelector(".sk-footer");
+        if (foot2) foot2.appendChild(hintEl);
+      }
+      hintEl.style.display = "";
+      hintEl.className = "sb-hint";
+      hintEl.textContent = startHintText();
     }
+  }
+  function startHintText() {
+    // OS/setup-aware one-liner for the red state
+    var p = (SK.cfg && SK.cfg.platform) || (navigator.platform && navigator.platform.indexOf("Win") >= 0 ? "windows" : "macos");
+    if (p === "windows") {
+      return "Start it again: schtasks /run /tn OfficeKickServer   (or in your clone: py -3 install.py --start)";
+    }
+    return "Start it again: python3 install.py --start   (in your OfficeKick clone)";
   }
   function srvBeat() {
     var el = $("srvbeat");
