@@ -30,6 +30,14 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.118
+### Changed
+- Settings -> General (all add-ins): settings save automatically on
+  change - no more per-group Save buttons. Changed: debug logging
+  (checkbox), speaker-notes generation, session auto-clean (checkbox +
+  days, debounced 500 ms), update-check-at-startup (was already live).
+  A small green "\u2713 saved" flash confirms each save next to the
+  control; errors surface in the same spot.
 ## 0.9.117
 ### Docs
 - Documented the blank icon in the Add-ins dialog as an expected cosmetic

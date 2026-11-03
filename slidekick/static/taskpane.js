@@ -4745,6 +4745,14 @@ OfficeDeck.prototype.setNotes = function (i, text) {
     }).catch(function (e) { setStatus("Could not save the notes setting: " + ((e && e.message) || e), "error"); });
   }
 
+  function flashSaved(id, text) {
+    var el = $(id);
+    if (!el) return;
+    el.textContent = (text || "\u2713 saved");
+    el.classList.add("show");
+    clearTimeout(el._t);
+    el._t = setTimeout(function () { el.classList.remove("show"); }, 1800);
+  }
   function saveDebugOption() {
     apiJson("/api/settings", "PUT", { debug: $("settings-debug").checked }).then(function () {
       return loadConfigAndRender();
@@ -4985,9 +4993,15 @@ OfficeDeck.prototype.setNotes = function (i, text) {
     Array.prototype.forEach.call(document.querySelectorAll("#settings-subtabs button"), function (b) {
       b.addEventListener("click", function () { switchSettingsSub(b.dataset.subtab); });
     });
-    $("settings-debug-save").addEventListener("click", saveDebugOption);
-    $("settings-notes-save").addEventListener("click", saveNotesOnly);
-    $("settings-autoclean-save").addEventListener("click", saveAutoClean);
+    $("settings-debug").addEventListener("change", function () { saveDebugOption(); flashSaved("saved-debug", SK.cfg && SK.cfg.debug ? "\u2713 saved - debug logging ON" : "\u2713 saved - debug logging OFF"); });
+    $("settings-notes").addEventListener("change", function () { saveNotesOnly(); flashSaved("saved-notes", "\u2713 saved"); });
+    var _acTimer = null;
+    var _acSave = function () {
+      clearTimeout(_acTimer);
+      _acTimer = setTimeout(function () { saveAutoClean(); flashSaved("saved-autoclean"); }, 500);
+    };
+    $("settings-autoclean").addEventListener("change", _acSave);
+    $("settings-autoclean-days").addEventListener("change", _acSave);
     var fsSel2 = $("settings-fontsize");
     if (fsSel2) fsSel2.addEventListener("change", function () {
       var v = parseInt(fsSel2.value, 10) || 100;

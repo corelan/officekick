@@ -765,3 +765,10 @@ body.dark #upd-info.updavail { color: #e6b646; }           /* dark theme: gold *
 /* the how-to-restart hint shown under the footer text while the server is down */
 .sb-hint { font-size: 10.5px; color: #b02a2a; white-space: normal; padding: 0 10px 4px; }
 body.dark .sb-hint { color: #ff6b6b; }
+
+/* auto-save indicator: a small green flash next to a just-saved setting */
+.savedflash { display: inline-flex; align-items: center; gap: 4px;
+  color: #2e9e5b; font-size: 11.5px; margin-left: 8px; opacity: 0;
+  transition: opacity .4s ease; }
+.savedflash.show { opacity: 1; }
+body.dark .savedflash { color: #7ee787; }

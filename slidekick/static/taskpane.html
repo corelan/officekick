@@ -107,7 +107,7 @@
       </div>
       <p class="muted">Logs (one file per day) are written to
         <span id="debug-path" class="small"></span>. They contain slide contents.</p>
-      <div class="row"><button id="settings-debug-save" class="btn" type="button">Save debug setting</button></div>
+      <span class="savedflash" id="saved-debug" aria-live="polite"></span>
       </div>
       <div class="setgroup"><h2 class="setgh">Sessions</h2>
       <div class="row">
@@ -116,7 +116,7 @@
       </div>
       <p class="muted" style="margin:0 0 4px 0">When enabled (default), opening any of the add-ins deletes
         sessions whose newest message is older than the number of days (120 by default).</p>
-      <div class="row"><button id="settings-autoclean-save" class="btn" type="button">Save session cleanup</button></div>
+      <span class="savedflash" id="saved-autoclean" aria-live="polite"></span>
       <p class="opnote" id="settings-autoclean-msg" role="status"></p>
       </div>
 
@@ -149,7 +149,7 @@
       <p class="muted" style="margin:0 0 4px 0">When off (default), notes are never generated or
         written on slides - notes actions from the model are skipped and the prompt tells the
         model not to produce them. Turn it on here if you want notes.</p>
-        <div class="row"><button id="settings-notes-save" class="btn" type="button">Save notes setting</button></div>
+        <span class="savedflash" id="saved-notes" aria-live="polite"></span>
       </div>
     </div>
     <div class="subpanel" id="sub-approvals">
