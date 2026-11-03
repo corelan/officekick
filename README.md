@@ -139,7 +139,8 @@ you configured.
   (Add-ins -> Manage) only lists store and organization add-ins - it never
   shows local folder catalogs, and on current Windows builds (16.0.19x) a
   ribbon-commands manifest makes the add-in vanish from BOTH dialogs
-  (ribbon commands therefore stay opt-in: --ribbon, list-mode = default).
+  (ribbon-commands manifests make the add-in disappear on the tested
+  builds - do not install with --ribbon).
 - **Outlook (MailKick)**: the installer places the manifest in Outlook's own
   add-in folder. Quit and reopen Outlook. If MailKick does not appear:
   Get Add-ins -> My add-ins -> Custom Addins -> Add a custom add-in ->
@@ -153,20 +154,6 @@ First run:
 2. **Profiles** tab: pick the content model (edits and generation) and the
    other-actions model (advice and brainstorming).
 3. Type an instruction in the pane and hit **Run** (Cmd/Ctrl+Enter).
-
-### Ribbon (opt-in)
-
-`python3 install.py --ribbon` keeps the manifest's AI commands: an **AI** group
-with the add-in icon on the Home tab (MailKick: message read/compose tabs).
-
-- Default is the list-mode manifest (no ribbon commands).
-- Verdict on this build (retested on a clean state, 0.9.29): the Office-Mac
-  16.114.3 build accepts a command manifest, renders nothing, and drops the
-  Add-ins-list entry. The add-in then shows "Add-in Error". This is a build
-  limitation for developer file-sideloads, not a stale cache.
-- If your build shows the AI group, you can stay on `--ribbon`. After any
-  `--ribbon` attempt, restore with a plain install re-run (it ships a fresh
-  manifest Version, so Office discards the cached broken registration).
 
 ## macOS permissions (locally hosted models)
 

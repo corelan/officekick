@@ -24,38 +24,20 @@ is about how SlideKick works.
 
 ## Using it inside PowerPoint
 
-### Opening the pane on Windows
+### Opening the pane (the one working path on every platform)
 
-The install registers the ribbon command by default on Windows: open the
-pane from the **Corelan SlideKick** button in the Home tab ribbon
-(the button's menu also carries **New session**). If the button is not
-there yet: Home tab -> **Add-ins** -> **Advanced** (the link next to
-Manage) -> the classic **Office Add-ins** dialog -> **SHARED FOLDER** at
-the top -> **Corelan SlideKick** -> **Add** (once). Note: the newer
-"Apps" dialog (Add-ins -> **Manage**) lists Microsoft Store and
-organization add-ins only - local trusted folder catalogs never appear
-there.
-
-
+- **Windows**: quit and reopen PowerPoint, then Home tab -> **Add-ins** ->
+  **Advanced** (the link next to Manage) -> the classic **Office Add-ins**
+  dialog -> **SHARED FOLDER** at the top -> **Corelan SlideKick** ->
+  **Add** (once per application; it stays in the list afterwards).
 - **macOS**: open a deck, then **Home tab -> Add-ins** (dropdown) ->
-  **Developer Add-ins** -> **Corelan SlideKick**. The pane opens on the right;
-  the Add-ins entry stays available every session.
-- **Ribbon (opt-in)**: install with `python3 install.py --ribbon` to keep the
-  manifest's add-in commands: an **AI** group with the Corelan logo
-  (16/32/80 px icons) and an "Open SlideKick" button on the Home ribbon.
-  - Word keeps the same group for DocKick.
-  - Outlook shows the group on the message read/compose tabs.
-  - Default is list-mode (no commands).
-  - Retested on a clean state (0.9.29): the 16.114.3 Office-Mac build accepts
-    the commands manifest, renders nothing and drops the Add-ins entry - a
-    build limitation for developer file-sideloads, not a cache artifact.
-    Restore with a plain install re-run (it bumps the manifest Version).
-  Default = list mode: on the Office-Mac build we tested, a command manifest
-  REPLACED the Add-ins-list entry and then rendered neither the group nor a
-  list item (and earlier 16.114 builds behaved the same) - the add-in was
-  unreachable until the installer was re-run without `--ribbon`.
-- **Windows**: quit and reopen PowerPoint, then **Insert -> My Add-ins
-  (dropdown) -> SHARED FOLDER -> Corelan SlideKick -> Add** once.
+  **Developer Add-ins** -> **Corelan SlideKick**.
+
+Do not install with `--ribbon`: on the tested builds (Office-Mac 16.114.3
+and Windows 16.0.19725) a ribbon-commands manifest makes the add-in
+disappear - on the Mac from the Add-ins list, on Windows from BOTH the
+classic dialog and the Apps dialog. The installer defaults to list-mode
+for this reason; plain `--ribbon` installs are not supported.
 
 ## Typed instructions, routes and approvals
 

@@ -30,6 +30,15 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.116
+### Docs
+- Removed every how-to ribbon reference from the docs. The only remaining
+  mentions are the warning: ribbon-commands manifests break the add-in on
+  the tested builds (Office-Mac 16.114.3, Windows 16.0.19725), so the
+  installer ships list-mode by default and --ribbon installs are not
+  supported. The stale "Insert -> My Add-ins -> SHARED FOLDER" Windows
+  route is gone too - every doc now points at Home -> Add-ins ->
+  Advanced -> Shared Folder.
 ## 0.9.115
 ### Docs
 - README: new "The local server" section - manual start (--start per OS,

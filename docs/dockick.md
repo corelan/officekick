@@ -22,34 +22,19 @@ Install + uninstall basics: see the top-level [README](../README.md).
 
 ## Using it inside Word
 
-### Opening the pane on Windows
+### Opening the pane (the one working path on every platform)
 
-The install registers the ribbon command by default on Windows: open the
-pane from the **Corelan DocKick** button in the Home tab ribbon
-(the button's menu also carries **New session**). If the button is not
-there yet: Home tab -> **Add-ins** -> **Advanced** (the link next to
-Manage) -> the classic **Office Add-ins** dialog -> **SHARED FOLDER** at
-the top -> **Corelan DocKick** -> **Add** (once). Note: the newer
-"Apps" dialog (Add-ins -> **Manage**) lists Microsoft Store and
-organization add-ins only - local trusted folder catalogs never appear
-there.
-
-
+- **Windows**: quit and reopen Word, then Home tab -> **Add-ins** ->
+  **Advanced** -> the classic **Office Add-ins** dialog -> **SHARED
+  FOLDER** at the top -> **Corelan DocKick** -> **Add** (once).
 - **macOS**: open a document, then **Home tab -> Add-ins** (dropdown) ->
   **Developer Add-ins** -> **Corelan DocKick**.
-- **Windows**: **Insert -> My Add-ins (dropdown) -> SHARED FOLDER -> Corelan
-  DocKick -> Add** once (same per-user trusted catalog as SlideKick).
-- The pane shows the document as a paragraph outline; with *include document
-  context* (default on) every request carries the paragraphs (index + style +
-  text), tables and your current selection, so "reword the current paragraph"
-  works without naming indices.
 
-**Sessions & the Previous-requests box** (shared with the other add-ins): every
-exchange is auto-saved in a local, AI-named session and can be resumed from the
-**History** tab. The box below the prompt lists every run - timestamp first,
-the request text below it, +/- to expand the full request and the response;
-clicking a stored request refills an empty input. Failed runs keep your typed
-text and re-enable the input.
+Do not install with `--ribbon` (see
+[slidekick.md](slidekick.md#opening-the-pane-the-one-working-path-on-every-platform)):
+on the tested builds a ribbon-commands manifest makes the add-in
+disappear, so the installer defaults to list-mode.
+
 
 ## Document actions (ops)
 

@@ -88,9 +88,8 @@ run to `~/Library/Containers/com.microsoft.Outlook/Data/Documents/wef/mailkick.x
 4. If Outlook ever shows "Installation failed": retry after a restart of
    Outlook. Some builds report a timeout although the add-in installed; the
    My add-ins list is the truth.
-The manifest now carries the standard VersionOverrides (a ribbon button in
-Message-Read and Message-Compose command surfaces) and is validated with the
-official office-addin-manifest validator ("The manifest is valid").
+The default manifest is list-mode (no ribbon commands; on the tested
+Office builds a commands manifest breaks the add-in).
 **Windows**: install.py registers the trusted folder catalog - no manual step.
 (Outlook on Windows does not read folder catalogs: load the manifest once via
 the "Add from File" dialog - the installer prints the steps.)
