@@ -84,6 +84,42 @@ If a deck or document ever greets you with an
 once with the repair tool - see the troubleshooting section in
 [docs/slidekick.md](docs/slidekick.md).
 
+## The local server: starting it manually and automatically
+
+Everything the add-ins show comes from a small local server
+(`http://127.0.0.1:8765`). If it is not running, the pane's footer text
+(the line next to the heartbeat dot) turns red with an OS-specific hint.
+
+Start it manually - from your OfficeKick checkout:
+
+```bash
+python3 install.py --start      # macOS
+py -3 install.py --start        # Windows
+```
+
+`--start` brings the server up and health-checks it; it changes nothing
+else. Related flags: `--status` (shows the running version or exits
+non-zero), `--stop`. In the interactive installer the same action is
+menu item **(2b) Start (or restart) the local server only**.
+
+How it starts automatically:
+
+- **macOS - login item.** The installer registers the `OfficeKickServer`
+  login item (the app bundle in `~/Applications`). It runs at login with
+  no visible window. Re-register: `python3 install.py --install`
+  (or repair via the interactive menu, option 1).
+- **Windows - scheduled task.** The installer creates the per-user task
+  `OfficeKickServer` (runs at logon, hidden, and hardened at every
+  install: no stop-on-idle, no stop-on-batteries, no execution time
+  limit, so it cannot end itself silently). Inspect it with
+  `schtasks /query /tn OfficeKickServer /v`. The pane's footer hint shows
+  `schtasks /run /tn OfficeKickServer` as the quickest restart because
+  the registered task is the most faithful way to start it exactly like
+  the logon does.
+
+Check whether it is up: open `http://127.0.0.1:8765/api/health` in a
+browser, or `python3 install.py --status` from the checkout.
+
 The pane also checks for updates itself. See **Settings -> Check now** (or the
 "Check for updates automatically at startup" option). Your config, profiles and
 sessions survive every update.

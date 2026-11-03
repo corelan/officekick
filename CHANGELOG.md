@@ -30,6 +30,12 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.115
+### Docs
+- README: new "The local server" section - manual start (--start per OS,
+  --status/--stop, menu 2b) and automatic start (macOS login item,
+  Windows hardened logon task + schtasks quick restart), plus the
+  health URL and the pane's red-footer hint.
 ## 0.9.114
 ### Fixed
 - git calls made by the Windows server (update probe, git pull) no longer
