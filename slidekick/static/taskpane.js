@@ -685,10 +685,13 @@
   ].join("\n");
 
   var NOTES_OFF_RULE =
-    "- Speaker-notes generation is DISABLED for this user (Settings). Never generate notes:" +
-    " omit the notes field in create_slide/edit_slide ops and never emit set_notes ops." +
-    " If the user explicitly asks for speaker notes, use format A (reply) and tell them to" +
-    " enable 'Generate speaker notes' in Settings.";
+    "- Speaker-notes AUTO-generation is OFF in the user's Settings. For ordinary slide work:" +
+    " omit notes fields and never invent set_notes ops. When the user explicitly asks for" +
+    " presenter/speaker notes (or clearly wants them for a slide): DO emit the set_notes op" +
+    " (and keep notes fields out of create_slide/edit_slide) - the pane will ask the user to" +
+    " confirm that one write before applying it; nothing is dropped. NEVER refuse an explicit" +
+    " notes request, never tell the user to change Settings first, and never offer to put the" +
+    " note text on the slide itself instead.";
 
   var REPAIR_ASK =
     "Your previous answer did not follow the required format. " +
@@ -2406,7 +2409,8 @@ OfficeDeck.prototype.setNotes = function (i, text) {
           out.find = findR;
         }
       } else if (t === "set_notes") {
-        if (notesOff) { notesDropped++; return; } // speaker-notes generation disabled
+        // notes-off no longer drops the op: it goes through as "confirm"
+        // (renderOpsPreview forces confirm when generateNotes is off)
         if (!slideOk(op.slide)) { bad("bad slide index"); return; }
         if (typeof op.notes !== "string" || !op.notes) { bad("missing notes"); return; }
         out.slide = op.slide; out.notes = op.notes;
@@ -4062,6 +4066,9 @@ OfficeDeck.prototype.setNotes = function (i, text) {
       var text = row.mode === "deny" ? fmtOp(row.op, ctx) + "  - blocked by approval policy"
         : row.mode === "invalid" ? (row.op && row.op.type ? row.op.type + ": " : "") + (row.reason || "invalid")
         : fmtOp(row.op, ctx);
+      if (row.op.notesOffConfirm) {
+        text += "  - note generation is OFF in Settings; ticking this writes them anyway for this slide";
+      }
       desc.textContent = text;
       line1.appendChild(badge);
       if (row.mode === "confirm") {

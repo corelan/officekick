@@ -34,7 +34,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 APP = "OfficeKick"
-VERSION = "0.9.118"
+VERSION = "0.9.119"
 # how to start the server again when it is down (per OS / setup, shown by the panes).
 # Windows: prefer the registered logon task (starts it detached+hidden); else the clone's installer.
 def _start_hint():

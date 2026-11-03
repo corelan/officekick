@@ -30,6 +30,16 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.119
+### Changed
+- Explicit speaker-notes requests no longer refuse while "Generate speaker
+  notes" is OFF. set_notes ops now survive validation: they render as
+  "(needs approval)" rows with an explanatory line ("note generation is
+  OFF in Settings; ticking this writes them anyway for this slide"), so
+  asking once confirms once. The model rule was rewritten accordingly:
+  never refuse an explicit notes request, never demand a Settings change
+  first, never offer to put the note on the slide instead; only spontaneous
+  note-writing stays suppressed.
 ## 0.9.118
 ### Changed
 - Settings -> General (all add-ins): settings save automatically on
