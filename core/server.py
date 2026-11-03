@@ -34,7 +34,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 APP = "OfficeKick"
-VERSION = "0.9.113"
+VERSION = "0.9.114"
 # how to start the server again when it is down (per OS / setup, shown by the panes).
 # Windows: prefer the registered logon task (starts it detached+hidden); else the clone's installer.
 def _start_hint():
@@ -1164,8 +1164,7 @@ def git_update_probe(store=None):
     out["git"] = git
     def run(args, timeout=20):
         try:
-            p = subprocess.run([git, "-C", repo] + args, capture_output=True,
-                               text=True, timeout=timeout)
+            p = git_run(repo, args, timeout=timeout)
             return p.returncode, (p.stdout or "").strip(), (p.stderr or "").strip()
         except Exception as exc:
             return 1, "", str(exc)
@@ -1188,6 +1187,17 @@ def git_update_probe(store=None):
     return out
 
 
+def git_run(repo, args, timeout=30):
+    """run git without any console window on Windows (the pane's server
+    runs detached; a bare subprocess.run flashes a console per call)"""
+    flags = 0
+    if os.name == "nt" and hasattr(subprocess, "CREATE_NO_WINDOW"):
+        flags = subprocess.CREATE_NO_WINDOW
+    git = shutil.which("git") or "git"
+    return subprocess.run([git, "-C", repo] + args, capture_output=True,
+                          text=True, timeout=timeout, creationflags=flags)
+
+
 def git_pull(store):
     """POST /api/repo-update: run git pull --ff-only in the recorded clone.
     Returns a report; never auto-runs on its own."""
@@ -1199,8 +1209,7 @@ def git_pull(store):
     if not shutil.which("git"):
         raise ApiError(400, "git is not installed")
     try:
-        p = subprocess.run(["git", "-C", repo, "pull", "--ff-only"],
-                           capture_output=True, text=True, timeout=180)
+        p = git_run(repo, ["pull", "--ff-only"], timeout=180)
     except subprocess.TimeoutExpired:
         raise ApiError(500, "git pull timed out after 180 s")
     out = {"ok": p.returncode == 0, "repoPath": repo,

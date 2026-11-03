@@ -30,6 +30,10 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.114
+### Fixed
+- git calls made by the Windows server (update probe, git pull) no longer
+  flash a console window per call (CREATE_NO_WINDOW).
 ## 0.9.113
 ### Added
 - When the server is down, the pane footer shows an OS/setup-specific
