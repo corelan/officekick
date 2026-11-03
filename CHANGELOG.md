@@ -30,6 +30,11 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.120
+### Changed
+- After a successful "Pull update from git now", the success message tells
+  the user to refresh the pane (About -> Reload pane / close+reopen) to
+  load the new pane files first, then run the installer to redeploy.
 ## 0.9.119
 ### Changed
 - Explicit speaker-notes requests no longer refuse while "Generate speaker

@@ -387,7 +387,7 @@
                 info.className = "opnote";
                 info.textContent = "Pulled into " + (pr.repoPath || "the clone") + ". " +
                   ((pr.stdout || "").split("\n").filter(function (l) { return l; })[0] || "") +
-                  " - now run the installer (python3 install.py --update / py -3 install.py --update) to redeploy + restart the server, then reload this pane.";
+                  " - then: (1) reload this pane (About tab -> Reload pane, or close and reopen the add-in) to load the new pane files, and (2) run the installer (python3 install.py --update) to redeploy the manifests and restart the server.";
               } else {
                 info.className = "opnote updavail";
                 info.textContent = "Pull failed: " + ((pr && (pr.stderr || pr.stdout || pr.error)) || "git error");
