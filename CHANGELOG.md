@@ -30,6 +30,12 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.117
+### Docs
+- Documented the blank icon in the Add-ins dialog as an expected cosmetic
+  artifact of the http-only localhost transport (dialog webview skips
+  http images; the icons themselves are served and used elsewhere).
+  Decision: keep http-only, no external icon hosting.
 ## 0.9.116
 ### Docs
 - Removed every how-to ribbon reference from the docs. The only remaining

@@ -39,6 +39,16 @@ disappear - on the Mac from the Add-ins list, on Windows from BOTH the
 classic dialog and the Apps dialog. The installer defaults to list-mode
 for this reason; plain `--ribbon` installs are not supported.
 
+### About the icon in the Add-ins dialog
+
+The add-in may show a generic/blank icon in the Add-ins dialog. That is
+expected with the http-only localhost transport: the pane and the manifest
+work over plain http (Office whitelists localhost), but the dialog's
+webview refuses to render http images, so the icon thumbnail is skipped.
+The icons themselves are served fine (they appear anywhere non-dialog
+content is shown); functionality is unaffected. No icon hosting outside
+localhost is used or planned (the icons must stay fully local).
+
 ## Typed instructions, routes and approvals
 
 - The **route** decides which model runs: `auto` sends slide-related requests
