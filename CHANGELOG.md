@@ -30,6 +30,14 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.112
+### Added
+- install.py --start / --stop / --status: bring the local server up (or
+  down) without touching the install; the interactive menu gained
+  "(2b) Start (or restart) the local server only".
+- Windows: the logon task no longer self-kills the server (the
+  stop-on-idle/battery/72h-limit settings used to end it silently - the
+  likely cause of "server died"); the task is re-hardened at every install.
 ## 0.9.111
 ### Changed
 - The "enable debug logging" explanation shortened to two lines: the log

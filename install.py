@@ -246,6 +246,55 @@ def stop_server():
         time.sleep(0.4)
 
 
+def _hard_task_settings(name):
+    """schtasks-idle/battery settings kill long-running servers; edit the
+    task XML to keep the server running (no idle-stop, no battery-stop,
+    no 72h execution limit, restart on failure)"""
+    import tempfile as tf2
+    rc, xml = run_quiet(["schtasks", "/query", "/tn", name, "/xml"])
+    if rc != 0 or not xml:
+        return
+    import re as re2
+    xml = re2.sub(r"<DisallowStartIfOnBatteries>[^<]*</DisallowStartIfOnBatteries>",
+                  "<DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>", xml)
+    xml = re2.sub(r"<StopIfGoingOnBatteries>[^<]*</StopIfGoingOnBatteries>",
+                  "<StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>", xml)
+    xml = re2.sub(r"<StopOnIdleEnd>[^<]*</StopOnIdleEnd>",
+                  "<StopOnIdleEnd>false</StopOnIdleEnd>", xml)
+    xml = re2.sub(r"<ExecutionTimeLimit>[^<]*</ExecutionTimeLimit>",
+                  "<ExecutionTimeLimit>PT0S</ExecutionTimeLimit>", xml)
+    if "StopOnIdleEnd" not in xml:
+        xml = xml.replace("</IdleSettings>", "<StopOnIdleEnd>false</StopOnIdleEnd></IdleSettings>")
+        if "</IdleSettings>" not in xml:
+            xml = xml.replace("</Settings>", "<IdleSettings><StopOnIdleEnd>false</StopOnIdleEnd></IdleSettings></Settings>")
+    try:
+        fh = tf2.NamedTemporaryFile(mode="w", suffix=".xml", delete=False)
+        fh.write(xml); fh.close()
+        rc2, o2 = run_quiet(["schtasks", "/create", "/f", "/tn", name, "/xml", fh.name])
+        try: os.unlink(fh.name)
+        except OSError: pass
+        if rc2 == 0:
+            ok("task hardened: no idle/battery stop, no execution time limit (%s)" % name)
+        else:
+            warn("task hardening failed (%s)" % (o2 or "rc %d" % rc2))
+    except Exception as exc:
+        warn("task hardening skipped: %s" % exc)
+
+
+def start_only():
+    """--start: bring the local server up (no install steps) and health-check"""
+    out("")
+    out("  Starting the OfficeKick server")
+    install_dir()   # just for the message below
+    if health(PORT):
+        ok("already running: http://127.0.0.1:%d (version %s)"
+           % (PORT, health(PORT).get("version")))
+        return
+    stop_server()
+    if start_server():
+        return
+    die("could not start the server - run install.py --install")
+
 def start_server():
     if DRY_RUN:
         out("  [..]  [dry-run] would start the server on port %d" % PORT)
@@ -804,6 +853,11 @@ def autostart_windows():
     rc, o = run_quiet(["schtasks", "/create", "/f", "/sc", "onlogon",
                        "/tn", TASK_NAME, "/tr", tr])
     if rc == 0:
+        # the 0.9.108-era task died on its own: "Stop the task if it runs
+        # longer than 3 days" + idle-stop kill long-running servers. The
+        # server must run until the machine shuts down.
+        _hard_task_settings(TASK_NAME)
+    if rc == 0:
         ok("scheduled task created (starts the server at logon): %s" % TASK_NAME)
         return True
     warn("schtasks failed (%s) - using the HKCU Run key instead" % (o or "rc %d" % rc))
@@ -1029,6 +1083,9 @@ def main():
     ap.add_argument("--install", action="store_true", help="interactive install now")
     ap.add_argument("--update", action="store_true", help="git pull + update (non-interactive)")
     ap.add_argument("--uninstall", action="store_true", help="remove the add-ins + server")
+    ap.add_argument("--start", action="store_true", help="start the local server only (no install changes)")
+    ap.add_argument("--stop", action="store_true", help="stop the local server")
+    ap.add_argument("--status", action="store_true", help="show whether the local server is running")
     ap.add_argument("--purge-config", action="store_true",
                     help="with --uninstall: also wipe ~/.officekick")
     ap.add_argument("--port", type=int, default=DEFAULT_PORT, help="server port (default %d)" % DEFAULT_PORT)
@@ -1050,6 +1107,20 @@ def main():
     if not (is_mac() or is_windows()):
         die("this installer supports macOS and Windows only (detected: %s)." % sys.platform)
 
+    if args.start:
+        start_only()
+        return
+    if args.stop:
+        stop_server()
+        ok("server stopped (port %d)" % PORT)
+        return
+    if args.status:
+        h = health(PORT)
+        if h:
+            ok("running: http://127.0.0.1:%d (version %s)" % (PORT, h.get("version")))
+            raise SystemExit(0)
+        out("  not running on port %d (try: install.py --start)" % PORT)
+        raise SystemExit(1)
     if args.uninstall:
         do_uninstall(True if args.purge_config else None)
         return
@@ -1065,6 +1136,7 @@ def main():
         out("OfficeKick %s - installer (auto-detected: %s)" % (VERSION, platform.system()))
         out("  1) Install (or repair the current install)")
         out("  2) Update the current install (also pulls the repo with git)")
+        out("  2b) Start (or restart) the local server only")
         out("  3) Uninstall")
         out("  q) quit")
         try:
@@ -1080,6 +1152,10 @@ def main():
         if choice == "2":
             git_pull()
             install("Update", interactive=False)
+            return
+        if choice == "2b":
+            stop_server()
+            start_only()
             return
         if choice == "3":
             do_uninstall(None)
