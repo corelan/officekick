@@ -3938,6 +3938,45 @@ OfficeDeck.prototype.setNotes = function (i, text) {
   // ------------------------------------------------------------------ //
   // Ops preview + approval gate
   // ------------------------------------------------------------------ //
+  function copyTextToClipboard2(txt, done) {
+    try {
+      var ta2 = document.createElement("textarea");
+      ta2.value = txt; ta2.style.position = "fixed"; ta2.style.opacity = "0";
+      document.body.appendChild(ta2); ta2.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta2);
+      if (done) done(true); return;
+    } catch (eC) { if (done) done(false); }
+  }
+  function manualNotesBox(res) {
+    var mb = document.createElement("div");
+    mb.className = "manualbox";
+    mb.appendChild(document.createElement("h4")).textContent =
+      "Notes could not be written automatically (this Office build blocks notes-page edits) - copy each into the notes pane:";
+    res.manualNotes.forEach(function (mn) {
+      var wrap = document.createElement("div");
+      wrap.style.display = "flex"; wrap.style.alignItems = "flex-start"; wrap.style.gap = "6px";
+      var ta = document.createElement("textarea");
+      ta.value = "Slide " + (mn.slide + 1) + ": " + mn.text;
+      ta.style.flex = "1 1 auto";
+      var btn = document.createElement("button");
+      btn.className = "btn subtle";
+      btn.type = "button";
+      btn.textContent = "\uD83D\uDCCB";
+      btn.title = "Copy these notes to the clipboard";
+      btn.addEventListener("click", function () {
+        copyTextToClipboard2(ta.value, function (okc) {
+          btn.textContent = okc ? "\u2713 copied" : "copy failed";
+          btn.disabled = true;
+          setTimeout(function () { btn.textContent = "\uD83D\uDCCB"; btn.disabled = false; }, 1800);
+        });
+      });
+      wrap.appendChild(btn); wrap.appendChild(ta);
+      mb.appendChild(wrap);
+    });
+    return mb;
+  }
+
   function renderApplyResult(result, res) {
     result.innerHTML = "";
     res.lines.forEach(function (l) {
@@ -3946,20 +3985,9 @@ OfficeDeck.prototype.setNotes = function (i, text) {
       d.textContent = l.text;
       result.appendChild(d);
     });
-    if (res.manualNotes.length) {
-      var mb = document.createElement("div");
-      mb.className = "manualbox";
-      mb.appendChild(document.createElement("h4")).textContent = "Notes could not be written automatically - copy manually:";
-      res.manualNotes.forEach(function (mn) {
-        var ta = document.createElement("textarea");
-        ta.value = "Slide " + (mn.slide + 1) + ": " + mn.text;
-        mb.appendChild(ta);
-      });
-      result.appendChild(mb);
-    }
+    if (res.manualNotes.length) result.appendChild(manualNotesBox(res));
   }
 
-  // ---- mechanical readability enforcement: no dark-on-dark / light-on-light ----
   function hexLum(hex) {
     var m = /^#([0-9a-fA-F]{6})$/.exec(String(hex || "").trim());
     if (!m) return null;
@@ -4293,43 +4321,19 @@ OfficeDeck.prototype.setNotes = function (i, text) {
           result.appendChild(d);
         });
         // everything executed cleanly? close the proposal section; only the
-        // completed list stays (below where the buttons used to be)
+        // completed list (+ any manual-notes copy boxes) stays
         var liveRows = rows.filter(function (r) { return !r.removed && !r.done; }).length;
         if (!liveRows) {
-          if (res.manualNotes.length) {
-            var mb2 = document.createElement("div");
-            mb2.className = "manualbox";
-            mb2.appendChild(document.createElement("h4")).textContent = "Notes could not be written automatically - copy manually:";
-            res.manualNotes.forEach(function (mn) {
-              var ta = document.createElement("textarea");
-              ta.value = "Slide " + (mn.slide + 1) + ": " + mn.text;
-              mb2.appendChild(ta);
-            });
-            doneBox.appendChild(mb2);
-          }
-          box.parentNode.removeChild(box);   // box also disappears - the done box is a sibling
+          if (res.manualNotes.length) doneBox.appendChild(manualNotesBox(res));
+          box.parentNode.removeChild(box);   // the done box is a sibling
           SK.opProgress = null;
           setStatus("Applied " + chosen.length + " op(s).", "ok");
-          var f0 = res && res.lines ? res.lines.filter(function (l) { return !l.ok; }).length : 0;
-          if (f0) setStatus("Applied with " + f0 + " error(s).", "error");
+          var f2 = res && res.lines ? res.lines.filter(function (l) { return !l.ok; }).length : 0;
+          if (f2) setStatus("Applied with " + f2 + " error(s).", "error");
           renderSimDeck();
           updateDeckSummary();
           dbg("ops.applied", { lines: res.lines, closedGate: true });
           return;
-        }
-        // some failed: keep the buttons + rows so the failed ones can be re-tried
-        applyBtn.disabled = false;   // re-arm for a retry of the survivors
-        updateApplyLabel();
-        if (res.manualNotes.length) {
-          var mb = document.createElement("div");
-          mb.className = "manualbox";
-          mb.appendChild(document.createElement("h4")).textContent = "Notes could not be written automatically - copy manually:";
-          res.manualNotes.forEach(function (mn) {
-            var ta = document.createElement("textarea");
-            ta.value = "Slide " + (mn.slide + 1) + ": " + mn.text;
-            mb.appendChild(ta);
-          });
-          result.appendChild(mb);
         }
         var fails = res.lines.filter(function (l) { return !l.ok; }).length;
         setStatus(fails ? "Applied with " + fails + " error(s)." : "Applied " + chosen.length + " op(s).", fails ? "error" : "ok");

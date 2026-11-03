@@ -30,6 +30,16 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.121
+### Changed
+- Manual-notes fallback (when a host refuses notes-page writes): each note
+  now sits next to a clipboard copy button - one click copies the exact
+  text for that slide (button flashes "\u2713 copied"). All three manual-
+  notes render sites use one shared builder; the box header names the
+  cause (this Office build blocks notes-page edits). Notes-writing on
+  Windows will get a deeper API fix once the affected host build can be
+  probed directly; the sim shim writes notes successfully (the manual
+  path only triggers where the host genuinely refuses).
 ## 0.9.120
 ### Changed
 - After a successful "Pull update from git now", the success message tells
