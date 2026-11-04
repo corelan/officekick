@@ -34,7 +34,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 APP = "OfficeKick"
-VERSION = "0.9.133"
+VERSION = "0.9.134"
 
 # --------------------------------------------------------------------------- #
 # Self-restart: the server watches for <cfg dir>/restart.flag. Whatever writes
@@ -119,7 +119,7 @@ def _restart_watcher(store, servers, port):
     """Daemon thread: on restart.flag -> spawn the detached helper, stop serving."""
     flag = restart_flag_path(store)
     while True:
-        time.sleep(1.0)
+        time.sleep(10.0)   # a restart = never urgent: 10 s poll, near-zero overhead
         if not os.path.exists(flag):
             continue
         cause = ""
@@ -170,8 +170,12 @@ DEFAULT_CUSTOM_PROMPT = (
     "### Writing style\n"
     "- Plain, simple vocabulary and short sentences - without simplifying the substance or losing technical precision.\n"
     "- Active voice; concrete, specific wording; no filler or marketing language.\n"
+    "\n"
+    "### Formatting\n"
+    "- Use and implement the same style and theme elements already present in the document.\n"
     "- Identify code/syntax/protocol/command instructions and make a separate request to put them in a monospaced font such as Consolas"
 )
+
 # how to start the server again when it is down (per OS / setup, shown by the panes).
 # Windows: prefer the registered logon task (starts it detached+hidden); else the clone's installer.
 def _start_hint():

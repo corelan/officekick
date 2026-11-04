@@ -873,6 +873,9 @@
       ],
     }).then(function (resp) {
       var name = stripReasoning(resp.text || "").replace(/"/g, "").replace(/^[:\- ]+/, "").trim().slice(0, 48);
+      // the model may answer KEEP (= the current title still fits): must not
+      // rename the session to the literal word
+      if (String(name).toUpperCase() === "KEEP") { SK.titleBusy = false; return; }
       // reject non-title junk (models that ignore the instruction and echo ops/json)
       var junk = /^[{\[]/.test(name) || /"(kind|ops|type)"/.test(name) || name.length < 2 || name.length > 60;
       if (junk) { renameFallback(); SK.titleBusy = false; return; }
@@ -2415,6 +2418,10 @@ OfficeDeck.prototype.setNotes = function (i, text) {
     var ops = [], invalid = [];
     var notesDropped = 0;
     var notesOff = !(SK.cfg && SK.cfg.generateNotes);
+    // slides the batch itself creates (create_slide ops processed before the
+    // op being validated) count as valid targets: the validator sees the deck
+    // as it will be AFTER those creates, not only as it is right now
+    var virtualCount = ctx ? ctx.slideCount : 0;
     (rawOps || []).forEach(function (op, index) {
       if (!op || typeof op !== "object") { invalid.push({ op: op, reason: "not an object" }); return; }
       var t = op.type;
@@ -2424,7 +2431,11 @@ OfficeDeck.prototype.setNotes = function (i, text) {
         return;
       }
       var bad = function (reason) { invalid.push({ op: op, reason: reason }); };
-      var slideOk = function (v) { return typeof v === "number" && Math.floor(v) === v && v >= 1 && (!ctx || v <= ctx.slideCount); };
+      var slideOk = function (v) { return typeof v === "number" && Math.floor(v) === v && v >= 1 && (!ctx || v <= virtualCount); };
+      // a slide the CURRENT deck does not have yet = created later in this
+      // batch: shape/find checks cannot use the stored context - defer them
+      // to apply time (a wrong shape number fails honestly there)
+      var futureSlide = function (v) { return ctx && typeof v === "number" && v > ctx.slideCount; };
       var shapeOk = function (sl, sh) {
         if (!ctx || !ctx.slides[sl - 1]) return false;
         return (ctx.slides[sl - 1].shapes || []).some(function (s) { return s.idx === sh - 1 && s.text != null; });
@@ -2442,6 +2453,7 @@ OfficeDeck.prototype.setNotes = function (i, text) {
         out.body = body;
         out.notes = notesOff ? null : (typeof op.notes === "string" ? op.notes : null);
         out.after = typeof op.after === "number" ? op.after : null;
+        virtualCount += 1;   // later ops in this batch may target this slide
       } else if (t === "edit_slide") {
         if (!slideOk(op.slide)) { bad("bad slide index"); return; }
         out.slide = op.slide;
@@ -2460,10 +2472,11 @@ OfficeDeck.prototype.setNotes = function (i, text) {
         if (typeof op.find === "string" && op.find.trim()) {
           var findR = op.find.trim();
           if (findR.length > 200) { bad("find text too long (200 chars max)"); return; }
-          var shapeTxtR = ((ctx.slides[op.slide - 1].shapes || []).find(function (sh) { return sh.idx === op.shape - 1; }) || {}).text || "";
-          if (shapeTxtR.toLowerCase().indexOf(findR.toLowerCase()) === -1) {
-            bad("find text not found in that shape's current text"); return;
-          }
+          var curSlR = ctx && ctx.slides[op.slide - 1];   // future slides: no ctx row yet
+        var shapeTxtR = (((curSlR && curSlR.shapes) || []).find(function (sh) { return sh.idx === op.shape - 1; }) || {}).text || "";
+        if (!futureSlide(op.slide) && shapeTxtR.toLowerCase().indexOf(findR.toLowerCase()) === -1) {
+          bad("find text not found in that shape's current text"); return;
+        }
           out.find = findR;
         }
       } else if (t === "set_notes") {
@@ -2500,7 +2513,7 @@ OfficeDeck.prototype.setNotes = function (i, text) {
         if (!slideOk(op.slide)) { bad("bad slide index"); return; }
         var shapeInCtx = ctx && ctx.slides[op.slide - 1] &&
           (ctx.slides[op.slide - 1].shapes || []).some(function (s) { return s.idx === op.shape - 1; });
-        if (!shapeInCtx) { bad("shape " + op.shape + " not in the context list for slide " + op.slide); return; }
+        if (!futureSlide(op.slide) && !shapeInCtx) { bad("shape " + op.shape + " not in the context list for slide " + op.slide); return; }
         var anyM = false, geoM = {};
         ["left", "top", "width", "height"].forEach(function (p3) {
           if (typeof op[p3] === "number") { geoM[p3] = op[p3]; anyM = true; }
@@ -2529,7 +2542,7 @@ OfficeDeck.prototype.setNotes = function (i, text) {
         }
         var shapeInCtxF = ctx && ctx.slides[op.slide - 1] &&
           (ctx.slides[op.slide - 1].shapes || []).some(function (sh) { return sh.idx === op.shape - 1; });
-        if (!shapeInCtxF) { bad("shape " + op.shape + " not in the context list for slide " + op.slide); return; }
+        if (!futureSlide(op.slide) && !shapeInCtxF) { bad("shape " + op.shape + " not in the context list for slide " + op.slide); return; }
         var fontF = {}, hasAny = false;
         ["bold", "italic", "allCaps", "underline"].forEach(function (k2) {
           if (typeof op.font !== "undefined" && typeof op.font[k2] === "boolean") { fontF[k2] = op.font[k2]; hasAny = true; }
@@ -2545,10 +2558,11 @@ OfficeDeck.prototype.setNotes = function (i, text) {
         if (typeof op.find === "string" && op.find.trim()) {
           var findS = op.find.trim();
           if (findS.length > 200) { bad("find text too long (200 chars max)"); return; }
-          var shapeTxtF = (ctx.slides[op.slide - 1].shapes.find(function (sh) { return sh.idx === op.shape - 1; }) || {}).text || "";
-          if (shapeTxtF.toLowerCase().indexOf(findS.toLowerCase()) === -1) {
-            bad("find text not found in that shape's current text"); return;
-          }
+          var curSlF = ctx && ctx.slides[op.slide - 1];   // future slides: no ctx row yet
+          var shapeTxtF = (((curSlF && curSlF.shapes) || []).find(function (sh) { return sh.idx === op.shape - 1; }) || {}).text || "";
+        if (!futureSlide(op.slide) && shapeTxtF.toLowerCase().indexOf(findS.toLowerCase()) === -1) {
+          bad("find text not found in that shape's current text"); return;
+        }
           out.find = findS;
         }
       } else if (t === "format_selection") {
@@ -2565,7 +2579,7 @@ OfficeDeck.prototype.setNotes = function (i, text) {
         if (!slideOk(op.slide)) { bad("bad slide index"); return; }
         var shapeInCtxS = ctx && ctx.slides[op.slide - 1] &&
           (ctx.slides[op.slide - 1].shapes || []).some(function (s) { return s.idx === op.shape - 1; });
-        if (!shapeInCtxS) { bad("shape " + op.shape + " not in the context list for slide " + op.slide); return; }
+        if (!futureSlide(op.slide) && !shapeInCtxS) { bad("shape " + op.shape + " not in the context list for slide " + op.slide); return; }
         var fillS = null, lineS = null;
         if (typeof op.fill === "string" && op.fill.trim()) {
           if (!/^[\w#\(\), .%]{1,40}$/.test(op.fill.trim())) { bad("bad fill color"); return; }
@@ -2597,7 +2611,7 @@ OfficeDeck.prototype.setNotes = function (i, text) {
         if (!slideOk(op.slide)) { bad("bad slide index"); return; }
         var shapeInCtxI = ctx && ctx.slides[op.slide - 1] &&
           (ctx.slides[op.slide - 1].shapes || []).some(function (sh) { return sh.idx === op.shape - 1; });
-        if (!shapeInCtxI) { bad("shape " + op.shape + " not in the context list for slide " + op.slide); return; }
+        if (!futureSlide(op.slide) && !shapeInCtxI) { bad("shape " + op.shape + " not in the context list for slide " + op.slide); return; }
         if (typeof op.prompt !== "string" || op.prompt.trim().length < 3) { bad("missing image prompt"); return; }
         if (op.prompt.length > 4000) { bad("image prompt too long (max 4000 chars)"); return; }
         out.slide = op.slide; out.shape = op.shape; out.prompt = op.prompt.trim();
@@ -2606,7 +2620,7 @@ OfficeDeck.prototype.setNotes = function (i, text) {
         if (!slideOk(op.slide)) { bad("bad slide index"); return; }
         var shapeInCtxH = ctx && ctx.slides[op.slide - 1] &&
           (ctx.slides[op.slide - 1].shapes || []).some(function (sh) { return sh.idx === op.shape - 1; });
-        if (!shapeInCtxH) { bad("shape " + op.shape + " not in the context list for slide " + op.slide); return; }
+        if (!futureSlide(op.slide) && !shapeInCtxH) { bad("shape " + op.shape + " not in the context list for slide " + op.slide); return; }
         if (typeof op.url !== "string" || !/^(https?:\/\/\S+|mailto:\S+)$/.test(op.url.trim())) { bad("url must be http(s)://... or mailto:..."); return; }
         out.slide = op.slide; out.shape = op.shape; out.url = op.url.trim();
         if (typeof op.tip === "string" && op.tip.trim()) out.tip = op.tip.trim().slice(0, 200);
@@ -2614,7 +2628,7 @@ OfficeDeck.prototype.setNotes = function (i, text) {
         if (!slideOk(op.slide)) { bad("bad slide index"); return; }
         var shapeInCtxA = ctx && ctx.slides[op.slide - 1] &&
           (ctx.slides[op.slide - 1].shapes || []).some(function (sh) { return sh.idx === op.shape - 1; });
-        if (!shapeInCtxA) { bad("shape " + op.shape + " not in the context list for slide " + op.slide); return; }
+        if (!futureSlide(op.slide) && !shapeInCtxA) { bad("shape " + op.shape + " not in the context list for slide " + op.slide); return; }
         if (typeof op.description !== "string" || !op.description.trim()) { bad("alt text needs a description"); return; }
         out.slide = op.slide; out.shape = op.shape; out.description = op.description.trim().slice(0, 500);
         if (typeof op.title === "string" && op.title.trim()) out.title = op.title.trim().slice(0, 200);

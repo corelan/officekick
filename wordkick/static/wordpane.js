@@ -685,6 +685,9 @@
       ],
     }).then(function (resp) {
       var name = stripReasoning(resp.text || "").replace(/"/g, "").replace(/^[:\- ]+/, "").trim().slice(0, 48);
+      // the model may answer KEEP (= the current title still fits): must not
+      // rename the session to the literal word
+      if (String(name).toUpperCase() === "KEEP") { SK.titleBusy = false; return; }
       // reject non-title junk (models that ignore the instruction and echo ops/json)
       var junk = /^[{\[]/.test(name) || /"(kind|ops|type)"/.test(name) || name.length < 2 || name.length > 60;
       if (junk) { renameFallback(); SK.titleBusy = false; return; }

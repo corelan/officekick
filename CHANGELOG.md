@@ -30,6 +30,26 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.134
+### Changed
+- Batch validation now understands slides the batch creates itself: a
+  create_slide op raises a batch-local "virtual slide count" (the validator
+  sees the deck as it will be after those creates), so later format_text /
+  edit/replace ops in the same batch may legally target those new slides.
+  Shape-in-context and find-text checks are deferred to apply time for
+  slides that only exist after the batch's own creates (a wrong shape
+  number still fails honestly there). Fixes "bad slide index: slide X
+  does not exist" storms for multi-slide build-out batches.
+- Built-in default prompt updated to the three blocks: Content (accuracy),
+  Writing style, and Formatting (reuse the document's existing style/theme
+  elements; code/syntax/protocol/command lines get a separate
+  monospaced-font request, e.g. Consolas).
+### Fixed
+- Session titles: the model replying exactly "KEEP" (title still fits) no
+  longer renames the session to the literal word KEEP - it keeps the
+  current title (all three add-ins).
+- Restart-flag watcher poll relaxed from 1 s to 10 s (a restart is never
+  urgent; near-zero overhead).
 ## 0.9.133
 ### Added
 - Server self-restart. The server watches <config dir>/restart.flag (1 s
