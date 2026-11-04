@@ -30,6 +30,16 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.135
+### Fixed
+- Cut-off recovery no longer runs actions twice: when the continuation's
+  ops are merged with the salvaged ones, exact duplicate ops (the
+  continuation very often repeats what it already emitted - it sees its
+  own partial list in the context) are dropped deterministically, and the
+  proposal note reports how many were removed.
+- The continuation ask now says explicitly that the previously recovered
+  ops are already kept and must NOT be repeated (emit only new ops, or
+  reply done when nothing is missing).
 ## 0.9.134
 ### Changed
 - Batch validation now understands slides the batch creates itself: a

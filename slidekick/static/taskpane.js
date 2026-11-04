@@ -26,6 +26,8 @@
     activeFetch: null,       // AbortController of the in-flight pane request
     modelsCache: {},     // connName -> {list:[...], at:ms}
     sessionApprovals: {},// opType -> 'auto' when approved for this session
+    lastRecovered: 0,      // op count salvaged from a cut-off reply (gate note)
+    recoveredDupes: 0,     // of those, duplicates removed during the merge
     history: [],         // conversation turns shown to the model (session-only)
     editingConn: null,
     editingProf: null,
@@ -757,12 +759,29 @@
     "(slides not yet covered), same JSON format. If nothing is missing, reply " +
     '{"kind":"reply","text":"done"}';
 
+  // cut-off recovery merge: the continuation very often repeats ops it had
+  // already emitted (it sees its own partial list in the context). Exact
+  // duplicates later in the merged list get dropped so actions do not run
+  // twice; the count lands in the proposal note (recoveredDupes).
+  function dedupeMergedOps(base, extra) {
+    var seen = {}, out = [], dropped = 0;
+    base.concat(extra || []).forEach(function (o) {
+      var k = null;
+      try { k = JSON.stringify(o); } catch (eK) { k = null; }
+      if (k && seen[k]) { dropped++; return; }
+      if (k) seen[k] = 1;
+      out.push(o);
+    });
+    SK.recoveredDupes = dropped;
+    return out;
+  }
   function continueAsk(ctx) {
     var n = ctx && typeof ctx.slideCount === "number" ? ctx.slideCount : null;
     return CONTINUE_ASK +
       "\nREMINDERS: op slide numbers are 1-based and MUST be within 1.." + (n || "the current slide count") +
       (n ? " (this deck currently has " + n + " slides)" : "") +
-      "; reference only shapes that appeared in the outline. Do not re-cover slides already handled in your previous reply.";
+      "; reference only shapes that appeared in the outline." +
+      "\nCRITICAL: the operations from your previous (cut-off) reply ARE already kept and will run - do NOT repeat any of them. Emit ONLY genuinely new operations; if your previous list was actually complete, reply {\"kind\":\"reply\",\"text\":\"done\"} instead.";
   }
 
   var REPAIR_EMPTY_ASK =
@@ -3583,7 +3602,7 @@ OfficeDeck.prototype.setNotes = function (i, text) {
               SK.lastModelText = { text: r3.text };
               var p3 = tryParse(r3.text);
               var extra = (p3.ok && !p3.recovered && p3.ops ? p3.ops : salvageOps(r3.text)) || [];
-              return { ok: true, kind: "slide_ops", ops: parsed.ops.concat(extra), recovered: true };
+              return { ok: true, kind: "slide_ops", ops: dedupeMergedOps(parsed.ops, extra), recovered: true };
             });
         }
 
@@ -3629,7 +3648,7 @@ OfficeDeck.prototype.setNotes = function (i, text) {
                 SK.lastModelText = { text: r3.text };
                 var p3 = tryParse(r3.text);
                 var extra = (p3.ok && p3.ops ? p3.ops : salvageOps(r3.text)) || [];
-                return { ok: true, kind: "slide_ops", ops: salv.concat(extra), recovered: true };
+                return { ok: true, kind: "slide_ops", ops: dedupeMergedOps(salv, extra), recovered: true };
               });
           });
         });
@@ -4167,9 +4186,12 @@ OfficeDeck.prototype.setNotes = function (i, text) {
     if (SK.lastRecovered) {
       var recN = document.createElement("div");
       recN.className = "opnote";
-      recN.textContent = "Recovered " + SK.lastRecovered + " action(s) from a cut-off reply; the model was asked for the rest. If some slides are still untouched, ask to continue.";
+      recN.textContent = "Recovered " + SK.lastRecovered + " action(s) from a cut-off reply; the model was asked for the rest." +
+        (SK.recoveredDupes > 0 ? " " + SK.recoveredDupes + " duplicated action(s) from the continuation were removed." : "") +
+        " If some slides are still untouched, ask to continue.";
       box.appendChild(recN);
       SK.lastRecovered = 0;
+      SK.recoveredDupes = 0;
     }
 
     if (!caps.text) {
