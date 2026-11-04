@@ -34,7 +34,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 APP = "OfficeKick"
-VERSION = "0.9.142"
+VERSION = "0.9.143"
 
 # --------------------------------------------------------------------------- #
 # Self-restart: the server watches for <cfg dir>/restart.flag. Whatever writes
@@ -328,6 +328,7 @@ class SessionStore:
                     "updated": data.get("updated") or f.stat().st_mtime,
                     "messages": len(data.get("exchanges") or []),
                     "app": doc_app,
+                    "manualName": bool(data.get("manualName")),
                 })
             except Exception:
                 continue
@@ -349,7 +350,7 @@ class SessionStore:
         sid = uuid.uuid4().hex
         return self.upsert(sid, name, exchanges, app=app)
 
-    def upsert(self, sid, name, exchanges, existing=None, app=None):
+    def upsert(self, sid, name, exchanges, existing=None, app=None, manual=None):
         if not self._valid(sid):
             raise ApiError(400, "Invalid session id")
         # the stored file is the source of truth: if the caller does not
@@ -372,6 +373,10 @@ class SessionStore:
             "exchanges": ex,
             "app": app if app in ("slidekick", "wordkick", "mailkick")
                    else (base or {}).get("app"),
+            # manualName = the user renamed this session themselves; AI title
+            # updates stop until the refresh button is used (None = keep what
+            # is stored; absent = AI-generated and auto-updates stay allowed)
+            "manualName": True if manual else bool((base or {}).get("manualName")),
         }
         f = self.dir / (sid + ".json")
         f.write_text(json.dumps(doc, indent=1), encoding="utf-8")
@@ -379,7 +384,7 @@ class SessionStore:
             os.chmod(f, 0o600)   # Windows: chmod maps to ACL quirks and can fail under task tokens
         return {"id": sid, "name": doc["name"], "updated": doc["updated"], "messages": len(ex)}
 
-    def rename(self, sid, name):
+    def rename(self, sid, name, manual=None):
         doc = self.get(sid)
         # title-repair: the model may answer with reasoning fragments, fences,
         # labels ("Title: x") or long essays - derive a clean short title
@@ -396,7 +401,7 @@ class SessionStore:
             n = " ".join(words[:7])
         if not n:
             n = ""   # empty = keep the stored/derived name
-        return self.upsert(sid, n[:80], doc.get("exchanges"), doc)
+        return self.upsert(sid, n[:80], doc.get("exchanges"), doc, manual=manual)
 
     def remove_pair(self, sid, ts):
         """Explicitly remove the exchange pair stamped `ts` (user + assistant
@@ -2062,7 +2067,8 @@ class SlideKickHandler(BaseHTTPRequestHandler):
                 self._send_json({"ok": True, "template": doc})
             elif path.startswith("/api/sessions/rename/"):
                 sid = path[len("/api/sessions/rename/"):]
-                doc = self.store.sessions.rename(sid, body.get("name"))
+                doc = self.store.sessions.rename(sid, body.get("name"),
+                                                 manual=bool(body.get("manual")))
                 self._send_json({"ok": True, "session": doc})
             elif path == "/api/chat":
                 conn = body.get("connection")
@@ -2260,7 +2266,10 @@ class SlideKickHandler(BaseHTTPRequestHandler):
                     new_name = existing.get("name")   # keep the stored title
                 doc = self.store.sessions.upsert(
                     sid, new_name, body.get("exchanges") or [],
-                    existing=existing, app=body.get("app"))
+                    existing=existing, app=body.get("app"),
+                    manual=(True if body.get("manualName") else
+                            (False if body.get("manualName") is not None and not body.get("manualName")
+                             else None)))
                 self._send_json({"ok": True, "session": doc})
             elif path.startswith("/api/templates/"):
                 tid = urllib.parse.unquote(path[len("/api/templates/"):])

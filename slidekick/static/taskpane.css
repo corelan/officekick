@@ -803,3 +803,8 @@ body.dark .savedflash { color: #7ee787; }
 .reqecho .reqecho-copy { display: inline-block; margin-left: 8px; padding: 1px 6px; font-size: 11px; vertical-align: middle; }
 
 #settings-customprompt { width: 100%; min-height: 240px; max-height: 48vh; resize: vertical; }
+
+/* session-label refresh/edit buttons */
+.slabelbtn { font-size: 11px; padding: 1px 7px; margin-left: 4px; }
+.sessionlabel { display: flex; align-items: center; gap: 2px; }
+.sess-rename { font: inherit; padding: 2px 6px; }

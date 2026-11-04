@@ -26,6 +26,7 @@
     activeFetch: null,       // AbortController of the in-flight pane request
     modelsCache: {},     // connName -> {list:[...], at:ms}
     sessionApprovals: {},// opType -> 'auto' when approved for this session
+    sessionManual: false,  // the user renamed this session: pause AI titles
     history: [],         // conversation turns shown to the model (session-only)
     editingConn: null,
     editingProf: null,
@@ -578,13 +579,73 @@
     var el = $("chat-session-label");
     if (!el) return;
     if (SK.history.length && SK.sessionId) {
-      el.textContent = "Session: " + (SK.sessionName || derivedSessionName());
+      el.innerHTML = "";
+      var lbl = document.createElement("span");
+      lbl.textContent = "Session: " + (SK.sessionName || derivedSessionName());
+      el.appendChild(lbl);
+      el.appendChild(document.createTextNode(" "));
+      var ref = document.createElement("button");
+      ref.className = "btn subtle slabelbtn";
+      ref.type = "button";
+      ref.textContent = "\u21bb";
+      ref.title = "Ask the AI for a new session title";
+      ref.addEventListener("click", function (ev) {
+        ev.stopPropagation();
+        if (SK.titleBusy || !SK.sessionId) return;
+        SK.sessionManual = false;   // an AI refresh re-enables auto updates
+        aiNameSession(SK.sessionId, true);
+      });
+      var ed = document.createElement("button");
+      ed.className = "btn subtle slabelbtn";
+      ed.type = "button";
+      ed.textContent = "\u270e";
+      ed.title = "Type your own title (stops automatic AI renames until you press refresh)";
+      ed.addEventListener("click", function (ev) {
+        ev.stopPropagation();
+        renameSessionLabelInline();
+      });
+      el.appendChild(ref);
+      el.appendChild(ed);
       el.style.display = "";
     } else {
-      el.textContent = "";
+      el.innerHTML = "";
       el.style.display = "none";
     }
   }
+
+  function renameSessionLabelInline() {
+    var el = $("chat-session-label");
+    if (!el || !SK.sessionId) return;
+    if (el._editing) return;
+    el._editing = true;
+    var lbl = el.querySelector("span");
+    var input = document.createElement("input");
+    input.type = "text";
+    input.maxLength = 48;
+    input.value = SK.sessionName || derivedSessionName();
+    input.className = "sess-rename";
+    var done = function (commit) {
+      el._editing = false;
+      var val = input.value.trim();
+      el.innerHTML = "";
+      updateSessionLabel();
+      if (commit && val && val !== SK.sessionName) {
+        SK.sessionManual = true;   // user-titled: no more automatic AI renames
+        apiJson("/api/sessions/rename/" + SK.sessionId, "POST", { name: val, manual: true })
+          .then(function () { SK.sessionName = val; updateSessionLabel(); renderSessions(); setStatus("Session renamed - AI title updates pause until you press refresh.", "ok"); })
+          .catch(function (e) { setStatus("Rename failed: " + ((e && e.message) || e), "error"); });
+      }
+    };
+    input.addEventListener("keydown", function (e) {
+      if (e.key === "Enter") done(true);
+      else if (e.key === "Escape") done(false);
+    });
+    input.addEventListener("blur", function () { done(false); });
+    lbl.textContent = "";
+    lbl.appendChild(input);
+    input.focus(); input.select();
+  }
+
 
   function scheduleSaveSession() {
     if (SK.sessionSaveTimer) clearTimeout(SK.sessionSaveTimer);
@@ -594,7 +655,7 @@
   function saveSessionNow() {
     if (SK.testMode) return;   // test runs never end up in history
     if (!SK.history.length) return;
-    var payload = { exchanges: SK.history.slice(), app: SK.app };
+    var payload = { exchanges: SK.history.slice(), app: SK.app, manualName: !!SK.sessionManual };
     var createPromise;
     if (!SK.sessionId) {
       payload.name = derivedSessionName();
@@ -691,6 +752,7 @@
   // session is now about (bounded: one update in flight, cheap calls)
   function maybeUpdateSessionTitle() {
     if (SK.testMode || !SK.sessionId) return;
+    if (SK.sessionManual) return;   // user-titled: only the refresh button renames
     if (SK.titleBusy) return;
     if (!SK.history || SK.history.length < 4) return;   // nothing meaningful yet
     try {
@@ -704,6 +766,7 @@
       SK.sessionId = doc.id;
       try { localStorage.setItem("sk-resume-session-mailkick", doc.id); } catch (eS) {}
       SK.sessionName = doc.name || "";
+      SK.sessionManual = !!doc.manualName;   // absent = AI-titled (updates allowed)
       var inp1 = $("chat-input");
       if (inp1) { inp1.disabled = false; inp1.value = ""; }
       switchTab("chat");
@@ -1224,6 +1287,7 @@
     SK.sessionId = null;
     try { localStorage.removeItem("sk-resume-session-mailkick"); } catch (eS) {}      // the next exchange saves as a NEW session
     SK.sessionName = "";
+    SK.sessionManual = false;
     updateChatMeta();
     updateSessionLabel();
     renderSessions();

@@ -30,6 +30,17 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.143
+### Added
+- The session label has two buttons: refresh (asks the AI for a new title,
+  re-using the whole-recent-context ask) and edit (rename it inline; Enter
+  confirms, Escape cancels).
+### Changed
+- A manual rename pauses automatic AI title updates for that session - the
+  flag ("manualName") is stored in the session file, so it works for
+  existing sessions too; sessions without the flag = AI-titled and stay
+  eligible for automatic updates. Pressing refresh clears the pause. The
+  flag round-trips through create/update/rename/list/get.
 ## 0.9.142
 ### Changed
 - Session-title updates consider the session's whole recent picture:
