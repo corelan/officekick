@@ -783,3 +783,7 @@ body.dark .sb-hint { color: #ff6b6b; }
   transition: opacity .4s ease; }
 .savedflash.show { opacity: 1; }
 body.dark .savedflash { color: #7ee787; }
+
+.reqecho.copyable { cursor: pointer; }
+.reqecho.copyable:hover { text-decoration: underline; }
+.reqecho .reqecho-copy { display: inline-block; margin-left: 8px; padding: 1px 6px; font-size: 11px; vertical-align: middle; }

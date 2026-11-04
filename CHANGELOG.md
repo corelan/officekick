@@ -30,6 +30,15 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.130
+### Added
+- The last-request echo (the line above the proposed-actions box) is now
+  interactive in all add-ins: clicking it always copies the request text
+  to the clipboard, and when the input box is empty the click also fills
+  the input with the same text ("Copied + filled the empty input box."
+  vs "Copied to the clipboard."); a small clipboard button sits at the
+  right of the echo with the same behavior (hover underline + cursor
+  affordances).
 ## 0.9.129
 ### Changed
 - Built-in prompt follows your rewording (style block): "Identify

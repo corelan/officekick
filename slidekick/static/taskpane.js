@@ -3853,6 +3853,33 @@ OfficeDeck.prototype.setNotes = function (i, text) {
     updatePastBox();
   }
 
+  // the last-request echo: click (or its copy button) always copies the
+  // request text; when the input box is empty it is also filled with it
+  function makeReqEchoCopyable(reqEcho, instruction) {
+    reqEcho.classList.add("copyable");
+    reqEcho.title = "Click to copy this request - it also fills the input box when that is empty";
+    var cpBtn = document.createElement("button");
+    cpBtn.className = "btn subtle reqecho-copy";
+    cpBtn.type = "button";
+    cpBtn.textContent = "\uD83D\uDCCB";
+    cpBtn.title = "Copy this request to the clipboard";
+    var doCopy = function (after) {
+      var inp = $("chat-input");
+      var wasEmpty = !!(inp && !inp.value.trim());
+      copyTextToClipboard2(instruction, function (okc) {
+        if (okc && wasEmpty && inp) { inp.value = instruction; }
+        if (okc) setStatus(wasEmpty ? "Copied + filled the empty input box." : "Copied to the clipboard.", "ok");
+        else setStatus("Could not copy automatically - select the text manually.", "error");
+        if (after) after(okc);
+      });
+    };
+    reqEcho.addEventListener("click", function () { doCopy(function (okc) { if (okc) { cpBtn.textContent = "\u2713"; } }); });
+    cpBtn.addEventListener("click", function (ev) {
+      ev.stopPropagation();
+      doCopy(function (okc) { cpBtn.textContent = okc ? "\u2713" : "\u00d7"; setTimeout(function () { cpBtn.textContent = "\uD83D\uDCCB"; }, 1600); });
+    });
+    reqEcho.appendChild(cpBtn);
+  }
   function renderParsed(parsed, ctx, instruction) {
     SK.lastInstruction = instruction;
     SK.opProgress = null;     // a fresh run gets fresh progressive tracking
@@ -3863,6 +3890,7 @@ OfficeDeck.prototype.setNotes = function (i, text) {
     var reqEcho = document.createElement("div");
     reqEcho.className = "reqecho";
     reqEcho.textContent = instruction;
+    makeReqEchoCopyable(reqEcho, instruction);
     out.appendChild(reqEcho);
     if (!parsed.ok) {
       var box = document.createElement("div");
