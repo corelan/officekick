@@ -2133,7 +2133,7 @@ function applyOps(deck, ops, ctx) {
     head.appendChild(ts1);
     var cpIc = document.createElement("span");
     cpIc.className = "pt-copy";
-    cpIc.textContent = "\u29C9";               // copy icon next to the step title
+    cpIc.innerHTML = copyIconSvg();               // copy icon next to the step title
     cpIc.title = "Copy this request to the clipboard (and into the input box if it is empty)";
     cpIc.addEventListener("click", function (ev) {
       ev.stopPropagation();
@@ -2244,13 +2244,35 @@ function applyOps(deck, ops, ctx) {
 
   // the last-request echo: click (or its copy button) always copies the
   // request text; when the input box is empty it is also filled with it
+  function copyIconSvg() {
+    return '<svg width="12" height="12" viewBox="0 0 12 12" style="vertical-align:-2px" aria-hidden="true">' +
+      '<rect x="1" y="1" width="8" height="8" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.4"/>' +
+      '<rect x="3.5" y="3.5" width="7.5" height="7.5" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.4"/>' +
+    '</svg>';
+  }
+  function copyTextToClipboard2(txt, done) {
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(txt).then(function () { done(true); }, function () { done(false); });
+        return;
+      }
+    } catch (eN) { /* fall through */ }
+    try {
+      var ta = document.createElement("textarea");
+      ta.value = txt; ta.style.position = "fixed"; ta.style.opacity = "0";
+      document.body.appendChild(ta); ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+      done(true);
+    } catch (eC) { done(false); }
+  }
   function makeReqEchoCopyable(reqEcho, instruction) {
     reqEcho.classList.add("copyable");
     reqEcho.title = "Click to copy this request - it also fills the input box when that is empty";
     var cpBtn = document.createElement("button");
     cpBtn.className = "btn subtle reqecho-copy";
     cpBtn.type = "button";
-    cpBtn.textContent = "\uD83D\uDCCB";
+    cpBtn.innerHTML = copyIconSvg();
     cpBtn.title = "Copy this request to the clipboard";
     var doCopy = function (after) {
       var inp = $("chat-input");
@@ -2265,7 +2287,7 @@ function applyOps(deck, ops, ctx) {
     reqEcho.addEventListener("click", function () { doCopy(function (okc) { if (okc) { cpBtn.textContent = "\u2713"; } }); });
     cpBtn.addEventListener("click", function (ev) {
       ev.stopPropagation();
-      doCopy(function (okc) { cpBtn.textContent = okc ? "\u2713" : "\u00d7"; setTimeout(function () { cpBtn.textContent = "\uD83D\uDCCB"; }, 1600); });
+      doCopy(function (okc) { cpBtn.textContent = okc ? "\u2713" : "\u00d7"; setTimeout(function () { cpBtn.innerHTML = copyIconSvg(); }, 1600); });
     });
     reqEcho.appendChild(cpBtn);
   }

@@ -30,6 +30,16 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.131
+### Changed
+- Copy buttons now use the "two overlapping squares" copy icon instead of
+  the clipboard glyph, drawn as an inline SVG (two stroked rounded rects)
+  so it renders identically on every host font: the last-request echo
+  button, the past-request copy affordance on step titles, and the
+  manual-notes per-slide copy buttons. Word/Mail also gained the local
+  clipboard helper they were missing behind the echo button (navigator
+  .clipboard with an execCommand fallback), and the slidekick past-turn
+  copy row uses it too.
 ## 0.9.130
 ### Added
 - The last-request echo (the line above the proposed-actions box) is now
