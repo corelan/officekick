@@ -30,6 +30,13 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.142
+### Changed
+- Session-title updates consider the session's whole recent picture:
+  together with the existing title, the last up to 6 requests are listed
+  (oldest first, 90 chars each) and the model is told to consider ALL of
+  them - not only the newest - and to reply KEEP only when the existing
+  title still covers that mix. All three add-ins.
 ## 0.9.141
 ### Changed
 - Built-in prompt, Formatting block: the monospace trigger list now also

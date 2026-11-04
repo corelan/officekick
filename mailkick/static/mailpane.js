@@ -645,15 +645,19 @@
     var sysPrompt = "You generate very short chat-session titles. Reply with ONLY the title: 2-4 words, no quotes, no punctuation at the end.";
     var userMsg = "Session start: " + first.slice(0, 120);
     if (updateMode) {
-      // the session moved on - the title must follow what it is NOW about
-      userMsg = "Current title: " + String(SK.sessionName || first).slice(0, 60) +
-        "\nRecent requests (oldest first):";
+      // the title must follow the session's CURRENT overall focus: consider
+      // up to the last 6 requests together with the existing title (models
+      // over-index on the newest ask otherwise), KEEP = title still fits
+      var asks = [];
       SK.history.slice(-HISTORY_MAX_EXCHANGES * 2).forEach(function (h) {
-        if (h.role === "user") userMsg += "\n- " + String(h.content || "").replace(/\s+/g, " ").slice(0, 90);
+        if (h.role === "user" && asks.length < 6) asks.push(String(h.content || "").replace(/\s+/g, " ").slice(0, 90));
       });
-      userMsg += "\nReply with ONLY the new 2-4 word title that matches what the session is now about" +
-        "(not necessarily the opening ask), or reply with exactly KEEP if the current title still fits.";
-      sysPrompt += " As sessions evolve the title may change to follow the session's new focus. If the current title still fits, reply with exactly KEEP.";
+      userMsg = "Existing session title: " + String(SK.sessionName || first).slice(0, 60) +
+        "\nLast " + asks.length + " request(s) (oldest first):";
+      asks.forEach(function (a) { userMsg += "\n- " + a; });
+      userMsg += "\nConsider ALL of those requests together (not only the newest)." +
+        "\nReply with ONLY the 2-4 word title that fits the session's overall current focus, or reply with exactly KEEP if the existing title still covers it.";
+      sysPrompt += " Titles must follow the session's overall focus across the listed requests, never just the last one. If the current title still fits, reply with exactly KEEP.";
     }
     apiJson("/api/chat", "POST", {
       connection: prof.other.connection, model: prof.other.model,
