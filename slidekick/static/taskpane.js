@@ -3339,10 +3339,10 @@ OfficeDeck.prototype.setNotes = function (i, text) {
         if (selMap[s2.idx]) {
           var selTxt = 0;
           (s2.shapes || []).forEach(function (sh) {
-            if (sh.text == null || !String(sh.text).trim()) return;
+            var txt = sh.text == null ? "" : String(sh.text).replace(/\r|\n/g, " | ");
+            if (!String(txt).trim()) txt = "(no readable text - table/gfx shape)";
+            else if (txt.length > 900) txt = txt.slice(0, 900) + "…[text continues]";
             var role = sh.isTitle ? "title" : sh.isBody ? "body" : "text";
-            var txt = String(sh.text).replace(/\r|\n/g, " | ");
-            if (txt.length > 900) txt = txt.slice(0, 900) + "…[text continues]";
             lines.push("    shape " + (sh.idx + 1) + " (" + role + ", " + sh.name + '): "' + txt + '"');
             selTxt++;
           });
@@ -3360,9 +3360,9 @@ OfficeDeck.prototype.setNotes = function (i, text) {
         if (sh.text == null) return;
         // shapes are numbered from 1 in the outline listing below
         var role = sh.isTitle || (title && sh.idx === title.idx) ? "title" : sh.isBody ? "body" : "text";
-        var txt = String(sh.text).replace(/\r|\n/g, " | ");
-        if (txt.length > 900) txt = txt.slice(0, 900) + "…[text continues]";
-        if (!txt.trim()) return;
+        var txt = sh.text == null ? "" : String(sh.text).replace(/\r|\n/g, " | ");
+        if (!txt.trim()) txt = "(no readable text - table/gfx shape)";
+        else if (txt.length > 900) txt = txt.slice(0, 900) + "…[text continues]";
         lines.push("    shape " + (sh.idx + 1) + " (" + role + ", " + sh.name + '): "' + txt + '"');
       });
     });

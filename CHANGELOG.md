@@ -30,6 +30,15 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.150
+### Fixed
+- The outline never silently hides a shape any more: shapes whose text is
+  empty/unreadable (tables in particular) are now listed as
+  "(no readable text - table/gfx shape)" instead of vanishing. This is
+  why slide 93's outline suddenly "lost" its table: the previous filter
+  dropped shapes without text, so whether the model saw the table
+  depended on the table-cell read succeeding - the shape was always
+  there. Read_slide still lists every shape (it never filtered).
 ## 0.9.149
 ### Fixed
 - (0.9.148 shipped the changelog text without the code - this commit
