@@ -30,6 +30,17 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.148
+### Fixed
+- Table reads target the right API set: PowerPoint.Table/TableCell = 1.8
+  (rows access 1.9), so the guard = 1.8 and cell text is read row-by-row
+  (rows.load("items") + per-cell load("text")) instead of a deep
+  items/cells/text load that can be rejected. The per-row fallback chain
+  stays; failures keep surfacing their real reason.
+### Verified (researched against the Office JS docs)
+- PowerPoint.Table, TableCell = PowerPointApi 1.8; TableRow = 1.9;
+  TableCell.text = a plain string. Older hosts than 1.8 = the honest
+  "cell text unavailable" note.
 ## 0.9.147
 ### Added
 - DocKick: "insert table of contents" op (create_toc, levels "1-3"|"1-2",
