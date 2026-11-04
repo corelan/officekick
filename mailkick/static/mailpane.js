@@ -364,6 +364,28 @@
       info.textContent = "could not check for updates: " + (e && e.message ? e.message : e);
     });
   }
+    var rsBtn2 = $("btn-restart-server");
+    if (rsBtn2) rsBtn2.addEventListener("click", function () {
+      rsBtn2.disabled = true;
+      apiJson("/api/health", "GET").then(function (h0) {
+        var oldGen = (h0 && h0.gen) || "";
+        return apiJson("/api/server-restart", "POST", { cause: "manual restart from the pane" }).then(function () {
+          setStatus("Restarting the server\u2026", "busy");
+          var tries = 0;
+          var poll = function () {
+            apiJson("/api/health", "GET").then(function (h1) {
+              tries++;
+              rsBtn2.disabled = false;
+              if ((h1 && h1.gen && h1.gen !== oldGen) || tries > 60) {
+                setStatus(tries > 60 ? "Server did not answer after the restart - start it manually." : "Server restarted (new generation).", tries > 60 ? "error" : "ok");
+              } else { setTimeout(poll, 700); }
+            }).catch(function () { if (++tries < 61) setTimeout(poll, 700); else { rsBtn2.disabled = false; setStatus("Server did not answer after the restart - start it manually.", "error"); } });
+          };
+          setTimeout(poll, 1200);
+        });
+      }).catch(function (e3) { rsBtn2.disabled = false; setStatus("Could not restart: " + (e3 && e3.message ? e3.message : e3), "error"); });
+    });
+
 
   function apiJson(path, method, body) {
     var t0 = Date.now();

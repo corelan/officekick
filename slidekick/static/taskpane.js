@@ -388,6 +388,33 @@
                 info.textContent = "Pulled into " + (pr.repoPath || "the clone") + ". " +
                   ((pr.stdout || "").split("\n").filter(function (l) { return l; })[0] || "") +
                   " - then: (1) reload this pane (About tab -> Reload pane, or close and reopen the add-in) to load the new pane files, and (2) run the installer (python3 install.py --update) to redeploy the manifests and restart the server.";
+                var rsBtn = document.createElement("button");
+                rsBtn.className = "btn subtle";
+                rsBtn.type = "button";
+                rsBtn.textContent = "Restart server now";
+                rsBtn.title = "Stops the local server, starts it again with this setup's own start mechanism (mac app / scheduled task / same command line).";
+                rsBtn.addEventListener("click", function () {
+                  rsBtn.disabled = true;
+                  apiJson("/api/health", "GET").then(function (h0) {
+                    var oldGen = (h0 && h0.gen) || "";
+                    return apiJson("/api/server-restart", "POST", { cause: "restart after pull" }).then(function () {
+                      info.textContent = "Restarting the server\u2026";
+                      var tries = 0;
+                      var poll = function () {
+                        apiJson("/api/health", "GET").then(function (h1) {
+                          tries++;
+                          if ((h1 && h1.gen && h1.gen !== oldGen) || tries > 60) {
+                            info.textContent = tries > 60 ? "Restart problem - check the server (logs/restart.log)." : "Server restarted on the pulled build - reload the pane to get the new UI.";
+                            setStatus(info.textContent, tries > 60 ? "error" : "ok");
+                          } else { setTimeout(poll, 700); }
+                        }).catch(function () { if (++tries < 61) setTimeout(poll, 700); else { info.textContent = "Restart problem - check the server (logs/restart.log)."; setStatus(info.textContent, "error"); } });
+                      };
+                      setTimeout(poll, 1200);
+                    });
+                  }).catch(function (e3) { rsBtn.disabled = false; info.textContent = "Could not restart: " + (e3 && e3.message ? e3.message : e3); });
+                });
+                info.appendChild(document.createElement("br"));
+                info.appendChild(rsBtn);
               } else {
                 info.className = "opnote updavail";
                 info.textContent = "Pull failed: " + ((pr && (pr.stderr || pr.stdout || pr.error)) || "git error");
@@ -405,6 +432,28 @@
       info.textContent = "could not check for updates: " + (e && e.message ? e.message : e);
     });
   }
+    var rsBtn2 = $("btn-restart-server");
+    if (rsBtn2) rsBtn2.addEventListener("click", function () {
+      rsBtn2.disabled = true;
+      apiJson("/api/health", "GET").then(function (h0) {
+        var oldGen = (h0 && h0.gen) || "";
+        return apiJson("/api/server-restart", "POST", { cause: "manual restart from the pane" }).then(function () {
+          setStatus("Restarting the server\u2026", "busy");
+          var tries = 0;
+          var poll = function () {
+            apiJson("/api/health", "GET").then(function (h1) {
+              tries++;
+              rsBtn2.disabled = false;
+              if ((h1 && h1.gen && h1.gen !== oldGen) || tries > 60) {
+                setStatus(tries > 60 ? "Server did not answer after the restart - start it manually." : "Server restarted (new generation).", tries > 60 ? "error" : "ok");
+              } else { setTimeout(poll, 700); }
+            }).catch(function () { if (++tries < 61) setTimeout(poll, 700); else { rsBtn2.disabled = false; setStatus("Server did not answer after the restart - start it manually.", "error"); } });
+          };
+          setTimeout(poll, 1200);
+        });
+      }).catch(function (e3) { rsBtn2.disabled = false; setStatus("Could not restart: " + (e3 && e3.message ? e3.message : e3), "error"); });
+    });
+
 
   // ---- image generation as an async job: short 4s polls survive WebView
   // suspension, a killed fetch costs one cycle instead of the whole wait ----

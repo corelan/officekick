@@ -30,6 +30,26 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.133
+### Added
+- Server self-restart. The server watches <config dir>/restart.flag (1 s
+  poll): on detection it removes the flag, generates a detached helper
+  (restart_helper.py + restart_payload.json in the config dir), spawns it
+  and stops serving. The helper waits for the port to free up, starts the
+  next instance with the OS-appropriate launcher - macOS: the
+  OfficeKickServer login-item app; Windows: the OfficeKickServer scheduled
+  task (falling back to a detached pythonw relaunch of the same command
+  line); other setups (manual/crontab): the exact original restart - waits
+  until the new instance answers, then exits. Every server boot removes a
+  stale flag first, so a restart cannot loop. Problems are appended to
+  logs/restart.log.
+- POST /api/server-restart arms a restart (optionally with a cause);
+  /api/health now reports a "gen" boot stamp so a caller can see when a
+  restart happened.
+- Panes: a "Restart server" button in the update-check row (all three
+  add-ins) + "Restart server now" directly after a successful git pull -
+  both POST /api/server-restart and poll health until the generation
+  changes ("Server restarted (new generation).").
 ## 0.9.132
 ### Changed
 - Recovered-from-cut-off batches that then fail validation completely no
