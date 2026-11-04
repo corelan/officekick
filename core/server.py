@@ -34,7 +34,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 APP = "OfficeKick"
-VERSION = "0.9.135"
+VERSION = "0.9.136"
 
 # --------------------------------------------------------------------------- #
 # Self-restart: the server watches for <cfg dir>/restart.flag. Whatever writes
@@ -173,7 +173,8 @@ DEFAULT_CUSTOM_PROMPT = (
     "\n"
     "### Formatting\n"
     "- Use and implement the same style and theme elements already present in the document.\n"
-    "- Identify code/syntax/protocol/command instructions and make a separate request to put them in a monospaced font such as Consolas"
+    "- For every line (or table cell) that contains shell commands, CLI flags, code, syntax, URLs or protocol elements: make the separate format_text request with font {\"name\":\"Consolas\"} on that shape. Never treat such lines as prose.\n"
+    "- Do not apply the monospace rule to ordinary text; when in doubt, ask."
 )
 
 # how to start the server again when it is down (per OS / setup, shown by the panes).

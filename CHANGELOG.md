@@ -30,6 +30,12 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.136
+### Changed
+- Built-in prompt, Formatting block: the monospace rule is now explicit and
+  actionable - every line/cell with shell commands, CLI flags, code,
+  syntax, URLs or protocol elements gets its separate Consolas format_text
+  request ("never treat such lines as prose; when in doubt, ask").
 ## 0.9.135
 ### Fixed
 - Cut-off recovery no longer runs actions twice: when the continuation's
