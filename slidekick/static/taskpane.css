@@ -53,7 +53,7 @@ label input[type="text"], label input[type="password"], label select {
   display: block; width: 100%; margin-top: 3px; padding: 6px 8px; font: inherit;
   border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--ink);
 }
-select:focus, input:focus, textarea:focus { outline: 2px solid #93c5fd; outline-offset: 0; }
+select:focus, input:focus, textarea:focus { outline: 2px solid #6366f1; outline-offset: 0; }
 
 .row { display: flex; gap: 8px; align-items: center; margin: 8px 0; flex-wrap: wrap; }
 .row-tight { margin: 4px 0; }
@@ -207,7 +207,7 @@ body.dark .btn { background: var(--panel); color: var(--ink); }
 body.dark .btn:hover { background: var(--chip); }
 body.dark .btn.danger { color: var(--bad); border-color: #6b2a2e; }
 body.dark .btn.danger:hover { background: #2e1a1c; }
-body.dark select:focus, body.dark input:focus, body.dark textarea:focus { outline-color: #1d4ed8; }
+body.dark select:focus, body.dark input:focus, body.dark body.dark textarea:focus { outline-color: #818cf8; }
 body.dark .manualbox { background: #2b2415; border-color: #65501f; }
 body.dark .manualbox h4 { color: var(--accent-ink); }
 body.dark .chip:hover { color: var(--ink); border-color: var(--accent); }
@@ -319,7 +319,7 @@ label input[type="text"], label input[type="password"], label select {
   display: block; width: 100%; margin-top: 3px; padding: 6px 8px; font: inherit;
   border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--ink);
 }
-select:focus, input:focus, textarea:focus { outline: 2px solid #93c5fd; outline-offset: 0; }
+select:focus, input:focus, textarea:focus { outline: 2px solid #6366f1; outline-offset: 0; }
 
 .row { display: flex; gap: 8px; align-items: center; margin: 8px 0; flex-wrap: wrap; }
 .row-tight { margin: 4px 0; }
@@ -465,7 +465,7 @@ body.dark .btn { background: var(--panel); color: var(--ink); }
 body.dark .btn:hover { background: var(--chip); }
 body.dark .btn.danger { color: var(--bad); border-color: #6b2a2e; }
 body.dark .btn.danger:hover { background: #2e1a1c; }
-body.dark select:focus, body.dark input:focus, body.dark textarea:focus { outline-color: #1d4ed8; }
+body.dark select:focus, body.dark input:focus, body.dark body.dark textarea:focus { outline-color: #818cf8; }
 body.dark .manualbox { background: #2b2415; border-color: #65501f; }
 body.dark .manualbox h4 { color: var(--accent-ink); }
 body.dark .chip:hover { color: var(--ink); border-color: var(--accent); }
@@ -650,6 +650,20 @@ body.dark .reqgrp.reqbad { border-color: rgba(239,68,68,.7); background: rgba(23
 .oprow.op-del .optype { color: #f85149; }
 .oprow.op-del .opdesc { color: #f85149; }
 body.dark .oprow.op-mod .optype { color: #3fb950; }
+
+/* the request box stands out (light theme): indigo border, soft shadow, faint tint */
+textarea#chat-input {
+  border: 1.5px solid #6366f1;
+  background: #f4f5ff;
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.18);
+}
+
+/* the request box stands out (dark theme): brighter border, soft glow */
+body.dark textarea#chat-input {
+  border-color: #818cf8;
+  background: #1d2333;
+  box-shadow: 0 2px 10px rgba(129, 140, 248, 0.22);
+}
 #chat-input:disabled { opacity: .55; }
 
 /* the request echo above the response/summary after a run completes */

@@ -30,6 +30,11 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.139
+### Changed
+- The request box stands out: indigo border, faint indigo background tint
+  and a soft blur shadow; a slightly brighter variant in dark mode. The
+  focus outline now matches the border color. All three add-ins.
 ## 0.9.138
 ### Changed
 - Wording fixes: the custom-prompt hint no longer says "below" (there is
