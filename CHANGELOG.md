@@ -30,6 +30,17 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.129
+### Changed
+- Built-in prompt follows your rewording (style block): "Identify
+  code/syntax/protocol/command instructions and make a separate request to
+  put them in a monospaced font such as Consolas".
+- SlideKick system prompt gained the matching operational rule so the ask
+  is executable: when a bullet/shape contains code, commands, protocol
+  fragments or syntax (not ordinary prose), emit a separate format_text op
+  with font {"name":"Consolas"} (Courier New acceptable) on that shape.
+  (format_text already supports font name; DocKick/MailKick have no
+  font-name op, so there the style line reads as guidance only.)
 ## 0.9.128
 ### Changed
 - Built-in quality/style prompt, style block: the monospaced-font line was
