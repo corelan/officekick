@@ -1463,7 +1463,12 @@
   OfficeDeck.prototype._readTableText = function (ctx, sh) {
     var tryRead = function () {
       var tbl = sh.table;
-      if (!tbl || !tbl.rows) return null;
+      if (!tbl || !tbl.rows) {
+        var err2 = new Error("shape.table not available (build " +
+          ((Office.context && Office.context.diagnostics && Office.context.diagnostics.version) || "?") + ")");
+        err2.noTableProp = true;
+        throw err2;
+      }
       tbl.load("rowCount,columnCount");
       tbl.rows.load("items/cells/text");
       return ctx.sync().then(function () {
@@ -1635,9 +1640,10 @@
                   });
                   if (!tblShapes.length) return null;
                   var tblApi = true;
-                  try { tblApi = Office.context.requirements.isSetSupported("PowerPointApi", "1.6"); } catch (eTbl) { tblApi = false; }
+                  try { tblApi = Office.context.requirements.isSetSupported("PowerPointApi", "1.9") ||
+                    Office.context.requirements.isSetSupported("PowerPointApi", "1.6"); } catch (eTbl) { tblApi = false; }
                   var tries = tblShapes.map(function (sh) {
-                    if (!tblApi) return { txt: "[table - cell text unavailable in this Office build]" };
+                    if (!tblApi) return { txt: "[table - cell text unavailable in this Office build (table API not in this requirement set)]" };
                     return self._readTableText(ctx, sh)
                       .then(function (info) {
                         if (!info || !info.cells || !info.cells.length) return "[table " + info.r + "x" + info.c + " - unreadable]";
@@ -1645,7 +1651,12 @@
                         var head = "[table " + info.r + "x" + info.c + "] ";
                         return head + joined;
                       })
-                      .catch(function () { return "[table - cell text unavailable in this Office build]"; });
+                      .catch(function (eT) {
+                        var why = eT && (eT.message || String(eT));
+                        if (eT && eT.noTableProp) why = "the add-in surface has no shape.table here - a newer Office build is needed";
+                        dbg("table.read", { failed: true, why: why });
+                        return "[table - cell text unavailable in this Office build (" + why + ")]";
+                      });
                   });
                   return Promise.all(tries).then(function (vals) {
                     tblShapes.forEach(function (sh, k) { sh.text = vals[k]; });
@@ -2501,16 +2512,22 @@ OfficeDeck.prototype.setNotes = function (i, text) {
                 t2.shapes.forEach(function (sh) { if (sh.type === "table") tblEntries.push(sh); });
               });
               var tblApi2 = true;
-              try { tblApi2 = Office.context.requirements.isSetSupported("PowerPointApi", "1.6"); } catch (eTbl2) { tblApi2 = false; }
+              try { tblApi2 = Office.context.requirements.isSetSupported("PowerPointApi", "1.9") ||
+                Office.context.requirements.isSetSupported("PowerPointApi", "1.6"); } catch (eTbl2) { tblApi2 = false; }
               var tblTries = tblEntries.map(function (sh) {
-                if (!tblApi2) return Promise.resolve("[table - cell text unavailable in this Office build]");
+                if (!tblApi2) return Promise.resolve("[table - cell text unavailable in this Office build (table API not in this requirement set)]");
                 return self._readTableText(ctx, sh)
                   .then(function (info) {
                     return info && info.cells && info.cells.length
                       ? "[table " + info.r + "x" + info.c + "] " + info.cells.join(" | ")
                       : "[table " + info.r + "x" + info.c + " - unreadable]";
                   })
-                  .catch(function () { return "[table - cell text unavailable in this Office build]"; });
+                  .catch(function (eT) {
+                    var why = eT && (eT.message || String(eT));
+                    if (eT && eT.noTableProp) why = "the add-in surface has no shape.table here - a newer Office build is needed";
+                    dbg("table.read", { failed: true, why: why });
+                    return "[table - cell text unavailable in this Office build (" + why + ")]";
+                  });
               });
               return Promise.all(tblTries).then(function (vals) {
                 tblEntries.forEach(function (sh, k) { sh.text = vals[k]; });

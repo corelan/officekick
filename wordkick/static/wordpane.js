@@ -68,6 +68,7 @@
     reject_changes:   { label: "reject tracked changes", hint: "Rejects ALL tracked changes currently in the document (undo of the AI edits made with revisions on)." },
     set_header:       { label: "set header", hint: "Writes text into the page header of the document (section 1)." },
     set_footer:       { label: "set footer", hint: "Writes text into the page footer of the document (section 1)." },
+    create_toc:       { label: "insert table of contents", hint: "Inserts a real TOC field (heading levels 1-3) with an optional title at the end of the document; Word fills the entries when fields update (F9 / print / right-click -> Update Field)." },
   };
   var OP_TYPES = Object.keys(OPS_META);
 
@@ -547,6 +548,8 @@
     '- {"type":"accept_changes"} (accepts ALL tracked changes in the document; use ONLY when the user asks to accept/approve/finalize the changes or revisions; list it AFTER the edits that produced them)',
     '- {"type":"reject_changes"} (rejects ALL tracked changes in the document; only when the user explicitly asks to reject/discard the revisions)',
     '- {"type":"set_header","text":"..."} / {"type":"set_footer","text":"..."} (writes text into the page header / footer of section 1; use when the user asks for a header/footer, e.g. a draft marker)',
+    '- {"type":"create_toc","title":"Table of Contents"(optional),"levels":"1-3"(optional)} (inserts a REAL table-of-contents FIELD for the given heading levels at the end of the document; Word fills the entries when fields are updated - never fake TOC entries as plain text)',
+
     '- {"type":"set_track_changes","on":true|false} (turns the DOCUMENT\'s Track Changes mode on/off - the Review-tab toggle; use when the user asks to start/stop tracking; turning it off does NOT remove existing revisions - offer accept_changes for those; the pane\'s separate "AI edits as tracked changes" lives in Settings)',
     "",
     "Rules:",
@@ -1484,6 +1487,34 @@
     });
   };
 
+  WordDeck.prototype.createToc = function (op) {
+    return this.run("createToc", function (ctx) {
+      // insertOoxml exists since WordApi 1.1; a real TOC field (w:fldChar +
+      // instrText) - Word fills the entries when the field updates (F9)
+      var body = ctx.document.body;
+      var lvl = String(op.levels || "1-3");
+      var instr = " TOC \\o \"" + lvl + "\" \\h \\z \\u ";
+      var escT = function (s) {
+        return String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      };
+      var titleP = "";
+      if (op.title && op.title.trim()) {
+        titleP = '<w:p xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+          '<w:pPr><w:pStyle w:val="TOCHeading"/></w:pPr>' +
+          '<w:r><w:t xml:space="preserve">' + escT(op.title.trim()) + "</w:t></w:r></w:p>";
+      }
+      var tocP = '<w:p xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+        '<w:r><w:fldChar w:fldCharType="begin" w:dirty="true"/></w:r>' +
+        '<w:r><w:instrText xml:space="preserve">' + escT(instr) + "</w:instrText></w:r>" +
+        '<w:r><w:fldChar w:fldCharType="separate"/></w:r>' +
+        '<w:r><w:t xml:space="preserve">Table of contents - select it and press F9 to fill the entries.</w:t></w:r>' +
+        '<w:r><w:fldChar w:fldCharType="end"/></w:r></w:p>';
+      return body.insertOoxml(titleP + tocP, Word.InsertLocation.end).then(function () {
+        return ctx.sync();
+      }).then(function () { return { ok: true }; });
+    });
+  };
+
   function q34() { return String.fromCharCode(34); }
   WordDeck.prototype.formatTextFind = function (index, findText, font) {
     return this.run("formatTextFind", function (ctx) {
@@ -1684,6 +1715,11 @@ function normalizeWordStyle(v) {
       } else if (t === "set_header" || t === "set_footer") {
         if (typeof op.text !== "string" || !op.text.trim()) { bad("missing header/footer text"); return; }
         out.text = op.text.trim().slice(0, 600);
+      } else if (t === "create_toc") {
+        if (op.title != null && typeof op.title !== "string") { bad("title must be a string"); return; }
+        out.title = typeof op.title === "string" ? op.title.trim().slice(0, 80) : "";
+        var lvT = typeof op.levels === "string" && /^\s*1\s*-\s*[23]\s*$/.test(op.levels) ? op.levels.replace(/\s+/g, "") : "1-3";
+        out.levels = lvT;
       } else if (t === "add_hyperlink") {
         if (typeof op.find !== "string" || !op.find.trim()) { bad("missing find text"); return; }
         var linkF = op.find.trim();
@@ -1779,6 +1815,8 @@ function normalizeWordStyle(v) {
         return "Page header: " + op.text.slice(0, 60);
       case "set_footer":
         return "Page footer: " + op.text.slice(0, 60);
+      case "create_toc":
+        return "Table of contents" + (op.title ? ': "' + op.title + '"' : "") + " (heading levels " + (op.levels || "1-3") + ")";
       case "add_hyperlink":
         return "Hyperlink '" + op.find.slice(0, 60) + "' -> " + op.url;
       case "format_selection":

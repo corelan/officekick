@@ -66,6 +66,13 @@
         host: "DocKick simulator",
       };
     },
+    createToc: async function (op) {
+      const title = (op.title || "Table of Contents").trim();
+      const lvl = String(op.levels || "1-3");
+      paras.push({ text: title, style: "Title" });
+      paras.push({ text: "[TOC field " + lvl + " - in Word this fills when fields update (F9)]", style: "Normal" });
+      return { ok: true };
+    },
     insertParagraphs: async function (op) {
       (op.items || []).forEach(function (it) {
         paras.push({ text: String(it.text == null ? "" : it.text), style: styleName(it.style) });

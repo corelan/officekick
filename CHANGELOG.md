@@ -30,6 +30,21 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.147
+### Added
+- DocKick: "insert table of contents" op (create_toc, levels "1-3"|"1-2",
+  optional title). Inserts a REAL Word TOC field (OOXML fldChar + instr
+  TOC \o ".." \h \z \u) at the end of the document plus an optional
+  TOC-Heading title paragraph; the model is told never to fake TOC entries
+  as literal text. Word fills the entries when fields update (F9 / print).
+  Simulator shim supported.
+### Changed
+- SlideKick table reads are now diagnosable: when shape.table is missing
+  or the load fails, the note the model sees carries the real reason
+  ("no shape.table here - a newer Office build is needed" / the load
+  error) and a table.read debug line is written. Confirmed on a real
+  Mac host: titles/text boxes/subtitles read fine; tables still depend
+  on the host exposing shape.table.
 ## 0.9.146
 ### Fixed
 - Tables were invisible to the model (correct claim - table shapes carry no
