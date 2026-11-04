@@ -30,6 +30,15 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.152
+### Changed
+- The table-unavailable note now states the platform truth: per
+  Microsoft's requirement-set table, the PowerPoint JS table APIs
+  (PowerPointApi 1.8) are Windows-only today - macOS Office reports them
+  "Not available" on every Mac build so far, including the latest. So on
+  macOS the model says plainly: no add-in can read (or edit) table cells
+  there yet, independent of the Office version; on Windows it needs
+  2504/build 18730+.
 ## 0.9.151
 ### Changed
 - When a table cannot be read, the note the model returns is now
