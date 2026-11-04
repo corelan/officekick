@@ -1251,45 +1251,45 @@
     });
   }
 
+  // shared "new session" flow (chat-tab New button + History-tab New session):
+  // armed confirm, keep the session in History, then a clean slate everywhere
+  function startNewSession(btn) {
+    if (!btn) return;
+    if (btn.dataset.armed !== "1") {
+      btn.dataset.armed = "1";
+      btn.dataset.was = btn.textContent;
+      btn.textContent = "Really start a new session?";
+      btn.classList.add("armed");
+      setTimeout(function () {
+        if (btn.parentNode) { btn.dataset.armed = "0"; btn.textContent = btn.dataset.was || btn.textContent; btn.classList.remove("armed"); }
+      }, 3500);
+      return;
+    }
+    btn.dataset.armed = "0";
+    btn.textContent = btn.dataset.was || btn.textContent;
+    btn.classList.remove("armed");
+    filePreviousRun();   // the current chat's last exchange = in the session already
+    SK.history = [];
+    SK.sessionId = null;
+    SK.sessionName = "";
+    SK.sessionManual = false;
+    try { localStorage.removeItem("sk-res...kick"); } catch (eR) {}
+    var inp0 = $("chat-input");
+    if (inp0) { inp0.disabled = false; inp0.value = ""; }
+    var el = $("chat-output");
+    if (el) el.innerHTML = "";
+    var body0 = $("past-body");
+    if (body0) body0.innerHTML = "";   // a new session = a clean Previous requests box
+    updatePastBox();
+    switchTab("chat");
+    setStatus("New session - the current one stays saved in History.", "ok");
+    renderSessions();
+  }
+
   // wire the sessions tab buttons (called from wireEvents)
   function wireSessions() {
     var nw = $("sess-new");
-    if (nw) nw.addEventListener("click", function () {
-      // two-stage confirm (same armed pattern as the session Delete):
-      // a fresh session is only meaningful when the current one is saved
-      if (nw.dataset.armed !== "1") {
-        nw.dataset.armed = "1";
-        nw.dataset.was = nw.textContent;
-        nw.textContent = "Really start a new session?";
-        nw.classList.add("armed");
-        setTimeout(function () {
-          if (nw.parentNode) { nw.dataset.armed = "0"; nw.textContent = nw.dataset.was || "New session"; nw.classList.remove("armed"); }
-        }, 3500);
-        return;
-      }
-      nw.dataset.armed = "0";
-      nw.textContent = nw.dataset.was || "New session";
-      nw.classList.remove("armed");
-      // the current session's last exchange moves into the Previous requests
-      // box first (it may not be saved yet if the user never ran a follow-up)
-      filePreviousRun();
-      // a new session begins on a clean slate
-      var body0 = $("past-body");
-      if (body0) body0.innerHTML = "";
-      updatePastBox();
-      SK.history = [];
-      SK.sessionId = null;
-      SK.sessionName = "";
-      SK.sessionManual = false;
-      var inp0 = $("chat-input");
-      if (inp0) { inp0.disabled = false; inp0.value = ""; }
-      switchTab("chat");
-      setStatus("New session - the current one stays saved in History.", "ok");
-      var el = $("chat-output");
-      if (el) el.innerHTML = "";
-      try { localStorage.removeItem("sk-res...kick"); } catch (eR) {}
-      renderSessions();
-    });
+    if (nw) nw.addEventListener("click", function () { startNewSession(nw); });
     var rf = $("sess-refresh");
     if (rf) rf.addEventListener("click", renderSessions);
   }
@@ -5227,12 +5227,7 @@ OfficeDeck.prototype.setNotes = function (i, text) {
     $("chat-input").addEventListener("keydown", function (ev) {
       if ((ev.metaKey || ev.ctrlKey) && ev.key === "Enter") { ev.preventDefault(); runPrompt(); }
     });
-    $("chat-new").addEventListener("click", function () {
-      resetHistory();
-      $("chat-output").innerHTML = "";
-      $("chat-input").value = "";
-      setStatus("Conversation history cleared.", "ok");
-    });
+    $("chat-new").addEventListener("click", function () { startNewSession($("chat-new")); });
     $("chat-refresh-deck").addEventListener("click", function () { updateDeckSummary(); setStatus("Deck refreshed.", ""); });
     // merge another deck: file picker -> base64 -> insert all its slides at the end
     $("merge-deck").addEventListener("click", function () {

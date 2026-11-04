@@ -30,6 +30,15 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.154
+### Fixed
+- The chat tab's "New session" button (next to the request box) now runs
+  the SAME flow as the History tab one - 0.9.153 only covered the History
+  button, which is why a click could still say "Conversation history
+  cleared." without a confirmation and leave the Previous requests box
+  filled. Both buttons share one handler now: armed confirm ("Really
+  start a new session?"), previous exchange kept in the session, request
+  box cleared, Previous requests emptied, clean slate. All add-ins.
 ## 0.9.153
 ### Changed
 - "New session" = two-stage confirm now (click once -> "Really start a

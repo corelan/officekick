@@ -1162,6 +1162,41 @@
     });
   }
 
+  // shared "new session" flow (chat-tab New button + History-tab New session):
+  // armed confirm, keep the session in History, then a clean slate everywhere
+  function startNewSession(btn) {
+    if (!btn) return;
+    if (btn.dataset.armed !== "1") {
+      btn.dataset.armed = "1";
+      btn.dataset.was = btn.textContent;
+      btn.textContent = "Really start a new session?";
+      btn.classList.add("armed");
+      setTimeout(function () {
+        if (btn.parentNode) { btn.dataset.armed = "0"; btn.textContent = btn.dataset.was || btn.textContent; btn.classList.remove("armed"); }
+      }, 3500);
+      return;
+    }
+    btn.dataset.armed = "0";
+    btn.textContent = btn.dataset.was || btn.textContent;
+    btn.classList.remove("armed");
+    filePreviousRun();   // the current chat's last exchange = in the session already
+    SK.history = [];
+    SK.sessionId = null;
+    SK.sessionName = "";
+    SK.sessionManual = false;
+    try { localStorage.removeItem("sk-res...kick"); } catch (eR) {}
+    var inp0 = $("chat-input");
+    if (inp0) { inp0.disabled = false; inp0.value = ""; }
+    var el = $("chat-output");
+    if (el) el.innerHTML = "";
+    var body0 = $("past-body");
+    if (body0) body0.innerHTML = "";   // a new session = a clean Previous requests box
+    updatePastBox();
+    switchTab("chat");
+    setStatus("New session - the current one stays saved in History.", "ok");
+    renderSessions();
+  }
+
   function wireSessions() {
 var nw = $("sess-new");
     if (nw) nw.addEventListener("click", function () {
@@ -3387,12 +3422,7 @@ function applyOps(deck, ops, ctx) {
     $("chat-input").addEventListener("keydown", function (ev) {
       if ((ev.metaKey || ev.ctrlKey) && ev.key === "Enter") { ev.preventDefault(); runPrompt(); }
     });
-    $("chat-new").addEventListener("click", function () {
-      resetHistory();
-      $("chat-output").innerHTML = "";
-      $("chat-input").value = "";
-      setStatus("Conversation history cleared.", "ok");
-    });
+    $("chat-new").addEventListener("click", function () { startNewSession($("chat-new")); });
     $("chat-refresh-deck").addEventListener("click", function () { updateDeckSummary(); setStatus("Email refreshed.", ""); });
 
     $("conn-new").addEventListener("click", function () {
