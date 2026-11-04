@@ -5226,9 +5226,11 @@ OfficeDeck.prototype.setNotes = function (i, text) {
     var relBtn = $("pane-reload");
     if (relBtn) relBtn.addEventListener("click", function () {
       dbg("pane.reload", {});
-      // hard reload of the pane from the running server, busting any cache
+      // hard reload of the pane from the running server, busting any cache;
+      // boots into Settings -> General (where updates/user settings live)
       var qs = String(location.search || "").replace(/cb=\d+(&|$)/g, "").replace(/^\?/, "");
-      location.replace(location.pathname + "?" + (qs ? qs + "&" : "") + "cb=" + Date.now());
+      if (/reloadnav=general(&|$)/.test("?" + qs + "&")) qs = qs.replace(/&?reloadnav=general/, "");
+      location.replace(location.pathname + "?" + (qs ? qs + "&" : "") + "reloadnav=general&cb=" + Date.now());
     });
     wireAutoApplySetting();
     var updAuto = $("upd-auto");
@@ -5247,6 +5249,20 @@ OfficeDeck.prototype.setNotes = function (i, text) {
         apiJson("/api/settings", "PUT", { autoUpdateCheck: !!updAuto.checked });
       });
     }
+    // a pane reload lands on Settings -> General (the caller tags the URL)
+    try {
+      var q = new URLSearchParams(location.search);
+      if (q.get("reloadnav") === "general") {
+        switchTab("settings");
+        switchSettingsSub("general");
+        q.delete("reloadnav");   // not sticky: a plain F5 keeps the normal boot
+        var clean = location.pathname + ("" + q ? "?" + q.toString() : "");
+        try { history.replaceState(null, "", clean); } catch (eH) {
+          location.replace(clean);   // WebViews without replaceState
+        }
+      }
+    } catch (eQR) { /* older parser: leave the boot view */ }
+
     // a pane reload (or back-end restart) resumes the session that was active
     var bootResume = null;
     try { bootResume = localStorage.getItem("sk-resume-session-slidekick"); } catch (eS) {}

@@ -30,6 +30,13 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.140
+### Changed
+- "Reload pane" is now "Reload add-in", and after a reload the pane boots
+  straight into Settings -> General (the reload tags the URL with a
+  one-shot reloadnav=general parameter that is cleaned from the address
+  right after boot, so a manual reload later behaves normally). All
+  three add-ins.
 ## 0.9.139
 ### Changed
 - The request box stands out: indigo border, faint indigo background tint

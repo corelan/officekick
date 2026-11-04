@@ -3711,14 +3711,27 @@ function applyOps(deck, ops, ctx) {
     var relBtn = $("pane-reload");
     if (relBtn) relBtn.addEventListener("click", function () {
       dbg("pane.reload", {});
-      // hard reload of the pane from the running server, busting any cache
+      // hard reload of the pane from the running server, busting any cache;
+      // boots into Settings -> General (where updates/user settings live)
       var qs = String(location.search || "").replace(/cb=\d+(&|$)/g, "").replace(/^\?/, "");
-      location.replace(location.pathname + "?" + (qs ? qs + "&" : "") + "cb=" + Date.now());
+      if (/reloadnav=general(&|$)/.test("?" + qs + "&")) qs = qs.replace(/&?reloadnav=general/, "");
+      location.replace(location.pathname + "?" + (qs ? qs + "&" : "") + "reloadnav=general&cb=" + Date.now());
     });
     // a pane reload (or back-end update) resumes the session that was active
     var bootResume = null;
     try { bootResume = localStorage.getItem("sk-resume-session-wordkick"); } catch (eS) {}
     if (bootResume) resumeSession(bootResume);
+    // a pane reload lands on Settings -> General (the caller tags the URL)
+    try {
+      var qnav = new URLSearchParams(location.search);
+      if (qnav.get("reloadnav") === "general") {
+        switchTab("settings");
+        switchSettingsSub("general");
+        qnav.delete("reloadnav");   // not sticky: a plain reload keeps the normal boot
+        var cleanUrl = location.pathname + ("" + qnav ? "?" + qnav.toString() : "");
+        try { history.replaceState(null, "", cleanUrl); } catch (eH) { location.replace(cleanUrl); }
+      }
+    } catch (eQR) { /* older parser: leave the boot view */ }
     wireAutoApplySetting();
     var updAuto = $("upd-auto");
     if (updAuto) {
