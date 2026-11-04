@@ -3204,7 +3204,8 @@ OfficeDeck.prototype.setNotes = function (i, text) {
     var lines = [];
     var sel = ctx.selected && ctx.selected.length ? " (slides are numbered 1..N; * = selected: " +
       ctx.selected.map(function (x) { return x + 1; }).join(",") + ")" : "";
-    lines.push("DECK OUTLINE: " + ctx.slideCount + " slides" + sel + (ctx.truncated ? " (only the first slides are listed)" : "") + ", host: " + ctx.host);
+    lines.push("DECK OUTLINE: " + ctx.slideCount + " slides" + sel + (ctx.truncated ? " (only the first slides are listed)" : "") + ", host: " + ctx.host +
+      "\n(Per-shape text may be shortened in this outline. To check/refer to full slide text, first emit a read_slide op for that slide - its reply shows every shape in full; never claim you cannot see content without using read_slide.)");
     if (ctx.selection && (ctx.selection.shapes.length || ctx.selection.textPreview || ctx.selection.slides.length)) {
       var selBits = [];
       if (ctx.selection.slides.length) selBits.push("slides " + ctx.selection.slides.map(function (x) { return x + 1; }).join(","));
@@ -3220,7 +3221,7 @@ OfficeDeck.prototype.setNotes = function (i, text) {
         var t2 = (s2.shapes || []).filter(function (sh) { return sh.isBody && sh.text; })
           .map(function (sh) { return sh.text; }).join(" ") || "";
         t2 = String(t2).replace(/\r|\n/g, " ");
-        if (t2.length > 90) t2 = t2.slice(0, 90) + "…";
+        if (t2.length > 240) t2 = t2.slice(0, 240) + "…";
         return t2 ? " — " + t2 : "";
       };
       ctx.slides.forEach(function (s2) {
@@ -3229,7 +3230,7 @@ OfficeDeck.prototype.setNotes = function (i, text) {
         var tt2 = (s2.shapes || []).filter(function (sh) { return sh.isTitle || (sh.text && /title/i.test(sh.name)); })[0];
         var line2 = "[" + (s2.idx + 1) + star2 + "] (role: " + role2 + ") " +
           (tt2 && tt2.text ? tt2.text : "(no title)") + bodyPrevF(s2);
-        if (line2.length > 170) line2 = line2.slice(0, 170);
+        if (line2.length > 340) line2 = line2.slice(0, 340);
         lines.push(line2);
         if (selMap[s2.idx]) {
           var selTxt = 0;
@@ -3237,7 +3238,7 @@ OfficeDeck.prototype.setNotes = function (i, text) {
             if (sh.text == null || !String(sh.text).trim()) return;
             var role = sh.isTitle ? "title" : sh.isBody ? "body" : "text";
             var txt = String(sh.text).replace(/\r|\n/g, " | ");
-            if (txt.length > 500) txt = txt.slice(0, 500) + "…[text continues]";
+            if (txt.length > 900) txt = txt.slice(0, 900) + "…[text continues]";
             lines.push("    shape " + (sh.idx + 1) + " (" + role + ", " + sh.name + '): "' + txt + '"');
             selTxt++;
           });
@@ -3256,7 +3257,7 @@ OfficeDeck.prototype.setNotes = function (i, text) {
         // shapes are numbered from 1 in the outline listing below
         var role = sh.isTitle || (title && sh.idx === title.idx) ? "title" : sh.isBody ? "body" : "text";
         var txt = String(sh.text).replace(/\r|\n/g, " | ");
-        if (txt.length > 400) txt = txt.slice(0, 400) + "…[text continues]";
+        if (txt.length > 900) txt = txt.slice(0, 900) + "…[text continues]";
         if (!txt.trim()) return;
         lines.push("    shape " + (sh.idx + 1) + " (" + role + ", " + sh.name + '): "' + txt + '"');
       });

@@ -30,6 +30,17 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.145
+### Changed
+- Deck-outline text limits raised: per-shape text cap 400 -> 900 chars,
+  selected-slide deep listing 500 -> 900, big-deck per-slide body preview
+  90 -> 240 and line cap 170 -> 340 (60 K total guard unchanged).
+- The outline header now tells the model explicitly that per-shape text
+  may be shortened and to emit a read_slide op to see a slide in full -
+  "never claim you cannot see content without using read_slide" (the
+  read-slide path shows every shape uncapped, up to the 60 K total).
+  This answers cases like "I cannot see the last bullet of slide N": the
+  outline cut the shape text, and the model now knows the fix.
 ## 0.9.144
 ### Changed
 - The session label's title text is accented (indigo on light theme,
