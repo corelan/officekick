@@ -34,7 +34,21 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 APP = "OfficeKick"
-VERSION = "0.9.122"
+VERSION = "0.9.123"
+
+# Built-in quality/style prompt: used when the user's customPrompt is empty
+# (the Settings field shows it and falls back to it). Two labeled blocks.
+DEFAULT_CUSTOM_PROMPT = (
+    "### Content (accuracy)\n"
+    "- Stick to facts actually present in the deck, document, or email thread. Never invent numbers, quotes, names, dates, versions, or citations.\n"
+    "- If information is missing or uncertain, say so or ask - never fill gaps with plausible-sounding content.\n"
+    "- Clearly separate existing content from your suggestions.\n"
+    "\n"
+    "### Writing style\n"
+    "- Plain, simple vocabulary and short sentences - without simplifying the substance or losing technical precision.\n"
+    "- Active voice; concrete, specific wording; no filler or marketing language.\n"
+    "- One idea per bullet; trim to the shortest form that keeps the full meaning."
+)
 # how to start the server again when it is down (per OS / setup, shown by the panes).
 # Windows: prefer the registered logon task (starts it detached+hidden); else the clone's installer.
 def _start_hint():
@@ -703,6 +717,7 @@ class Store:
             "generateNotes": bool(d.get("generateNotes", False)),
             "paneFontSize": int(d.get("paneFontSize", 100)),
             "customPrompt": str(d.get("customPrompt", "") or ""),
+            "customPromptDefault": DEFAULT_CUSTOM_PROMPT,
             "trackedChanges": bool(d.get("trackedChanges", False)),
             "autoClean": bool(d.get("autoClean", True)),
             "autoCleanDays": int(d.get("autoCleanDays", 120)),

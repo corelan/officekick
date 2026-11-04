@@ -3181,8 +3181,9 @@ OfficeDeck.prototype.setNotes = function (i, text) {
       var webPromise = Promise.resolve("");
       return webPromise.then(function () {
       var sys = SYSTEM_PROMPT + "\nHost: " + (SK.sim ? "SlideKick simulator" : SK.deck.capabilities().host);
-      if (SK.cfg && SK.cfg.customPrompt && String(SK.cfg.customPrompt).trim()) {
-        sys += "\n\nUSER CUSTOM INSTRUCTIONS (from Settings - obey these):\n" + String(SK.cfg.customPrompt).trim();
+      var _cp = SK.cfg ? (String(SK.cfg.customPrompt || "").trim() ? String(SK.cfg.customPrompt).trim() : String(SK.cfg.customPromptDefault || "").trim()) : "";
+      if (_cp) {
+        sys += "\n\nUSER CUSTOM INSTRUCTIONS (from Settings - obey these):\n" + _cp;
       }
       if (!(SK.cfg && SK.cfg.generateNotes)) sys += "\n" + NOTES_OFF_RULE;
       if (MAKEOVER_RE.test(instruction)) sys += "\n" + MAKEOVER_BRIEF;
@@ -5007,21 +5008,19 @@ OfficeDeck.prototype.setNotes = function (i, text) {
     Array.prototype.forEach.call(document.querySelectorAll("#settings-subtabs button"), function (b) {
       b.addEventListener("click", function () { switchSettingsSub(b.dataset.subtab); });
     });
-    $("settings-debug").addEventListener("change", function () { saveDebugOption();
-    var cpT = null;
     var cpEl = $("settings-customprompt");
+    var cpSave = $("settings-customprompt-save");
     if (cpEl) {
-      cpEl.value = String((SK.cfg && SK.cfg.customPrompt) || "");
-      cpEl.addEventListener("input", function () {
-        clearTimeout(cpT);
-        cpT = setTimeout(function () {
-          apiJson("/api/settings", "PUT", { customPrompt: cpEl.value }).then(function () {
-            if (SK.cfg) SK.cfg.customPrompt = cpEl.value;
-            flashSaved("saved-customprompt", "✓ saved");
-          }).catch(function () { flashSaved("saved-customprompt", "save failed"); });
-        }, 1000);
+      cpEl.value = String((SK.cfg && SK.cfg.customPrompt)
+        || (SK.cfg && SK.cfg.customPromptDefault) || "");   // empty = the built-in prompt
+      if (cpSave) cpSave.addEventListener("click", function () {
+        apiJson("/api/settings", "PUT", { customPrompt: cpEl.value }).then(function () {
+          if (SK.cfg) SK.cfg.customPrompt = cpEl.value;
+          flashSaved("saved-customprompt", "\u2713 saved");
+        }).catch(function () { flashSaved("saved-customprompt", "save failed"); });
       });
-    } flashSaved("saved-debug", SK.cfg && SK.cfg.debug ? "\u2713 saved - debug logging ON" : "\u2713 saved - debug logging OFF"); });
+    }
+    $("settings-debug").addEventListener("change", function () { saveDebugOption(); flashSaved("saved-debug", SK.cfg && SK.cfg.debug ? "\u2713 saved - debug logging ON" : "\u2713 saved - debug logging OFF"); });
     $("settings-notes").addEventListener("change", function () { saveNotesOnly(); flashSaved("saved-notes", "\u2713 saved"); });
     var _acTimer = null;
     var _acSave = function () {

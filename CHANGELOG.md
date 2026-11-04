@@ -30,6 +30,20 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.123
+### Changed
+- Custom system prompt auto-save reverted to a Save button (auto-save =
+  only right for checkbox-type settings). The button writes the textarea
+  verbatim with the green flash.
+### Added
+- Built-in quality/style prompt: when no custom prompt is set, the field
+  is presented pre-filled with a default covering two labeled blocks -
+  "### Content (accuracy)" (no invented facts, flag uncertainty, separate
+  existing content from suggestions) and "### Writing style" (plain
+  vocabulary without dumbing down, active voice, one idea per bullet).
+  Clearing the field and saving falls back to this built-in prompt; the
+  fallback also applies to the actual prompt assembly for fresh installs
+  (customPromptDefault served by the server).
 ## 0.9.122
 ### Added
 - Custom system prompt (Settings -> General, all add-ins): a textarea whose
