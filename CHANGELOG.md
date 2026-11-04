@@ -30,6 +30,13 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.127
+### Changed
+- Connections / Profiles: the extra sheet headings were misplaced (they
+  sat above the edit forms); removed. The form titles themselves
+  ("New connection" / "New profile", and "Edit connection: X" /
+  "Edit profile: X") now carry the stand-out color - deep teal on light,
+  bright cyan on dark. The "Approval policy per action" title keeps it.
 ## 0.9.126
 ### Changed
 - Built-in quality/style prompt updated: the accuracy block now also
