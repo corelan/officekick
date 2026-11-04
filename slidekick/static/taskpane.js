@@ -1469,37 +1469,39 @@
         err2.noTableProp = true;
         throw err2;
       }
+      // PowerPoint.Table/TableCell = 1.8, TableRow = 1.9; read row-by-row
+      // (deep loads can be rejected; TableCell.text = a plain string)
       tbl.load("rowCount,columnCount");
-      tbl.rows.load("items/cells/text");
+      tbl.rows.load("items");
       return ctx.sync().then(function () {
-        var cells = [];
+        var cellQs = [];
         (tbl.rows.items || []).forEach(function (row) {
           (row.cells.items || []).forEach(function (cell) {
-            cells.push(String(cell.text || ""));
+            cell.load("text");
+            cellQs.push(cell);
           });
         });
-        return { r: tbl.rowCount, c: tbl.columnCount, cells: cells };
+        return ctx.sync().then(function () {
+          var cells = cellQs.map(function (cell) { return String(cell.text || ""); });
+          return { r: tbl.rowCount, c: tbl.columnCount, cells: cells };
+        });
       });
     };
     return Promise.resolve().then(tryRead).catch(function (eT) {
-      // deep load may be rejected on some builds: fall back to a per-row read
+      // some builds reject the batched cell loads: try the deep-load form
       return Promise.resolve().then(function () {
         var tbl = sh.table;
         if (!tbl || !tbl.rows) throw eT;
         tbl.load("rowCount,columnCount");
-        tbl.rows.load("items");
+        tbl.rows.load("items/cells/text");
         return ctx.sync().then(function () {
-          var cellQs = [];
+          var cells = [];
           (tbl.rows.items || []).forEach(function (row) {
             (row.cells.items || []).forEach(function (cell) {
-              cell.load("text");
-              cellQs.push(cell);
+              cells.push(String(cell.text || ""));
             });
           });
-          return ctx.sync().then(function () {
-            var cells = cellQs.map(function (cell) { return String(cell.text || ""); });
-            return { r: tbl.rowCount, c: tbl.columnCount, cells: cells };
-          });
+          return { r: tbl.rowCount, c: tbl.columnCount, cells: cells };
         });
       }).catch(function () { throw eT; });
     });
@@ -1640,8 +1642,7 @@
                   });
                   if (!tblShapes.length) return null;
                   var tblApi = true;
-                  try { tblApi = Office.context.requirements.isSetSupported("PowerPointApi", "1.9") ||
-                    Office.context.requirements.isSetSupported("PowerPointApi", "1.6"); } catch (eTbl) { tblApi = false; }
+                  try { tblApi = Office.context.requirements.isSetSupported("PowerPointApi", "1.8"); } catch (eTbl) { tblApi = false; }
                   var tries = tblShapes.map(function (sh) {
                     if (!tblApi) return { txt: "[table - cell text unavailable in this Office build (table API not in this requirement set)]" };
                     return self._readTableText(ctx, sh)
@@ -2512,8 +2513,7 @@ OfficeDeck.prototype.setNotes = function (i, text) {
                 t2.shapes.forEach(function (sh) { if (sh.type === "table") tblEntries.push(sh); });
               });
               var tblApi2 = true;
-              try { tblApi2 = Office.context.requirements.isSetSupported("PowerPointApi", "1.9") ||
-                Office.context.requirements.isSetSupported("PowerPointApi", "1.6"); } catch (eTbl2) { tblApi2 = false; }
+              try { tblApi2 = Office.context.requirements.isSetSupported("PowerPointApi", "1.8"); } catch (eTbl2) { tblApi2 = false; }
               var tblTries = tblEntries.map(function (sh) {
                 if (!tblApi2) return Promise.resolve("[table - cell text unavailable in this Office build (table API not in this requirement set)]");
                 return self._readTableText(ctx, sh)

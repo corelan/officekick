@@ -30,6 +30,17 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.149
+### Fixed
+- (0.9.148 shipped the changelog text without the code - this commit
+  carries the actual change.) Table reads now guard PowerPointApi **1.8**
+  (Table/TableCell = 1.8, TableRow = 1.9, TableCell.text = a plain string
+  per the Office JS docs) and read cells row-by-row
+  (rows.load("items") + per-cell load("text")), with the deep-
+  load ("items/cells/text") as the fallback. If the user's host still
+  reports "cell text unavailable", the note now includes the exact cause
+  (no shape.table on that build vs the load error) plus a table.read
+  debug line.
 ## 0.9.148
 ### Fixed
 - Table reads target the right API set: PowerPoint.Table/TableCell = 1.8
