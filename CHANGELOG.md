@@ -30,6 +30,14 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.122
+### Added
+- Custom system prompt (Settings -> General, all add-ins): a textarea whose
+  content is appended to every AI request's system prompt ("USER CUSTOM
+  INSTRUCTIONS" block) - writing style, tone, formatting house rules.
+  Auto-saves 1 s after the last keystroke with the green flash. Stored in
+  the shared config (customPrompt, empty by default, so new installs get
+  the key too; 4000-char cap).
 ## 0.9.121
 ### Changed
 - Manual-notes fallback (when a host refuses notes-page writes): each note

@@ -34,7 +34,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 APP = "OfficeKick"
-VERSION = "0.9.121"
+VERSION = "0.9.122"
 # how to start the server again when it is down (per OS / setup, shown by the panes).
 # Windows: prefer the registered logon task (starts it detached+hidden); else the clone's installer.
 def _start_hint():
@@ -455,6 +455,9 @@ class Store:
         self.data.setdefault("generateNotes", False)
         # pane text size in percent (80..160, 100 = default)
         self.data.setdefault("paneFontSize", 100)
+        # custom instructions appended to every system prompt (style, tone,
+        # house rules); empty by default for fresh installs
+        self.data.setdefault("customPrompt", "")
         # AI edits as tracked changes (Word; opt-in)
         self.data.setdefault("trackedChanges", True)
         self.save()
@@ -699,6 +702,7 @@ class Store:
             "debug": bool(d.get("debug")),
             "generateNotes": bool(d.get("generateNotes", False)),
             "paneFontSize": int(d.get("paneFontSize", 100)),
+            "customPrompt": str(d.get("customPrompt", "") or ""),
             "trackedChanges": bool(d.get("trackedChanges", False)),
             "autoClean": bool(d.get("autoClean", True)),
             "autoCleanDays": int(d.get("autoCleanDays", 120)),
@@ -2049,6 +2053,10 @@ class SlideKickHandler(BaseHTTPRequestHandler):
                     changed = True
                 if "generateNotes" in body and body["generateNotes"] is not None:
                     self.store.data["generateNotes"] = bool(body["generateNotes"])
+                    changed = True
+                if "customPrompt" in body and body["customPrompt"] is not None:
+                    _cp = str(body["customPrompt"] or "")
+                    self.store.data["customPrompt"] = _cp[:4000]
                     changed = True
                 if "paneFontSize" in body and body["paneFontSize"] is not None:
                     try:
