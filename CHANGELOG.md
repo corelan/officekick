@@ -30,6 +30,16 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.146
+### Fixed
+- Tables were invisible to the model (correct claim - table shapes carry no
+  text frame, so the outline and read_slide showed them as empty). Both
+  Office paths (getContext + readSlides) now read table cells through the
+  table API (PowerPointApi 1.6+, guarded): a table shape reports
+  "[table RxC] cell1 | cell2 | ..." with the same per-shape text caps as
+  other shapes. Old/unsupported builds degrade to an honest
+  "[table - cell text unavailable in this Office build]" note instead of
+  silence. The simulator shows the same cell text.
 ## 0.9.145
 ### Changed
 - Deck-outline text limits raised: per-shape text cap 400 -> 900 chars,

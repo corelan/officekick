@@ -1458,6 +1458,47 @@
   // PlaceholderFormat (PowerPointApi 1.8) is the reliable, localization-safe way
   // to find title/body placeholders. It throws when loaded on non-placeholder
   // shapes, so gate every load on shape.type === "placeholder" and probe once.
+  // tables: GraphicFrame shapes have NO textFrame - read cell text through
+  // the table API when the build has it (PowerPointApi 1.6+), else say so
+  OfficeDeck.prototype._readTableText = function (ctx, sh) {
+    var tryRead = function () {
+      var tbl = sh.table;
+      if (!tbl || !tbl.rows) return null;
+      tbl.load("rowCount,columnCount");
+      tbl.rows.load("items/cells/text");
+      return ctx.sync().then(function () {
+        var cells = [];
+        (tbl.rows.items || []).forEach(function (row) {
+          (row.cells.items || []).forEach(function (cell) {
+            cells.push(String(cell.text || ""));
+          });
+        });
+        return { r: tbl.rowCount, c: tbl.columnCount, cells: cells };
+      });
+    };
+    return Promise.resolve().then(tryRead).catch(function (eT) {
+      // deep load may be rejected on some builds: fall back to a per-row read
+      return Promise.resolve().then(function () {
+        var tbl = sh.table;
+        if (!tbl || !tbl.rows) throw eT;
+        tbl.load("rowCount,columnCount");
+        tbl.rows.load("items");
+        return ctx.sync().then(function () {
+          var cellQs = [];
+          (tbl.rows.items || []).forEach(function (row) {
+            (row.cells.items || []).forEach(function (cell) {
+              cell.load("text");
+              cellQs.push(cell);
+            });
+          });
+          return ctx.sync().then(function () {
+            var cells = cellQs.map(function (cell) { return String(cell.text || ""); });
+            return { r: tbl.rowCount, c: tbl.columnCount, cells: cells };
+          });
+        });
+      }).catch(function () { throw eT; });
+    });
+  };
   OfficeDeck.prototype._probeGeometry = function () {
     var self = this;
     if (this._geoApi !== undefined) return Promise.resolve();
@@ -1585,6 +1626,31 @@
                       s.shapes.forEach(function (sh) { if (sh.text === undefined) sh.text = ""; });
                     });
                   }
+                }).then(function () {
+                  // tables: GraphicFrame shapes have no textFrame; pull the
+                  // cell text through the table API (guarded per shape)
+                  var tblShapes = [];
+                  data.forEach(function (sd) {
+                    sd.shapes.forEach(function (sh) { if (sh.type === "table") tblShapes.push(sh); });
+                  });
+                  if (!tblShapes.length) return null;
+                  var tblApi = true;
+                  try { tblApi = Office.context.requirements.isSetSupported("PowerPointApi", "1.6"); } catch (eTbl) { tblApi = false; }
+                  var tries = tblShapes.map(function (sh) {
+                    if (!tblApi) return { txt: "[table - cell text unavailable in this Office build]" };
+                    return self._readTableText(ctx, sh)
+                      .then(function (info) {
+                        if (!info || !info.cells || !info.cells.length) return "[table " + info.r + "x" + info.c + " - unreadable]";
+                        var joined = info.cells.join(" | ");
+                        var head = "[table " + info.r + "x" + info.c + "] ";
+                        return head + joined;
+                      })
+                      .catch(function () { return "[table - cell text unavailable in this Office build]"; });
+                  });
+                  return Promise.all(tries).then(function (vals) {
+                    tblShapes.forEach(function (sh, k) { sh.text = vals[k]; });
+                    return null;
+                  });
                 }).then(function () {
                   var selected = [];
                   var selSupported = false;
@@ -2429,25 +2495,46 @@ OfficeDeck.prototype.setNotes = function (i, text) {
             });
             return ctx.sync().then(function () {
               trs.forEach(function (e) { e.entry.text = e.tf.textRange.text || ""; });
-              var out = [];
-              targets.forEach(function (t) {
-                out.push("SLIDE " + t.n + " (slide " + t.n + " in the outline):");
-                if (!t.shapes.length) { out.push("  (no shapes)"); return; }
-                t.shapes.forEach(function (sh) {
-                  var txt = sh.text == null ? "(text unavailable in this Office build)" : String(sh.text);
-                  txt = txt.replace(/\r|\n/g, " | ");
-                  out.push("  shape " + (sh.idx + 1) + " (" + sh.name + ", " + sh.type + '): "' + txt + '"');
-                });
+              // tables have no textFrame: read their cells via the table API
+              var tblEntries = [];
+              targets.forEach(function (t2) {
+                t2.shapes.forEach(function (sh) { if (sh.type === "table") tblEntries.push(sh); });
               });
-              var total = out.join("\n");
-              if (total.length > 60000) total = total.slice(0, 60000) + "\n…[truncated]";
-              return total;
-            });
-          });
-        });
-      });
-    });
+              var tblApi2 = true;
+              try { tblApi2 = Office.context.requirements.isSetSupported("PowerPointApi", "1.6"); } catch (eTbl2) { tblApi2 = false; }
+              var tblTries = tblEntries.map(function (sh) {
+                if (!tblApi2) return Promise.resolve("[table - cell text unavailable in this Office build]");
+                return self._readTableText(ctx, sh)
+                  .then(function (info) {
+                    return info && info.cells && info.cells.length
+                      ? "[table " + info.r + "x" + info.c + "] " + info.cells.join(" | ")
+                      : "[table " + info.r + "x" + info.c + " - unreadable]";
+                  })
+                  .catch(function () { return "[table - cell text unavailable in this Office build]"; });
+              });
+              return Promise.all(tblTries).then(function (vals) {
+                tblEntries.forEach(function (sh, k) { sh.text = vals[k]; });
+                var out = [];
+                targets.forEach(function (t) {
+                  out.push("SLIDE " + t.n + " (slide " + t.n + " in the outline):");
+                  if (!t.shapes.length) { out.push("  (no shapes)"); return; }
+                  t.shapes.forEach(function (sh) {
+                    var txt = sh.text == null ? "(text unavailable in this Office build)" : String(sh.text);
+                    txt = txt.replace(/\r|\n/g, " | ");
+                    out.push("  shape " + (sh.idx + 1) + " (" + sh.name + ", " + sh.type + '): "' + txt + '"');
+                  });
+                });
+                var total = out.join("\n");
+                if (total.length > 60000) total = total.slice(0, 60000) + "\n\u2026[truncated]";
+                return total;
+              });            // Promise.all(tblTries)
+            });              // ctx.sync (textRange)
+          });                // ctx.sync (tfs)
+        });                  // ctx.sync (shapes)
+      });                    // ctx.sync (ids)
+    });                      // run callback
   };
+
 
   OfficeDeck.prototype.applyLayout = function (i, kind) {
     if (this._textApi === false) {

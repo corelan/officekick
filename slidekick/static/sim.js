@@ -11,6 +11,13 @@ window.__SK_SIM__ = true;
 (function () {
   "use strict";
 
+  function tableCellText(sh) {
+    if (!sh.table || !Array.isArray(sh.table.values)) return sh.text || "";
+    const flat = [];
+    sh.table.values.forEach((row) => Array.isArray(row) && row.forEach((v) => flat.push(String(v))));
+    return "[table " + sh.table.rows + "x" + sh.table.cols + "] " + flat.join(" | ");
+  }
+
   const fakeSelectedText = "AI agents are reshaping security work";
   const fakeSelectedFont = {};
   const INITIAL = [
@@ -78,7 +85,7 @@ window.__SK_SIM__ = true;
           idx: j,
           name: sh.name,
           type: sh.type,
-          text: sh.text,
+          text: sh.type === "table" ? tableCellText(sh) : sh.text,
           isTitle: sh.isTitle,
           isBody: sh.isBody,
           left: sh.left != null ? sh.left : 20,
@@ -103,7 +110,7 @@ window.__SK_SIM__ = true;
         const shs = sl.shapes || [];
         if (!shs.length) lines.push("  (no shapes)");
         shs.forEach((sh, j) => {
-          const txt = String(sh.text == null ? "" : sh.text).replace(/\r|\n/g, " | ");
+          const txt = String((sh.type === "table" ? tableCellText(sh) : (sh.text == null ? "" : sh.text))).replace(/\r|\n/g, " | ");
           const label = (sh.name || sh.type || "shape") + ", " + (sh.type || "");
           lines.push('  shape ' + (j + 1) + ' (' + label + '): "' + txt + '"');
         });
