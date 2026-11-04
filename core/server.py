@@ -34,7 +34,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 APP = "OfficeKick"
-VERSION = "0.9.140"
+VERSION = "0.9.141"
 
 # --------------------------------------------------------------------------- #
 # Self-restart: the server watches for <cfg dir>/restart.flag. Whatever writes
@@ -173,7 +173,7 @@ DEFAULT_CUSTOM_PROMPT = (
     "\n"
     "### Formatting\n"
     "- Use and implement the same style and theme elements already present in the document.\n"
-    "- For every line (or table cell) that contains shell commands, CLI flags, code, syntax, URLs or protocol elements: make the separate format_text request with font {\"name\":\"Consolas\"} on that shape. Never treat such lines as prose.\n"
+    "- For every line (or table cell) that contains shell, filenames, folder paths, commands, CLI flags, code, syntax, URLs or protocol elements: make the separate format_text request with font {\"name\":\"Consolas\"} on that shape. Never treat such lines as prose.\n"
     "- Do not apply the monospace rule to ordinary text; when in doubt, ask."
 )
 

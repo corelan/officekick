@@ -30,6 +30,11 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.141
+### Changed
+- Built-in prompt, Formatting block: the monospace trigger list now also
+  covers filenames and folder paths ("shell, filenames, folder paths,
+  commands, CLI flags, code, syntax, URLs or protocol elements").
 ## 0.9.140
 ### Changed
 - "Reload pane" is now "Reload add-in", and after a reload the pane boots
