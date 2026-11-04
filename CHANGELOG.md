@@ -30,6 +30,10 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.137
+### Changed
+- The custom system prompt editor is bigger: 16 rows, taller minimum
+  height, capped at ~half the pane height, vertically resizable.
 ## 0.9.136
 ### Changed
 - Built-in prompt, Formatting block: the monospace rule is now explicit and
