@@ -30,6 +30,11 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.144
+### Changed
+- The session label's title text is accented (indigo on light theme,
+  bright indigo on dark) as are the History view's "current session"
+  markers (the meta line + card highlight) - all three add-ins.
 ## 0.9.143
 ### Added
 - The session label has two buttons: refresh (asks the AI for a new title,

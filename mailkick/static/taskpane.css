@@ -838,3 +838,10 @@ body.dark .savedflash { color: #7ee787; }
 .slabelbtn { font-size: 11px; padding: 1px 7px; margin-left: 4px; }
 .sessionlabel { display: flex; align-items: center; gap: 2px; }
 .sess-rename { font: inherit; padding: 2px 6px; }
+
+/* the session label title = in an accent color (light: indigo, dark: bright indigo) */
+.sessionlabel > span { color: #4338ca; }
+body.dark .sessionlabel > span { color: #a5b4fc; }
+/* the History "current session" indicator = accent-colored too */
+.sesscard.current .sessmeta { color: #4338ca; }
+body.dark .sesscard.current .sessmeta { color: #a5b4fc; }
