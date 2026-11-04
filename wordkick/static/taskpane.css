@@ -619,14 +619,15 @@ body.dark .list .reqgrp.failed { border-color: rgba(248,113,113,.35); }
 .setgroup > .row:last-child { margin-bottom: 0; }   /* no dead tail space */
 .setgroup > .row:empty { display: none; }           /* empty feedback rows vanish */
 /* section titles stand out: cyan on dark, deep teal on light */
-.setgroup > .setgh {
+.setgroup > .setgh, .sheettitle {
   margin: 0 0 6px 0;
-  color: #22d3ee;                 /* bright cyan - dark mode default */
+  color: #005f73;                 /* deep teal on light theme */
   text-transform: uppercase;
   letter-spacing: 0.05em;
   font-weight: 700;
 }
-body:not(.dark) .setgroup > .setgh { color: #005f73; }  /* readable deep teal on white */
+/* dark override must out-specific body.dark h2 (muted gray) */
+body.dark .setgroup > .setgh, body.dark .sheettitle { color: #22d3ee; }
 
 .setgroup > .setgh { margin: 0 0 4px 0; }
 .setgroup > .setgh { margin: 0 0 6px 0; font-size: 12px; font-weight: 700; letter-spacing: .3px; }

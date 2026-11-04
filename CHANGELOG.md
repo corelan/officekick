@@ -30,6 +30,14 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.125
+### Changed
+- Section-title colors extended across the other Settings panes: the
+  Approval policy sheet title and proper "Connections" / "Profiles" sheet
+  headings (new, above the edit forms) all use the same stand-out style -
+  deep teal on light, bright cyan on dark. The dark override is
+  specificity-matched against the generic h2 gray so it wins in both
+  themes (verified in the simulator).
 ## 0.9.124
 ### Changed
 - Settings section titles (GENERAL (ALL ADD-INS), CUSTOM SYSTEM PROMPT,
