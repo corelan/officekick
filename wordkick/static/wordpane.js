@@ -742,7 +742,7 @@
     var note = document.createElement("div");
     note.className = "opnote";
     note.textContent = "Resumed session \u201C" + SK.sessionName + "\u201D - the AI sees the last " +
-      Math.min(HISTORY_MAX_EXCHANGES, SK.history.length / 2) + " exchange(s). The last turns are in the Previous requests box below (collapsed; click its header to open). Continue typing below.";
+      Math.min(HISTORY_MAX_EXCHANGES, SK.history.length / 2) + " exchange(s). The last turns are in the Previous requests box (collapsed; click its header to open). Just type in the request box to continue.";
     el.appendChild(note);
     // show the last up-to-6 messages (3 exchanges) as collapsed request/response
     // boxes, styled like the Inspector groups; future runs append below

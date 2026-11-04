@@ -30,6 +30,13 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.138
+### Changed
+- Wording fixes: the custom-prompt hint no longer says "below" (there is
+  nothing below to point at); the resume note says "Just type in the
+  request box to continue." instead of "Continue typing below" (the input
+  box sits above the note) and drops the "below" from the Previous
+  requests reference.
 ## 0.9.137
 ### Changed
 - The custom system prompt editor is bigger: 16 rows, taller minimum
