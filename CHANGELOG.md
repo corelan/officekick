@@ -30,6 +30,13 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.126
+### Changed
+- Built-in quality/style prompt updated: the accuracy block now also
+  forbids inventing routines/solutions ("facts" emphasis), and the style
+  block asks for code/syntax/protocol text in a monospaced font
+  (e.g. Consolas) via a format_request. Dropped the "one idea per bullet"
+  line in favor of the user's wording.
 ## 0.9.125
 ### Changed
 - Section-title colors extended across the other Settings panes: the
