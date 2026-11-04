@@ -30,6 +30,16 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.153
+### Changed
+- "New session" = two-stage confirm now (click once -> "Really start a
+  new session?", click again within 3.5 s to proceed) - same armed-button
+  pattern as session Delete.
+- Before the reset, the current chat's last exchange is filed into the
+  "Previous requests" box (so nothing disappears), and when the new
+  session actually starts the Previous requests box is cleared - a new
+  session begins on a clean slate. The resume hint marker is removed too,
+  so the next run saves a genuinely fresh session. All three add-ins.
 ## 0.9.152
 ### Changed
 - The table-unavailable note now states the platform truth: per
