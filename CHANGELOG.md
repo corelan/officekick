@@ -30,6 +30,14 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.151
+### Changed
+- When a table cannot be read, the note the model returns is now
+  user-actionable: it names the Office build and says exactly what fixes
+  it ("update Office to a build with the PowerPointApi 1.8 tables, then
+  ask again"), or shows the real load error. Confirmed on a Mac 16.114
+  host: no shape.table on the add-in surface = no in-pane table reads or
+  edits until Office ships the 1.8 table set to that build/channel.
 ## 0.9.150
 ### Fixed
 - The outline never silently hides a shape any more: shapes whose text is

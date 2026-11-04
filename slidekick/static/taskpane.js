@@ -1464,8 +1464,8 @@
     var tryRead = function () {
       var tbl = sh.table;
       if (!tbl || !tbl.rows) {
-        var err2 = new Error("shape.table not available (build " +
-          ((Office.context && Office.context.diagnostics && Office.context.diagnostics.version) || "?") + ")");
+        var bld = (Office.context && Office.context.diagnostics && Office.context.diagnostics.version) || "?";
+        var err2 = new Error("this Office build (" + bld + ") does not expose the table APIs to add-ins - update Office to a build with the PowerPointApi 1.8 tables, then ask again");
         err2.noTableProp = true;
         throw err2;
       }
@@ -1644,7 +1644,7 @@
                   var tblApi = true;
                   try { tblApi = Office.context.requirements.isSetSupported("PowerPointApi", "1.8"); } catch (eTbl) { tblApi = false; }
                   var tries = tblShapes.map(function (sh) {
-                    if (!tblApi) return { txt: "[table - cell text unavailable in this Office build (table API not in this requirement set)]" };
+                    if (!tblApi) return { txt: "[table - this Office build does not expose table cell APIs to add-ins (needs the PowerPoint table API, set 1.8) - update Office, then ask again]" };
                     return self._readTableText(ctx, sh)
                       .then(function (info) {
                         if (!info || !info.cells || !info.cells.length) return "[table " + info.r + "x" + info.c + " - unreadable]";
@@ -1654,7 +1654,7 @@
                       })
                       .catch(function (eT) {
                         var why = eT && (eT.message || String(eT));
-                        if (eT && eT.noTableProp) why = "the add-in surface has no shape.table here - a newer Office build is needed";
+                        if (eT && eT.noTableProp) why = eT.message;
                         dbg("table.read", { failed: true, why: why });
                         return "[table - cell text unavailable in this Office build (" + why + ")]";
                       });
@@ -2515,7 +2515,7 @@ OfficeDeck.prototype.setNotes = function (i, text) {
               var tblApi2 = true;
               try { tblApi2 = Office.context.requirements.isSetSupported("PowerPointApi", "1.8"); } catch (eTbl2) { tblApi2 = false; }
               var tblTries = tblEntries.map(function (sh) {
-                if (!tblApi2) return Promise.resolve("[table - cell text unavailable in this Office build (table API not in this requirement set)]");
+                if (!tblApi2) return Promise.resolve("[table - this Office build does not expose table cell APIs to add-ins (needs the PowerPoint table API, set 1.8) - update Office, then ask again]");
                 return self._readTableText(ctx, sh)
                   .then(function (info) {
                     return info && info.cells && info.cells.length
@@ -2524,7 +2524,7 @@ OfficeDeck.prototype.setNotes = function (i, text) {
                   })
                   .catch(function (eT) {
                     var why = eT && (eT.message || String(eT));
-                    if (eT && eT.noTableProp) why = "the add-in surface has no shape.table here - a newer Office build is needed";
+                    if (eT && eT.noTableProp) why = eT.message;
                     dbg("table.read", { failed: true, why: why });
                     return "[table - cell text unavailable in this Office build (" + why + ")]";
                   });
