@@ -30,6 +30,21 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.132
+### Changed
+- Recovered-from-cut-off batches that then fail validation completely no
+  longer paint a wall of dead rows: the proposal box collapses into one
+  error line ("None of the N action(s) survived validation ... No changes
+  were applied") plus an "Ask again (same request)" button that re-runs
+  the same instruction (restores it from the last instruction when the
+  input was cleared). Mixed batches (some valid) keep the row list.
+- "bad slide index" reasons improved: "bad slide index: slide X does not
+  exist (deck has N slides)" so the mismatch is obvious at a glance.
+- The cut-off continuation ask is now dynamic (continueAsk(ctx)): it
+  anchors the model to the actual slide count, 1-based numbering, the
+  outline-only shape references, and tells it not to re-cover handled
+  slides - this counters hallucinated slide indices in recovered batches.
+  Word/Mail get the same all-invalid collapse + anchored continue ask.
 ## 0.9.131
 ### Changed
 - Copy buttons now use the "two overlapping squares" copy icon instead of

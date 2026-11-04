@@ -535,6 +535,10 @@
     "slide_ops JSON containing ONLY the ops still needed to FINISH the redesign " +
     "(slides not yet covered), same JSON format. If nothing is missing, reply " +
     '{"kind":"reply","text":"done"}';
+  function continueAsk(ctx) {
+    return CONTINUE_ASK +
+      "\nREMINDERS: reference only paragraphs/targets that appeared in the context summary; do not re-cover content already handled in your previous reply.";
+  }
 
   var HISTORY_MAX_EXCHANGES = 6; // oldest turns are dropped, newest kept
   var HISTORY_MAX_CHARS = 2000;  // per stored message
@@ -1916,7 +1920,7 @@ function applyOps(deck, ops, ctx) {
               setStatus("Reply was cut off - recovered " + parsed.ops.length + " action(s), asking for the rest…", "busy");
               var cont = messages.concat([
                 { role: "assistant", content: resp.text || "" },
-                { role: "user", content: CONTINUE_ASK },
+                { role: "user", content: continueAsk(ctx) },
               ]);
               return askRetryable(function () { return apiJson("/api/chat", "POST", { connection: ref.connection, model: ref.model, messages: cont }); })
                 .then(function (r3) {
@@ -1956,7 +1960,7 @@ function applyOps(deck, ops, ctx) {
               setStatus("Reply was cut off - recovered " + salv.length + " action(s), asking for the rest…", "busy");
               var cont = messages.concat([
                 { role: "assistant", content: best },
-                { role: "user", content: CONTINUE_ASK },
+                { role: "user", content: continueAsk(ctx) },
               ]);
               return askRetryable(function () { return apiJson("/api/chat", "POST", { connection: ref.connection, model: ref.model, messages: cont }); })
                 .then(function (r3) {
@@ -2416,6 +2420,32 @@ function applyOps(deck, ops, ctx) {
     validation.invalid.forEach(function (entry) {
       rows.push({ op: entry.op || { type: "?" }, mode: "invalid", reason: entry.reason });
     });
+
+    if (!validation.ops.length && validation.invalid.length > 0) {
+      var allbad = document.createElement("div");
+      allbad.className = "status error";
+      allbad.textContent = "None of the " + validation.invalid.length + " action(s) survived validation" +
+        (SK.lastRecovered ? " (they came from a cut-off reply)" : "") +
+        " - the paragraphs/targets they reference do not match this email. No changes were applied.";
+      box.appendChild(allbad);
+      var reRow = document.createElement("div");
+      reRow.className = "row";
+      var reBtn = document.createElement("button");
+      reBtn.className = "btn";
+      reBtn.type = "button";
+      reBtn.textContent = "Ask again (same request)";
+      reBtn.addEventListener("click", function () {
+        var inp = $("chat-input");
+        if (SK.busy) return;
+        if (!inp.value.trim() && SK.lastInstruction) { inp.value = SK.lastInstruction; }
+        runPrompt();
+      });
+      reRow.appendChild(reBtn);
+      box.appendChild(reRow);
+      SK.lastRecovered = 0;
+      out.appendChild(box);
+      return box;
+    }
 
     var tableRows = document.createElement("div");
     rows.forEach(function (row) {

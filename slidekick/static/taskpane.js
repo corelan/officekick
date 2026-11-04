@@ -702,11 +702,19 @@
     "an empty response is a failure; if you cannot act, use format A with the " +
     "reason as text.";
 
-  var CONTINUE_ASK =
+    var CONTINUE_ASK =
     "Your previous reply was cut off mid-way through the op list. Reply with a " +
     "slide_ops JSON containing ONLY the ops still needed to FINISH the redesign " +
     "(slides not yet covered), same JSON format. If nothing is missing, reply " +
     '{"kind":"reply","text":"done"}';
+
+  function continueAsk(ctx) {
+    var n = ctx && typeof ctx.slideCount === "number" ? ctx.slideCount : null;
+    return CONTINUE_ASK +
+      "\nREMINDERS: op slide numbers are 1-based and MUST be within 1.." + (n || "the current slide count") +
+      (n ? " (this deck currently has " + n + " slides)" : "") +
+      "; reference only shapes that appeared in the outline. Do not re-cover slides already handled in your previous reply.";
+  }
 
   var REPAIR_EMPTY_ASK =
     "Your previous reply was EMPTY. An empty response is NEVER acceptable. " +
@@ -2464,7 +2472,12 @@ OfficeDeck.prototype.setNotes = function (i, text) {
         });
         out.geometry = geoI;
       } else if (t === "format_text") {
-        if (!slideOk(op.slide)) { bad("bad slide index"); return; }
+        if (!slideOk(op.slide)) {
+          bad(typeof op.slide === "number"
+            ? "bad slide index: slide " + op.slide + " does not exist (deck has " + (ctx ? ctx.slideCount : 0) + " slides)"
+            : "bad slide index: slide must be a number (1-" + (ctx ? ctx.slideCount : 0) + ")");
+          return;
+        }
         var shapeInCtxF = ctx && ctx.slides[op.slide - 1] &&
           (ctx.slides[op.slide - 1].shapes || []).some(function (sh) { return sh.idx === op.shape - 1; });
         if (!shapeInCtxF) { bad("shape " + op.shape + " not in the context list for slide " + op.slide); return; }
@@ -3499,7 +3512,7 @@ OfficeDeck.prototype.setNotes = function (i, text) {
           setStatus("Reply was cut off - recovered " + parsed.ops.length + " action(s), asking for the rest…", "busy");
           var cont = messages.concat([
             { role: "assistant", content: resp.text || "" },
-            { role: "user", content: CONTINUE_ASK },
+            { role: "user", content: continueAsk(ctx) },
           ]);
           return askRetryable(function () { return apiJson("/api/chat", "POST", { connection: ref.connection, model: ref.model, messages: cont }); })
             .then(function (r3) {
@@ -3545,7 +3558,7 @@ OfficeDeck.prototype.setNotes = function (i, text) {
             setStatus("Reply was cut off - recovered " + salv.length + " action(s), asking for the rest…", "busy");
             var cont = messages.concat([
               { role: "assistant", content: best },
-              { role: "user", content: CONTINUE_ASK },
+              { role: "user", content: continueAsk(ctx) },
             ]);
             return askRetryable(function () { return apiJson("/api/chat", "POST", { connection: ref.connection, model: ref.model, messages: cont }); })
               .then(function (r3) {
@@ -4113,6 +4126,34 @@ OfficeDeck.prototype.setNotes = function (i, text) {
     validation.invalid.forEach(function (entry) {
       rows.push({ op: entry.op || { type: "?" }, mode: "invalid", reason: entry.reason });
     });
+
+    if (!validation.ops.length && validation.invalid.length > 0) {
+      // nothing survived validation: no per-row wall of failures - one clear
+      // box + a one-click re-ask of the same instruction
+      var allbad = document.createElement("div");
+      allbad.className = "status error";
+      allbad.textContent = "None of the " + validation.invalid.length + " action(s) survived validation" +
+        (SK.lastRecovered ? " (they came from a cut-off reply)" : "") +
+        " - the slides/shapes they target do not match this deck. No changes were applied.";
+      box.appendChild(allbad);
+      var reRow = document.createElement("div");
+      reRow.className = "row";
+      var reBtn = document.createElement("button");
+      reBtn.className = "btn";
+      reBtn.type = "button";
+      reBtn.textContent = "Ask again (same request)";
+      reBtn.addEventListener("click", function () {
+        var inp = $("chat-input");
+        if (SK.busy) return;
+        if (!inp.value.trim() && SK.lastInstruction) { inp.value = SK.lastInstruction; }
+        runPrompt();
+      });
+      reRow.appendChild(reBtn);
+      box.appendChild(reRow);
+      SK.lastRecovered = 0;
+      out.appendChild(box);
+      return box;
+    }
 
     var tableRows = document.createElement("div");
     rows.forEach(function (row) {
