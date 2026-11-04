@@ -34,7 +34,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 APP = "OfficeKick"
-VERSION = "0.9.127"
+VERSION = "0.9.128"
 
 # Built-in quality/style prompt: used when the user's customPrompt is empty
 # (the Settings field shows it and falls back to it). Two labeled blocks.
@@ -47,7 +47,7 @@ DEFAULT_CUSTOM_PROMPT = (
     "### Writing style\n"
     "- Plain, simple vocabulary and short sentences - without simplifying the substance or losing technical precision.\n"
     "- Active voice; concrete, specific wording; no filler or marketing language.\n"
-    "- Request to put code/syntax/protocol instructions in a monospaced font such as Consolas"
+    "- Identify code/syntax/protocol/command instructions and make a separate request to put them in a monospaced font such as Consolas"
 )
 # how to start the server again when it is down (per OS / setup, shown by the panes).
 # Windows: prefer the registered logon task (starts it detached+hidden); else the clone's installer.

@@ -30,6 +30,12 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.128
+### Changed
+- Built-in quality/style prompt, style block: the monospaced-font line was
+  reworded - "Identify code/syntax/protocol/command instructions and make
+  a separate request to put them in a monospaced font such as Consolas"
+  (identify + a separate format_request instead of a vague inline ask).
 ## 0.9.127
 ### Changed
 - Connections / Profiles: the extra sheet headings were misplaced (they
