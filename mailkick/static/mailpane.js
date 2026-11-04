@@ -3138,6 +3138,12 @@ function applyOps(deck, ops, ctx) {
     return apiJson("/api/config", "GET").then(function (cfg) {
       SK.cfg = cfg;
       applyPaneFontSize(cfg.paneFontSize || 100);
+      // custom-prompt field: show the effective prompt (custom, else the
+      // built-in default); only when the user is not typing in it right now
+      var cpEl2 = $("settings-customprompt");
+      if (cpEl2 && document.activeElement !== cpEl2) {
+        cpEl2.value = String((SK.cfg && SK.cfg.customPrompt) || (SK.cfg && SK.cfg.customPromptDefault) || "");
+      }
       // the auto-apply checkbox was wired before the config arrived - keep it
       // in sync with the stored setting from now on (the "off after reopen" bug)
       var sap2 = $("set-autoapply");

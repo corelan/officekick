@@ -30,6 +30,16 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.124
+### Changed
+- Settings section titles (GENERAL (ALL ADD-INS), CUSTOM SYSTEM PROMPT,
+  etc.) now stand out: bright cyan on dark theme, deep teal on light,
+  uppercase with extra letter spacing - applied to every settings group
+  in all three add-ins.
+- Custom-prompt field: the prefill now lives where the config arrives, so
+  the built-in default reliably shows on first open (previously it could
+  stay empty until the next config render). While the user is typing,
+  config reloads no longer clobber the field.
 ## 0.9.123
 ### Changed
 - Custom system prompt auto-save reverted to a Save button (auto-save =

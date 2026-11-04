@@ -34,7 +34,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 APP = "OfficeKick"
-VERSION = "0.9.123"
+VERSION = "0.9.124"
 
 # Built-in quality/style prompt: used when the user's customPrompt is empty
 # (the Settings field shows it and falls back to it). Two labeled blocks.

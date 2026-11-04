@@ -636,6 +636,16 @@ body.dark .list .reqgrp.failed { border-color: rgba(248,113,113,.35); }
   padding: 6px 12px 4px; margin: 0 0 12px 0; }
 .setgroup > .row:last-child { margin-bottom: 0; }   /* no dead tail space */
 .setgroup > .row:empty { display: none; }           /* empty feedback rows vanish */
+/* section titles stand out: cyan on dark, deep teal on light */
+.setgroup > .setgh {
+  margin: 0 0 6px 0;
+  color: #22d3ee;                 /* bright cyan - dark mode default */
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 700;
+}
+body:not(.dark) .setgroup > .setgh { color: #005f73; }  /* readable deep teal on white */
+
 .setgroup > .setgh { margin: 0 0 4px 0; }
 .setgroup > .setgh { margin: 0 0 6px 0; font-size: 12px; font-weight: 700; letter-spacing: .3px; }
 
