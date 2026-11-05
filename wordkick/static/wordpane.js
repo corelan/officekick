@@ -3800,7 +3800,7 @@ function applyOps(deck, ops, ctx) {
           .then(function (rR) {
             SK.lastModelText = { text: rR.text };
             var pR = tryParse(rR.text);
-            return renderParsed(pR.ok ? pR : { ok: false, text: rR.text }, ctx, instruction);
+            return renderParsed(pR.ok ? pR : { ok: false, text: rR.text }, ctx, SK.lastInstruction || "");
           }).catch(function (eR) {
             setStatus("Re-ask failed: " + ((eR && eR.message) || eR), "error");
           });

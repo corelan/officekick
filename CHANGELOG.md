@@ -30,6 +30,13 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.218
+### Fixed
+- DocKick still crashed the validation re-ask with "instruction is not
+  defined" (0.9.217 fixed Slide/Mail only - the Word block lives in
+  renderOpsPreview without an instruction param too). The recursion now
+  uses SK.lastInstruction in all three panes; audited by regex that no
+  bare reference remains.
 ## 0.9.217
 ### Changed (MailKick)
 - The same "don't reject fast" treatment as 0.9.216 for MailKick: when
