@@ -273,8 +273,14 @@ def start_only():
     out("  Starting the OfficeKick server")
     install_dir()   # just for the message below
     if health(PORT):
+        h = health(PORT)
         ok("already running: http://127.0.0.1:%d (version %s)"
-           % (PORT, health(PORT).get("version")))
+           % (PORT, h.get("version")))
+        rv = read_version()
+        hv = (h.get("version") or "").strip()
+        if rv and hv and hv != rv:
+            warn("the running build (%s) differs from this checkout (%s) - "
+                 "run install.py --update" % (hv, rv))
         return
     stop_server()
     if start_server():
@@ -1070,6 +1076,7 @@ def main():
     ap.add_argument("--update", action="store_true", help="git pull + update (non-interactive)")
     ap.add_argument("--uninstall", action="store_true", help="remove the add-ins + server")
     ap.add_argument("--start", action="store_true", help="start the local server only (no install changes)")
+    ap.add_argument("--restart", action="store_true", help="stop the local server, then start it again")
     ap.add_argument("--stop", action="store_true", help="stop the local server")
     ap.add_argument("--status", action="store_true", help="show whether the local server is running")
     ap.add_argument("--purge-config", action="store_true",
@@ -1094,6 +1101,10 @@ def main():
         die("this installer supports macOS and Windows only (detected: %s)." % sys.platform)
 
     if args.start:
+        start_only()
+        return
+    if args.restart:
+        stop_server()
         start_only()
         return
     if args.stop:

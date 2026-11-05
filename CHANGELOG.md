@@ -30,6 +30,13 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.178
+### Added
+- `install.py --restart` - stop the local server, then start it again (the
+  same stop/start the menu's "2b" option ran).
+### Fixed
+- `install.py --start` now says so when the running server is an older
+  build than the checkout ("run install.py --update").
 ## 0.9.177
 ### Added
 - **Update before serving**: at boot the server compares the released
