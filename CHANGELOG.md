@@ -30,6 +30,13 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.231
+### Changed (MailKick)
+- The "propose" quick action no longer prescribes 2-3 replies: the model
+  decides itself how many and which reply proposals would genuinely help
+  (a question, a positive/negative answer, a decision, or an alternative
+  it judges better - if only one reply is natural, it proposes one).
+  Each proposal stays its own draft_reply action in the approval list.
 ## 0.9.230
 ### Added (MailKick)
 - New quick action "propose" next to reply +/reply -: the AI analyzes the

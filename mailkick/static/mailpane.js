@@ -2387,12 +2387,16 @@ function applyOps(deck, ops, ctx) {
       // replies - not one canned stance. Each proposal = a draft_reply op,
       // so they land in the approval list side by side.
       instruction =
-        "Analyze this email conversation. What would be the most natural next replies? " +
-        "Consider: would a QUESTION make sense? a positive/agreeable answer? a politely negative answer? " +
-        "a concrete DECISION or commitment? Pick the 2-3 most useful variants (different in kind, not just wording). " +
-        "Then return one draft_reply action PER selected proposal, each with short marker text like [Proposal 1 - question] / " +
-        "[Proposal 2 - positive] / [Proposal 3 - decision] at the start of its body (simple inline HTML only). " +
-        "Reply entirely in the conversation's language and tone. Do not send anything.";
+        "Analyze this email conversation and decide yourself how many and which " +
+        "reply proposals would genuinely help - this includes the judgment of " +
+        "how many variants are useful (if only one natural reply exists, propose " +
+        "only that one). Consider at least: a QUESTION, a positive/agreeable " +
+        "answer, a politely negative answer, a concrete DECISION or commitment, " +
+        "or a sensible alternative you judge better. Return one draft_reply action " +
+        "PER proposal, each starting with a short marker like " +
+        "[Proposal 1 - <kind you picked>] at the top of its body (simple inline " +
+        "HTML only). Reply entirely in the conversation's language and tone. " +
+        "Do not send anything.";
     } else {
       var stanceText = stance === "pos"
         ? "positive and agreeable"
