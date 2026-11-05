@@ -128,7 +128,7 @@
     insert_comment:    { label: "insert comment", hint: "Adds a comment anchored to the matching text (WordApi 1.4)." },
     delete_paragraph:  { label: "delete paragraph", hint: "Removes a paragraph by index." },
     rewrite_doc:       { label: "rewrite document", hint: "Replaces the document body with a new set of paragraphs (destructive - review)." },
-    insert_image:      { label: "insert image", hint: "Generates a picture from a description with the profile's image model and inserts it at the end of the document (or at the cursor with the checkbox)." },
+    insert_image:      { label: "insert image", hint: "Generates a picture from a description with the profile's image model and inserts it WHERE THE MODEL CHOOSES (place: cursor / an anchor text / end); without a place value, the pane's insert-at-cursor setting applies." },
     format_text:      { label: "format text", hint: "bold/italic/color/size/underline/allCaps/highlight + alignment on one paragraph." },
     create_template:  { label: "create template block", hint: "appends a titled template block with fillable content controls (text, dropdown, checkbox, date)." },
     accept_changes:   { label: "accept tracked changes", hint: "Accepts ALL tracked changes currently in the document (finalizes the AI edits made with revisions on)." },
@@ -971,7 +971,7 @@
     '- {"type":"delete_paragraph","para":N} (para = the paragraph number shown in the outline; 1 = the first paragraph - never invent them)',
     '- {"type":"rewrite_doc","items":[{"text":"...","style":"..."}]} (DESTROYS the current body - only when explicitly asked for a full rewrite)',
     '- {"type":"create_template","title":"Template name","fields":[{"label":"Field label","type":"text|dropdown|checkbox|date","options":["only for dropdown"]}]} (appends a titled template block with fillable controls; use when the user asks for a template/form/template block; dropdown needs an options array)',
-    '- {"type":"insert_image","prompt":"detailed image description"} (generate a picture from the description and insert it at the end of the document; only when the user asks for a picture/image/illustration/logo)',
+    '- {"type":"insert_image","prompt":"detailed image description","place":"cursor"} (generate a picture from the description and insert it where place says; only when the user asks for a picture/image/illustration/logo)',
     '- {"type":"format_text","para":N,"font":{"bold":true},"align":"center"} (format ONE paragraph from the outline: font = {"bold","italic","color","size","name","underline","allCaps","highlightColor"} subset; align = left|center|right|justify; only what is requested)',
     '- to format only PART of a paragraph, add "find":"exact words appearing in that paragraph" (all matches within the paragraph are formatted; e.g. {"type":"format_text","para":N,"find":"AI","font":{"bold":true}})',
     '- {"type":"add_hyperlink","find":"exact text to link","url":"https://..."} (links the FIRST occurrence of that text; url must be http(s) or mailto:)',
@@ -994,7 +994,7 @@
     "- Image refinement ('refine/change the image'): write a FRESH self-contained image prompt describing the FULL desired result. Never embed previous prompts, the conversation, or op JSON into it - only the scene essentials plus the requested change. Prefer 200-600 words.",
     "- LIVE WEB LOOKUPS: when the request needs up-to-date info you cannot reliably know (current events, news, prices, recent releases, rankings, live data), reply with ONLY {\"kind\":\"web_lookup\"} - nothing else. SlideKick then runs a web-enabled lookup and re-asks you with fresh citable results. Never use it for deck/document/mail edits, styling, general concepts, or what the outline/context already answers. Lookups are INTERNAL actions - free (never gated/approved) - and you may reply with later rounds of {\"kind\":\"web_lookup\"} as well (up to 3 lookups per run). After a lookup you may also ask for the FULL text of one page from its results by replying with ONLY {\"kind\":\"read_page\",\"url\":\"https://...\"} (internal, free, up to 4 pages per run). When a page's text carries a \"…[page continues]\" ending and the info you need may sit deeper, read the NEXT part by replying with ONLY {\"kind\":\"read_page\",\"url\":\"https://...\",\"from\":<n>} using the part start the pane gave you (continuations are free and do not use the 4-page budget). You have no web access yourself and cannot run a search; the lookup channel belongs to SlideKick - never claim you tried a lookup or that the lookup channel is unavailable, and never refuse for lack of live data: reply with {\"kind\":\"web_lookup\"} instead. For CONTENT-CREATION requests (write me an essay/article/report/letter/plan/...): the pane has ALREADY run a web lookup before this ask and any fetched results sit in the context above - verify your claims against them, keep facts current and cite the sources you use; if you need MORE, reply {\"kind\":\"web_lookup\"} again (up to 3 rounds per run).",
 
-    "- Picture placement: 'here / at the cursor / current position' = the image lands at the caret (the pane's 'insert at cursor' checkbox); default = end of document. Keep insert_image minimal (type + prompt only).",
+    "- Picture placement: ALWAYS set 'place' on insert_image - \"cursor\" = the caret/current selection, \"end\" = end of document, or give an ANCHOR (a short exact-ish text from the document) to insert the image right AFTER that text, e.g. \"place\":\"Figure 1: Results\". Omit it only when you truly cannot decide (then the pane's setting applies).",
   ].join("\n");
 
   var NOTES_OFF_RULE = "";
@@ -2071,16 +2071,34 @@ var nw = $("sess-new");
   };
 
   WordDeck.prototype.addImage = function (payload) {
+    // 0.9.209 - the MODEL (or the pane setting) decides where to insert:
+    //   payload.place === "cursor"  -> the caret / selection ("Replace")
+    //   payload.place === "end"     -> end of document
+    //   any other non-empty string  -> ANCHOR text: insert right AFTER the
+    //      first body match; anchor not found -> end of document (reported)
+    //   missing/empty               -> caret when atCursor !== false, else end
+    var place = typeof payload.place === "string" && payload.place.trim()
+      ? payload.place.trim() : (payload.atCursor !== false ? "cursor" : "end");
     return this.run("addImage", function (ctx) {
-      // default: at the caret/selection (0.9.208) - body "End" only when
-      // the payload explicitly opts out (unchecked "insert at cursor").
-      if (payload.atCursor !== false) {
-        // WordApi 1.2: insert at the caret / selection
+      if (place === "cursor") {
         ctx.document.getSelection().insertInlinePictureFromBase64(String(payload.b64), "Replace");
-      } else {
-        ctx.document.body.insertInlinePictureFromBase64(String(payload.b64), "End");
+        return ctx.sync().then(function () { return { ok: true, how: "at caret/selection" }; });
       }
-      return ctx.sync().then(function () { return { ok: true }; });
+      if (place === "end") {
+        ctx.document.body.insertInlinePictureFromBase64(String(payload.b64), "End");
+        return ctx.sync().then(function () { return { ok: true, how: "at end of document" }; });
+      }
+      var rs = ctx.document.body.search(place);
+      return ctx.sync().then(function () {
+        if (rs && rs.items && rs.items.length) {
+          rs.items[0].insertInlinePictureFromBase64(String(payload.b64), "After");
+          return ctx.sync().then(function () { return { ok: true, how: "after '" + place.slice(0, 60) + "'" }; });
+        }
+        ctx.document.body.insertInlinePictureFromBase64(String(payload.b64), "End");
+        return ctx.sync().then(function () {
+          return { ok: true, how: "anchor '" + place.slice(0, 60) + "' not found - inserted at end of document" };
+        });
+      });
     });
   };
 
@@ -2175,6 +2193,11 @@ function normalizeWordStyle(v) {
         return;
       }
       var bad = function (reason) { invalid.push({ op: op, reason: reason }); };
+      if (t === "insert_image" && typeof op.place === "string" && op.place.trim()) {
+        var p0 = op.place.trim();
+        if (p0 === "cursor" || p0 === "end") out.place = p0;
+        else if (p0.length >= 3) out.place = p0.slice(0, 200);  // an anchor text to insert after
+      }
       var paraOk = function (v) { return typeof v === "number" && Math.floor(v) === v && v >= 1 && (!ctx || v <= ctx.paragraphCount); };
       var out = { type: t };
       if (t === "insert_paragraphs") {
@@ -2403,7 +2426,10 @@ function normalizeWordStyle(v) {
           op.fields.map(function (f) { return f.label + " (" + f.type + ")"; }).join(", ");
       case "insert_image": {
         var prI = op.prompt && op.prompt.length > 60 ? op.prompt.slice(0, 60) + "…" : (op.prompt || "");
-        return "Image at end of document: '" + prI + "' (profile image model)";
+        var pl = (typeof op.place === "string" && op.place.trim())
+          ? { cursor: "caret/selection", end: "end of document" }[op.place.trim()] || ("after '" + op.place.trim().slice(0, 40) + "'")
+          : "per the pane setting";
+        return "Image (" + pl + "): '" + prI + "' (profile image model)";
       }
     }
     return op.type;
@@ -2532,9 +2558,13 @@ function applyOps(deck, ops, ctx) {
             }),
           ]).then(function (img) {
             if (!img || !img.b64) throw new FriendlyError("server returned no image data");
-            return deck.addImage({ b64: img.b64, atCursor: $("chat-cursor") && $("chat-cursor").checked }).then(function () {
-              var atCursor = $("chat-cursor") && $("chat-cursor").checked;
-              lines.push({ ok: true, text: "image inserted " + (atCursor ? "at cursor/selection" : "at end of document") +
+            var opPlace = (typeof op.place === "string" && op.place.trim()) ? op.place.trim() : null;
+            var uiAtCursor = $("chat-cursor") && $("chat-cursor").checked;
+            var place = opPlace || (uiAtCursor ? "cursor" : "end");
+            return deck.addImage({ b64: img.b64, place: place }).then(function (res) {
+              lines.push({ ok: true, text: "image inserted " +
+                ((res && res.how) || (place === "cursor" ? "at caret/selection" : "at end of document")) +
+                (opPlace ? " (model chose)" : " (pane setting)") +
                 " (" + imgRef.connection + ":" + imgRef.model + ")" });
             });
           });

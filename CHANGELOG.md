@@ -30,6 +30,17 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.209
+### Added
+- The model now decides where insert_image lands: the op accepts
+  "place": "cursor" (caret/selection), "end" (document end), or an ANCHOR
+  text - the image inserts immediately after the first body match
+  (Word-JS body.search -> range "After"; if the anchor is not found the
+  image goes to the end and the chat line says so). The chat line reports
+  the actual placement and whether the model or the pane setting chose
+  it. The pane's "insert at cursor" checkbox remains the default for ops
+  WITHOUT a place value. Schema/placement guidance updated so the model
+  always sets place when it can.
 ## 0.9.208
 ### Fixed
 - DocKick image insertion defaulted to the END of the document: the
