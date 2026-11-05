@@ -30,6 +30,25 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.162
+### Fixed
+- {"kind":"web_lookup"} intents never parsed (tryParse had no web_lookup
+  branch) so the repair chain answered with a format nudge instead of
+  running the lookup - now: the intent parses, the lookup runs (profile
+  ladder; internal, never gated), and the model is re-asked with the
+  results (verified live: the search fired, the model answered with the
+  found sources and skipped the title change rather than guessing).
+- up to 3 lookup rounds per run; a give-up reply names the steps that ran.
+- trigger regex widened (can't confirm/would need live/won't guess...).
+- buildSearchLadder no longer references the out-of-scope connOf helper.
+## 0.9.161
+### Changed
+- Web lookups are now a fully internal, free action: the model can ask for
+  {"kind":"web_lookup"} in up to 3 rounds per run (each round's results get
+  re-asked into the conversation and the model decides the next move -
+  more lookups, ops, or a reply). The lookup never appears in the approval
+  gate and never needs approval; the refusal-trigger lookup is unchanged.
+- System prompt states the free + repeatable nature explicitly.
 ## 0.9.160
 ### Fixed
 - Search-profile editor flow: steps attach to a profile before its first

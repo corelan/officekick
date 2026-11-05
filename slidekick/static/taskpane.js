@@ -496,7 +496,8 @@
     });
     if (!profile) {
       // free-only is the DEFAULT; still try the provider's own channel after
-      if (((prof.other || {}).connection) && connOf(prof.other.connection).type === "openrouter") {
+      var own = ((SK.cfg && SK.cfg.connections) || []).filter(function (x) { return x.name === prof.other.connection; })[0];
+      if (own && own.type === "openrouter" && prof.other.model) {
         attempts.push({ connection: prof.other.connection, model: prof.other.model + ":online" });
       }
     }
@@ -970,7 +971,7 @@
     "- Image requests: always return a create_image op (never generate the picture inline); SlideKick fetches it with the user's configured image model. Include a concrete, self-contained prompt in the op.",
     "- Image refinement ('refine/change the image'): write a FRESH self-contained image prompt describing the FULL desired result. Never embed previous prompts, the conversation, or op JSON into it - only the scene essentials plus the requested change. Prefer 200-600 words.",
     "- READ SLIDES ON DEMAND: the outline shows full shape text only for small decks and for the selected slide(s) - in LARGE decks every other slide shows just its title and a short preview. When you need a slide's ACTUAL content (to answer a question about it, or before rewriting it), reply with only {\"kind\":\"read_slide\",\"slides\":[N]} (1-based outline numbers, max 12). SlideKick re-asks you with the COMPLETE text of those slides. Never guess content from a title.",
-    "- LIVE WEB LOOKUPS: when the request needs up-to-date info you cannot reliably know (current events, news, prices, recent releases, rankings, live data), reply with ONLY {\"kind\":\"web_lookup\"} - nothing else. SlideKick then runs a web-enabled lookup and re-asks you with fresh citable results. Never use it for deck/document/mail edits, styling, general concepts, or what the outline/context already answers. You have no web access yourself and cannot run a search; the lookup channel belongs to SlideKick - never claim you tried a lookup or that the lookup channel is unavailable, and never refuse for lack of live data: reply with {\"kind\":\"web_lookup\"} instead.",
+    "- LIVE WEB LOOKUPS: when the request needs up-to-date info you cannot reliably know (current events, news, prices, recent releases, rankings, live data), reply with ONLY {\"kind\":\"web_lookup\"} - nothing else. SlideKick then runs a web-enabled lookup and re-asks you with fresh citable results. Never use it for deck/document/mail edits, styling, general concepts, or what the outline/context already answers. Lookups are INTERNAL actions - free (never gated/approved) - and you may reply with later rounds of {\"kind\":\"web_lookup\"} as well (up to 3 lookups per run). You have no web access yourself and cannot run a search; the lookup channel belongs to SlideKick - never claim you tried a lookup or that the lookup channel is unavailable, and never refuse for lack of live data: reply with {\"kind\":\"web_lookup\"} instead.",
 
   ].join("\n");
 
@@ -3706,6 +3707,7 @@ OfficeDeck.prototype.setNotes = function (i, text) {
     ctxPromise.then(function (ctx) {
       SK.lastCtx = ctx;
       SK.readRounds = 0;
+      SK.webRounds = 0;
       SK.webResults = "";
       var webPromise = Promise.resolve("");
       return webPromise.then(function () {
@@ -3734,7 +3736,7 @@ OfficeDeck.prototype.setNotes = function (i, text) {
                 /lookup channel|don'?t have (web|live)|no (web|live|internet) (access|connection)|can'?t (access|browse|search|pull|verify|run|do) [a-z ]{0,24}(web|internet|search|lookup|online|current|fresh|live)|won'?t guess|cannot verify|can'?t verify|without (a )?(live |real )?(web|internet|search|lookup|live access)|stale\b/i.test(txt0);
             if (!askedLookup && !SK.noLookupRedo &&
                 (noWebSaid || (pre.ok && pre.kind === "reply" &&
-                  /can'?t verify|cannot verify|no (live |web |internet )?(access|search|lookup|connection|data)|without (a )?(live )?(web|internet|search|live access)/i.test(txt0))) &&
+                  /can'?t verify|cannot verify|can'?t confirm|cannot confirm|no (live |web |internet )?(access|search|lookup|connection|data)|without (a )?(live )?(web|internet|search|live access)|would need (a )?(live|current)|requires? (a )?(live|web) (lookup|search|check|connection)|check a live|won'?t guess|pull live|didn'?t return a search result|did not return a search result/i.test(txt0))) &&
                 /(rankings?|current|latest|today|news|price|prices|release|releases|live|up[- ]?to[- ]?date|fresh|who is|what happened|version|release|check|search|web|online)/i.test(instruction || "")) {
               // The model believes IT must search and refuses. The pane owns
               // the lookup channel - run the web lookup HERE and re-ask once
@@ -3758,30 +3760,46 @@ OfficeDeck.prototype.setNotes = function (i, text) {
             }
             if (pre.ok && pre.kind === "web_lookup" && !askedLookup) {
               askedLookup = true;
-              setStatus("Doing a live web lookup through the model…", "busy");
-              return webLookup(prof, instruction).then(function (ws) {
-                if (!ws) {
-                  return { ok: true, kind: "reply",
-                           text: "No web-enabled model available for a live lookup (the model reported no web access). Re-phrase or check the profile/connection." };
-                }
-                SK.webResults = ws;
-                setStatus("Reading the found documents\u2026", "busy");
-                return gatherPageContents(ws).then(function (pages) {
-                  SK.webResults = ws + pages;
-                  messages = messages.concat([{ role: "assistant", content: pre.text || '{"kind":"web_lookup"}' },
-                                              { role: "user", content: "WEB LOOKUP RESULTS:\n" + ws +
-                                                (pages ? "\n\nThe lookups also RETURNED THE FULL TEXT of these documents/pages - read them before answering:" + pages : "") +
-                                               "\n\nAnswer the ORIGINAL USER REQUEST now using these results (cite sources); the required JSON format rules apply again." }]);
-                  setStatus("Answering with the fresh web results\u2026", "busy");
-                  return mainAsk2();
-                });
-              }).catch(function (e) {
-                return { ok: true, kind: "reply", text: "The live web lookup failed: " + ((e && e.message) || e) };
-              });
+              return webLookupThen(resp);
             }
             if (pre.ok && pre.kind === "read_slide") return readSlideThen(resp);
             return resp;
           });
+      }
+      // web_lookup: the model asked for a live web lookup. Internal action -
+      // free (never gated, no approval) and repeatable (up to 3 rounds per
+      // run): each round re-asks the model with the results, and the model
+      // decides what to do next (ops, a reply, or another lookup).
+      function webLookupThen(resp) {
+        var pre = tryParse(resp.text);
+        if ((SK.webRounds || 0) >= 3) {
+          return { ok: true, kind: "reply",
+                   text: "Web lookups were already run the maximum of 3 times this run. Decide with the results you have, or state what you could not verify." };
+        }
+        SK.webRounds = (SK.webRounds || 0) + 1;
+        dbg("web_lookup", { round: SK.webRounds, profile: prof.name });
+        setStatus("Doing a live web lookup (round " + SK.webRounds + ")\u2026", "busy");
+        return webLookup(prof, instruction).then(function (ws) {
+          if (!ws) {
+            var ladderInfo = buildSearchLadder(prof);
+            var ran = (ladderInfo.attempts || []).map(function (a) { return a.label || ((a.connection || "") + ":" + (a.model || "")); }).join(" -> ");
+            return { ok: true, kind: "reply",
+                     text: "No live results came back from any lookup step in the search profile (" + (ran || "no steps configured") + "). The model was not re-asked with web content." };
+          }
+          SK.webResults = ws;
+          setStatus("Reading the found documents\u2026", "busy");
+          return gatherPageContents(ws).then(function (pages) {
+            SK.webResults = ws + pages;
+            messages = messages.concat([{ role: "assistant", content: pre.text || '{"kind":"web_lookup"}' },
+                                        { role: "user", content: "WEB LOOKUP RESULTS:\n" + ws +
+                                          (pages ? "\n\nThe lookups also RETURNED THE FULL TEXT of these documents/pages - read them before answering:" + pages : "") +
+                                          "\n\nAnswer the ORIGINAL USER REQUEST now using these results (cite sources); the required JSON format rules apply again." }]);
+            setStatus("Answering with the fresh web results\u2026", "busy");
+            return mainAsk2();
+          });
+        }).catch(function (e) {
+          return { ok: true, kind: "reply", text: "The live web lookup failed: " + ((e && e.message) || e) };
+        });
       }
       // read_slide: the model asked for the FULL text of specific slide(s);
       // fetch it from the deck and re-ask with it (same flow as web_lookup),
@@ -3821,6 +3839,7 @@ OfficeDeck.prototype.setNotes = function (i, text) {
         return askRetryable(function () { return apiJson("/api/chat", "POST", { connection: ref.connection, model: ref.model, messages: messages }); })
           .then(function (resp) {
             var pre = tryParse(resp.text);
+            if (pre.ok && pre.kind === "web_lookup") return webLookupThen(resp);
             if (pre.ok && pre.kind === "read_slide") return readSlideThen(resp);
             return resp;
           });
@@ -4174,6 +4193,12 @@ OfficeDeck.prototype.setNotes = function (i, text) {
       if (obj.kind === "reply") {
         if (typeof obj.text === "string") return { ok: true, kind: "reply", text: obj.text };
         return { ok: true, kind: "reply", text: String(obj.text == null ? "" : JSON.stringify(obj.text)) };
+      }
+      if (obj.kind === "web_lookup") {
+        // an internal lookup intent: no ops, no approval - the pane runs the
+        // search profile and re-asks (this must parse BEFORE the repair
+        // chain, or the model gets nagged for "format" instead of results)
+        return { ok: true, kind: "web_lookup", text: stripped };
       }
       if (obj.kind === "read_slide") {
         var rs = [];
