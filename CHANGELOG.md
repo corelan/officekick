@@ -30,6 +30,22 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.211
+### Added
+- insert_paragraphs accepts the same `place` vocabulary as insert_image
+  ("cursor" at the selection, "end", or an ANCHOR text to insert after
+  the first body match - end-fallback reported). This is exactly what
+  text/image placeholders need: the model can now insert placeholder
+  paragraphs at the right positions instead of only appending.
+- New op move_text {find, place}: relocates the paragraph containing
+  `find` to sit right after the `place` anchor (copy -> insert after ->
+  delete source, style preserved; end-fallback). That covers the
+  "move them to the right position yourself" ask.
+- Placement guidance updated so the model uses anchors for placeholders.
+### Note
+- The 19:0x failures in the user session: the model was asked to place
+  placeholders mid-document while every text op could only append - it
+  had no workable op set and collapsed into empty/unclear JSON.
 ## 0.9.210
 ### Fixed
 - "Cannot set properties of undefined (setting 'place')": the 0.9.209

@@ -963,7 +963,8 @@
     'Accepted also: {"kind":"slide_ops","ops":[...]} (treated like doc_ops).',
     "",
     "Allowed op types:",
-    '- {"type":"insert_paragraphs","items":[{"text":"...","style":"normal|title|heading1|heading2|heading3|quote|listParagraph"}]} (appended at the end of the document; start a rewrite with a heading)',
+    '- {"type":"insert_paragraphs","items":[{"text":"...","style":"normal|title|heading1|heading2|heading3|quote|listParagraph"}],"place":"cursor | end | an anchor text"} (same placement as insert_image; default end; anchor places are what you want for placeholders)',
+    '- {"type":"move_text","find":"exact-ish existing text","place":"anchor text to insert AFTER"} (relocates that whole paragraph right after the anchor; preserves style)',
     '- {"type":"edit_paragraph","para":N,"text":"..."} (keeps the paragraph style)',
     '- {"type":"replace_text","find":"exact text","replace":"new text","all":true} (all matches by default)',
     '- {"type":"create_table","values":[["h1","h2"],["a","b"]]} (inserted at the end of the document)',
@@ -1766,15 +1767,54 @@ var nw = $("sess-new");
   };
 
   WordDeck.prototype.insertParagraphs = function (op) {
+    // 0.9.211: same placement vocabulary as insert_image -
+    //   place "cursor" -> at the selection; "end" (default) -> append;
+    //   any other string = ANCHOR: insert after the first body match.
     return this.run("insertParagraphs", function (ctx) {
       var body = ctx.document.body;
       var items = op.items || [];
-      items.forEach(function (it) {
-        var p = body.insertParagraph(String(it.text == null ? "" : it.text), "End");
-        var st = styleNameOf(it.style);
-        if (st) p.style = st;
+      var place = (typeof op.place === "string" && op.place.trim()) ? op.place.trim() : "end";
+      if (place === "end") {
+        items.forEach(function (it) {
+          var p = body.insertParagraph(String(it.text == null ? "" : it.text), "End");
+          var st = styleNameOf(it.style);
+          if (st) p.style = st;
+        });
+        return ctx.sync().then(function () { return { ok: true, how: "end of document" }; });
+      }
+      if (place === "cursor") {
+        var sel = ctx.document.getSelection();
+        return ctx.sync().then(function () {
+          items.forEach(function (it) {
+            var p = sel.insertParagraph(String(it.text == null ? "" : it.text), "After");
+            var st = styleNameOf(it.style);
+            if (st) p.style = st;
+          });
+          return { ok: true, how: "at caret/selection" };
+        });
+      }
+      var rs = body.search(place);
+      return ctx.sync().then(function () {
+        var rng = rs && rs.items && rs.items[0];
+        if (!rng) {
+          items.forEach(function (it2) {
+            var p2 = body.insertParagraph(String(it2.text == null ? "" : it2.text), "End");
+            var st2 = styleNameOf(it2.style);
+            if (st2) p2.style = st2;
+          });
+          return ctx.sync().then(function () {
+            return { ok: true, how: "anchor '" + place.slice(0, 60) + "' not found - end of document" };
+          });
+        }
+        items.forEach(function (it3) {
+          var p3 = rng.insertParagraph(String(it3.text == null ? "" : it3.text), "After");
+          var st3 = styleNameOf(it3.style);
+          if (st3) p3.style = st3;
+        });
+        return ctx.sync().then(function () {
+          return { ok: true, how: "after '" + place.slice(0, 60) + "'" };
+        });
       });
-      return ctx.sync().then(function () { return { ok: true }; });
     });
   };
 
@@ -1827,6 +1867,59 @@ var nw = $("sess-new");
         if (!results.items.length) return { ok: true, hits: 0 };
         results.items[0].insertComment(String(text));
         return ctx.sync().then(function () { return { ok: true, hits: 1 }; });
+      });
+    });
+  };
+
+  WordDeck.prototype.moveText = function (op) {
+    // 0.9.211: move the paragraph containing `find` so it sits right after
+    // `place` (an anchor text), or at the end when place is "end"/missing.
+    // Implementation = copy the text, insert after the anchor, delete the
+    // original paragraph. Style is preserved via the source snapshot.
+    return this.run("moveText", function (ctx) {
+      var find = String(op.find || "");
+      var place = (typeof op.place === "string" && op.place.trim()) ? op.place.trim() : "end";
+      if (!find) throw new FriendlyError("move_text: missing find text");
+      var paras = ctx.document.body.paragraphs;
+      paras.load("text");
+      var found = ctx.document.body.search(find, { matchCase: false, matchWholeWord: false });
+      found.load("items");
+      return ctx.sync().then(function () {
+        var hit = found.items && found.items[0];
+        if (!hit) throw new FriendlyError("move_text: text not found: " + find.slice(0, 60));
+        // resolve the source paragraph object (the body paragraph that contains the hit)
+        var srcText = null;
+        var srcPara = null;
+        (paras.items || []).some(function (pr) {
+          if (pr.text && pr.text.indexOf(find) >= 0) { srcText = pr.text; srcPara = pr; return true; }
+          return false;
+        });
+        if (srcPara == null) throw new FriendlyError("move_text: paragraph containing '" + find.slice(0, 50) + "' not resolved");
+        var style = srcPara.style;
+        if (place === "end") {
+          var p = ctx.document.body.insertParagraph(srcText, "End");
+          p.style = style || undefined;
+          srcPara.delete();
+          return ctx.sync().then(function () { return { ok: true, how: "moved to end of document" }; });
+        }
+        var rs = ctx.document.body.search(place);
+        return ctx.sync().then(function () {
+          var rng = rs && rs.items && rs.items[0];
+          if (!rng) {
+            var pe = ctx.document.body.insertParagraph(srcText, "End");
+            pe.style = style || undefined;
+            srcPara.delete();
+            return ctx.sync().then(function () {
+              return { ok: true, how: "anchor '" + place.slice(0, 60) + "' not found - moved to end" };
+            });
+          }
+          var pm = rng.insertParagraph(srcText, "After");
+          pm.style = style || undefined;
+          srcPara.delete();
+          return ctx.sync().then(function () {
+            return { ok: true, how: "after '" + place.slice(0, 60) + "'" };
+          });
+        });
       });
     });
   };
@@ -2195,10 +2288,17 @@ function normalizeWordStyle(v) {
       var bad = function (reason) { invalid.push({ op: op, reason: reason }); };
       var paraOk = function (v) { return typeof v === "number" && Math.floor(v) === v && v >= 1 && (!ctx || v <= ctx.paragraphCount); };
       var out = { type: t };
-      if (t === "insert_image" && typeof op.place === "string" && op.place.trim()) {
+      if ((t === "insert_image" || t === "insert_paragraphs") && typeof op.place === "string" && op.place.trim()) {
         var p0 = op.place.trim();
         if (p0 === "cursor" || p0 === "end") out.place = p0;
         else if (p0.length >= 3) out.place = p0.slice(0, 200);  // an anchor text to insert after
+      }
+      if (t === "move_text") {
+        if (typeof op.find === "string" && op.find.trim()) out.find = op.find.trim().slice(0, 200);
+        else { invalid.push({ op: op, reason: "move_text needs find (the text to relocate)" }); return; }
+        if (typeof op.place === "string" && op.place.trim() && op.place.trim() !== "end") {
+          out.place = op.place.trim() === "cursor" ? "end" : op.place.trim().slice(0, 200);
+        }
       }
       if (t === "insert_paragraphs") {
         var items = Array.isArray(op.items) ? op.items : null;
@@ -2381,9 +2481,15 @@ function normalizeWordStyle(v) {
       return t ? ' "' + String(t).slice(0, 60) + '"' : "";
     };
     switch (op.type) {
-      case "insert_paragraphs":
-        return "Insert " + op.items.length + " paragraph(s) -> end of document (" +
-          op.items.map(function (i) { return i.style; }).filter(function (s, k, a) { return a.indexOf(s) === k; }).join(", ") + ")";
+      case "insert_paragraphs": {
+        var pl2 = (typeof op.place === "string" && op.place.trim())
+          ? { cursor: "caret/selection", end: "end of document" }[op.place.trim()] || ("after '" + op.place.trim().slice(0, 40) + "'")
+          : "end of document";
+        return "Insert " + op.items.length + " paragraph(s) -> " + pl2 + " (" +
+          op.items.map(function (i) { return i.style; }).filter(function (s, k, a) { return a.indexOf(s) === k; }).join(", ") + ")"; }
+      case "move_text":
+        return "Move '" + op.find.slice(0, 60) + "' -> " +
+          (op.place ? "after '" + op.place.slice(0, 40) + "'" : "end of document");
       case "edit_paragraph":
         return "Paragraph " + op.para + paraRef(op.para) + ": -> " + op.text.slice(0, 80);
       case "replace_text":
@@ -2457,8 +2563,15 @@ function applyOps(deck, ops, ctx) {
     var runOne = function (op) {
       switch (op.type) {
         case "insert_paragraphs":
-          return deck.insertParagraphs(op).then(function () {
-            lines.push({ ok: true, text: "insert " + op.items.length + " paragraph(s) -> end of document" });
+          return deck.insertParagraphs(op).then(function (res) {
+            lines.push({ ok: true, text: "insert " + op.items.length + " paragraph(s) -> " +
+              ((res && res.how) || "end of document") +
+              (op.place && op.place !== "end" ? " (model chose)" : "") });
+          });
+        case "move_text":
+          return deck.moveText(op).then(function (res2) {
+            lines.push({ ok: true, text: "moved '" + op.find.slice(0, 50) + "' -> " +
+              ((res2 && res2.how) || "after target") });
           });
         case "edit_paragraph":
           return deck.editParagraph(adj(op.para - 1), op.text).then(function () {
