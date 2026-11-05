@@ -1,1 +1,3 @@
 *.balsum*
+__pycache__/
+*.pyc
