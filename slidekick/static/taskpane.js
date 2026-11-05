@@ -3759,6 +3759,7 @@ OfficeDeck.prototype.setNotes = function (i, text) {
                      text: "No live results came back from any lookup step in the search profile (" + (ran || "no steps configured") + "). The model was not re-asked with web content." };
           }
           SK.webResults = ws;
+          if (pre.ops && pre.ops.length) SK.pendingWebOps = pre.ops;   // look-up-then-act in one reply
           setStatus("Reading the found documents\u2026", "busy");
           return gatherPageContents(ws).then(function (pages) {
             SK.webResults = ws + pages;
@@ -3790,6 +3791,7 @@ OfficeDeck.prototype.setNotes = function (i, text) {
             return { ok: true, kind: "reply",
                      text: "Could not read " + url + " from the server\'s fetcher. Pick a different page from the results, or decide with what you have." };
           }
+          if (pre.ops && pre.ops.length) SK.pendingWebOps = pre.ops;   // page-read-then-act in one reply
           messages = messages.concat([{ role: "assistant", content: pre.text || JSON.stringify({ kind: "read_page", url: url }) },
                                       { role: "user", content: "PAGE CONTENT (" + (pg.title || pg.url || url) + ") - " + url + ":\n" + pg.text +
                                         "\n\nUse it for the ORIGINAL USER REQUEST; cite the page. The required JSON format rules apply again." }]);
@@ -4052,6 +4054,29 @@ OfficeDeck.prototype.setNotes = function (i, text) {
         dbg("response", { text: resp.text, elapsedMs: resp.elapsedMs });
         SK.lastModelText = { text: resp.text };
         var parsed = tryParse(resp.text);
+        if (parsed.ok && parsed.kind === "web_lookup" && parsed.ops) {
+          // look-up-then-act in one reply: run the lookup (internal, free),
+          // then the model is re-asked normally - but if THAT fails to parse,
+          // still apply the ops the model attached to the intent.
+          SK.pendingWebOps = parsed.ops;
+          return webLookupThen(resp);
+        }
+        if (parsed.ok && parsed.kind === "web_lookup") {
+          // bare lookup intent + nothing else: the pane has probably ALREADY
+          // handled it mid-run (refusal trigger); if no results were
+          // collected, run it now and do NOT end with an empty-action list.
+          if (!SK.webResults) return webLookupThen(resp);
+          return parsed;   // web results exist; fall through (empty ops => the
+                           // "empty action list" box below now explains why)
+        }
+        if (parsed.ok && parsed.kind === "read_page" && parsed.ops) {
+          SK.pendingWebOps = parsed.ops;
+          return readPageThen(resp);
+        }
+        if (parsed.ok && parsed.kind === "read_page") {
+          if (!SK.webResults) return readPageThen(resp);
+          return parsed;
+        }
         if (parsed.ok && parsed.recovered) {
           // truncated reply: complete ops salvaged - ask once for the rest, merge
           SK.lastRecovered = parsed.ops.length;
@@ -4196,13 +4221,15 @@ OfficeDeck.prototype.setNotes = function (i, text) {
       if (obj.kind === "read_page" && typeof obj.url === "string" && /^https?:\/\//i.test(obj.url)) {
         // an internal page-read intent: the pane fetches the page text and
         // re-asks (free, never gated)
-        return { ok: true, kind: "read_page", url: obj.url.split("#")[0], text: stripped };
+        return { ok: true, kind: "read_page", url: obj.url.split("#")[0], ops: Array.isArray(obj.ops) ? obj.ops : null, text: stripped };
       }
       if (obj.kind === "web_lookup") {
         // an internal lookup intent: no ops, no approval - the pane runs the
         // search profile and re-asks (this must parse BEFORE the repair
         // chain, or the model gets nagged for "format" instead of results)
-        return { ok: true, kind: "web_lookup", text: stripped };
+        // Models sometimes emit look-up-plus-actions in one reply: keep the
+        // ops so the runner can apply them after the lookup round.
+        return { ok: true, kind: "web_lookup", ops: Array.isArray(obj.ops) ? obj.ops : null, text: stripped };
       }
       if (obj.kind === "read_slide") {
         var rs = [];
@@ -4486,10 +4513,19 @@ OfficeDeck.prototype.setNotes = function (i, text) {
     }
     var validation = validateOps(parsed.ops, ctx);
     SK.contrastFixes = adjustForContrast(validation.ops);   // mechanical readability guard
+    if (!validation.ops.length && !validation.invalid.length && (SK.pendingWebOps || []).length) {
+      // the look-up-then-act ops attached to the intent = the real payload
+      parsed = { ok: true, kind: "slide_ops", ops: SK.pendingWebOps };
+      SK.pendingWebOps = null;
+      validation = validateOps(parsed.ops, ctx);
+      SK.contrastFixes = adjustForContrast(validation.ops);
+    }
     if (!validation.ops.length && !validation.invalid.length) {
       var box3 = document.createElement("div");
       box3.className = "reply-text";
-      box3.textContent = "(model returned an empty action list)";
+      box3.textContent = (SK.webResults || SK.pendingWebOps) ?
+        "(model returned an empty action list - web lookup ran; the model chose not to change the deck)" :
+        "(model returned an empty action list)";
       out.appendChild(box3);
       setStatus("Done.", "ok");
       return;

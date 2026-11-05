@@ -30,6 +30,15 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.164
+### Fixed
+- "try again, you should have the ability to do a web search now" ended in
+  "(model returned an empty action list)": a bare web_lookup intent that
+  reached renderParsed after a no-results round ended the run silently.
+  Now: a bare intent (no web results yet) triggers the lookup from the
+  runner too; intents that carry ops keep them (stash pendingWebOps); an
+  empty action list AFTER a lookup applies the stashed ops; and the empty
+  box now says when a lookup ran but the model chose no deck change.
 ## 0.9.163
 ### Changed
 - ONE search sequence for all add-ins (Settings -> Search): no more named
