@@ -397,7 +397,7 @@
   function connLookupCapability(connName) {
     var c = ((SK.cfg && SK.cfg.connections) || []).filter(function (x) { return x.name === connName; })[0];
     if (!c) return "(unknown connection)";
-    if (c.type === "openrouter") return "native: :online attaches to any model";
+    if (c.type === "openrouter") return "pin a model - :online attaches to it (empty = step skipped)";
     if (c.type === "openai" || c.type === "generic-openai") return "needs a search-preview model";
     return "no native web search - this step skips itself";
   }
@@ -494,7 +494,10 @@
           // no native searching model selected: skip this step
           return;
         }
-        var online = c.type === "openrouter" ? (model ? model + ":online" : ":online") : model;
+        // ":online" cannot run bare - OpenRouter needs a base model id; a
+        // step with no model pinned = "no search model = no search" -> skip
+        if (c.type === "openrouter" && !model) return;
+        var online = c.type === "openrouter" ? model + ":online" : model;
         if (!online) return;
         attempts.push({ connection: st.connection, model: online, label: st.connection + " : " + online });
       }
@@ -2887,8 +2890,14 @@ function applyOps(deck, ops, ctx) {
         return Promise.reject(new FriendlyError("Run cancelled."));
       var status = err && err.status;
       var retries_429 = status === 429;
+      // provider business errors surface as "Provider returned HTTP 4xx..."
+      // inside the message when the pane carries no status object: 429 is
+      // retryable, every other 4xx throws immediately (retrying a bad
+      // model id 5 times just wastes 50 seconds)
+      var emsg = String((err && err.message) || err);
+      var biz4xx = !status && /HTTP 4\d\d\b/.test(emsg) && !/HTTP 429\b/.test(emsg);
       var serverish = !status || status >= 500 || retries_429;
-      if (!serverish || attempt >= 5) throw err;
+      if (!serverish || biz4xx || attempt >= 5) throw err;
       var secs = 10;
       setStatus("Attempt " + attempt + "/5 failed (" + ((err && err.message) || err) +
         ") - retrying in " + secs + " s…", "busy");

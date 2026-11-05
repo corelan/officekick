@@ -30,6 +30,13 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.166
+### Fixed
+- ":online is not a valid model ID": a Model lookup step on OpenRouter
+  with "(connection default)" (no model pinned) sent a bare ":online".
+  Now the step skips itself (no search model = no search) and the editor
+  hint says to pin a model. Also: provider HTTP 4xx errors (message-carried
+  status) are no longer retried 5x10 s - only 429/5xx/network retry.
 ## 0.9.165
 ### Changed
 - Settings -> Search wording + keys: "Search engine" / "Model lookup" step
