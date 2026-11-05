@@ -5172,9 +5172,18 @@ OfficeDeck.prototype.setNotes = function (i, text) {
         return askRetryable(function () { return apiJson("/api/chat", "POST", { connection: ask.connection, model: ask.model, messages: repairMsgs }); })
           .then(function (rR) {
             SK.lastModelText = { text: rR.text };
-            var pR = tryParse(rR.text);
-            return renderParsed(pR.ok ? pR : { ok: false, text: rR.text }, ctx, SK.lastInstruction || "");
+            var pR;
+            try { pR = tryParse(rR.text); } catch (eP) { pR = { ok: false, text: rR.text }; }
+            try {
+              return renderParsed(pR.ok ? pR : { ok: false, text: rR.text }, ctx, SK.lastInstruction || "");
+            } catch (eR2) {
+              // 0.9.221: log the FULL trace into the activity box so a
+              // broken re-ask self-reports instead of staying opaque
+              try { actLog("RE-ASK RENDER FAILED: " + ((eR2 && eR2.stack) || eR2)); } catch (eL) { }
+              setStatus("Re-ask render failed: " + ((eR2 && eR2.message) || eR2), "error");
+            }
           }).catch(function (eR) {
+            try { actLog("RE-ASK FAILED: " + ((eR && eR.stack) || eR)); } catch (eL) { }
             setStatus("Re-ask failed: " + ((eR && eR.message) || eR), "error");
           });
       }

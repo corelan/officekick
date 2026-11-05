@@ -30,6 +30,12 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.221
+### Changed (all panes)
+- Re-ask failures now log their FULL stack trace into the pane's
+  activity log ("RE-ASK FAILED: ..." / "RE-ASK RENDER FAILED: ...")
+  instead of only a status line, so the actual broken statement is
+  visible and fixable in one round-trip instead of guesswork.
 ## 0.9.220
 ### Added (DocKick / Word)
 - move_image {find, place}: relocates an inline image (or every image in
