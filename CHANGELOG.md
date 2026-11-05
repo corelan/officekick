@@ -30,6 +30,13 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.198
+### Docs
+- README: the transport story now covers both schemes - Word/PowerPoint on
+  http://localhost:8765, MailKick on macOS over https://localhost:8766
+  (loopback TLS, per-user CA) - with a per-add-in port/scheme table, how to
+  read the pane's bottom line (the lock + port) and how to check a manifest
+  on disk. The installer's transport banner states the same split.
 ## 0.9.197
 ### Changed
 - Scope correction: only MailKick needs https URLs (Outlook's manifest

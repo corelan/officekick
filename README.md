@@ -67,8 +67,14 @@ Good to know:
   instead of `python` - `python` alone is often the Store alias that opens
   the Microsoft Store instead of running your script.
 - No admin rights are needed.
-- The add-ins talk to the server over plain http. Office allows `localhost`
-  over http, so there are no certificates on any path.
+- The add-ins talk to the server over `http://localhost:8765`. Office allows
+  `localhost` over http, so SlideKick and DocKick need no certificates.
+  **Exception - MailKick on macOS Outlook**: Outlook validates every URL in
+  its add-in manifest as https, so on macOS the server opens a second
+  listener, `https://localhost:8766` (loopback TLS with a per-user
+  "OfficeKick Loopback CA" the installer generates and trusts once; see
+  [docs/mailkick.md](docs/mailkick.md) > Requirements). Word and PowerPoint
+  keep plain http and never touch the certificate.
 - The macOS server wrapper restarts the server if it crashes.
 - Re-running the installer is safe. It repairs and updates in place.
 
@@ -87,6 +93,21 @@ If a deck or document ever greets you with an
 "Add-in Error / This add-in is no longer available" toast on open, heal it
 once with the repair tool - see the troubleshooting section in
 [docs/slidekick.md](docs/slidekick.md).
+
+### Ports and how to tell which scheme an add-in uses
+
+| Add-in | macOS | Windows |
+|---|---|---|
+| SlideKick (PowerPoint) | `http://localhost:8765` | `http://localhost:8765` |
+| DocKick (Word) | `http://localhost:8765` | `http://localhost:8765` |
+| MailKick (Outlook) | `https://localhost:8766` (loopback TLS) | `http://localhost:8765` |
+
+How to tell what a pane is actually using: the **bottom status line** in the
+task pane shows it - a 🔒 plus port **8766** means the pane is served over
+the loopback TLS listener; no lock with port **8765** means plain http.
+On disk, check the manifest your Office container holds, e.g.
+`grep -o 'http[^"]*taskpane.html' "~/Library/Containers/com.microsoft.Outlook/Data/Documents/wef/mailkick.xml"`
+(https = the Outlook route).
 
 ## The local server: starting it manually and automatically
 

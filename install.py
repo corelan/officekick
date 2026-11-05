@@ -1095,8 +1095,11 @@ def preflight(mode):
     out("OfficeKick %s - %s (SlideKick + DocKick + MailKick)" % (VERSION, mode))
     out("  platform  : %s (%s) | python %s" % (
         platform.system(), platform.release(), platform.python_version()))
-    out("  transport : http://localhost:<port> - Office allows localhost over http,")
-    out("              so this installer uses NO certificate and NO https at all.")
+    out("  transport : Word/PowerPoint/OpenOffice panes -> http://localhost:<port>")
+    out("              (Office allows localhost over http).")
+    out("              macOS Outlook -> https://localhost:<port+1> (loopback TLS with")
+    out("              a per-user CA generated + trusted once) - Outlook validates")
+    out("              every manifest URL as https, so MailKick must go over TLS.")
     out("  admin     : not required - every step here is per-user.")
     if is_mac():
         out("  popups    : macOS may show -")
