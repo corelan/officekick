@@ -34,7 +34,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 APP = "OfficeKick"
-VERSION = "0.9.157"
+VERSION = "0.9.158"
 
 # --------------------------------------------------------------------------- #
 # Self-restart: the server watches for <cfg dir>/restart.flag. Whatever writes
@@ -1498,6 +1498,28 @@ def _search_tavily(q, key, max_results=8):
     return out
 
 
+def _search_firecrawl(q, key, max_results=8):
+    """Firecrawl search API (paid, Bearer key)."""
+    if not key:
+        raise ApiError(400, "Firecrawl search needs an API key - set it in Settings")
+    req = urllib.request.Request("https://api.firecrawl.dev/v1/search", method="POST",
+        data=json.dumps({"query": q[:400], "limit": max_results}).encode(),
+        headers={"Content-Type": "application/json",
+                 "Authorization": "Bearer " + key})
+    try:
+        with urllib.request.urlopen(req, timeout=20) as r:
+            j = json.loads(r.read().decode("utf-8", "replace"))
+    except Exception as exc:
+        raise ApiError(502, "firecrawl search failed: %s" % str(exc)[:160])
+    out = []
+    for r2 in (j.get("data") or j.get("results") or [])[:max_results]:
+        url = str(r2.get("url") or "")[:400]
+        title = str(r2.get("title") or "")[:180]
+        snippet = str(r2.get("description") or r2.get("content") or "")[:300]
+        if url:
+            out.append({"title": title, "url": url, "snippet": snippet})
+    return out
+
 def web_search(store, query, max_results=8):
     """Server-side web search. Engine = the webSearchEngine setting;
     "auto" = the free keyless DuckDuckGo channel. brave/tavily need an API
@@ -1520,6 +1542,8 @@ def web_search(store, query, max_results=8):
         results = _search_brave(q, key, max_results)
     elif engine == "tavily":
         results = _search_tavily(q, key, max_results)
+    elif engine == "firecrawl":
+        results = _search_firecrawl(q, key, max_results)
     else:
         results = _search_duckduckgo(q, max_results)
     if not results:
@@ -2474,7 +2498,7 @@ class SlideKickHandler(BaseHTTPRequestHandler):
                     changed = True
                 if "webSearchEngine" in body and body["webSearchEngine"] is not None:
                     eng = str(body["webSearchEngine"] or "auto")
-                    if eng not in ("auto", "duckduckgo", "brave", "tavily"):
+                    if eng not in ("auto", "duckduckgo", "brave", "tavily", "firecrawl"):
                         raise ApiError(400, "unknown web search engine: %r" % eng)
                     self.store.data["webSearchEngine"] = eng
                     changed = True

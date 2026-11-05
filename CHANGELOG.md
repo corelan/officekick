@@ -30,6 +30,12 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.158
+### Added
+- Firecrawl as a search engine option (Settings -> General -> Web search,
+  takes an API key, POST /v1/search with the query). The free DuckDuckGo
+  channel stays the keyless default; page reading still runs through the
+  server's own fetcher.
 ## 0.9.157
 ### Added
 - Profiles gained a 4th slot: "Web search model (optional)". Empty (the
