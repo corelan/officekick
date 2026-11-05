@@ -30,6 +30,20 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.236
+### Added (all add-ins)
+- The clarify round no longer depends on the model volunteering: the word
+  'infographic' (slide/doc, with no image/picture word in the ask) now ALWAYS
+  surfaces the image-vs-shapes(-vs-both / vs-table) question before anything
+  is built. Other ambiguous words stay model-decided via the prompt rule.
+### Fixed (SlideKick)
+- Textbox ladder hardening for the 16.114 mac bridge: variant 3 now creates
+  the rectangle through the PROVEN geometric path (creation + styling in one
+  run) and writes the text in an ISOLATED second run against the created
+  shape's id - a textFrame rejection can no longer take the created shape
+  with it; a failed text write reports the shape + the reason in the apply
+  line instead of failing the op.
+
 ## 0.9.235
 ### Added (all add-ins)
 - Clarification round: when a request could plausibly deliver a DIFFERENT

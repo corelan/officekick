@@ -3537,6 +3537,14 @@ function applyOps(deck, ops, ctx) {
           });
         });
       }).then(function (parsed) {
+        if (parsed && parsed.kind !== "clarify" && !(SK.clarifyChain || 0) &&
+            /infographics?\b/i.test(instruction) &&
+            !/\b(image|picture|illustration|screenshot|photo|poster|graphic)\b/i.test(instruction)) {
+          // 0.9.236: the word infographic ALWAYS surfaces the form question
+          parsed = { ok: true, kind: "clarify",
+                     question: "Infographic as an AI-generated image, a table/diagram, or formatted text?",
+                     options: ["AI image", "Table or diagram", "Formatted text"] };
+        }
         if (parsed && parsed.kind === "clarify") {
           // 0.9.235: the model asks the user to pick the form of the result
           SK.clarifyChain = (SK.clarifyChain || 0) + 1;

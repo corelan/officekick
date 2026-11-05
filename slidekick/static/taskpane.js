@@ -2507,6 +2507,7 @@ OfficeDeck.prototype.createShape = function (slideIndex, op) {
   // (1.5). Non-textbox kinds keep the single native attempt.
   var self = this;
   var runVariant = function (vi) {
+    var txt = String(op.text || "");
     return self.run("createShape(v" + vi + ")", function (ctx) {
       if (!Office.context.requirements.isSetSupported("PowerPointApi", "1.4")) {
         throw new FriendlyError("shape creation needs PowerPointApi 1.4 - update PowerPoint (16.62+ on Mac).");
@@ -2527,16 +2528,9 @@ OfficeDeck.prototype.createShape = function (slideIndex, op) {
             if (opts[gk] != null) { try { created[gk] = opts[gk]; } catch (eG) { /* geometry optional */ } }
           });
         } else {
-          if (!Office.context.requirements.isSetSupported("PowerPointApi", "1.5")) {
-            throw new FriendlyError("writing textbox text needs PowerPointApi 1.5 - update PowerPoint (16.64+ on Mac).");
-          }
-          created = shapes.addGeometricShape("rectangle", opts);
-          try { created.fill.clear(); } catch (eF0) { /* keep the default fill */ }
-          try { created.lineFormat.visible = false; } catch (eL0) { /* keep the default line */ }
-          if (txt.trim()) {
-            created.textFrame.wordWrap = true;
-            created.textFrame.textRange.text = txt;
-          }
+          // v3 moved out of this run: the geometric path + an isolated text
+          // run (runVariant3) - a textFrame rejection here must not take
+          // the created shape with it. This branch is unreachable.
         }
       } else if (op.kind === "line") {
         created = shapes.addLine("Straight", opts);
@@ -2568,16 +2562,87 @@ OfficeDeck.prototype.createShape = function (slideIndex, op) {
       });
     }).catch(function (err) {
       var msg = String((err && err.message) || err);
-      if (op.kind === "textbox" && vi < 3 && !/needs PowerPointApi/.test(msg)) {
+      if (op.kind === "textbox" && vi < 2 && !/needs PowerPointApi/.test(msg)) {
         // this build rejected the textbox creation path - try the next one
         dbg("office.createShape.attempt", { variant: vi, kind: op.kind, error: msg.slice(0, 120) });
         return runVariant(vi + 1);
       }
       throw err;
     });
-  };
-  return runVariant(1);
-};
+    };
+    var runVariant3 = function () {
+    var txt = String(op.text || "");
+    // the geometric path is the one PROVEN working on this build (rects
+    // with styling applied fine while textbox calls all threw); the text
+    // write runs ISOLATED afterwards so a textFrame rejection cannot take
+    // the created shape with it
+    return self.run("createShape(v3)", function (ctx) {
+      if (!Office.context.requirements.isSetSupported("PowerPointApi", "1.4")) {
+        throw new FriendlyError("shape creation needs PowerPointApi 1.4 - update PowerPoint (16.62+ on Mac).");
+      }
+      var shapes = ctx.presentation.slides.getItemAt(slideIndex).shapes;
+      var opts = {};
+      ["left", "top", "width", "height"].forEach(function (gk) {
+        if (op.geometry && op.geometry[gk] != null) opts[gk] = op.geometry[gk];
+      });
+      var created = shapes.addGeometricShape("rectangle", opts);
+      try { created.name = "sk-shape-textbox"; } catch (eName) { /* naming optional */ }
+      if (op.fill) {
+        created.fill.setSolidColor(String(op.fill));
+      }
+      if (op.transparency != null) {
+        if (!Office.context.requirements.isSetSupported("PowerPointApi", "1.10")) {
+          throw new FriendlyError("fill transparency needs PowerPointApi 1.10 - update PowerPoint (16.105+ on Mac).");
+        }
+        created.fill.transparency = Number(op.transparency);
+      }
+      if (op.line) {
+        created.lineFormat.visible = true;
+        created.lineFormat.color = String(op.line);
+      }
+      if (op.geometry && op.geometry.rotation != null) {
+        if (!Office.context.requirements.isSetSupported("PowerPointApi", "1.10")) {
+          throw new FriendlyError("rotating shapes needs PowerPointApi 1.10 - update PowerPoint (16.105+ on Mac).");
+        }
+        created.rotation = op.geometry.rotation;
+      }
+      shapes.load("items/id,items/name");
+      return ctx.sync().then(function () {
+        var shapeId = "";
+        for (var i = shapes.items.length - 1; i >= 0; i--) {
+          if (String(shapes.items[i].name) === "sk-shape-textbox") { shapeId = String(shapes.items[i].id); break; }
+        }
+        dbg("office.createShape.fallback", { variant: 3, kind: "textbox", slide: op.slide, shapeId: shapeId });
+        return shapeId;
+      });
+    }).then(function (shapeId) {
+      if (!txt.trim()) return { ok: true, variant: 3 };
+      return self.run("createShapeText(v3)", function (ctx) {
+        if (!Office.context.requirements.isSetSupported("PowerPointApi", "1.5")) {
+          throw new FriendlyError("writing textbox text needs PowerPointApi 1.5 - update PowerPoint (16.64+ on Mac).");
+        }
+        var shapes2 = ctx.presentation.slides.getItemAt(slideIndex).shapes;
+        var sh2 = shapes2.getItem(shapeId);
+        var tf = sh2.getTextFrameOrNullObject();
+        tf.load("isNullObject");
+        return ctx.sync().then(function () {
+          if (tf.isNullObject) {
+            dbg("office.createShape.textSkip", { slide: op.slide });
+            return { ok: true, variant: 3, note: "created the shape but it carries no text frame" };
+          }
+          tf.wordWrap = true;
+          tf.textRange.text = txt;
+          return ctx.sync().then(function () { return { ok: true, variant: 3, textWritten: true }; });
+        });
+      }).catch(function (eTxt) {
+        var msgTxt = String((eTxt && eTxt.message) || eTxt);
+        dbg("office.createShape.textFailed", { slide: op.slide, error: msgTxt.slice(0, 120) });
+        return { ok: true, variant: 3, note: "created the shape but the text write failed (" + msgTxt.slice(0, 80) + ")" };
+      });
+    });
+    };
+    return runVariant(1);
+    };
 
 OfficeDeck.prototype.formatSelection = function (font) {
     return this.run("formatSelection", function (ctx) {
@@ -3699,8 +3764,8 @@ OfficeDeck.prototype.setNotes = function (i, text) {
             else lines.push({ ok: true, text: "set notes on slide " + op.slide });
           });
         case "create_shape":
-          return deck.createShape(cur, op).then(function () {
-            lines.push({ ok: true, text: fmtOp(op, ctx) });
+          return deck.createShape(cur, op).then(function (r) {
+            lines.push({ ok: true, text: fmtOp(op, ctx) + (r && r.note ? " [" + r.note + "]" : "") });
           });
         case "duplicate_slide":
           return deck.duplicateSlide(op.slide - 1).then(function (r) {
@@ -4634,6 +4699,15 @@ OfficeDeck.prototype.setNotes = function (i, text) {
         }
         return parsed;
       }).then(function (parsed) {
+        if (parsed && parsed.kind !== "clarify" && !(SK.clarifyChain || 0) &&
+            /infographics?\b/i.test(instruction) &&
+            !/\b(image|picture|illustration|screenshot|photo|poster|graphic)\b/i.test(instruction)) {
+          // 0.9.236: the word infographic ALWAYS surfaces the form question -
+          // models answer with shapes first, the user asked for a real ask
+          parsed = { ok: true, kind: "clarify",
+                     question: "Infographic as an AI-generated image, as editable shapes + text, or both?",
+                     options: ["AI image", "Editable shapes", "Both"] };
+        }
         if (parsed && parsed.kind === "clarify") {
           // 0.9.235: the model asks the user to pick the form of the result
           SK.clarifyChain = (SK.clarifyChain || 0) + 1;
