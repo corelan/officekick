@@ -33,7 +33,11 @@ installer nor the other two add-ins are affected. The requirements:
 ### Your three options (the installer asks on macOS)
 
 **Option 1 - the default: a self-signed, per-user loopback CA.** The
-installer generates a small CA plus a `localhost` certificate and *imports
+installer first CHECKS for a certificate that is already on disk: if it is
+unexpired, has a localhost SAN and its chain is trusted, it is REUSED and
+nothing is generated or re-imported; only when that check fails (expired /
+wrong SAN / not trusted - the reason is printed) does it generate. The
+generated pair is a small CA plus a `localhost` certificate, and it *imports
 that generated CA into your trusted keychains* (login keychain, per-user
 `security add-trusted-cert`, no admin rights; macOS may show one
 confirmation). That import is what makes the self-signed certificate work:

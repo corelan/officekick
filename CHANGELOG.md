@@ -30,6 +30,16 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.203
+### Changed
+- Option 1 (auto TLS) is now reuse-first: when a certificate is already on
+  disk it is validated (unexpired, localhost SAN, chain trusted via
+  security verify-cert) and REUSED - no new CA, no regeneration, no
+  re-import. Only a failed check triggers a regeneration, with the reason
+  printed. Verified on this Mac: the existing cert reuses; an expired cert
+  is detected and regenerated.
+### Docs
+- docs/mailkick.md Option 1 describes the reuse-first behavior.
 ## 0.9.202
 ### Fixed
 - Mode-vs-https correction (verified by Corelan on the real machine): the

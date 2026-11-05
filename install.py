@@ -430,6 +430,21 @@ def choose_mailkick_tls():
 
 
 # ------------------------------------------------------------ loopback TLS #
+def validate_existing_tls(crt):
+    """Check the cert ALREADY on disk: unexpired, localhost SAN, trusted.
+    None = usable; a short reason string = regenerate."""
+    rc, _o = run_quiet(["openssl", "x509", "-in", crt, "-noout", "-checkend", "0"])
+    if rc != 0:
+        return "expired or not yet valid"
+    rc, o = run_quiet(["openssl", "x509", "-in", crt, "-noout", "-text"])
+    if "DNS:localhost" not in o and "IP Address:127.0.0.1" not in o:
+        return "no localhost subjectAltName"
+    rc, o = run_quiet(["security", "verify-cert", "-c", crt, "-p", "ssl"])
+    if rc != 0:
+        return "its chain is not trusted by this Mac (" + (o or "untrusted").strip()[:120] + ")"
+    return None
+
+
 def ensure_tls_certs():
     """Generate a per-user CA + localhost server cert (0.9.193) and trust the
     CA in the USER keychain, so the macOS server can additionally answer
@@ -451,8 +466,14 @@ def ensure_tls_certs():
         os.chmod(cert_dir, 0o700)
     except OSError:
         pass
-    if os.path.isfile(crt) and os.path.isfile(key) and os.path.isfile(ca_crt):
+    existing = validate_existing_tls(crt)
+    if existing is None and os.path.isfile(crt) and os.path.isfile(key):
+        ok("reusing the existing loopback certificate (%s) - still valid and" % crt)
+        out("  [ok]  trusted; no certificate was generated and nothing was re-imported.")
         return (crt, key)
+    if existing:
+        warn("the existing loopback certificate is not usable (%s) - it will be" % existing)
+        out("       regenerated.")
     if DRY_RUN:
         out("  [..]  [dry-run] would generate loopback TLS certs under " + cert_dir)
         return None
