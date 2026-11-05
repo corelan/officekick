@@ -1173,8 +1173,8 @@
     "user's request, or format A (reply) with the answer/reason. Respond NOW " +
     "with the JSON object - no fences, no commentary, never an empty reply.";
 
-  var HISTORY_MAX_EXCHANGES = 6; // oldest turns are dropped, newest kept
-  var HISTORY_MAX_CHARS = 8000;  // per stored message (long answers must survive resume/history)
+  var HISTORY_MAX_EXCHANGES = 16; // oldest turns are dropped, newest kept (0.9.210: 6 -> 16 - much longer working memory)
+  var HISTORY_MAX_CHARS = 10000; // per stored message (long answers must survive resume/history)
 
   // ------------------------- local sessions ------------------------- //
   function derivedSessionName() {
@@ -1398,7 +1398,7 @@
     note.textContent = "Resumed session \u201C" + SK.sessionName + "\u201D - the AI sees the last " +
       Math.min(HISTORY_MAX_EXCHANGES, SK.history.length / 2) + " exchange(s). The last turns are in the Previous requests box (collapsed; click its header to open). Just type in the request box to continue.";
     el.appendChild(note);
-    // show the last up-to-6 messages (3 exchanges) as collapsed request/response
+    // show the last recent messages as collapsed request/response
     // boxes, styled like the Inspector groups; future runs append below
     // the last 6 interactions (newest first) as flat rows in the box
     var list = SK.history.slice(0);

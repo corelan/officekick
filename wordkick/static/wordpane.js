@@ -1021,8 +1021,8 @@
       "\nREMINDERS: reference only paragraphs/targets that appeared in the context summary; do not re-cover content already handled in your previous reply.";
   }
 
-  var HISTORY_MAX_EXCHANGES = 6; // oldest turns are dropped, newest kept
-  var HISTORY_MAX_CHARS = 8000;  // per stored message (long answers must survive resume/history)
+  var HISTORY_MAX_EXCHANGES = 16; // oldest turns are dropped, newest kept (0.9.210: 6 -> 16 - much longer working memory)
+  var HISTORY_MAX_CHARS = 10000; // per stored message (long answers must survive resume/history)
 
   // ------------------------- local sessions ------------------------- //
   function derivedSessionName() {
@@ -2193,13 +2193,13 @@ function normalizeWordStyle(v) {
         return;
       }
       var bad = function (reason) { invalid.push({ op: op, reason: reason }); };
+      var paraOk = function (v) { return typeof v === "number" && Math.floor(v) === v && v >= 1 && (!ctx || v <= ctx.paragraphCount); };
+      var out = { type: t };
       if (t === "insert_image" && typeof op.place === "string" && op.place.trim()) {
         var p0 = op.place.trim();
         if (p0 === "cursor" || p0 === "end") out.place = p0;
         else if (p0.length >= 3) out.place = p0.slice(0, 200);  // an anchor text to insert after
       }
-      var paraOk = function (v) { return typeof v === "number" && Math.floor(v) === v && v >= 1 && (!ctx || v <= ctx.paragraphCount); };
-      var out = { type: t };
       if (t === "insert_paragraphs") {
         var items = Array.isArray(op.items) ? op.items : null;
         if (!items) { bad("missing items"); return; }

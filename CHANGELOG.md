@@ -30,6 +30,15 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.210
+### Fixed
+- "Cannot set properties of undefined (setting 'place')": the 0.9.209
+  insert_image validator copied op.place into `out` before `out` was
+  declared. Order corrected (0.9.209 shipped the crash).
+### Changed
+- Chat working memory raised in all three panes: the model now sees the
+  last 16 exchanges (32 entries, was 6) with up to 10k characters per
+  stored message (was 8k). Resume notes no longer hardcode the old count.
 ## 0.9.209
 ### Added
 - The model now decides where insert_image lands: the op accepts
