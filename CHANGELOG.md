@@ -30,6 +30,15 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.220
+### Added (DocKick / Word)
+- move_image {find, place}: relocates an inline image (or every image in
+  the same paragraph) to sit right after `place` (an anchor text), or at
+  the end. find = text inside/near the image's paragraph. Implementation:
+  read the picture sources with getBase64ImageSrc (WordApi 1.6), insert
+  at the target, then delete the source paragraph; anchor-not-found
+  falls back to the end and says so. Registered in OPS_META + validated +
+  previewed; schema line added so the model can use it.
 ## 0.9.219
 ### Fixed
 - THE reason "All 6 action(s) were rejected": move_text and copy_text
