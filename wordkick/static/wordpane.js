@@ -1812,8 +1812,8 @@ var nw = $("sess-new");
       var rs = body.search(place);
       rs.load("items");
       return ctx.sync().then(function () {
-        var rng = rs && rs.items && rs.items[0];
-        if (!rng) {
+        var match = rs && rs.items && rs.items[0];
+        if (!match) {
           items.forEach(function (it2) {
             var p2 = body.insertParagraph(String(it2.text == null ? "" : it2.text), "End");
             var st2 = styleNameOf(it2.style);
@@ -1823,14 +1823,17 @@ var nw = $("sess-new");
             return { ok: true, how: "anchor '" + place.slice(0, 60) + "' not found - end of document" };
           });
         }
-        items.forEach(function (it3) {
-          var p3 = rng.insertParagraph(String(it3.text == null ? "" : it3.text), "After");
-          var st3 = styleNameOf(it3.style);
-          if (st3) p3.style = st3;
-        });
-        return ctx.sync().then(function () {
-          return { ok: true, how: "after '" + place.slice(0, 60) + "'" };
-        });
+        return this._wholeParaRangeOf(ctx, match).then(function (pr) {
+          var paraRange = pr || match;
+          items.forEach(function (it3) {
+            var p3 = paraRange.insertParagraph(String(it3.text == null ? "" : it3.text), "After");
+            var st3 = styleNameOf(it3.style);
+            if (st3) p3.style = st3;
+          });
+          return ctx.sync().then(function () {
+            return { ok: true, how: "after the paragraph containing '" + place.slice(0, 60) + "'" };
+          });
+        }.bind(this));
       });
     });
   };
@@ -1965,13 +1968,15 @@ var nw = $("sess-new");
                 var rs = ctx.document.body.search(place);
                 rs.load("items");
                 return ctx.sync().then(function () {
-                  var rng = rs && rs.items && rs.items[0];
-                  if (!rng) return inserter2(ctx.document.body).then(function (r) {
+                  var match = rs && rs.items && rs.items[0];
+                  if (!match) return inserter2(ctx.document.body).then(function (r) {
                     r.how = "anchor '" + place.slice(0, 60) + "' not found - " + r.how;
                     return r;
                   });
-                  return inserter2(rng);
-                });
+                  return this._wholeParaRangeOf(ctx, match).then(function (pr) {
+                    return inserter2(pr || match);
+                  }.bind(this));
+                }.bind(this));
               });
             })();
           });
@@ -2023,13 +2028,15 @@ var nw = $("sess-new");
             var rs = ctx.document.body.search(place);
             rs.load("items");
             return ctx.sync().then(function () {
-              var rng = rs && rs.items && rs.items[0];
-              if (!rng) return inserter(ctx.document.body).then(function (r) {
+              var match = rs && rs.items && rs.items[0];
+              if (!match) return inserter(ctx.document.body).then(function (r) {
                 r.how = "anchor '" + place.slice(0, 60) + "' not found - " + r.how;
                 return r;
               });
-              return inserter(rng);
-            });
+              return this._wholeParaRangeOf(ctx, match).then(function (pr) {
+                return inserter(pr || match);
+              }.bind(this));
+            }.bind(this));
           });
         });
       });
@@ -2090,16 +2097,18 @@ var nw = $("sess-new");
     var rs = body.search(place);
     rs.load("items");
     return ctx.sync().then(function () {
-      var rng = rs && rs.items && rs.items[0];
-      if (!rng) {
+      var match = rs && rs.items && rs.items[0];
+      if (!match) {
         return doInsert(null).then(function () {
           return { how: "anchor '" + place.slice(0, 60) + "' not found - end of document" };
         });
       }
-      return doInsert(rng).then(function () {
-        return { how: "after '" + place.slice(0, 60) + "'" };
-      });
-    });
+      return this._wholeParaRangeOf(ctx, match).then(function (pr) {
+        return doInsert(pr || match).then(function () {
+          return { how: "after the paragraph containing '" + place.slice(0, 60) + "'" };
+        });
+      }.bind(this));
+    }.bind(this));
   };
 
   WordDeck.prototype._pasteBlock = function (op, cut) {
@@ -2371,6 +2380,26 @@ var nw = $("sess-new");
     });
   };
 
+  WordDeck.prototype._wholeParaRangeOf = function (ctxX, matchRange) {
+    // 0.9.227 - expands a text-match range to the WHOLE paragraph that
+    // contains it (so inserts with "After" land after the paragraph, never
+    // mid-sentence). Returns the paragraph range or null.
+    var paras = ctxX.document.body.paragraphs;
+    paras.load("text");
+    return ctxX.sync().then(function () {
+      var matchTxt = (matchRange.text || "");
+      if (!matchTxt) return matchRange;
+      for (var i = 0; i < paras.items.length; i++) {
+        var ptxt = paras.items[i].text || "";
+        if (ptxt.indexOf(matchTxt.trim()) >= 0) {
+          var pr = paras.items[i];
+          return pr.getAsRange ? pr.getAsRange() : pr.getRange("Whole");
+        }
+      }
+      return matchRange;
+    });
+  };
+
   WordDeck.prototype.addImage = function (payload) {
     // 0.9.209 - the MODEL (or the pane setting) decides where to insert:
     //   payload.place === "cursor"  -> the caret / selection ("Replace")
@@ -2393,8 +2422,10 @@ var nw = $("sess-new");
       rs.load("items");
       return ctx.sync().then(function () {
         if (rs && rs.items && rs.items.length) {
-          rs.items[0].insertInlinePictureFromBase64(String(payload.b64), "After");
-          return ctx.sync().then(function () { return { ok: true, how: "after '" + place.slice(0, 60) + "'" }; });
+          return this._wholeParaRangeOf(ctx, rs.items[0]).then(function (pr) {
+            (pr || rs.items[0]).insertInlinePictureFromBase64(String(payload.b64), "After");
+            return ctx.sync().then(function () { return { ok: true, how: "after the paragraph containing '" + place.slice(0, 60) + "'" }; });
+          }.bind(this));
         }
         ctx.document.body.insertInlinePictureFromBase64(String(payload.b64), "End");
         return ctx.sync().then(function () {

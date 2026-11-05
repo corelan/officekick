@@ -30,6 +30,13 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.227
+### Fixed
+- Anchored inserts no longer split sentences: every anchor resolution
+  (insert_image, insert_paragraphs, move_text/copy_text blocks,
+  move_image) expands the matched range to the WHOLE paragraph that
+  contains it before inserting "After" - the inserted content lands after
+  the paragraph's last line, never mid-sentence.
 ## 0.9.226
 ### Added (DocKick)
 - Images are now VISIBLE to the model: the document outline marks image
