@@ -34,7 +34,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 APP = "OfficeKick"
-VERSION = "0.9.156"
+VERSION = "0.9.157"
 
 # --------------------------------------------------------------------------- #
 # Self-restart: the server watches for <cfg dir>/restart.flag. Whatever writes
@@ -682,7 +682,7 @@ class Store:
                 return True
         return False
 
-    def upsert_profile(self, name, content, other, image=None):
+    def upsert_profile(self, name, content, other, image=None, web=None):
         prof = {
             "name": name,
             "content": {"connection": content[0], "model": content[1]},
@@ -690,6 +690,8 @@ class Store:
         }
         if image:
             prof["image"] = {"connection": image[0], "model": image[1]}
+        if web:
+            prof["web"] = {"connection": web[0], "model": web[1]}
         for i, p in enumerate(self.data["profiles"]):
             if p["name"] == name:
                 self.data["profiles"][i] = prof
@@ -759,13 +761,15 @@ class Store:
         prof["name"] = dst
         if self.data.get("defaultProfile") == src:
             self.data["defaultProfile"] = dst
-        for slot in ("content", "other", "image"):
-            if slot not in updates and slot != "image" and slot not in prof:
+        for slot in ("content", "other", "image", "web"):
+            if slot not in updates and slot != "image" and slot != "web" and slot not in prof:
                 continue
             ref = updates.get(slot)
             if ref is None or ref == {}:
                 if slot == "image" and ref == {}:
                     prof.pop("image", None)   # explicit empty = clear the image model
+                if slot == "web" and ref == {}:
+                    prof.pop("web", None)   # explicit empty = clear the web model
                 continue
             if ref.get("connection") is not None:
                 if not self.find_connection(ref["connection"]):
@@ -1176,6 +1180,38 @@ def conn_headers(conn):
             h["x-api-key"] = key
         h["anthropic-version"] = "2023-06-01"
     return h
+
+
+WEB_MODEL_NAME_HINTS = (
+    # models with native/built-in web search (name-based detection; OpenRouter
+    # models can also get the :online plugin attached, so the web-slot there
+    # accepts every model - the filter just shortlists the obvious native ones)
+    "search-preview", "search", "online", "sonar", "perplexity", "gemini-2",
+    "-flash", "web",
+)
+
+
+def filter_web_models(store, conn_name):
+    """Models that plausibly support web search on this connection."""
+    conn = store.find_connection(conn_name)
+    if conn is None:
+        raise ApiError(404, "Unknown connection: %r" % (conn_name,))
+    t = conn["type"]
+    try:
+        resp = provider_list_models(store, conn_name)
+        ids = [str(x) for x in (resp.get("models") or [])]
+    except Exception:
+        ids = []
+    if t == "openrouter":
+        # :online attaches to any model - everything is web-capable
+        return ids
+    if t == "ollama":
+        # no native web search channel in Ollama itself
+        return []
+    def _webish(mid):
+        ml = str(mid).lower()
+        return any(h in ml for h in WEB_MODEL_NAME_HINTS)
+    return [x for x in ids if _webish(x)]
 
 
 IMAGE_MODEL_NAME_HINTS = (
@@ -1945,11 +1981,11 @@ def validate_profile_body(store, body):
     if not valid_name(name):
         raise ApiError(400, "Profile name must be 1-64 chars")
     refs = []
-    for slot in ("content", "other", "image"):
+    for slot in ("content", "other", "image", "web"):
         ref = body.get(slot)
         if ref is None or ref == {}:
-            if slot == "image":
-                continue  # image model is optional
+            if slot in ("image", "web"):
+                continue  # image and web-search models are optional
             raise ApiError(400, "Profile %s slot missing" % slot)
         conn, model = ref.get("connection"), ref.get("model")
         if not store.find_connection(conn):
@@ -1965,6 +2001,7 @@ def validate_profile_body(store, body):
         by_slot["content"],
         by_slot["other"],
         by_slot.get("image"),
+        by_slot.get("web"),
     )
 
 
@@ -2201,6 +2238,9 @@ class SlideKickHandler(BaseHTTPRequestHandler):
                 if caps == "image":
                     resp = dict(resp)
                     resp["models"] = filter_image_models(self.store, conn)
+                elif caps == "web":
+                    resp = dict(resp)
+                    resp["models"] = filter_web_models(self.store, conn)
                 self._send_json(resp)
             elif path == "/api/sessions":
                 self._send_json({"sessions": self.store.sessions.list(query.get("app", [None])[0])})
@@ -2268,8 +2308,8 @@ class SlideKickHandler(BaseHTTPRequestHandler):
                     raise ApiError(500, "could not write the restart flag")
 
             elif path == "/api/profiles":
-                name, content, other, image = validate_profile_body(self.store, body)
-                self.store.upsert_profile(name, content, other, image)
+                name, content, other, image, web = validate_profile_body(self.store, body)
+                self.store.upsert_profile(name, content, other, image, web)
                 self._send_json({"ok": True, "name": name})
             elif path == "/api/connections/rename":
                 self.store.rename_connection(

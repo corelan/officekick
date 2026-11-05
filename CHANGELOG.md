@@ -30,6 +30,19 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.157
+### Added
+- Profiles gained a 4th slot: "Web search model (optional)". Empty (the
+  default) = the automatic lookup ladder; when set, that connection+model
+  runs FIRST for lookups (on OpenRouter the :online plugin attaches to the
+  chosen model; on other providers the model must search natively, e.g.
+  OpenAI's gpt-4o-mini-search-preview).
+- The web slot's model picker mirrors the image slot: "web-capable only"
+  <-> "show all models" toggle (server capability=web filter). Detection:
+  OpenRouter = every model qualifies (:online is attachable); Ollama = an
+  empty shortlist (no native web search there) so the full list shows; the
+  rest = name hints (search-preview, sonar/perplexity, web, online...).
+  The Profiles table has a Web model column; renames carry the slot.
 ## 0.9.156
 ### Added
 - Settings -> General -> "Web search (all add-ins)": pick the search

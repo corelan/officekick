@@ -255,6 +255,16 @@
           </div>
           <input id="prof-image-custom" type="text" placeholder="custom model id" class="hidden" spellcheck="false" />
         </fieldset>
+        <fieldset>
+          <legend>Web search model <span class="muted">(optional - used when a lookup is needed; empty = automatic channel)</span></legend>
+          <label>Connection <select id="prof-web-conn"></select></label>
+<button class="btn subtle" type="button" id="prof-web-toggle" title="Toggles between web-capable models only and the full list">show all models</button>
+          <div class="row row-tight">
+            <label class="grow">Model <select id="prof-web-model"></select></label>
+            <button class="btn subtle" type="button" data-refresh="web">Refresh list</button>
+          </div>
+          <input id="prof-web-custom" type="text" placeholder="custom model id" class="hidden" spellcheck="false" />
+        </fieldset>
         <div class="row">
           <button id="prof-save" class="btn primary" type="button">Save profile</button>
           <button id="prof-default" class="btn" type="button">Set as default</button>

@@ -17,6 +17,7 @@
     sessionName: "",
     sessionSaveTimer: null,
     profImageFilter: true,
+    profWebFilter: true,    // the web-slot model select shows web-capable models by default
     sim: false,
     deck: null,
     cfg: null,
@@ -316,6 +317,15 @@
       openaiSearch = { connection: c.name, model: "gpt-4o-mini-search-preview" };
     });
     var attempts = [];
+    // the profile's own web slot (if set) = tried first: on OpenRouter the
+    // :online plugin attaches to any model; on other providers the model
+    // must search natively (e.g. OpenAI search-preview)
+    if (prof.web && prof.web.connection && prof.web.model) {
+      var wconn = connOf(prof.web.connection);
+      var wmodel = String(prof.web.model || "");
+      attempts.push({ connection: prof.web.connection,
+                      model: (wconn.type === "openrouter") ? wmodel + ":online" : wmodel });
+    }
     if (connOf(ref.connection).type === "openrouter") {
       attempts.push({ connection: ref.connection, model: ref.model + ":online" });
     }
@@ -3447,12 +3457,12 @@ function applyOps(deck, ops, ctx) {
   function renderProfiles() {
     // keep the profile-form connection dropdowns in sync with the current
     // config: connections created since the form was opened must show up
-    ["prof-content-conn", "prof-other-conn", "prof-image-conn"].forEach(function (id) {
+    ["prof-content-conn", "prof-other-conn", "prof-image-conn", "prof-web-conn"].forEach(function (id) {
       var sel = $(id);
       fillConnSelect(sel, sel.value || "");
     });
     var list = $("prof-list");
-    var rows = [ "<tr><th>Name</th><th>Content model</th><th>Other model</th><th>Image model</th></tr>" ];
+    var rows = [ "<tr><th>Name</th><th>Content model</th><th>Other model</th><th>Image model</th><th>Web model</th></tr>" ];
     (SK.cfg.profiles || []).forEach(function (p) {
       var star = p.name === SK.cfg.defaultProfile ? "*" : "";
       // click the name to edit; deletion lives in the edit form (with confirm)
@@ -3461,7 +3471,7 @@ function applyOps(deck, ops, ctx) {
         esc(p.name) + "</button>" + (star ? " <span class=\"opnote\">(default)</span>" : "");
       rows.push(
         "<tr><td>" + nameCell + "</td>" +
-        "<td>" + esc(modelRefLabel(p.content)) + "</td><td>" + esc(modelRefLabel(p.other)) + "</td><td>" + esc(modelRefLabel(p.image)) + "</td></tr>"
+        "<td>" + esc(modelRefLabel(p.content)) + "</td><td>" + esc(modelRefLabel(p.other)) + "</td><td>" + esc(modelRefLabel(p.image)) + "</td><td>" + esc(modelRefLabel(p.web)) + "</td></tr>"
       );
     });
     list.innerHTML = rows.join("") || "<tr><td>No profiles yet - add one below.</td></tr>";
@@ -3546,6 +3556,8 @@ function applyOps(deck, ops, ctx) {
     populateModelSelect("prof-content", p.content && p.content.connection, p.content && p.content.model);
     populateModelSelect("prof-other", p.other && p.other.connection, p.other && p.other.model);
     populateModelSelect("prof-image", p.image && p.image.connection, p.image && p.image.model, SK.profImageFilter ? "image" : null);
+    fillConnSelect($("prof-web-conn"), p.web && p.web.connection);
+    populateModelSelect("prof-web", p.web && p.web.connection, p.web && p.web.model, SK.profWebFilter ? "web" : null);
     setFormMsg($("prof-formmsg"), "", true);
   }
 
@@ -3556,6 +3568,7 @@ function applyOps(deck, ops, ctx) {
     fillConnSelect($("prof-content-conn"), "");
     fillConnSelect($("prof-other-conn"), "");
     fillConnSelect($("prof-image-conn"), "");
+    fillConnSelect($("prof-web-conn"), "");
     $("prof-content-model").innerHTML = '<option value="">(choose a connection first)</option>';
     $("prof-other-model").innerHTML = '<option value="">(choose a connection first)</option>';
     $("prof-image-model").innerHTML = '<option value="">(optional - choose a connection first)</option>';
@@ -3577,11 +3590,15 @@ function applyOps(deck, ops, ctx) {
     var imageConn = $("prof-image-conn").value;
     var imageModel = $("prof-image-model").value;
     if (imageModel === "__custom__") imageModel = $("prof-image-custom").value.trim();
+    var webConn = $("prof-web-conn").value;
+    var webModel = $("prof-web-model").value;
+    if (webModel === "__custom__") webModel = $("prof-web-custom").value.trim();
     return {
       name: $("prof-name").value.trim(),
       content: slotValue("prof-content"),
       other: slotValue("prof-other"),
       image: imageConn && imageModel ? { connection: imageConn, model: imageModel } : null,
+      web: webConn && webModel ? { connection: webConn, model: webModel } : null,
     };
   }
 
@@ -3595,7 +3612,7 @@ function applyOps(deck, ops, ctx) {
       // rename: moves the profile; the default-profile pointer follows
       req = apiJson("/api/profiles/rename", "POST", {
         from: SK.editingProf, to: p.name, content: p.content, other: p.other,
-        image: p.image || {},
+        image: p.image || {}, web: p.web || {},
       });
     } else {
       req = apiJson("/api/profiles", "POST", p);
@@ -3846,6 +3863,15 @@ function applyOps(deck, ops, ctx) {
         populateModelSelect(slot, connName, $(slot + "-model").value, cap);
       });
     });
+    $("prof-web-toggle").addEventListener("click", function () {
+      SK.profWebFilter = !SK.profWebFilter;
+      $("prof-web-toggle").textContent = SK.profWebFilter ? "web-capable only" : "show all models";
+      var connName = $("prof-web-conn").value;
+      if (connName) {
+        delete SK.modelsCache[connName + (SK.profWebFilter ? "::web" : "")];
+        populateModelSelect("prof-web", connName, "", SK.profWebFilter ? "web" : null);
+      }
+    });
     $("prof-image-toggle").addEventListener("click", function () {
       SK.profImageFilter = !SK.profImageFilter;
       $("prof-image-toggle").textContent = SK.profImageFilter ? "image-capable only" : "show all models";
@@ -3855,10 +3881,10 @@ function applyOps(deck, ops, ctx) {
         populateModelSelect("prof-image", connName, "", SK.profImageFilter ? "image" : null);
       }
     });
-    ["content", "other", "image"].forEach(function (slot) {
+    ["content", "other", "image", "web"].forEach(function (slot) {
       $("prof-" + slot + "-conn").addEventListener("change", function () {
         populateModelSelect("prof-" + slot, $("prof-" + slot + "-conn").value, "",
-          slot === "image" && SK.profImageFilter ? "image" : null);
+          slot === "image" && SK.profImageFilter ? "image" : slot === "web" && SK.profWebFilter ? "web" : null);
       });
       $("prof-" + slot + "-model").addEventListener("change", function () {
         var isCustom = $("prof-" + slot + "-model").value === "__custom__";
