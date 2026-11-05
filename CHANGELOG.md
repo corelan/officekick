@@ -30,6 +30,18 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.163
+### Changed
+- ONE search sequence for all add-ins (Settings -> Search): no more named
+  profiles, list, or "use this profile" - set the steps, save, done. The
+  old named profiles + selection migrate to the shared step list on
+  startup; no steps = the free DuckDuckGo engine.
+### Added
+- Internal page reads: after a lookup the model may reply with
+  {"kind":"read_page","url":"..."} to get a specific page's FULL text
+  (free, never gated, up to 4 reads per run; the server's SSRF-guarded
+  fetcher does the reading). The auto-gather still includes the top
+  result pages; read_page = the explicit follow-up the model asks for.
 ## 0.9.162
 ### Fixed
 - {"kind":"web_lookup"} intents never parsed (tryParse had no web_lookup

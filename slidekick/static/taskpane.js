@@ -301,25 +301,17 @@
   }
   // ------------------------- search profiles ------------------------- //
   function renderSearchProfiles() {
-    var sel0 = $("srp-list");
-    if (!sel0) return;
-    apiJson("/api/search-profiles", "GET").then(function (res) {
-      var profiles = (res && res.profiles) || [];
-      SK.searchProfiles = profiles;
-      var keep = sel0.value;
-      sel0.innerHTML = '<option value="">(no profile - free DuckDuckGo only)</option>' + profiles.map(function (p) {
-        return '<option value="' + esc(p.name) + '"' + (p.name === res.selected ? " selected" : "") + ">" + esc(p.name) + "</option>";
-      }).join("");
-      if (keep && profiles.some(function (p) { return p.name === keep; })) sel0.value = keep;
-      renderSearchSteps();
-    }).catch(function (e) { setStatus("Could not load search profiles: " + ((e && e.message) || e), "error"); });
+    if (!$("srp-steps")) return;
+    SK.srpDraft = null;   // rebuild the working copy of the ONE shared sequence
+    currentSearchProfile();
+    renderSearchSteps();
   }
 
   function currentSearchProfile() {
-    var sel0 = $("srp-list");
-    var name = sel0 ? sel0.value : "";
-    if (!name && SK.srpDraft) return SK.srpDraft;   // editing a not-yet-saved profile
-    return ((SK.searchProfiles || []).filter(function (p) { return p.name === name; })[0]) || null;
+    if (!SK.srpDraft) {
+      SK.srpDraft = { name: "", steps: (SK.cfg && SK.cfg.searchSteps || []).map(function (s) { return JSON.parse(JSON.stringify(s)); }) };
+    }
+    return SK.srpDraft;
   }
 
   function buildStepEditor(host, st) {
@@ -374,7 +366,6 @@
     if (!box) return;
     var p = currentSearchProfile();
     var steps = (p && p.steps) || [];
-    if (p && !$("srp-name").value) $("srp-name").value = p.name;
     box.innerHTML = "";
     steps.forEach(function (st, i) {
       var row = document.createElement("div");
@@ -415,53 +406,31 @@
   }
 
   function wireSearchProfiles() {
-    if (!$("srp-list")) return;
-    $("srp-list").addEventListener("change", renderSearchSteps);
-    $("srp-new").addEventListener("click", function () {
-      $("srp-list").value = "";
-      $("srp-name").value = "";
-      renderSearchSteps();
-    });
+    if (!$("srp-steps")) return;
     $("srp-add-server").addEventListener("click", addSearchStepFn({ kind: "server", engine: "duckduckgo" }));
-    $("srp-add-online").addEventListener("click", addSearchStepFn({ kind: "online", connection: ((SK.cfg && SK.cfg.connections || [])[0] || {}).name || "", model: "" }));
+    $("srp-add-online").addEventListener("click", addSearchStepFn({ kind: "online", connection: "", model: "" }));
     $("srp-save").addEventListener("click", saveSearchProfile);
-    $("srp-use").addEventListener("click", function () {
-      var name = $("srp-list").value;
-      apiJson("/api/settings", "PUT", { selectedSearchProfile: name }).then(function () {
-        flashSaved("saved-srp", name ? "\u2713 uses '" + name + "'" : "\u2713 default (free DuckDuckGo)");
-      }).catch(function () { flashSaved("saved-srp", "save failed"); });
-    });
   }
 
   function addSearchStepFn(st) {
     return function () {
-      var p = currentSearchProfile();
-      if (!p) {
-        var draftName = ($("srp-name").value || "").trim();
-        p = { name: draftName, steps: [] };
-        SK.srpDraft = p;
-        if (!SK.searchProfiles) SK.searchProfiles = [];
-        SK.searchProfiles.push(p);
-      }
+      var p = currentSearchProfile();   // creates the working copy lazily
+      st = JSON.parse(JSON.stringify(st));
+      st.connection = (((SK.cfg || {}).connections || [])[0] || {}).name || "";
       p.steps.push(st);
       renderSearchSteps();
     };
   }
 
   function saveSearchProfile() {
-    var name = $("srp-name").value.trim();
-    if (!name) { $("srp-status").textContent = "Give the profile a name first."; return; }
     var p = currentSearchProfile();
     var steps = (p && p.steps) || [];
-    apiJson("/api/search-profiles", "POST", { name: name, steps: steps }).then(function () {
-      SK.srpDraft = null;
+    apiJson("/api/settings", "PUT", { searchSteps: steps }).then(function () {
       flashSaved("saved-srp", "\u2713 saved");
-      return apiJson("/api/settings", "PUT", { selectedSearchProfile: name });
-    }).then(function () {
       return loadConfigAndRender();
     }).then(function () {
-      renderSearchProfiles();
-      $("srp-list").value = name;
+      SK.srpDraft = null;
+      currentSearchProfile();
       renderSearchSteps();
       $("srp-status").textContent = "";
     }).catch(function (e) {
@@ -474,9 +443,8 @@
   // capability and skips itself (no model = no search).
   function buildSearchLadder(prof) {
     var attempts = [];
-    var selName = String((SK.cfg && SK.cfg.selectedSearchProfile) || "");
-    var profile = selName ? ((SK.cfg.searchProfiles || []).filter(function (p2) { return p2.name === selName; })[0] || null) : null;
-    var steps = profile && profile.steps && profile.steps.length ? profile.steps : [{ kind: "server", engine: "duckduckgo" }];
+    var savedSteps = (SK.cfg && SK.cfg.searchSteps) || [];
+    var steps = savedSteps.length ? savedSteps : [{ kind: "server", engine: "duckduckgo" }];
     steps.forEach(function (st) {
       if (st.kind === "server") {
         attempts.push({ server: true, engine: st.engine, label: "server:" + st.engine });
@@ -494,14 +462,16 @@
         attempts.push({ connection: st.connection, model: online, label: st.connection + " : " + online });
       }
     });
-    if (!profile) {
-      // free-only is the DEFAULT; still try the provider's own channel after
+    if (!savedSteps.length && ((prof.other || {}).connection)) {
+      // free-only is the DEFAULT when no steps are configured; still try the
+      // provider's own channel after
       var own = ((SK.cfg && SK.cfg.connections) || []).filter(function (x) { return x.name === prof.other.connection; })[0];
       if (own && own.type === "openrouter" && prof.other.model) {
         attempts.push({ connection: prof.other.connection, model: prof.other.model + ":online" });
       }
     }
-    return { attempts: attempts, profileUsed: profile ? profile.name : "" };
+    if (!attempts.length) attempts.push({ server: true, engine: "duckduckgo", label: "server:duckduckgo" });
+    return { attempts: attempts, profileUsed: savedSteps.length ? "steps" : "" };
   }
 
   function webLookup(prof, instruction) {
@@ -971,7 +941,7 @@
     "- Image requests: always return a create_image op (never generate the picture inline); SlideKick fetches it with the user's configured image model. Include a concrete, self-contained prompt in the op.",
     "- Image refinement ('refine/change the image'): write a FRESH self-contained image prompt describing the FULL desired result. Never embed previous prompts, the conversation, or op JSON into it - only the scene essentials plus the requested change. Prefer 200-600 words.",
     "- READ SLIDES ON DEMAND: the outline shows full shape text only for small decks and for the selected slide(s) - in LARGE decks every other slide shows just its title and a short preview. When you need a slide's ACTUAL content (to answer a question about it, or before rewriting it), reply with only {\"kind\":\"read_slide\",\"slides\":[N]} (1-based outline numbers, max 12). SlideKick re-asks you with the COMPLETE text of those slides. Never guess content from a title.",
-    "- LIVE WEB LOOKUPS: when the request needs up-to-date info you cannot reliably know (current events, news, prices, recent releases, rankings, live data), reply with ONLY {\"kind\":\"web_lookup\"} - nothing else. SlideKick then runs a web-enabled lookup and re-asks you with fresh citable results. Never use it for deck/document/mail edits, styling, general concepts, or what the outline/context already answers. Lookups are INTERNAL actions - free (never gated/approved) - and you may reply with later rounds of {\"kind\":\"web_lookup\"} as well (up to 3 lookups per run). You have no web access yourself and cannot run a search; the lookup channel belongs to SlideKick - never claim you tried a lookup or that the lookup channel is unavailable, and never refuse for lack of live data: reply with {\"kind\":\"web_lookup\"} instead.",
+    "- LIVE WEB LOOKUPS: when the request needs up-to-date info you cannot reliably know (current events, news, prices, recent releases, rankings, live data), reply with ONLY {\"kind\":\"web_lookup\"} - nothing else. SlideKick then runs a web-enabled lookup and re-asks you with fresh citable results. Never use it for deck/document/mail edits, styling, general concepts, or what the outline/context already answers. Lookups are INTERNAL actions - free (never gated/approved) - and you may reply with later rounds of {\"kind\":\"web_lookup\"} as well (up to 3 lookups per run). After a lookup you may also ask for the FULL text of one page from its results by replying with ONLY {\"kind\":\"read_page\",\"url\":\"https://...\"} (internal, free, up to 4 pages per run). You have no web access yourself and cannot run a search; the lookup channel belongs to SlideKick - never claim you tried a lookup or that the lookup channel is unavailable, and never refuse for lack of live data: reply with {\"kind\":\"web_lookup\"} instead.",
 
   ].join("\n");
 
@@ -3708,6 +3678,7 @@ OfficeDeck.prototype.setNotes = function (i, text) {
       SK.lastCtx = ctx;
       SK.readRounds = 0;
       SK.webRounds = 0;
+      SK.pageReads = 0;
       SK.webResults = "";
       var webPromise = Promise.resolve("");
       return webPromise.then(function () {
@@ -3762,6 +3733,7 @@ OfficeDeck.prototype.setNotes = function (i, text) {
               askedLookup = true;
               return webLookupThen(resp);
             }
+            if (pre.ok && pre.kind === "read_page") return readPageThen(resp);
             if (pre.ok && pre.kind === "read_slide") return readSlideThen(resp);
             return resp;
           });
@@ -3799,6 +3771,32 @@ OfficeDeck.prototype.setNotes = function (i, text) {
           });
         }).catch(function (e) {
           return { ok: true, kind: "reply", text: "The live web lookup failed: " + ((e && e.message) || e) };
+        });
+      }
+      // read_page: the model wants the FULL text of one page (usually a link
+      // from a lookup result). Internal + free; up to 4 reads per run.
+      function readPageThen(resp) {
+        var pre = tryParse(resp.text);
+        var url = String(pre.url || "");
+        if ((SK.pageReads || 0) >= 4) {
+          return { ok: true, kind: "reply",
+                   text: "Page reads were already run the maximum of 4 times this run. Decide with the text you have, or state what you could not verify." };
+        }
+        SK.pageReads = (SK.pageReads || 0) + 1;
+        dbg("read_page", { round: SK.pageReads, url: url.slice(0, 160) });
+        setStatus("Reading the requested page (" + SK.pageReads + ")\u2026", "busy");
+        return fetchPageText(url).then(function (pg) {
+          if (!pg || !pg.text) {
+            return { ok: true, kind: "reply",
+                     text: "Could not read " + url + " from the server\'s fetcher. Pick a different page from the results, or decide with what you have." };
+          }
+          messages = messages.concat([{ role: "assistant", content: pre.text || JSON.stringify({ kind: "read_page", url: url }) },
+                                      { role: "user", content: "PAGE CONTENT (" + (pg.title || pg.url || url) + ") - " + url + ":\n" + pg.text +
+                                        "\n\nUse it for the ORIGINAL USER REQUEST; cite the page. The required JSON format rules apply again." }]);
+          setStatus("Answering with the requested page\u2026", "busy");
+          return mainAsk2();
+        }).catch(function (e) {
+          return { ok: true, kind: "reply", text: "Page read failed: " + ((e && e.message) || e) };
         });
       }
       // read_slide: the model asked for the FULL text of specific slide(s);
@@ -3840,6 +3838,7 @@ OfficeDeck.prototype.setNotes = function (i, text) {
           .then(function (resp) {
             var pre = tryParse(resp.text);
             if (pre.ok && pre.kind === "web_lookup") return webLookupThen(resp);
+            if (pre.ok && pre.kind === "read_page") return readPageThen(resp);
             if (pre.ok && pre.kind === "read_slide") return readSlideThen(resp);
             return resp;
           });
@@ -4193,6 +4192,11 @@ OfficeDeck.prototype.setNotes = function (i, text) {
       if (obj.kind === "reply") {
         if (typeof obj.text === "string") return { ok: true, kind: "reply", text: obj.text };
         return { ok: true, kind: "reply", text: String(obj.text == null ? "" : JSON.stringify(obj.text)) };
+      }
+      if (obj.kind === "read_page" && typeof obj.url === "string" && /^https?:\/\//i.test(obj.url)) {
+        // an internal page-read intent: the pane fetches the page text and
+        // re-asks (free, never gated)
+        return { ok: true, kind: "read_page", url: obj.url.split("#")[0], text: stripped };
       }
       if (obj.kind === "web_lookup") {
         // an internal lookup intent: no ops, no approval - the pane runs the

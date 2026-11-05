@@ -34,7 +34,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 APP = "OfficeKick"
-VERSION = "0.9.162"
+VERSION = "0.9.163"
 
 # --------------------------------------------------------------------------- #
 # Self-restart: the server watches for <cfg dir>/restart.flag. Whatever writes
@@ -612,8 +612,19 @@ class Store:
         # searchKeys; the single webSearchKey (pre-0.9.159) migrates on
         # first load.
         self.data.setdefault("searchProfiles", [])
+        self.data.setdefault("searchSteps", [])
         self.data.setdefault("selectedSearchProfile", "")
         self.data.setdefault("searchKeys", {})
+        # 0.9.163: the single unnamed profile absorbs the named ones
+        if not self.data.get("searchSteps"):
+            sel = str(self.data.get("selectedSearchProfile") or "")
+            for p in (self.data.get("searchProfiles") or []):
+                if sel and p.get("name") == sel and p.get("steps"):
+                    self.data["searchSteps"] = p["steps"]
+                    break
+            if self.data.get("searchSteps"):
+                self.data["searchProfiles"] = []
+                self.data["selectedSearchProfile"] = ""
         legacy_key = str(self.data.get("webSearchKey") or "")
         legacy_engine = str(self.data.get("webSearchEngine") or "auto")
         keys = self.data.get("searchKeys") or {}
@@ -730,27 +741,7 @@ class Store:
     def search_profile_upsert(self, name, steps):
         if not valid_name(name):
             raise ApiError(400, "Search profile name must be 1-64 chars")
-        clean = []
-        for st in (steps or [])[:6]:
-            if not isinstance(st, dict):
-                continue
-            kind = str(st.get("kind") or "")
-            if kind == "server":
-                eng = str(st.get("engine") or "")
-                if eng not in ("duckduckgo", "brave", "tavily", "firecrawl"):
-                    raise ApiError(400, "unknown search engine: %r" % eng)
-                clean.append({"kind": "server", "engine": eng})
-            elif kind == "online":
-                conn = str(st.get("connection") or "")
-                if not self.find_connection(conn):
-                    raise ApiError(400, "Lookup step references unknown connection: %r" % conn)
-                model = str(st.get("model") or "").strip()
-                step = {"kind": "online", "connection": conn}
-                if model:
-                    step["model"] = model[:160]
-                clean.append(step)
-            else:
-                raise ApiError(400, "search step kind must be server|online")
+        clean = validate_search_steps(self, steps)
         prof = {"name": name.strip()[:64], "steps": clean}
         lst = self.data.get("searchProfiles") or []
         for i2, p in enumerate(lst):
@@ -759,11 +750,9 @@ class Store:
                 break
         else:
             lst.append(prof)
-        self.data["searchProfiles"] = lst
-        if not self.data.get("selectedSearchProfile"):
-            self.data["selectedSearchProfile"] = prof["name"]
         self.save()
         return prof
+
 
     def search_profile_delete(self, name):
         lst = self.data.get("searchProfiles") or []
@@ -935,8 +924,7 @@ class Store:
             "webSearchEngine": str(d.get("webSearchEngine", "auto") or "auto"),
             # keys never leave the box: only set/unset markers are public
             "webSearchKeySet": bool(d.get("webSearchKey", "")),
-            "searchProfiles": [dict(p) for p in (d.get("searchProfiles") or [])],
-            "selectedSearchProfile": str(d.get("selectedSearchProfile", "") or ""),
+            "searchSteps": [dict(st) for st in (d.get("searchSteps") or [])],
             "searchKeysSet": {k: bool(v) for k, v in (d.get("searchKeys") or {}).items() if k in ("brave", "tavily", "firecrawl")},
             "customPromptDefault": DEFAULT_CUSTOM_PROMPT,
             "trackedChanges": bool(d.get("trackedChanges", False)),
@@ -1289,6 +1277,32 @@ def filter_web_models(store, conn_name):
         ml = str(mid).lower()
         return any(h in ml for h in WEB_MODEL_NAME_HINTS)
     return [x for x in ids if _webish(x)]
+
+
+def validate_search_steps(store, steps):
+    """Validate an ordered lookup sequence: server engines or online lookups."""
+    clean = []
+    for st in (steps or [])[:6]:
+        if not isinstance(st, dict):
+            continue
+        kind = str(st.get("kind") or "")
+        if kind == "server":
+            eng = str(st.get("engine") or "")
+            if eng not in ("duckduckgo", "brave", "tavily", "firecrawl"):
+                raise ApiError(400, "unknown search engine: %r" % (eng,))
+            clean.append({"kind": "server", "engine": eng})
+        elif kind == "online":
+            conn = str(st.get("connection") or "")
+            if not store.find_connection(conn):
+                raise ApiError(400, "Lookup step references unknown connection: %r" % (conn,))
+            model = str(st.get("model") or "").strip()
+            step = {"kind": "online", "connection": conn}
+            if model:
+                step["model"] = model[:160]
+            clean.append(step)
+        else:
+            raise ApiError(400, "search step kind must be server|online")
+    return clean
 
 
 IMAGE_MODEL_NAME_HINTS = (
@@ -2597,8 +2611,9 @@ class SlideKickHandler(BaseHTTPRequestHandler):
                 if body.get("webSearchKey") is not None:
                     self.store.data["webSearchKey"] = str(body["webSearchKey"] or "")[:200]
                     changed = True
-                if body.get("selectedSearchProfile") is not None:
-                    self.store.data["selectedSearchProfile"] = str(body["selectedSearchProfile"] or "")[:64]
+                if isinstance(body.get("searchSteps"), list):
+                    steps2 = validate_search_steps(self.store, body["searchSteps"])
+                    self.store.data["searchSteps"] = steps2
                     changed = True
                 if isinstance(body.get("searchKeys"), dict):
                     keys2 = self.store.data.get("searchKeys") or {}
