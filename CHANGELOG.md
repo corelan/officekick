@@ -30,6 +30,26 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.183
+### Added
+- **Pane error log (timestamped)**: every uncaught task-pane error -
+  window.onerror / unhandledrejection, including the ones that kill the
+  boot wiring like the 0.9.177 regression - is POSTed to the local server
+  and appended to ~/.officekick/logs/pane-errors-YYYY-MM-DD.log (one JSON
+  line: timestamp, kind, message, stack, pane path, server version, UA).
+  Always on, not behind the debug toggle; a 4 s dedupe avoids storming.
+  Files clean up with the other logs (logCleanDays).
+- **install.py surfaces it**: --status / --start / install+update output
+  print a warning with the file path and the last entry when panes crashed
+  TODAY, so a broken pane on the desktop points straight at its paper
+  trail.
+### Fixed
+- **Deleting the CURRENT session**: the History tab's Delete button now
+  double-confirms ("Delete CURRENT session?" -> "Really remove the
+  CURRENT session?" + a status explanation) and, when confirmed, wipes
+  the session's traces from the Sessions tab (chat output, previous
+  requests, session label/resume key) and resets to a fresh session.
+  Deleting a non-current session keeps its single confirm.
 ## 0.9.181
 ### Fixed
 - **Panes dead at "starting..." with empty Connections/Profiles and the

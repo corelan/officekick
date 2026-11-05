@@ -7,6 +7,41 @@
  * -> validation against deck context -> approval gate -> Office.js apply.
  */
 (function () {
+
+  // PANIC TRAP (0.9.182): every uncaught pane error (window.onerror /
+  // unhandledrejection) reports to the local server -> a timestamped,
+  // app-tagged JSON line in ~/.officekick/logs/pane-errors-<day>.log.
+  // Installed FIRST so even boot/wiring crashes are reported; never throws.
+  var _errLastMsg = "", _errLastT = 0;
+  function _paneErr(kind, msg, extra) {
+    try {
+      var t = +new Date();
+      if (msg === _errLastMsg && t - _errLastT < 4000) return;   // 4 s dedupe
+      _errLastMsg = msg; _errLastT = t;
+      var payload = {
+        kind: String(kind || "uncaught"),
+        message: String(msg == null ? "" : msg).slice(0, 800),
+        stack: String((extra && extra.stack) || "").slice(0, 2000),
+        at: String((extra && extra.fileName) || "").slice(0, 200),
+        line: (extra && extra.lineNumber) || 0,
+        ua: String(navigator.userAgent).slice(0, 200),
+        pane: String(window.location.pathname).slice(0, 120),
+        href: String(window.location.href).slice(0, 200)
+      };
+      var xr = new XMLHttpRequest();
+      xr.open("POST", "/api/pane-error", true);
+      xr.setRequestHeader("Content-Type", "application/json");
+      xr.send(JSON.stringify(payload));
+    } catch (eP) { /* the trap must never break the pane */ }
+  }
+  window.onerror = function (m, s, l, c, e) {
+    _paneErr("uncaught", m + " @" + (s || "?") + ":" + l, e);
+  };
+  window.addEventListener("unhandledrejection", function (ev) {
+    var r = ev && ev.reason;
+    _paneErr("rejection", String((r && (r.message || r.stack)) || r), (r instanceof Error) ? r : "");
+  });
+
   "use strict";
 
   var $ = function (id) { return document.getElementById(id); };
@@ -1156,10 +1191,26 @@
 
 
   function deleteSession(sessId) {
+    var wasCurrent = (SK.sessionId === sessId);
     apiJson("/api/sessions/" + sessId, "DELETE").then(function () {
-      if (SK.sessionId === sessId) {
-        SK.sessionId = null; SK.sessionName = "";
+      try { delete SK.sessionNames[sessId]; } catch (eN) {}
+      if (wasCurrent) {
+        // removing the ACTIVE session = wipe its slate + ready a new one
+        SK.sessionId = null; SK.sessionName = ""; SK.sessionManual = false;
+        SK.history = [];
         try { localStorage.removeItem("sk-resume-session-' + app + '"); } catch (eS) {}
+        var inp0 = $("chat-input");
+        if (inp0) { inp0.disabled = false; inp0.value = ""; }
+        var el0 = $("chat-output");
+        if (el0) el0.innerHTML = "";
+        var body0 = $("past-body");
+        if (body0) body0.innerHTML = "";
+        updatePastBox();
+        updateSessionLabel();
+        renderSessions();
+        switchTab("chat");
+        setStatus("Current session removed - a new session is ready.", "ok");
+        return;
       }
       renderSessions();
       setStatus("Session deleted.", "ok");
@@ -1343,13 +1394,26 @@
           b.textContent = pair[0];
           b.addEventListener("click", function () {
             if (pair[1] && b.dataset.armed !== "1") {
-              // two-stage confirm: the second click within 3.5 s deletes
+              // stage 1 confirm: the next click deletes - but the CURRENT
+              // session demands an explicit second confirmation (0.9.183)
               b.dataset.armed = "1";
-              b.textContent = "Really delete?";
+              b.textContent = (SK.sessionId === row.id)
+                ? "Delete CURRENT session?" : "Really delete?";
               b.classList.add("armed");
               setTimeout(function () {
-                if (b.parentNode) { b.dataset.armed = "0"; b.textContent = "Delete"; b.classList.remove("armed"); }
+                if (b.parentNode) { b.dataset.armed = "0"; b.dataset.armed2 = "0"; b.textContent = "Delete"; b.classList.remove("armed"); }
               }, 3500);
+              return;
+            }
+            if (pair[1] && SK.sessionId === row.id && b.dataset.armed2 !== "1") {
+              // stage 2: the wording makes clear this is the ACTIVE session
+              b.dataset.armed2 = "1";
+              b.textContent = "Really remove the CURRENT session?";
+              b.classList.add("armed");
+              setStatus("You are about to remove the CURRENT session - click once more to confirm (a fresh session starts).", "busy");
+              setTimeout(function () {
+                if (b.parentNode) { b.dataset.armed = "0"; b.dataset.armed2 = "0"; b.textContent = "Delete"; b.classList.remove("armed"); }
+              }, 6000);
               return;
             }
             if (pair[1]) deleteSession(row.id); else resumeSession(row.id);

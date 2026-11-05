@@ -34,7 +34,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 APP = "OfficeKick"
-VERSION = "0.9.181"
+VERSION = "0.9.183"
 
 # --------------------------------------------------------------------------- #
 # Self-restart: the server watches for <cfg dir>/restart.flag. Whatever writes
@@ -1075,7 +1075,7 @@ class Store:
         cutoff = time.time() - days * 86400
         removed = 0
         for f in sorted(logdir.glob("*.log")):
-            if not f.name.startswith(("debug-", "access-")):
+            if not f.name.startswith(("debug-", "access-", "pane-errors-")):
                 continue
             try:
                 if f.stat().st_mtime < cutoff:
@@ -1147,6 +1147,7 @@ class Store:
 # Debug logging (daily append file, opt-in)
 # --------------------------------------------------------------------------- #
 DBG_LOCK = threading.Lock()
+PANE_ERR_LOCK = threading.Lock()
 
 
 def dbg_line(store, source, category, payload):
@@ -1181,6 +1182,50 @@ def dbg_line(store, source, category, payload):
                 fh.write(line + "\n")
     except Exception:
         pass
+
+
+def pane_error_log(store, body):
+    """Timestamped pane crash report: one JSON line per uncaught error a pane
+    traps (window.onerror / unhandledrejection), app-tagged with the pane
+    path + server version. ALWAYS written - not behind the debug flag; the
+    pane WebView has nowhere else to report. Files:
+    ~/.officekick/logs/pane-errors-YYYY-MM-DD.log, cleaned with the other
+    logs after logCleanDays."""
+    try:
+        if store is None:
+            return {"ok": False, "error": "no config store"}
+        import datetime
+        logdir = store.path.parent / "logs"
+        logdir.mkdir(mode=0o700, parents=True, exist_ok=True)
+        try:
+            os.chmod(logdir, 0o700)
+        except OSError:
+            pass
+        now = datetime.datetime.now()
+        path = logdir / ("pane-errors-" + now.strftime("%Y-%m-%d") + ".log")
+        b = body if isinstance(body, dict) else {}
+        entry = {
+            "ts": now.strftime("%Y-%m-%d %H:%M:%S"),
+            "server": VERSION,
+            "kind": str(b.get("kind") or "uncaught")[:64],
+            "message": str(b.get("message") or "")[:800],
+            "stack": str(b.get("stack") or "")[:2000],
+            "at": str(b.get("at") or "")[:200],
+            "line": b.get("line") or 0,
+            "ua": str(b.get("ua") or "")[:200],
+            "pane": str(b.get("pane") or "")[:120],
+            "href": str(b.get("href") or "")[:200],
+        }
+        with PANE_ERR_LOCK:
+            with open(path, "a", encoding="utf-8") as fh:
+                fh.write(json.dumps(entry, ensure_ascii=False) + "\n")
+        try:
+            os.chmod(path, 0o600)
+        except OSError:
+            pass
+        return {"ok": True, "file": str(path), "server": VERSION}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
 
 
 # --------------------------------------------------------------------------- #
@@ -2731,6 +2776,8 @@ class SlideKickHandler(BaseHTTPRequestHandler):
                     "apiKey": key,
                 }
                 self._send_json(provider_list_models_conn(conn, self.store))
+            elif path == "/api/pane-error":
+                self._send_json(pane_error_log(self.store, body))
             elif path == "/api/debug":
                 dbg_line(self.store, "taskpane",
                          str(body.get("category") or "event"), body.get("data"))

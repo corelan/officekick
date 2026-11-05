@@ -238,6 +238,7 @@ what happened).
 | Config (+ all API keys, chmod 600) | `~/.officekick/config.json` |
 | Sessions | `~/.officekick/sessions/` |
 | Debug + access logs (when enabled) | `~/.officekick/logs/` |
+| Pane error log (always on) | `~/.officekick/logs/pane-errors-YYYY-MM-DD.log` |
 | Installed server | `~/Library/Application Support/OfficeKick/` (macOS) / `%LOCALAPPDATA%\OfficeKick` (Windows) |
 | Add-in manifests per app | each Office container's `Data/Documents/wef/` (macOS) |
 

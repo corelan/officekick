@@ -281,6 +281,7 @@ def start_only():
         if rv and hv and hv != rv:
             warn("the running build (%s) differs from this checkout (%s) - "
                  "run install.py --update" % (hv, rv))
+        check_pane_errors()
         return
     stop_server()
     if start_server():
@@ -1046,6 +1047,7 @@ def done_note(mode_name):
     out("  (About tab -> 'Pane build' should say %s)." % read_version())
     out("  Simulator (no Office needed): http://127.0.0.1:%d/slidekick/static/simulator.html" % PORT)
     out("  Config: %s - API keys stay local (chmod 600)." % config_dir())
+    check_pane_errors()
 
 
 def git_pull():
@@ -1062,6 +1064,38 @@ def git_pull():
     else:
         warn("git pull failed - continuing with the current checkout%s" %
              ((": " + o) if o else ""))
+
+
+def check_pane_errors():
+    """Point the user at the pane error log when panes crashed today (0.9.182):
+    every uncaught task-pane error is appended to
+    <config>/logs/pane-errors-YYYY-MM-DD.log by the server - the task pane's
+    webview console is invisible from the desktop, so this is the paper trail."""
+    import json as _json
+    try:
+        logdir = os.path.join(config_dir(), "logs")
+        if not os.path.isdir(logdir):
+            return
+        import datetime
+        cand = os.path.join(logdir, "pane-errors-" + datetime.datetime.now().strftime("%Y-%m-%d") + ".log")
+        if not os.path.isfile(cand):
+            return
+        with open(cand, "r", encoding="utf-8", errors="replace") as fh:
+            rows = [x for x in fh.read().splitlines() if x.strip()]
+        if not rows:
+            return
+        try:
+            last = _json.loads(rows[-1])
+            laststr = "%s  %s: %s" % (last.get("ts", ""), last.get("pane", "?"),
+                                      str(last.get("message", ""))[:110])
+        except Exception:
+            laststr = rows[-1][:130]
+        warn("panes crashed today - %d entr%s in the pane error log" %
+             (len(rows), "y" if len(rows) == 1 else "ies"))
+        out("       %s" % cand)
+        out("       last: %s" % laststr)
+    except Exception:
+        pass
 
 
 # ------------------------------------------------------------------- flows #
@@ -1115,6 +1149,7 @@ def main():
         h = health(PORT)
         if h:
             ok("running: http://127.0.0.1:%d (version %s)" % (PORT, h.get("version")))
+            check_pane_errors()
             raise SystemExit(0)
         out("  not running on port %d (try: install.py --start)" % PORT)
         raise SystemExit(1)
