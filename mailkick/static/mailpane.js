@@ -282,6 +282,199 @@
       return blocks;
     });
   }
+  // ------------------------- search profiles ------------------------- //
+  function renderSearchProfiles() {
+    var sel0 = $("srp-list");
+    if (!sel0) return;
+    apiJson("/api/search-profiles", "GET").then(function (res) {
+      var profiles = (res && res.profiles) || [];
+      SK.searchProfiles = profiles;
+      var keep = sel0.value;
+      sel0.innerHTML = '<option value="">(no profile - free DuckDuckGo only)</option>' + profiles.map(function (p) {
+        return '<option value="' + esc(p.name) + '"' + (p.name === res.selected ? " selected" : "") + ">" + esc(p.name) + "</option>";
+      }).join("");
+      if (keep && profiles.some(function (p) { return p.name === keep; })) sel0.value = keep;
+      renderSearchSteps();
+    }).catch(function (e) { setStatus("Could not load search profiles: " + ((e && e.message) || e), "error"); });
+  }
+
+  function currentSearchProfile() {
+    var sel0 = $("srp-list");
+    var name = sel0 ? sel0.value : "";
+    return ((SK.searchProfiles || []).filter(function (p) { return p.name === name; })[0]) || null;
+  }
+
+  function buildStepEditor(host, st) {
+    host.innerHTML = "";
+    if (st.kind === "server") {
+      var engines = ["duckduckgo", "brave", "tavily", "firecrawl"];
+      var es = document.createElement("select");
+      es.innerHTML = engines.map(function (e) { return '<option value="' + e + '">' + e + "</option>"; }).join("");
+      es.value = engines.indexOf(st.engine) >= 0 ? st.engine : "duckduckgo";
+      es.addEventListener("change", function () { st.engine = es.value; });
+      host.appendChild(es);
+    } else {
+      var conns = (SK.cfg && SK.cfg.connections) || [];
+      var cs = document.createElement("select");
+      cs.innerHTML = conns.map(function (c) { return '<option value="' + esc(c.name) + '">' + esc(c.name) + " (" + esc(c.type) + ")</option>"; }).join("");
+      cs.value = st.connection || (conns.length ? conns[0].name : "");
+      cs.addEventListener("change", function () { st.connection = cs.value; st.model = ""; fillWebModelSelect(st, cs); });
+      host.appendChild(cs);
+      var ms = document.createElement("select");
+      ms.id = "srp-step-model-" + (st.connection || "x");
+      host.appendChild(ms);
+      var hint = document.createElement("span");
+      hint.className = "opnote";
+      hint.textContent = connLookupCapability(cs.value);
+      host.appendChild(hint);
+      fillWebModelSelect(st, cs, ms);
+    }
+    return host;
+  }
+
+  function fillWebModelSelect(st, cs, ms) {
+    if (!ms) {
+      ms = document.createElement("select");   // not used
+    }
+    ms.innerHTML = '<option value="">(connection default)</option>';
+    if (cs.value) {
+      modelsCacheGet(cs.value, true, "web").then(function (list) {
+        (list || []).forEach(function (m) {
+          var o = document.createElement("option");
+          o.value = m; o.textContent = m;
+          ms.appendChild(o);
+        });
+        if (st.model && list.indexOf(st.model) >= 0) ms.value = st.model;
+      }).catch(function () {});
+    }
+    ms.addEventListener("change", function () { st.model = ms.value; });
+  }
+
+  function renderSearchSteps() {
+    var box = $("srp-steps");
+    if (!box) return;
+    var p = currentSearchProfile();
+    var steps = (p && p.steps) || [];
+    if (p && !$("srp-name").value) $("srp-name").value = p.name;
+    box.innerHTML = "";
+    steps.forEach(function (st, i) {
+      var row = document.createElement("div");
+      row.className = "row row-tight";
+      var n = document.createElement("span");
+      n.className = "opnote";
+      n.textContent = (i + 1) + ".";
+      row.appendChild(n);
+      var kindSel = document.createElement("select");
+      kindSel.innerHTML = '<option value="server">server engine</option><option value="online">online lookup</option>';
+      kindSel.value = st.kind;
+      kindSel.addEventListener("change", function () { st.kind = kindSel.value; buildStepEditor(row, st); });
+      row.appendChild(kindSel);
+      row.appendChild(buildStepEditor(document.createElement("span"), st));
+      var del = document.createElement("button");
+      del.className = "btn subtle danger";
+      del.type = "button";
+      del.textContent = "\u00d7";
+      del.title = "Remove this step";
+      del.addEventListener("click", function () { p.steps.splice(i, 1); renderSearchSteps(); });
+      row.appendChild(del);
+      box.appendChild(row);
+    });
+    if (!steps.length) {
+      var empty = document.createElement("div");
+      empty.className = "opnote";
+      empty.textContent = "(no steps yet - add one below)";
+      box.appendChild(empty);
+    }
+  }
+
+  function connLookupCapability(connName) {
+    var c = ((SK.cfg && SK.cfg.connections) || []).filter(function (x) { return x.name === connName; })[0];
+    if (!c) return "(unknown connection)";
+    if (c.type === "openrouter") return "native: :online attaches to any model";
+    if (c.type === "openai" || c.type === "generic-openai") return "needs a search-preview model";
+    return "no native web search - this step skips itself";
+  }
+
+  function wireSearchProfiles() {
+    if (!$("srp-list")) return;
+    $("srp-list").addEventListener("change", renderSearchSteps);
+    $("srp-new").addEventListener("click", function () {
+      $("srp-list").value = "";
+      $("srp-name").value = "";
+      renderSearchSteps();
+    });
+    $("srp-add-server").addEventListener("click", addSearchStepFn({ kind: "server", engine: "duckduckgo" }));
+    $("srp-add-online").addEventListener("click", addSearchStepFn({ kind: "online", connection: ((SK.cfg && SK.cfg.connections || [])[0] || {}).name || "", model: "" }));
+    $("srp-save").addEventListener("click", saveSearchProfile);
+    $("srp-use").addEventListener("click", function () {
+      var name = $("srp-list").value;
+      apiJson("/api/settings", "PUT", { selectedSearchProfile: name }).then(function () {
+        flashSaved("saved-srp", name ? "\u2713 uses '" + name + "'" : "\u2713 default (free DuckDuckGo)");
+      }).catch(function () { flashSaved("saved-srp", "save failed"); });
+    });
+  }
+
+  function addSearchStepFn(st) {
+    return function () {
+      var p = currentSearchProfile();
+      if (!p) { $("srp-status").textContent = "Type a name and save the profile first (or select one)."; return; }
+      p.steps.push(st);
+      renderSearchSteps();
+    };
+  }
+
+  function saveSearchProfile() {
+    var name = $("srp-name").value.trim();
+    if (!name) { $("srp-status").textContent = "Give the profile a name first."; return; }
+    var p = currentSearchProfile();
+    var steps = (p && p.steps) || [];
+    apiJson("/api/search-profiles", "POST", { name: name, steps: steps }).then(function () {
+      flashSaved("saved-srp", "\u2713 saved");
+      return apiJson("/api/settings", "PUT", { selectedSearchProfile: name });
+    }).then(function () {
+      return loadConfigAndRender();
+    }).then(function () {
+      renderSearchProfiles();
+      $("srp-status").textContent = "";
+    }).catch(function (e) {
+      $("srp-status").textContent = "Save failed: " + ((e && e.message) || e);
+    });
+  }
+
+  // the RUN order = the selected search profile's steps; no profile = the
+  // free DuckDuckGo engine. An online step checks the connection's actual
+  // capability and skips itself (no model = no search).
+  function buildSearchLadder(prof) {
+    var attempts = [];
+    var selName = String((SK.cfg && SK.cfg.selectedSearchProfile) || "");
+    var profile = selName ? ((SK.cfg.searchProfiles || []).filter(function (p2) { return p2.name === selName; })[0] || null) : null;
+    var steps = profile && profile.steps && profile.steps.length ? profile.steps : [{ kind: "server", engine: "duckduckgo" }];
+    steps.forEach(function (st) {
+      if (st.kind === "server") {
+        attempts.push({ server: true, engine: st.engine, label: "server:" + st.engine });
+      } else {
+        var c = ((SK.cfg && SK.cfg.connections) || []).filter(function (x) { return x.name === st.connection; })[0];
+        if (!c) return;
+        if (c.type === "ollama" || c.type === "llamacpp") return;   // cannot look up -> next step
+        var model = String(st.model || "");
+        if ((c.type === "openai" || c.type === "generic-openai") && !/search-preview/i.test(model)) {
+          // no native searching model selected: skip this step
+          return;
+        }
+        var online = c.type === "openrouter" ? (model ? model + ":online" : ":online") : model;
+        if (!online) return;
+        attempts.push({ connection: st.connection, model: online, label: st.connection + " : " + online });
+      }
+    });
+    if (!profile) {
+      // free-only is the DEFAULT; still try the provider's own channel after
+      if (((prof.other || {}).connection) && connOf(prof.other.connection).type === "openrouter") {
+        attempts.push({ connection: prof.other.connection, model: prof.other.model + ":online" });
+      }
+    }
+    return { attempts: attempts, profileUsed: profile ? profile.name : "" };
+  }
+
   function webLookup(prof, instruction) {
     var ref = prof.other && prof.other.connection && prof.other.model ? prof.other : prof.content;
     var sys = "You have LIVE WEB ACCESS. Research the user's request with web search now. " +
@@ -299,36 +492,8 @@
     // capability ladder: OpenRouter's :online plugin first (native search);
     // then the SERVER-SIDE keyless search (works for every connection kind);
     // then an OpenAI search-preview model (native search) when present.
-    var openaiSearch = null;
-    (SK.cfg.connections || []).forEach(function (c) {
-      if (openaiSearch || (c.type !== "openai" && c.type !== "generic-openai")) return;
-      openaiSearch = { connection: c.name, model: "gpt-4o-mini-search-preview" };
-    });
-    var attempts = [];
-    // the profile's own web slot (if set) = tried first: on OpenRouter the
-    // :online plugin attaches to any model; on other providers the model
-    // must search natively (e.g. OpenAI search-preview)
-    if (prof.web && prof.web.connection && prof.web.model) {
-      var wconn = connOf(prof.web.connection);
-      var wmodel = String(prof.web.model || "");
-      attempts.push({ connection: prof.web.connection,
-                      model: (wconn.type === "openrouter") ? wmodel + ":online" : wmodel });
-    }
-    if (connOf(ref.connection).type === "openrouter") {
-      attempts.push({ connection: ref.connection, model: ref.model + ":online" });
-    }
-    (SK.cfg.connections || []).forEach(function (c) {
-      if (c.type !== "openrouter") return;
-      var dup = attempts.some(function (a) { return a.connection === c.name; });
-      if (dup) return;
-      attempts.push({ connection: c.name, model: "openai/gpt-4o-mini:online" });
-    });
-    // when no model-side channel answers, the server searches itself + the
-    // pane turns results into facts; OpenAI's native search-preview model
-    // is the last model-side attempt
-    attempts.push({ server: true });
-    if (openaiSearch) attempts.push(openaiSearch);
-    var chosenEngine = String((SK.cfg && SK.cfg.webSearchEngine) || "auto");
+    var ladder = buildSearchLadder(prof);
+    var attempts = ladder.attempts;    var chosenEngine = String((SK.cfg && SK.cfg.webSearchEngine) || "auto");
     if (chosenEngine === "duckduckgo" || chosenEngine === "brave" || chosenEngine === "tavily") {
       attempts.unshift({ server: true });   // the user picked this engine: use it first
     }
@@ -339,7 +504,7 @@
     };
     var one = function (a) {
       if (a && a.server) {
-        return apiJson("/api/web-search?q=" + encodeURIComponent(instruction.slice(0, 240)), "GET")
+        return apiJson("/api/web-search?q=" + encodeURIComponent(instruction.slice(0, 240)) + "&engine=" + encodeURIComponent(a.engine || "duckduckgo"), "GET")
           .then(function (res) {
             if (!res || !res.ok || !(res.results || []).length) return "";
             var lines = (res.results || []).slice(0, 8).map(function (r) {
@@ -3468,6 +3633,7 @@ function applyOps(deck, ops, ctx) {
       dbg("config.loaded", { connections: (cfg.connections || []).length, profiles: (cfg.profiles || []).length, debug: cfg.debug });
       renderChat();
       renderConnections();
+      renderSearchProfiles();
       renderProfiles();
       renderSettings();
       renderAbout();
@@ -3728,6 +3894,7 @@ function applyOps(deck, ops, ctx) {
     }
     updateSessionLabel();
     wireSessions();
+    wireSearchProfiles();
     wireTemplates();
     $("req-clear").addEventListener("click", clearRequests);
     $("req-refresh").addEventListener("click", renderRequests);

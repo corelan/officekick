@@ -93,6 +93,7 @@
       <button data-subtab="approvals">Approval policy</button>
       <button data-subtab="connections">Connections</button>
       <button data-subtab="profiles">Profiles</button>
+        <button data-subtab="search">Search</button>
       <button data-subtab="inspector">Inspector</button>
     </div>
     <div class="subpanel active" id="sub-general">
@@ -268,7 +269,26 @@
         <div id="prof-formmsg" class="formmsg"></div>
       </form>
         </div>
-    <div class="subpanel" id="sub-inspector">
+    <div class="subpanel" id="sub-search">
+      <h2 class="sheettitle">Web search profiles</h2>
+      <p class="muted" style="margin:0 0 6px 0">A profile = an ordered lookup sequence. Top step runs first; a step without results falls to the next; all failed = the lookup gives up. No profile = the free keyless DuckDuckGo engine. An "online lookup" step uses the selected connection's models (OpenRouter attaches its web plugin to any model; other providers need a model that searches natively - the step skips itself when the connection has no web-capable model or none is selected).</p>
+      <div class="row"><select id="srp-list" style="max-width:260px"></select>
+        <button id="srp-new" class="btn subtle" type="button">New profile</button>
+        <button id="srp-delete" class="btn subtle danger" type="button">Delete</button></div>
+      <div class="row"><input id="srp-name" type="text" placeholder="profile name" maxlength="64" style="max-width:260px" /></div>
+      <div id="srp-steps"></div>
+      <div class="row">
+        <button id="srp-add-server" class="btn subtle" type="button">+ server engine step</button>
+        <button id="srp-add-online" class="btn subtle" type="button">+ online lookup step</button>
+      </div>
+      <div class="row">
+        <button id="srp-save" class="btn primary" type="button">Save search profile</button>
+        <button id="srp-use" class="btn" type="button">Use this profile</button>
+        <span class="savedflash" id="saved-srp" aria-live="polite"></span>
+      </div>
+      <p class="muted" id="srp-status" style="margin:4px 0 0 0"></p>
+      </div>
+      <div class="subpanel" id="sub-inspector">
       <div class="row row-wrap">
         <button id="req-clear" class="btn subtle" type="button">Clear log</button>
         <button id="req-refresh" class="btn subtle" type="button">Refresh</button>

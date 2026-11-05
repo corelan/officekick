@@ -34,7 +34,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 APP = "OfficeKick"
-VERSION = "0.9.158"
+VERSION = "0.9.159"
 
 # --------------------------------------------------------------------------- #
 # Self-restart: the server watches for <cfg dir>/restart.flag. Whatever writes
@@ -605,10 +605,23 @@ class Store:
         # custom instructions appended to every system prompt (style, tone,
         # house rules); empty by default for fresh installs
         self.data.setdefault("customPrompt", "")
-        # web search: engine + optional API key (paid engines); "auto" uses
-        # the free keyless engine
-        self.data.setdefault("webSearchEngine", "auto")
-        self.data.setdefault("webSearchKey", "")
+        # web search: an ordered sequence lives in searchProfiles
+        # (profile = {name, steps: [{kind: "server", engine} | {kind:
+        # "online", connection, model?}]}; no selected profile = the free
+        # keyless DuckDuckGo engine). Per-engine API keys live in
+        # searchKeys; the single webSearchKey (pre-0.9.159) migrates on
+        # first load.
+        self.data.setdefault("searchProfiles", [])
+        self.data.setdefault("selectedSearchProfile", "")
+        self.data.setdefault("searchKeys", {})
+        legacy_key = str(self.data.get("webSearchKey") or "")
+        legacy_engine = str(self.data.get("webSearchEngine") or "auto")
+        keys = self.data.get("searchKeys") or {}
+        if legacy_key and not any(keys.get(k) for k in ("brave", "tavily", "firecrawl")):
+            dest = legacy_engine if legacy_engine in ("brave", "tavily", "firecrawl") else None
+            if dest:
+                keys[dest] = legacy_key
+                self.data["searchKeys"] = keys
         # AI edits as tracked changes (Word; opt-in)
         self.data.setdefault("trackedChanges", True)
         self.save()
@@ -702,6 +715,67 @@ class Store:
             self.data["defaultProfile"] = name
         self.save()
         return prof
+
+
+    # ---------------- search profiles (web lookup sequences) --------------- #
+    def search_profile_list(self):
+        return [dict(p) for p in (self.data.get("searchProfiles") or [])]
+
+    def search_profile_get(self, name):
+        for p in (self.data.get("searchProfiles") or []):
+            if p.get("name") == name:
+                return dict(p)
+        raise ApiError(404, "Unknown search profile: %s" % name)
+
+    def search_profile_upsert(self, name, steps):
+        if not valid_name(name):
+            raise ApiError(400, "Search profile name must be 1-64 chars")
+        clean = []
+        for st in (steps or [])[:6]:
+            if not isinstance(st, dict):
+                continue
+            kind = str(st.get("kind") or "")
+            if kind == "server":
+                eng = str(st.get("engine") or "")
+                if eng not in ("duckduckgo", "brave", "tavily", "firecrawl"):
+                    raise ApiError(400, "unknown search engine: %r" % eng)
+                clean.append({"kind": "server", "engine": eng})
+            elif kind == "online":
+                conn = str(st.get("connection") or "")
+                if not self.find_connection(conn):
+                    raise ApiError(400, "Lookup step references unknown connection: %r" % conn)
+                model = str(st.get("model") or "").strip()
+                step = {"kind": "online", "connection": conn}
+                if model:
+                    step["model"] = model[:160]
+                clean.append(step)
+            else:
+                raise ApiError(400, "search step kind must be server|online")
+        prof = {"name": name.strip()[:64], "steps": clean}
+        lst = self.data.get("searchProfiles") or []
+        for i2, p in enumerate(lst):
+            if p.get("name") == prof["name"]:
+                lst[i2] = prof
+                break
+        else:
+            lst.append(prof)
+        self.data["searchProfiles"] = lst
+        if not self.data.get("selectedSearchProfile"):
+            self.data["selectedSearchProfile"] = prof["name"]
+        self.save()
+        return prof
+
+    def search_profile_delete(self, name):
+        lst = self.data.get("searchProfiles") or []
+        for i2, p in enumerate(lst):
+            if p.get("name") == name:
+                del lst[i2]
+                self.data["searchProfiles"] = lst
+                if self.data.get("selectedSearchProfile") == name:
+                    self.data["selectedSearchProfile"] = ""
+                self.save()
+                return {"ok": True, "deleted": name}
+        raise ApiError(404, "Unknown search profile: %s" % name)
 
     def delete_profile(self, name):
         profs = self.data["profiles"]
@@ -859,8 +933,11 @@ class Store:
             "paneFontSize": int(d.get("paneFontSize", 100)),
             "customPrompt": str(d.get("customPrompt", "") or ""),
             "webSearchEngine": str(d.get("webSearchEngine", "auto") or "auto"),
-            # the key never leaves the box: only a set/unset marker is public
+            # keys never leave the box: only set/unset markers are public
             "webSearchKeySet": bool(d.get("webSearchKey", "")),
+            "searchProfiles": [dict(p) for p in (d.get("searchProfiles") or [])],
+            "selectedSearchProfile": str(d.get("selectedSearchProfile", "") or ""),
+            "searchKeysSet": {k: bool(v) for k, v in (d.get("searchKeys") or {}).items() if k in ("brave", "tavily", "firecrawl")},
             "customPromptDefault": DEFAULT_CUSTOM_PROMPT,
             "trackedChanges": bool(d.get("trackedChanges", False)),
             "autoClean": bool(d.get("autoClean", True)),
@@ -1520,7 +1597,7 @@ def _search_firecrawl(q, key, max_results=8):
             out.append({"title": title, "url": url, "snippet": snippet})
     return out
 
-def web_search(store, query, max_results=8):
+def web_search(store, query, max_results=8, engine_override=None):
     """Server-side web search. Engine = the webSearchEngine setting;
     "auto" = the free keyless DuckDuckGo channel. brave/tavily need an API
     key in the webSearchKey setting (Settings -> General). Returns
@@ -1535,9 +1612,13 @@ def web_search(store, query, max_results=8):
     key = ""
     if store is not None:
         engine = str(store.data.get("webSearchEngine") or "auto") or "auto"
+        if engine_override:
+            engine = str(engine_override)
         key = str(store.data.get("webSearchKey") or "")
         if engine == "auto":
             engine = "duckduckgo"   # the free option also = the auto default
+    if not key and store is not None:
+        key = str((store.data.get("searchKeys") or {}).get(engine) or "")
     if engine == "brave":
         results = _search_brave(q, key, max_results)
     elif engine == "tavily":
@@ -2268,12 +2349,16 @@ class SlideKickHandler(BaseHTTPRequestHandler):
                 self._send_json(resp)
             elif path == "/api/sessions":
                 self._send_json({"sessions": self.store.sessions.list(query.get("app", [None])[0])})
+            elif path == "/api/search-profiles":
+                self._send_json({"profiles": self.store.search_profile_list(),
+                                 "selected": str(self.store.data.get("selectedSearchProfile") or "")})
             elif path.startswith("/api/sessions/"):
                 sid = path[len("/api/sessions/"):]
                 self._send_json(self.store.sessions.get(sid))
             elif path.startswith("/api/web-search"):
                 q2 = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
-                self._send_json(web_search(self.store, (q2.get("q") or [""])[0]))
+                self._send_json(web_search(self.store, (q2.get("q") or [""])[0],
+                    engine_override=(q2.get("engine") or [None])[0]))
             elif path.startswith("/api/fetch-url"):
                 q2 = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
                 self._send_json(fetch_url_text(self.store, (q2.get("url") or [""])[0]))
@@ -2339,6 +2424,13 @@ class SlideKickHandler(BaseHTTPRequestHandler):
                 self.store.rename_connection(
                     str(body.get("from") or ""), str(body.get("to") or ""), body)
                 self._send_json({"ok": True, "name": body.get("to")})
+            elif path == "/api/search-profiles":
+                name, steps = body.get("name"), body.get("steps") or []
+                doc = self.store.search_profile_upsert(str(name or ""), steps)
+                self._send_json({"ok": True, "profile": doc})
+            elif path.startswith("/api/search-profiles/delete/"):
+                name = urllib.parse.unquote(path[len("/api/search-profiles/delete/"):])
+                self._send_json(self.store.search_profile_delete(name))
             elif path == "/api/profiles/rename":
                 self.store.rename_profile(
                     str(body.get("from") or ""), str(body.get("to") or ""), body)
@@ -2504,6 +2596,19 @@ class SlideKickHandler(BaseHTTPRequestHandler):
                     changed = True
                 if body.get("webSearchKey") is not None:
                     self.store.data["webSearchKey"] = str(body["webSearchKey"] or "")[:200]
+                    changed = True
+                if body.get("selectedSearchProfile") is not None:
+                    self.store.data["selectedSearchProfile"] = str(body["selectedSearchProfile"] or "")[:64]
+                    changed = True
+                if isinstance(body.get("searchKeys"), dict):
+                    keys2 = self.store.data.get("searchKeys") or {}
+                    for k2, v2 in body["searchKeys"].items():
+                        if k2 in ("brave", "tavily", "firecrawl"):
+                            if v2 is None:
+                                keys2.pop(k2, None)
+                            else:
+                                keys2[k2] = str(v2 or "")[:200]
+                    self.store.data["searchKeys"] = keys2
                     changed = True
                 if "customPrompt" in body and body["customPrompt"] is not None:
                     _cp = str(body["customPrompt"] or "")

@@ -30,6 +30,19 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.159
+### Added
+- Settings -> "Search" tab: search PROFILES. A profile = a name + an
+  ordered sequence of lookup steps ("server engine" - DuckDuckGo/Brave/
+  Tavily/Firecrawl, or "online lookup" bound to one of your connections -
+  OpenRouter attachments carry :online, OpenAI-like need a search-preview
+  model, Ollama/llamacpp steps skip themselves). Steps fall through on no
+  results or failure; exhausted = the lookup gives up. "Use this profile"
+  selects it; no profile = the free keyless DuckDuckGo engine (the
+  original default). CRUD via /api/search-profiles (+ /delete); keys per
+  engine (searchKeys) migrate from the old single webSearchKey. The
+  per-profile "Web search model" slot (0.9.157) stays as the first
+  model-side attempt when a profile's online step has no model pinned.
 ## 0.9.158
 ### Added
 - Firecrawl as a search engine option (Settings -> General -> Web search,
