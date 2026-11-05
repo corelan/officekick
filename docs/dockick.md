@@ -1,13 +1,12 @@
 # Corelan DocKick - the Word add-in
 
 DocKick is an AI assistant task pane for **Microsoft Word** (macOS and
-DocKick is an AI assistant task pane for **Microsoft Word** (macOS and
 Windows), the Word sibling of [Corelan SlideKick](slidekick.md). It shares the
 same connections, profiles, approval policy and local server - configure your
 providers once and use them from every Office app. Home-lab providers
 (Ollama/llama.cpp on a private IP) additionally need the macOS **Local
 Network** grant for the server - see the README's "macOS permissions"
-section ("Errno 65 / No route to host" = that grant missing).
+section ("Errno 65 / No route to host" = that grant missing). Type what you want -
 `reword this paragraph`, `add an executive summary section with a table of the
 key findings`, `leave a comment on the methodology section` - and DocKick reads
 your document outline, routes the request to the model you chose, and applies

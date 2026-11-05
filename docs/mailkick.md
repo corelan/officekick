@@ -7,7 +7,6 @@ private IP) additionally need the macOS **Local Network** grant for the
 server - see the README's "macOS permissions" section ("Errno 65 / No
 route to host" = that grant missing). **MailKick never sends email** - it
 drafts; you review and send.
-DocKick (Word). **MailKick never sends email** - it drafts; you review and send.
 
 ## What it does
 - **Read context**: when a message is selected (the reading pane keeps the
