@@ -30,6 +30,14 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.208
+### Fixed
+- DocKick image insertion defaulted to the END of the document: the
+  "insert at cursor" checkbox defaulted to OFF, and WordDeck.addImage sent
+  every generated image through the body "End" fallback. At-cursor
+  (caret/selection) insert is now the DEFAULT (checkbox pre-ticked +
+  addImage treats a missing flag as at-cursor); unticking still appends
+  at the end.
 ## 0.9.207
 ### Fixed
 - About tab "Add-in identity (this manifest)" showed "?" whenever the

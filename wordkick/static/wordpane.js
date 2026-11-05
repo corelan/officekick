@@ -2072,7 +2072,9 @@ var nw = $("sess-new");
 
   WordDeck.prototype.addImage = function (payload) {
     return this.run("addImage", function (ctx) {
-      if (payload.atCursor) {
+      // default: at the caret/selection (0.9.208) - body "End" only when
+      // the payload explicitly opts out (unchecked "insert at cursor").
+      if (payload.atCursor !== false) {
         // WordApi 1.2: insert at the caret / selection
         ctx.document.getSelection().insertInlinePictureFromBase64(String(payload.b64), "Replace");
       } else {
