@@ -106,10 +106,13 @@ run to `~/Library/Containers/com.microsoft.Outlook/Data/Documents/wef/mailkick.x
   dialog fails for our manifest even though the XML is correct). Verify:
   the toggle sits at the **top of Outlook's toolbar** ("New Outlook");
   switch it OFF and relaunch Outlook - the classic client reads the
-  `~/Library/Containers/com.microsoft.Outlook/Data/Documents/wef/mailkick.xml`
   manifest again and the icon returns. Shell check:
   `defaults read com.microsoft.Outlook` shows
-  `IsRunningNewOutlook = 1` when the toggle is on.
+  `IsRunningNewOutlook = 1` when the toggle is on. Note that Microsoft's
+  16.x update rollouts can flip this mode on by themselves (an update
+  landed the day before this mode was observed disabling MailKick) - if
+  the MailKick icon vanishes after an Office update, check this toggle
+  first.
 - **"Installation failed" on Add from File** - some builds report a timeout
   although the add-in installed; retry once after an Outlook restart. The
   **My add-ins list is the truth**: if MailKick is listed there as
