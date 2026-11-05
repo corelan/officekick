@@ -70,6 +70,19 @@ localhost is used or planned (the icons must stay fully local).
   | set notes | write speaker notes | auto |
   | create table | adds a table (optionally on a new title slide; position/size in points) | auto |
   | move/resize shape | sets left/top/width/height (points) of one shape | auto |
+  | create shape | adds a textbox/rectangle/ellipse/panel with fill + outline | auto |
+  | style shape | fill + outline color + transparency on an existing shape | confirm |
+  | move slide | reorder a slide | confirm |
+  | duplicate slide | copies a slide (or over another) | auto / confirm |
+  | clear slide | wipes a nearly-empty placeholder slide | confirm |
+  | picture-fill shape | fills an existing shape/panel with an AI-generated picture | confirm |
+  | insert image | generates a picture and adds it to the slide | confirm |
+  | create image | requests an AI picture (paid call on the image model) | confirm |
+  | format text | font (name/size/color/bold/it/underline/highlight/caps) + alignment on one shape/textbox | confirm |
+  | format selection | the same formatting on the text you selected right now | confirm |
+  | set background | AI picture or solid color behind the slide | confirm |
+  | add hyperlink | links a shape/text | auto |
+  | set alt text | accessibility text on a shape | auto |
   | apply layout | switch a slide's layout (design change, text kept) | confirm |
   | delete slide | remove a slide | confirm |
   | reply | conversational answer - never touches the deck | n/a |
@@ -86,6 +99,10 @@ localhost is used or planned (the icons must stay fully local).
 - **Conversation memory**: follow-ups include your recent turns - the model
   sees the last 6 exchanges of the session, so "use the 2nd title you
   suggested" just works. **New session** starts fresh.
+- **Deleting the CURRENT session** (History tab) asks twice
+  ("Delete CURRENT session?" -> "Really remove the CURRENT session?") and
+  then wipes it from the Sessions tab and starts a clean session; other
+  sessions delete with the usual one confirm.
 - **Sessions & the Previous-requests box**: every exchange is auto-saved in a
   local, AI-named session (resumable from the **History** tab). The box below
   the prompt lists every run of the (resumed) session, newest first: the
@@ -183,6 +200,11 @@ produce a gate row.
   step types and the per-engine API keys). No steps = the free keyless
   DuckDuckGo engine. A step that cannot run skips itself with a stated
   reason; the lookup falls to the next step.
+- **Always on for content**: when you ask for new deck CONTENT ("make
+  slides about X", "build a deck on Y"), SlideKick fetches the search
+  results BEFORE the model is asked and hands them over with the run -
+  facts get verified and cited. Pure edit / reword / restyle requests do
+  not look anything up.
 - **Live lookups** (up to 3 rounds per run): the model replies with a
   lookup request, the pane runs the steps, then re-asks the model with the
   results - it answers with real sources or says it could not verify.
@@ -217,11 +239,12 @@ SlideKick/DocKick asks the model for a **create_image/insert_image** op, fetches
 actual pixels from a provider with an OpenAI-style images API, and inserts them
 (op default = confirm, change per-op in Settings).
 
-- Image models live in the profile: the optional third slot **Image model**
+- Image models live in the profile: the optional **Image model** slot
   (connection + model - e.g. OpenAI with `gpt-image-1`).
 - The Image model list shows **image-capable only** (via the provider's own
-  metadata on OpenRouter; name heuristics elsewhere). Toggle "show all models"
-  if your image model isn't detected; a custom model id is always available.
+  metadata on OpenRouter; name heuristics elsewhere). Tick the
+  **show all models** checkbox if your image model isn't detected; a custom
+  model id is always available.
 - Generation support: openai and generic-openai servers that implement the
   images route; openrouter works only if the endpoint implements it;
   anthropic / ollama / llama.cpp cannot generate images.
@@ -252,7 +275,7 @@ PowerPoint specifics on top of the shared settings:
 
 ```bash
 # serve straight from a repo checkout (dev mode)
-python3 core/server.py --config ~/.officekick --static-dir "$(pwd)" --port 8765
+python3 core/server.py --config ~/.officekick/config.json --static-dir "$(pwd)" --port 8765
 open http://127.0.0.1:8765/slidekick/static/simulator.html   # the exact task pane + in-memory deck
 python3 tools/mock_provider.py --flavor openai --port 8901    # mock provider for the UI
 npx -y office-addin-manifest validate "$HOME/Library/Application Support/OfficeKick/manifest/slidekick.xml"
@@ -319,8 +342,6 @@ design).
 - **Model answers arrive as plain text** - the model ignored the JSON contract;
   with debug logging on, the daily log (`~/.officekick/logs/debug-YYYY-MM-DD.log`)
   shows exactly what it sent.
-- **Certificates** - re-run the installer with `--https`; to reset TLS delete
-  `~/.officekick/certs/` and re-run.
 - **Wrong port** - re-run the installer with `--port`/`-Port`; it re-renders
   manifests and restarts the server.
 

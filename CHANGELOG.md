@@ -30,6 +30,23 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.188
+### Docs
+- Full documentation review pass: README shows the new installer menu
+  (1/2/3/x/0); SlideKick's action table carries every current op with its
+  default policy (shapes, duplicate/clear/picture-fill, formatting), the
+  web-lookups section documents the always-before-ask lookup for content
+  builds, sessions document the current-session double-confirm removal,
+  and the dev-mode command uses the correct config PATH
+  (~/.officekick/config.json). DocKick: repaired a mangled intro, the
+  missing create-TOC row, the typography law (Normal body / headings /
+  28pt cap), the always-lookup note, current image-model wording and a
+  stale limitation. MailKick: repaired a mangled intro and documents its
+  reactive-only lookup. settings.md: the current defaults list (incl. the
+  0.9.175 actions) and the General note that a Check-now result clears on
+  re-open. architecture.md: http-only diagram, current endpoint list,
+  per-pane op lists, sessions behavior, the rewritten web-lookups and
+  updates sections (boot self-update included).
 ## 0.9.187
 ### Changed
 - The installer's interactive menu is numbered 1 / 2 / 3 (Install / Update /

@@ -1,12 +1,13 @@
 # Corelan DocKick - the Word add-in
 
 DocKick is an AI assistant task pane for **Microsoft Word** (macOS and
+DocKick is an AI assistant task pane for **Microsoft Word** (macOS and
 Windows), the Word sibling of [Corelan SlideKick](slidekick.md). It shares the
-  Home-lab providers (Ollama/llama.cpp on a private IP) additionally need the
-  macOS **Local Network** grant for the server - see the README's "macOS permissions"
-  section ("Errno 65 / No route to host" = that grant missing).
 same connections, profiles, approval policy and local server - configure your
-providers once and use them from both Office apps. Type what you want -
+providers once and use them from every Office app. Home-lab providers
+(Ollama/llama.cpp on a private IP) additionally need the macOS **Local
+Network** grant for the server - see the README's "macOS permissions"
+section ("Errno 65 / No route to host" = that grant missing).
 `reword this paragraph`, `add an executive summary section with a table of the
 key findings`, `leave a comment on the methodology section` - and DocKick reads
 your document outline, routes the request to the model you chose, and applies
@@ -56,6 +57,7 @@ disappear, so the installer defaults to list-mode.
 | insert image | generates a picture from a description with the profile's Image model, inserts it at the end | confirm |
 | format text | (re)styles one paragraph: bold/italic/color/size/underline/allCaps/highlight + alignment; optional `style` (Heading 1-3, Title, Subtitle, List Bullet/Number, Quote, Normal) re-styles the whole paragraph | confirm |
 | create template block | appends a titled template block with fillable content controls (text / dropdown / checkbox / date) | confirm |
+| create table of contents | inserts a REAL TOC field (heading levels 1-3) at the end of the document | auto |
 | reply | conversational answer - never touches the document | n/a |
 
 Change these in **Settings** like in SlideKick (auto / confirm / deny per
@@ -65,6 +67,12 @@ conversation memory). Each proposed action row has a red **X** to remove it
 from the list (second click confirms the removal) before applying.
 Deletions keep their indices consistent while a batch applies (earlier
 deletions shift the later ones).
+
+**Typography law**: running text (an essay, article, report body) is ALWAYS
+the Normal style - the model uses "title" for at most one title paragraph
+and Heading 1/2 for sections; font sizes stay near the document's scale
+(larger than 28pt is rejected with an explanation), and a batch whose EVERY
+paragraph is title/heading gets returned to the model.
 
 Comments on Word builds without WordApi 1.4 fall back to a **copy-paste box**
 in the pane with the comment text and its anchor, instead of failing.
@@ -82,6 +90,15 @@ in the pane with the comment text and its anchor, instead of failing.
 - `rewrite this document: executive summary, then sections ...` - the gated
   full-document rewrite
 
+## Web lookups
+
+Content-creation requests (write an essay / article / report / letter /
+plan) make DocKick fetch the current web results BEFORE the model is asked,
+so facts are verified and cited; the step list and budgets are shared - see
+[slidekick.md > Web lookups](slidekick.md#web-lookups-and-page-reads) and
+[settings.md > Search](settings.md#settings--search). Pure edit / reword
+requests do not look anything up.
+
 ## Pictures (AI image generation)
 
 Type e.g. `add a picture of a clean data center rack` or `insert a picture of ...`.
@@ -89,11 +106,12 @@ SlideKick/DocKick asks the model for a **create_image/insert_image** op, fetches
 actual pixels from a provider with an OpenAI-style images API, and inserts them
 (op default = confirm, change per-op in Settings).
 
-- Image models live in the profile: the optional third slot **Image model**
+- Image models live in the profile: the optional **Image model** slot
   (connection + model - e.g. OpenAI with `gpt-image-1`).
 - The Image model list shows **image-capable only** (via the provider's own
-  metadata on OpenRouter; name heuristics elsewhere). Toggle "show all models"
-  if your image model isn't detected; a custom model id is always available.
+  metadata on OpenRouter; name heuristics elsewhere). Tick the
+  **show all models** checkbox if your image model isn't detected; a custom
+  model id is always available.
 - Generation support: openai and generic-openai servers that implement the
   images route; openrouter works only if the endpoint implements it;
   anthropic / ollama / llama.cpp cannot generate images.
@@ -160,7 +178,9 @@ http://127.0.0.1:8765/wordkick/static/simulator.html
   paragraph anchors).
 - Bulleted list items use the "List Paragraph" style (real list glyphs require
   list-level formatting not yet exposed).
-- Styling beyond built-in paragraph styles (fonts/colors of runs) is planned.
+- Styling runs inside a paragraph beyond built-in styles: `format_text`
+  covers bold/italic/color/size/underline/caps/highlight/fonts per
+  paragraph (with `find` fragments for part-of-line wording).
 
 ## License
 

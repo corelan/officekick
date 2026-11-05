@@ -1,10 +1,12 @@
 # MailKick - the Outlook add-in
 
-AI assistance for your mailbox, running on the same local OfficeKick server,
-  Home-lab providers (Ollama/llama.cpp on a private IP) additionally need the
-  macOS **Local Network** grant for the server - see the README's "macOS permissions"
-  section ("Errno 65 / No route to host" = that grant missing).
-shared connections/profiles/approvals/sessions with SlideKick (PowerPoint) and
+AI assistance for your mailbox, running on the same local OfficeKick server
+and sharing connections/profiles/approvals/sessions with SlideKick
+(PowerPoint) and DocKick (Word). Home-lab providers (Ollama/llama.cpp on a
+private IP) additionally need the macOS **Local Network** grant for the
+server - see the README's "macOS permissions" section ("Errno 65 / No
+route to host" = that grant missing). **MailKick never sends email** - it
+drafts; you review and send.
 DocKick (Word). **MailKick never sends email** - it drafts; you review and send.
 
 ## What it does
@@ -63,6 +65,13 @@ machine except model calls you trigger.
 ## Modes
 The pane adapts to the read/compose mode; ops that don't match the mode are
 rejected up front (e.g. compose_body on a received message).
+
+## Web lookups
+MailKick keeps the REACTIVE lookup only: when drafting a reply needs fresh
+facts, the model answers `{"kind":"web_lookup"}` and the pane fetches and
+re-asks with citable results (the shared step list from Settings > Search).
+Unlike the other two add-ins, MailKick does not pre-search before every
+draft - a reply is anchored to the thread you are answering.
 
 ## Shared features
 Same as the other two add-ins: Sessions (auto-saved, AI-named, resumable,

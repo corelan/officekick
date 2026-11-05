@@ -25,17 +25,18 @@ officekick/
      approval gate + history            same shared gate            same shared gate
      OfficeDeck -> PowerPoint.run       WordDeck -> Word.run        MailDeck -> mailbox API
               |                                  |                            |
-              +--------------------- same origin https://127.0.0.1:8765 -----------+
-                                             |   (loopback; --https opt-in on macOS)
+              +--------------------- same origin http://127.0.0.1:8765 -----------+
                                              v
 +---------------------------------------------------------------------------------------+
 |  core/server.py (python stdlib, threads, dual-stack loopback)                          |
 |    static files per add-in, no-store + ?v=<version> on script/style asset URLs   |
 |                                       /mailkick/static/  (legacy /outlook/static alias) |
 |    /api/health   /api/update-check (reads VERSION from GitHub; ?latest= test override) |
-|    /api/config   /api/settings (approvals, autoApplyByApp per add-in, debug, autoUpdateCheck) |
-|    /api/connections(+rename)  /api/profiles(+rename)  /api/test-connection             |
-|    /api/models   /api/image   /api/debug (daily append log)                            |
+|    /api/config   /api/settings (approvals, autoApplyByApp, debug, serverAutoUpdate) |
+|    /api/connections(+rename)  /api/profiles(+rename)  /api/test-connection          |
+|    /api/web-search   /api/fetch-url (from=<offset> continuations)   /api/models     |
+|    /api/image   /api/repo-update (pane's pull)   /api/server-restart (flag helper)  |
+|    /api/pane-error (always-on pane crash log)   /api/debug (daily append log)       |
 |    /api/sessions(+/id, +/rename/<id>) - per-app sessions, AI-named, resumable          |
 |    /api/templates(+/id) - MailKick named templates (mailkick only)                     |
 |    Store: ~/.officekick/config.json (0600), ~/.officekick/sessions/*.json              |
@@ -60,13 +61,16 @@ share the gate, the sessions, the Inspector log and the Settings model.
 
 - SlideKick ops: `create_slide`, `edit_slide`, `replace_text`, `set_notes`,
   `create_table`, `move_shape`, `create_shape`, `create_image`, `apply_layout`,
-  `format_text`, `format_selection`, `move_slide`, `set_background`,
-  `add_hyperlink`, `set_alt_text`, `delete_slide`.
+  `format_text`, `format_selection`, `move_slide`, `duplicate_slide`,
+  `duplicate_slide_to`, `clear_slide`, `set_background`, `set_shape_image`,
+  `style_shape`, `add_hyperlink`, `set_alt_text`, `delete_slide`.
 - DocKick ops: `insert_paragraphs` (built-in styles), `edit_paragraph`,
   `replace_text`, `create_table`, `insert_comment`, `delete_paragraph`,
-  `rewrite_doc`, `insert_image`, `format_text`, `create_template`.
+  `rewrite_doc`, `insert_image`, `format_text`, `create_template`,
+  `accept_changes`, `set_track_changes`, `add_hyperlink`, `format_selection`,
+  `reject_changes`, `set_header`, `set_footer`, `create_toc`.
 - MailKick ops (never sends): `draft_reply`, `compose_body`, `set_categories`,
-  `save_draft`, `new_message`.
+  `save_draft`, `new_message`, `forward`, `new_meeting`.
 
 Approval policy: per-op `auto` / `confirm` / `deny` in the shared config; the
 destructive-heavy ops default to `confirm` (deletes, layout moves, full
@@ -96,16 +100,25 @@ confirm). Applications show green, deletions red.
 - The model context per run = the last 6 exchanges of the session plus the
   fresh document/deck/mail context. Resuming a session still titled
   "Session" asks the AI for a better title and stores it.
+- Removing a session in the History tab = one confirm; removing the
+  session that IS currently open asks twice (the message names it as the
+  current session) and then wipes it from the Sessions sheet and starts a
+  fresh one.
 
 ## Web lookups
 
-When a request needs up-to-date info, the model is instructed to reply with
-`{"kind":"web_lookup"}`; the pane then re-asks the model once through the
-profile's **other** slot with a live-web system prompt (OpenRouter models get
-the `:online` web plugin automatically). Returned facts arrive with their
-source URLs and are offered as cites. If the model reports no web access, the
-pane answers without web data. No server-side search engine, no API keys
-involved.
+Lookups are internal and free (never gated). The pane owns the lookup
+channel - a step list in the shared config: server engines (`duckduckgo`
+free/keyless default, `brave`, `tavily`, `firecrawl` with per-engine keys)
+plus model-lookup steps (OpenRouter `:online` needs a pinned model; an
+OpenAI-compatible connection pins a search-preview model; ollama/llama.cpp
+skip). The model can ask with `{"kind":"web_lookup"}` (up to 3 rounds) and
+`{"kind":"read_page","url":...}` (up to 4 pages, each truncated at 8000
+chars with free `from`-offset continuations up to 6 per run); results carry
+source URLs and page text. CONTENT-CREATION requests additionally ALWAYS
+get one proactive lookup before the first model ask (SlideKick deck-content
+and DocKick document-content; MailKick stays reactive because replies are
+anchored to the thread).
 
 ## Key design points
 
@@ -131,10 +144,16 @@ involved.
   and send yourself; `compose_body`/`save_draft` only work while composing.
 - **Inspector.** Every request/response (including op batches and failures)
   is logged and inspectable from the pane; failed exchanges render red.
-- **Update check: anonymous, token-free, git-free.** The server only reads the
-  raw `VERSION` file from GitHub (10-minute cache, numeric compare,
-  `?latest=` hook for testing). No token, no automatic git operations:
-  updating = manual `git pull` + rerun the installer + reload the task panes.
+- **Updates: three layers, all safe to ignore.** (1) The pane's check
+  (Settings > General) compares the released VERSION anonymously (local
+  git probe first, GitHub raw fallback, 10-min cache, `?latest=` test
+  hook). (2) The boot self-update: before serving, the server pulls a git
+  install (`--ff-only`) or downloads the GitHub zip for non-git installs,
+  redeploys server.py + the add-in static trees and hands off to the
+  OS-native restart helper, so the server that starts answering IS the new
+  code (once per 12 h; failures never block the boot; the
+  `serverAutoUpdate` setting). (3) `install.py --update` re-deploys
+  everything including manifests (needed only when those changed).
 - **Approval policy lives server-side, enforced client-side** (the server
   never touches any document/mailbox).
 - **Installers** deploy the umbrella layout (`~/Library/Application

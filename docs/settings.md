@@ -80,6 +80,8 @@ add-ins share ONE config:
      `py -3 install.py --update`) to deploy manifests and server code.
 - **Reload add-in**: hard-reloads the pane and picks up new build files
   without reopening Office. Your active session auto-resumes.
+- The result note under **Check now** clears itself the next time you open
+  the General tab, so old "up to date" messages never linger.
 
 ## Settings > Approval policy
 
@@ -95,12 +97,16 @@ Configure:
 
 1. Each action lists its name + what it does on top, then the three modes.
 2. Pick a mode per action and press **Save policy**.
-3. Defaults (first boot) include: slide edit/type/table/format/move actions
-   `auto`; layout switching, deletions, background/image style changes and
-   comments `confirm`; destructive Word moves (`rewrite document`)
-   `confirm`. MailKick: `draft reply` / `forward` / `new meeting` / `set
-   categories` / `save draft` `auto` - MailKick NEVER SENDS EMAIL, it only
-   opens windows you review and send.
+3. Defaults (first boot): create/edit slides, replace text, notes, tables,
+   move/resize shapes, create shapes, duplicate slide, insert paragraphs,
+   edit paragraph, insert comment, add hyperlink, set alt-text, create
+   table of contents = `auto`; layout switching, deletions, move slide,
+   copy-slide-over, clear slide, background/image/picture-fill/style
+   actions, format text/selection, header/footer + tracked-changes
+   decisions, rewrite document = `confirm`. MailKick: `draft reply` /
+   `forward` / `new meeting` / `set categories` / `save draft` `auto`,
+   `compose body` `confirm` - MailKick NEVER SENDS EMAIL, it only opens
+   windows you review and send.
 
 Details:
 

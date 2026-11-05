@@ -41,7 +41,11 @@ The installer shows a menu:
 
 1. **Install** (also repairs an existing install)
 2. **Update** (pulls the repo with git, then updates)
-3. **Uninstall**
+3. **Start (or restart) the local server only**
+4. `x` = **Uninstall**, `0` = exit
+
+(The same actions exist as CLI flags: `--install`, `--update`,
+`--start`/`--restart`, `--uninstall`.)
 
 What the installer does:
 
