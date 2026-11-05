@@ -30,6 +30,15 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.195
+### Fixed
+- New Outlook rejected the loopback certificate ("not signed by a valid
+  security certificate") - macOS Certificate Transparency policy deems any
+  cert issued after ~2019 without SCTs untrusted for strict webviews, even
+  under a user-trusted root. The server leaf certificate is now issued with
+  a backdated notBefore (Jan 2018 -> Jan 2038) via `openssl ca`, which
+  falls under the cutoff and verifies successfully; verify-cert passes and
+  the pane loads over https://localhost:8766.
 ## 0.9.194
 ### Fixed
 - MailKick pane died at boot ("parsed is not defined", caught by the new

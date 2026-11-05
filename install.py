@@ -378,6 +378,35 @@ def ensure_tls_certs():
         fh.write("subjectAltName=DNS:localhost,IP:127.0.0.1,IP:0:0:0:0:0:0:0:1\n"
                  "keyUsage = digitalSignature, keyEncipherment\n"
                  "extendedKeyUsage = serverAuth\n")
+    # macOS Certificate Transparency: certs issued after ~2019 without SCTs
+    # are rejected by strict webviews even under a user-trusted root (New
+    # Outlook: "not signed by a valid security certificate"). Issue the leaf
+    # with a backdated notBefore via `openssl ca` to fall under the cutoff.
+    cnf = os.path.join(cert_dir, "ca.cnf")
+    db = os.path.join(cert_dir, "index.txt")
+    serial = os.path.join(cert_dir, "serial")
+    open(db, "a").close()
+    if not os.path.exists(serial):
+        open(serial, "w").write("1000")
+    with open(cnf, "w") as fh:
+        fh.write("""[ ca ]
+default_ca = CA_default
+[ CA_default ]
+database = %s
+serial = %s
+new_certs_dir = %s
+certificate = %s
+private_key = %s
+default_md = sha256
+default_days = 3650
+policy = policy_any
+copy_extensions = copy
+[ policy_any ]
+commonName = supplied
+[ req ]
+distinguished_name = req_dn
+[ req_dn ]
+""" % (db, serial, cert_dir, ca_crt, ca_key))
     cmds = [
         ["openssl", "req", "-x509", "-newkey", "rsa:2048", "-sha256", "-days", "3650",
          "-nodes", "-keyout", ca_key, "-out", ca_crt,
@@ -386,9 +415,9 @@ def ensure_tls_certs():
          "-out", os.path.join(cert_dir, "server.csr"),
          "-subj", "/CN=localhost", "-addext",
          "subjectAltName=DNS:localhost,IP:127.0.0.1"],
-        ["openssl", "x509", "-req", "-in", os.path.join(cert_dir, "server.csr"),
-         "-CA", ca_crt, "-CAkey", ca_key, "-CAcreateserial", "-days", "3650",
-         "-sha256", "-out", crt, "-extfile", ext],
+        ["openssl", "ca", "-batch", "-config", cnf,
+         "-startdate", "20180101000000Z", "-enddate", "20380101000000Z",
+         "-in", os.path.join(cert_dir, "server.csr"), "-out", crt],
     ]
     for cmd in cmds:
         rc, o = run_quiet(cmd)
