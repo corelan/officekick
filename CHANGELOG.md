@@ -30,6 +30,15 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.223
+### Fixed
+- move_text/copy_text still crashed with the style-proxy error on the
+  box even with the collection loaded (0.9.222): hardened BOTH directions
+  - each block paragraph is individually re-loaded ("text, style") in
+  _blockSlice, and every style read/write in _insertBlockAfter is
+  try-guarded, so a single un-materialized property can no longer abort
+  the whole move (style simply falls back to keeping the anchor's
+  formatting on that paragraph) and the op completes.
 ## 0.9.222
 ### Fixed
 - move_text/copy_text applied but failed at runtime for all 6 actions

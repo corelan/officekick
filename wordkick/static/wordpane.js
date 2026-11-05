@@ -1977,7 +1977,10 @@ var nw = $("sess-new");
       toI = Math.min(fromI + Math.floor(op.count) - 1, items.length - 1);
     }
     var block = [];
-    for (var k = fromI; k <= toI; k++) block.push(items[k]);
+    for (var k = fromI; k <= toI; k++) {
+      try { items[k].load("text, style"); } catch (eL1) { }   // 0.9.223: belt+braces materialize on each object
+      block.push(items[k]);
+    }
     return block;
   };
 
@@ -1989,7 +1992,9 @@ var nw = $("sess-new");
       var last = null;
       block.forEach(function (pr) {
         last = rng ? rng.insertParagraph(pr.text || "", "After") : body.insertParagraph(pr.text || "", "End");
-        if (pr.style) last.style = pr.style;
+        var st = null;
+        try { st = pr.style; } catch (eS) { }   // 0.9.223: never crash on an un-materialized style read
+        if (st) { try { last.style = st; } catch (eW) { } }
         rng = last;   // keep appending AFTER the previously inserted one
       });
       return ctx.sync();
