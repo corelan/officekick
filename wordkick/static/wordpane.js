@@ -969,6 +969,7 @@
     '- {"type":"insert_paragraphs","items":[{"text":"...","style":"normal|title|heading1|heading2|heading3|quote|listParagraph"}],"place":"cursor | end | an anchor text"} (same placement as insert_image; default end; anchor places are what you want for placeholders)',
     '- {"type":"move_text","find":"existing text","until":"last paragraph text","place":"anchor text"} (CUT one or more consecutive paragraphs - from the one containing find through the one containing until, or when using "count":N the N paragraphs from find - and paste right after the anchor; preserves styles)',
     '- {"type":"copy_text","find":"existing text","until":"last paragraph text or omit","place":"anchor text"} (a paste-COPY: same as move_text but the original block stays put)',
+    '- {"type":"move_image","image":N,"place":"anchor text or end"} (relocate the Nth inline picture; image paragraphs are marked [image xN] in the outline)',
     '- {"type":"edit_paragraph","para":N,"text":"..."} (keeps the paragraph style)',
     '- {"type":"replace_text","find":"exact text","replace":"new text","all":true} (all matches by default)',
     '- {"type":"create_table","values":[["h1","h2"],["a","b"]]} (inserted at the end of the document)',
@@ -1750,20 +1751,31 @@ var nw = $("sess-new");
     return this.run("getContext", function (ctx) {
       var body = ctx.document.body;
       var paras = body.paragraphs;
-      paras.load("text, style");
+      paras.load("text, style, inlinePictures/items");   // 0.9.226: image markers in the outline
       var sel = ctx.document.getSelection();
       sel.load("text");
       var tables = body.tables;
       tables.load("itemCount");
+      var pics = body.inlinePictures;
+      pics.load("items");
       return ctx.sync().then(function () {
         var n = Math.min(opts.maxParas || paras.items.length, 300);
         var t0 = null;
         var items = [];
+        var imageCount = 0;
         for (var i = 0; i < n; i++) {
-          items.push({ idx: i, text: paras.items[i].text, style: paras.items[i].style || "Normal" });
+          var ptxt = paras.items[i].text || "";
+          var np = 0;
+          try { np = (paras.items[i].inlinePictures && paras.items[i].inlinePictures.items) ? paras.items[i].inlinePictures.items.length : 0; } catch (eI) { }
+          if (np > 0) {
+            imageCount += np;
+            ptxt = (ptxt ? ptxt + " " : "") + "[image x" + np + "]";
+          }
+          items.push({ idx: i, text: ptxt, style: paras.items[i].style || "Normal" });
         }
         return ctx.sync().then(function () {
           return { documentName: "document", paragraphCount: paras.items.length,
+                   images: imageCount,
                    paragraphs: items, tables: [], selected: sel.text || "", host: self.capabilities().host };
         });
       });
@@ -1877,8 +1889,7 @@ var nw = $("sess-new");
   };
 
   WordDeck.prototype.moveImage = function (op) {
-    // 0.9.220 - move an INLINE IMAGE to a new position:
-    //   {"type":"move_image","find":"text near the image","place":"anchor|end"}
+    // 0.9.220 - {"type":"move_image","image":N,"place":"anchor text or end"} (relocate the Nth inline picture; image paragraphs appear as "[image x1]" in the outline - also accepts "find":"text around the image")',
     // Find the paragraph whose text contains `find`; if that paragraph
     // contains inline pictures, copy their base64 sources, insert them after
     // the NEW anchor (or at the end), then delete the source paragraph.
@@ -1891,6 +1902,80 @@ var nw = $("sess-new");
       var found = ctx.document.body.search(find, { matchCase: false, matchWholeWord: false });
       found.load("items");
       return ctx.sync().then(function () {
+        var srcPara = null;
+        if (typeof op.image === "number" && op.image >= 1) {
+          // 0.9.226: image:N - walk the paragraphs until the Nth inline picture is reached
+          var target = Math.floor(op.image);
+          var seen = 0;
+          (paras.items || []).some(function (pr) {
+            try { pr.load("inlinePictures/items"); } catch (eIp) { return false; }
+            return false;
+          });
+          return ctx.sync().then(function () {
+            for (var ip = 0; ip < (paras.items || []).length; ip++) {
+              var pIp = paras.items[ip];
+              var cnt = 0;
+              try { cnt = (pIp.inlinePictures && pIp.inlinePictures.items) ? pIp.inlinePictures.items.length : 0; } catch (eIc) { }
+              if (cnt > 0) {
+                seen += cnt;
+                if (seen >= target) { srcPara = pIp; break; }
+              }
+            }
+            if (!srcPara) throw new FriendlyError("move_image: inline picture " + target + " not found (document has fewer images)");
+            var srcText0 = srcPara.text || "";
+            return (function () {
+              var b64s = [];
+              try {
+                if (srcPara.pictures) { srcPara.pictures.load("items"); }
+              } catch (eP2) { }
+              var collect2 = ctx.sync().then(function () {
+                if (srcPara.pictures && srcPara.pictures.items) {
+                  srcPara.pictures.items.forEach(function (p) {
+                    try { b64s.push(p.getBase64ImageSrc()); } catch (eG2) { }
+                  });
+                  return ctx.sync();
+                }
+                return null;
+              }).then(function () { return b64s; });
+              return collect2.then(function () {
+                if (!b64s.length) throw new FriendlyError("move_image: picture " + target + " could not be read");
+                var inserter2 = function (rng) {
+                  var chainB = Promise.resolve();
+                  b64s.forEach(function (getSrc) {
+                    chainB = chainB.then(function () {
+                      return Promise.resolve(getSrc).then(function (src) {
+                        (rng || ctx.document.body).insertInlinePictureFromBase64(src, rng ? "After" : "End");
+                        return ctx.sync();
+                      });
+                    });
+                  });
+                  return chainB.then(function () {
+                    // image-only paragraphs are deleted whole; text paragraphs keep their text (a copy was inserted)
+                    var deleted = false;
+                    if (!String(srcPara.text || "").trim() && srcPara.pictures && srcPara.pictures.items && srcPara.pictures.items.length === b64s.length) {
+                      try { srcPara.delete(); deleted = true; } catch (eD) { }
+                      return ctx.sync().then(function () {
+                        return { ok: true, how: (b64s.length) + " image(s) - " + (place === "end" ? "to end of document" : "after '" + place.slice(0, 60) + "'") + (deleted ? " (moved)" : " (copy; original kept because sharing the paragraph with text)") };
+                      });
+                    }
+                    return Promise.resolve({ ok: true, how: (b64s.length) + " image(s) - " + (place === "end" ? "to end of document" : "after '" + place.slice(0, 60) + "'") + " (copy; image shares a paragraph with text - delete the original manually)" });
+                  });
+                };
+                if (place === "end") return inserter2(ctx.document.body);
+                var rs = ctx.document.body.search(place);
+                rs.load("items");
+                return ctx.sync().then(function () {
+                  var rng = rs && rs.items && rs.items[0];
+                  if (!rng) return inserter2(ctx.document.body).then(function (r) {
+                    r.how = "anchor '" + place.slice(0, 60) + "' not found - " + r.how;
+                    return r;
+                  });
+                  return inserter2(rng);
+                });
+              });
+            })();
+          });
+        }
         if (!(found.items && found.items.length)) throw new FriendlyError("move_image: text not found: " + find.slice(0, 60));
         var srcPara = null;
         (paras.items || []).some(function (pr) {
@@ -2448,8 +2533,11 @@ function normalizeWordStyle(v) {
         if (headingsOnly) { bad("every item uses style title/heading1 - the document BODY must be 'normal' paragraphs; use title for ONE title paragraph and heading1 for section titles only, then continue the text as normal"); return; }
         out.items = itemsOk;
       } else if (t === "move_image") {
-        if (typeof op.find === "string" && op.find.trim()) out.find = op.find.trim().slice(0, 200);
-        else { invalid.push({ op: op, reason: "move_image needs find (text inside/near the image paragraph)" }); return; }
+        if (typeof op.image === "number" && op.image >= 1) {
+          out.image = Math.floor(op.image);
+        } else if (typeof op.find === "string" && op.find.trim()) {
+          out.find = op.find.trim().slice(0, 200);
+        } else { invalid.push({ op: op, reason: "move_image needs either image:N (1-based inline picture from the outline) or find (text of the image paragraph)" }); return; }
         if (typeof op.place === "string" && op.place.trim()) {
           out.place = op.place.trim() === "cursor" ? "end" : op.place.trim().slice(0, 200);
         }
@@ -2627,7 +2715,7 @@ function normalizeWordStyle(v) {
           "' -> " +
           (op.place ? "after '" + op.place.slice(0, 40) + "'" : "end of document");
       case "move_image":
-        return "Move image (near '" + op.find.slice(0, 40) + "') -> " +
+        return "Move " + (op.image ? "image " + op.image : "image (near '" + String(op.find || "").slice(0, 40) + "')") + " -> " +
           (op.place ? "after '" + op.place.slice(0, 40) + "'" : "end of document");
       case "copy_text":
         return "Copy " + (op.until || op.count ? (op.until ? "'" + op.until.slice(0, 30) + "'" : String(op.count) + " paragraph(s)") : "1") + // from '" + op.find.slice(0, 40) + "'

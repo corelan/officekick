@@ -30,6 +30,16 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.226
+### Added (DocKick)
+- Images are now VISIBLE to the model: the document outline marks image
+  paragraphs as [image xN], and the context exposes the total inline
+  picture count.
+- move_image gains image:N addressing - relocate the Nth inline picture
+  directly (image-only paragraphs are deleted after the move; images
+  sharing a paragraph with text are COPIED with the original kept and
+  reported). The model can now actually perform "move the images to the
+  right place" instead of only moving caption text.
 ## 0.9.225
 ### Fixed
 - THINKING BUDGET EXHAUSTION (root cause of the empty-replies / silent
