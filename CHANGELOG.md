@@ -30,6 +30,17 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.213
+### Added (SlideKick / PowerPoint)
+- copy_shape {slide, shape, to, left/top/width/height}: duplicates a shape
+  (picture, text box, table - full fidelity via the Office-JS shape
+  copy/paste pair, PowerPointApi 1.13) onto slide `to` (or an omitted
+  target = the same slide), with optional re-placement.
+- move_shape_to (same fields): CUT+paste - relocates the shape and removes
+  the original; the Word-block cut/copy idiom applied to PowerPoint
+  objects. Approvals: copy = auto, move = confirm.
+- Model schema + preview strings updated; validation reuses the existing
+  slide/shape context checks. move_shape (reposition/resize) unchanged.
 ## 0.9.212
 ### Added (DocKick / Word)
 - Cut/paste-grade block ops: move_text now accepts `until` (move from the

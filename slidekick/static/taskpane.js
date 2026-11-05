@@ -93,6 +93,8 @@
     set_notes: { label: "set notes", hint: "Writes speaker notes on a slide." },
     create_table: { label: "create table", hint: "Adds a table (new slide when slide is empty; position/size in points)." },
     move_shape: { label: "move/resize shape", hint: "Sets left/top/width/height (points) and optional rotation (degrees) of one shape - design passes use this." },
+    copy_shape:        { label: "copy shape", hint: "Duplicates a shape (picture, text box, table...) onto another slide or the same one, keeping full fidelity; optional left/top re-placement. PowerPointApi 1.13+" },
+    move_shape_to:     { label: "move shape to", hint: "CUT+paste: relocates a shape to another slide (position kept or re-specified); the original is removed. PowerPointApi 1.13+" },
     create_image: { label: "generate + insert image", hint: "Creates an image from a description with the profile's image model (OpenAI-style images API) and inserts it - lands on the slide you have open in Office." },
     apply_layout: { label: "apply layout", hint: "Applies a different slide layout (design change, text kept)." },
     format_text: { label: "format text", hint: "bold / italic / color / size / underline / allCaps / alignment / bullets on one shape's text (the numbers from the outline)." },
@@ -1074,6 +1076,8 @@
     '- {"type":"set_notes","slide":N,"notes":"..."}',
     '- {"type":"create_table","slide":N|null,"values":[["h1","h2"],["x","y"]],"left":40,"top":150,"width":640} (all cells strings, rows rectangular; slide null = new title slide first; left/top/width optional points)',
     '- {"type":"move_shape","slide":N,"shape":N,"left":40,"top":150,"width":300,"height":60} (points; only the fields to change; keep shapes inside the slide bounds shown in the outline)',
+    '- {"type":"copy_shape","slide":N,"shape":N,"to":M,"left":40,"top":150} (duplicate the shape onto slide M; "to" omitted = the same slide; left/top optional re-placement; full fidelity copy)',
+    '- {"type":"move_shape_to","slide":N,"shape":N,"to":M,"left":40,"top":150} (CUT: relocate that shape to slide M - original removed)',
     '- {"type":"create_image","prompt":"detailed image description","slide":N|null,"width":400} (generate an image from the description and insert it; slide null = the slide the user currently has open; only when the user asks for a picture/image/illustration/logo)',
     '- {"type":"apply_layout","slide":N,"layout":"title_content|title_only|section|blank"} (only when the user asks for layout/design changes)',
     '- {"type":"format_text","slide":N,"shape":N,"font":{"bold":true},"align":"center","bullet":true} (format ONE shape from the outline: font = {"bold","italic","color","size","name","underline","allCaps"} subset only, colors as HTML hex/red/green/...; align = left|center|right; bullet = true adds bullets; only requested properties)',
@@ -2252,6 +2256,46 @@
     });
   };
 
+  OfficeDeck.prototype.copyPasteShape = function (srcSlide, srcShape, dstSlide, geo, cut) {
+    // 0.9.213 - the Word cut/paste idiom for PowerPoint objects:
+    // copy the shape (full fidelity, incl. pictures/tables) via the
+    // Office-JS shape copy/paste pair, drop it on the target slide,
+    // optionally re-place it, and - for a MOVE - delete the source.
+    return this.run(cut ? "moveShapeTo" : "copyShape", function (ctx) {
+      if (!Office.context.requirements.isSetSupported("PowerPointApi", "1.13")) {
+        throw new FriendlyError("shape copy/paste needs PowerPointApi 1.13 (PowerPoint 16.108+): " +
+          "update PowerPoint, or move the shape with move_shape (position/size) instead.");
+      }
+      var s = ctx.presentation.slides.getItemAt(srcSlide);
+      var sh = s.shapes.getItemAt(srcShape);
+      sh.copy();
+      return ctx.sync().then(function () {
+        var d = ctx.presentation.slides.getItemAt(dstSlide);
+        d.shapes.paste();
+        return ctx.sync().then(function () {
+          var how = (cut ? "moved" : "copied") + " to slide " + (dstSlide + 1);
+          var pasted = d.shapes.getItemAt(d.shapes.items.length - 1);
+          var placed = false;
+          ["left", "top", "width", "height"].forEach(function (p) {
+            if (geo && geo[p] != null) { pasted[p] = geo[p]; placed = true; }
+          });
+          if (cut) sh.delete();
+          return ctx.sync().then(function () {
+            return { ok: true, how: how + (placed && geo && geo.left != null ? " (replaced: left " + Math.round(geo.left) + ", top " + Math.round(geo.top) + ")" : " (same position)") };
+          });
+        });
+      });
+    });
+  };
+
+  OfficeDeck.prototype.copyShape = function (srcSlide, srcShape, dstSlide, geo) {
+    return this.copyPasteShape(srcSlide, srcShape, dstSlide, geo, false);
+  };
+
+  OfficeDeck.prototype.moveShapeTo = function (srcSlide, srcShape, dstSlide, geo) {
+    return this.copyPasteShape(srcSlide, srcShape, dstSlide, geo, true);
+  };
+
   OfficeDeck.prototype.moveShape = function (slideIndex, shapeIndex, geometry) {
     return this.run("moveShape", function (ctx) {
       var shape = ctx.presentation.slides.getItemAt(slideIndex).shapes.getItemAt(shapeIndex);
@@ -3349,6 +3393,20 @@ OfficeDeck.prototype.setNotes = function (i, text) {
       } else if (t === "apply_layout") {
         if (!slideOk(op.slide)) { bad("bad slide index"); return; }
         out.slide = op.slide; out.layout = normalizeLayout(op.layout);
+      } else if (t === "copy_shape" || t === "move_shape_to") {
+        if (!slideOk(op.slide)) { bad("bad source slide index"); return; }
+        if (!futureSlide(op.slide) && !shapeIdxOk(op.slide, op.shape)) { bad("shape " + op.shape + " not in the context list for slide " + op.slide); return; }
+        out.slide = op.slide; out.shape = Math.round(op.shape);
+        if (op.to == null) {
+          out.to = op.slide;
+        } else if (typeof op.to === "number" && Math.floor(op.to) === op.to && op.to >= 1 && op.to <= (ctx ? ctx.slideCount : op.slide)) {
+          out.to = Math.round(op.to);
+        } else { bad("to must be a slide number 1.." + (ctx ? ctx.slideCount : op.slide)); return; }
+        var geoX = {};
+        ["left", "top", "width", "height"].forEach(function (gk5) {
+          if (typeof op[gk5] === "number") geoX[gk5] = op[gk5];
+        });
+        if (Object.keys(geoX).length) out.geometry = geoX;
       } else if (t === "delete_slide") {
         if (!slideOk(op.slide)) { bad("bad slide index"); return; }
         out.slide = op.slide;
@@ -3418,6 +3476,12 @@ OfficeDeck.prototype.setNotes = function (i, text) {
       case "move_shape":
         return "Slide " + op.slide + ", shape " + op.shape + ": " +
           Object.keys(op.geometry || {}).map(function (p) { return p + "->" + Math.round(op.geometry[p]); }).join(" ") || "(no geometry)";
+      case "copy_shape":
+      case "move_shape_to":
+        return (op.type === "move_shape_to" ? "Cut " : "Copy ") + "slide " + op.slide + " shape " + op.shape +
+          " -> slide " + op.to +
+          (op.geometry && op.geometry.left != null ? " @ left " + Math.round(op.geometry.left) + ", top " + Math.round(op.geometry.top) : "") +
+          (op.type === "move_shape_to" ? " (original removed)" : " (duplicate)");
       case "create_image": {
         var pr = op.prompt.length > 60 ? op.prompt.slice(0, 60) + "…" : op.prompt;
         return (op.slide != null ? "Slide " + op.slide + slideTitle(op.slide) : "Slide you have open") +
@@ -3564,6 +3628,13 @@ OfficeDeck.prototype.setNotes = function (i, text) {
           return deck.moveShape(cur, op.shape - 1, op.geometry || {}).then(function () {
             lines.push({ ok: true, text: "move shape " + op.shape + " on slide " + op.slide + ": " +
               Object.keys(op.geometry || {}).map(function (p) { return p + "->" + Math.round(op.geometry[p]); }).join(" ") });
+          });
+        case "copy_shape":
+        case "move_shape_to":
+          return deck.copyPasteShape(cur, op.shape - 1, op.to - 1, op.geometry || null,
+            op.type === "move_shape_to").then(function (res) {
+            lines.push({ ok: true, text: (op.type === "move_shape_to" ? "moved" : "copied") + " shape " +
+              op.shape + " slide " + op.slide + " -> slide " + op.to + ": " + (res && res.how ? res.how.split("-> ")[1] || res.how : "") });
           });
         case "set_notes":
           return deck.setNotes(cur, op.notes).then(function (nr) {
