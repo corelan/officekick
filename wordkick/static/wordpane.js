@@ -298,8 +298,8 @@
   // NO_WEB_ACCESS and the pane says so in the status. ----
   // fetch a source URL's page text via the server (the pane's research
   // channel: search results, then the DOCUMENTS they point at)
-  function fetchPageText(url) {
-    return apiJson("/api/fetch-url?url=" + encodeURIComponent(url), "GET").then(function (r) {
+  function fetchPageText(url, from) {
+    return apiJson("/api/fetch-url?url=" + encodeURIComponent(url) + (from > 0 ? "&from=" + parseInt(from, 10) : ""), "GET").then(function (r) {
       return (r && r.ok) ? r : null;
     }).catch(function () { return null; });
   }
@@ -863,7 +863,7 @@
     "- If the request is a question/explanation/brainstorm rather than a document change, use format A.",
     "- Image requests: always return an insert_image op (never generate the picture inline); DocKick fetches it with the user's configured image model. Include a concrete, self-contained prompt in the op.",
     "- Image refinement ('refine/change the image'): write a FRESH self-contained image prompt describing the FULL desired result. Never embed previous prompts, the conversation, or op JSON into it - only the scene essentials plus the requested change. Prefer 200-600 words.",
-    "- LIVE WEB LOOKUPS: when the request needs up-to-date info you cannot reliably know (current events, news, prices, recent releases, rankings, live data), reply with ONLY {\"kind\":\"web_lookup\"} - nothing else. SlideKick then runs a web-enabled lookup and re-asks you with fresh citable results. Never use it for deck/document/mail edits, styling, general concepts, or what the outline/context already answers. Lookups are INTERNAL actions - free (never gated/approved) - and you may reply with later rounds of {\"kind\":\"web_lookup\"} as well (up to 3 lookups per run). After a lookup you may also ask for the FULL text of one page from its results by replying with ONLY {\"kind\":\"read_page\",\"url\":\"https://...\"} (internal, free, up to 4 pages per run). You have no web access yourself and cannot run a search; the lookup channel belongs to SlideKick - never claim you tried a lookup or that the lookup channel is unavailable, and never refuse for lack of live data: reply with {\"kind\":\"web_lookup\"} instead.",
+    "- LIVE WEB LOOKUPS: when the request needs up-to-date info you cannot reliably know (current events, news, prices, recent releases, rankings, live data), reply with ONLY {\"kind\":\"web_lookup\"} - nothing else. SlideKick then runs a web-enabled lookup and re-asks you with fresh citable results. Never use it for deck/document/mail edits, styling, general concepts, or what the outline/context already answers. Lookups are INTERNAL actions - free (never gated/approved) - and you may reply with later rounds of {\"kind\":\"web_lookup\"} as well (up to 3 lookups per run). After a lookup you may also ask for the FULL text of one page from its results by replying with ONLY {\"kind\":\"read_page\",\"url\":\"https://...\"} (internal, free, up to 4 pages per run). When a page's text carries a \"…[page continues]\" ending and the info you need may sit deeper, read the NEXT part by replying with ONLY {\"kind\":\"read_page\",\"url\":\"https://...\",\"from\":<n>} using the part start the pane gave you (continuations are free and do not use the 4-page budget). You have no web access yourself and cannot run a search; the lookup channel belongs to SlideKick - never claim you tried a lookup or that the lookup channel is unavailable, and never refuse for lack of live data: reply with {\"kind\":\"web_lookup\"} instead.",
 
     "- Picture placement: 'here / at the cursor / current position' = the image lands at the caret (the pane's 'insert at cursor' checkbox); default = end of document. Keep insert_image minimal (type + prompt only).",
   ].join("\n");
@@ -2718,21 +2718,32 @@ function applyOps(deck, ops, ctx) {
       function readPageThen(resp) {
         var pre = tryParse(resp.text);
         var url = String(pre.url || "");
+        var frm = (typeof pre.from === "number" && pre.from > 0) ? Math.floor(pre.from) : 0;
         if ((SK.pageReads || 0) >= 4) {
           return { ok: true, kind: "reply",
                    text: "Page reads were already run the maximum of 4 times this run. Decide with the text you have, or state what you could not verify." };
         }
-        SK.pageReads = (SK.pageReads || 0) + 1;
-        dbg("read_page", { round: SK.pageReads, url: url.slice(0, 160) });
-        setStatus("Reading the requested page (" + SK.pageReads + ")\u2026", "busy");
-        return fetchPageText(url).then(function (pg) {
+        if (frm > 0 && (SK.pageConts || 0) >= 6) {
+          return { ok: true, kind: "reply",
+                   text: "This run already extended page text " + (SK.pageConts || 0) + " times. Decide with the text you have, or state what you could not verify." };
+        }
+        if (frm > 0) { SK.pageConts = (SK.pageConts || 0) + 1; }
+        else { SK.pageReads = (SK.pageReads || 0) + 1; }
+        dbg("read_page", { round: frm > 0 ? "cont-" + (SK.pageConts || 0) : SK.pageReads, from: frm, url: url.slice(0, 160) });
+        setStatus(frm > 0 ? "Reading more of the requested page (from " + frm + ")\u2026"
+                          : "Reading the requested page (" + SK.pageReads + ")\u2026", "busy");
+        return fetchPageText(url, frm).then(function (pg) {
           if (!pg || !pg.text) {
             return { ok: true, kind: "reply",
-                     text: "Could not read " + url + " from the server's fetcher. Pick a different page from the results, or decide with what you have." };
+                     text: "Could not read " + url + (frm ? " at offset " + frm : "") + " from the server's fetcher. Pick a different page from the results, or decide with what you have." };
           }
           if (pre.ops && pre.ops.length) SK.pendingWebOps = pre.ops;   // page-read-then-act in one reply
-          messages = messages.concat([{ role: "assistant", content: pre.text || JSON.stringify({ kind: "read_page", url: url }) },
-                                      { role: "user", content: "PAGE CONTENT (" + (pg.title || pg.url || url) + ") - " + url + ":\n" + pg.text +
+          var trailer = pg.more ?
+            "\n\n(The text shown above is PART of the page - it ends at char " + ((pg.offset || 0) + pg.chars) + " of " + pg.total +
+            ". If what you need may sit deeper, read the NEXT part now with ONLY " +
+            '{"kind":"read_page","url":"' + url + '","from":' + pg.next + "} (continuations do not use the page-read budget).)" : "";
+          messages = messages.concat([{ role: "assistant", content: pre.text || JSON.stringify({ kind: "read_page", url: url, from: frm }) },
+                                      { role: "user", content: "PAGE CONTENT (" + (pg.title || pg.url || url) + ")" + (frm ? " [part from char " + frm + "]" : "") + " - " + url + ":\n" + pg.text + trailer +
                                         "\n\nUse it for the ORIGINAL USER REQUEST; cite the page. The required JSON format rules apply again." }]);
           setStatus("Answering with the requested page\u2026", "busy");
           return mainAsk2();
@@ -2917,7 +2928,9 @@ function applyOps(deck, ops, ctx) {
     var obj = extractObject(stripped);
     if (obj && typeof obj === "object") {
       if (obj.kind === "read_page" && typeof obj.url === "string" && /^https?:\/\//i.test(obj.url)) {
-        return { ok: true, kind: "read_page", url: obj.url.split("#")[0], ops: Array.isArray(obj.ops) ? obj.ops : null, text: stripped };
+        return { ok: true, kind: "read_page", url: obj.url.split("#")[0],
+                 from: (typeof obj.from === "number" && obj.from > 0) ? Math.floor(obj.from) : 0,
+                 ops: Array.isArray(obj.ops) ? obj.ops : null, text: stripped };
       }
       if (obj.kind === "web_lookup") {
         // an internal lookup intent: no ops, no approval - the pane runs the

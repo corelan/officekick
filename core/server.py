@@ -34,7 +34,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 APP = "OfficeKick"
-VERSION = "0.9.170"
+VERSION = "0.9.171"
 
 # --------------------------------------------------------------------------- #
 # Self-restart: the server watches for <cfg dir>/restart.flag. Whatever writes
@@ -1646,11 +1646,13 @@ def web_search(store, query, max_results=8, engine_override=None):
     return {"ok": True, "query": q, "engine": engine, "results": results}
 
 
-def fetch_url_text(store, raw_url, max_chars=8000):
+def fetch_url_text(store, raw_url, max_chars=8000, offset=0):
     """Server-side page fetch + text extraction (no external deps).
 
     http(s) only, no private/loopback targets (SSRF guard), 15 s timeout,
-    3 MB body cap; returns {title, text, url} - pane research only."""
+    3 MB body cap; returns {title, text, url, offset, total, more, next} -
+    pane research only; offset>0 re-serves a later slice of the same page
+    (read_page continuations: the info may sit deeper in the page)."""
     url = str(raw_url or "").strip()
     if not re.match(r"^https?://", url, re.I):
         raise ApiError(400, "only http(s) URLs are fetchable")
@@ -1703,11 +1705,23 @@ def fetch_url_text(store, raw_url, max_chars=8000):
     else:
         text = data.decode("utf-8", "replace")
     text = re.sub(r"\n{3,}", "\n\n", text).strip()
-    if len(text) > max_chars:
-        text = text[:max_chars] + "\n…[page continues]"
     if not text:
         raise ApiError(502, "no readable text on that page")
-    return {"ok": True, "url": url, "title": title, "text": text, "chars": len(text)}
+    total = len(text)
+    try:
+        offset = int(offset)
+    except (TypeError, ValueError):
+        offset = 0
+    offset = max(0, offset)
+    shown = text[offset:offset + max_chars]
+    more = offset + max_chars < total
+    nxt = (offset + max_chars) if more else None
+    if shown and more:
+        shown = shown + "\n…[page continues]"
+    elif not shown:
+        raise ApiError(400, "offset %d is beyond the page text (%d chars)" % (offset, total))
+    return {"ok": True, "url": url, "title": title, "text": shown, "chars": len(shown),
+            "offset": offset, "total": total, "more": more, "next": nxt}
 
 
 def git_run(repo, args, timeout=30):
@@ -2375,7 +2389,8 @@ class SlideKickHandler(BaseHTTPRequestHandler):
                     engine_override=(q2.get("engine") or [None])[0]))
             elif path.startswith("/api/fetch-url"):
                 q2 = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
-                self._send_json(fetch_url_text(self.store, (q2.get("url") or [""])[0]))
+                self._send_json(fetch_url_text(self.store, (q2.get("url") or [""])[0],
+                                               offset=(q2.get("from") or [0])[0]))
             elif path == "/api/test-connection":
                 name = (query.get("connection") or [""])[0]
                 result = test_connection(self.store, name)

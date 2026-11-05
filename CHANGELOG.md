@@ -30,6 +30,15 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.171
+### Added
+- read_page continuations: a fetched page carries only its first 8000
+  chars. The pane's follow-up now says exactly how much of the page was
+  shown and teaches the model to ask for the NEXT part
+  ({"kind":"read_page","url":"...","from":<n>}). /api/fetch-url serves
+  later slices (offset=from), returns {offset,total,more,next}, and
+  continuations do not use the 4-page-read budget (up to 6 per run).
+  All three add-ins.
 ## 0.9.170
 ### Fixed
 - format_text / format_text-substring on a shape with no text (table,
