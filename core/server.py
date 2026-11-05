@@ -34,7 +34,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 APP = "OfficeKick"
-VERSION = "0.9.174"
+VERSION = "0.9.175"
 
 # --------------------------------------------------------------------------- #
 # Self-restart: the server watches for <cfg dir>/restart.flag. Whatever writes
@@ -243,10 +243,16 @@ DEFAULT_APPROVALS = {
     "create_shape": "auto",
     "accept_changes": "confirm",
     "set_track_changes": "confirm",
-    "add_hyperlink": "confirm",
-    "format_selection": "confirm",
     "style_shape": "confirm",
     "new_meeting": "auto",
+    "duplicate_slide": "auto",
+    "duplicate_slide_to": "confirm",
+    "clear_slide": "confirm",
+    "set_shape_image": "confirm",
+    "create_toc": "auto",
+    "reject_changes": "confirm",
+    "set_header": "confirm",
+    "set_footer": "confirm",
 }
 APPROVAL_MODES = ("auto", "confirm", "deny")
 OP_TYPES = tuple(DEFAULT_APPROVALS.keys())

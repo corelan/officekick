@@ -30,6 +30,17 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.175
+### Fixed
+- Saving the approval policy failed with "Unknown action type:
+  duplicate_slide": the server's action whitelist was missing ops the
+  policy tables render. Added duplicate_slide (auto), copy slide over
+  (confirm), clear slide (confirm), picture-fill shape (confirm), create
+  table of contents (auto), reject tracked changes (confirm), set header
+  / set footer (confirm). Removed two duplicated literal entries.
+  Existing stored policies keep their values; the new actions adopt
+  their default modes. De-duping also re-lost "format_selection" and
+  "add_hyperlink" from the default table - restored (confirm / auto).
 ## 0.9.174
 ### Fixed
 - Activity log label for Model lookup steps said the model name twice
