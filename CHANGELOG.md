@@ -30,6 +30,17 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.155
+### Added
+- The live-lookup channel now READS THE DOCUMENTS IT FINDS: after web
+  lookup results come back, the pane fetches up to 2 source URLs through
+  the new server endpoint GET /api/fetch-url (stdlib-only HTML-to-text
+  extractor, page title + up to 8000 chars per page) and adds the page
+  contents to the re-ask ("The lookups also RETURNED THE FULL TEXT of
+  these documents/pages - read them before answering"). The model cites
+  from the actual page text instead of just snippets. Guards: http(s)
+  only, no localhost/private addresses (SSRF), 15 s timeout, 3 MB fetch
+  cap. All three add-ins; status shows "Reading the found documents…".
 ## 0.9.154
 ### Fixed
 - The chat tab's "New session" button (next to the request box) now runs

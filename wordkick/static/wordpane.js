@@ -267,6 +267,32 @@
   // openrouter injects fresh web results + source citations. Other
   // providers are asked too; models without web access answer
   // NO_WEB_ACCESS and the pane says so in the status. ----
+  // fetch a source URL's page text via the server (the pane's research
+  // channel: search results, then the DOCUMENTS they point at)
+  function fetchPageText(url) {
+    return apiJson("/api/fetch-url?url=" + encodeURIComponent(url), "GET").then(function (r) {
+      return (r && r.ok) ? r : null;
+    }).catch(function () { return null; });
+  }
+  function gatherPageContents(factsText) {
+    // up to 2 distinct http(s) URLs from the lookup facts, each = page text
+    var urls = [];
+    var re = /https?:\/\/[^\s)\]]+/g, m;
+    while ((m = re.exec(String(factsText || ""))) !== null) {
+      var u = m[0].replace(/[.,;'"]+$/, "");
+      if (urls.indexOf(u) < 0) urls.push(u);
+      if (urls.length >= 2) break;
+    }
+    return Promise.all(urls.map(function (u) { return fetchPageText(u); })).then(function (pages) {
+      var blocks = "";
+      pages.forEach(function (p) {
+        if (p && p.text) {
+          blocks += "\n\n--- PAGE: " + (p.title || p.url) + " (" + p.url + ") ---\n" + p.text;
+        }
+      });
+      return blocks;
+    });
+  }
   function webLookup(prof, instruction) {
     var ref = prof.other && prof.other.connection && prof.other.model ? prof.other : prof.content;
     var sys = "You have LIVE WEB ACCESS. Research the user's request with web search now. " +
@@ -2342,11 +2368,16 @@ function applyOps(deck, ops, ctx) {
               return webLookup(prof, instruction).then(function (ws) {
                 if (!ws) return resp;   // nothing to add - show the original answer
                 SK.webResults = ws;
-                messages = messages.concat([{ role: "assistant", content: txt0.slice(0, 4000) },
-                                            { role: "user", content: "WEB LOOKUP RESULTS:\n" + ws +
-                                              "\n\nAnswer the ORIGINAL USER REQUEST now using these results (cite sources); the required JSON format rules apply again." }]);
-                setStatus("Answering with the fresh web results\u2026", "busy");
-                return mainAsk2();
+                setStatus("Reading the found documents\u2026", "busy");
+                return gatherPageContents(ws).then(function (pages) {
+                  SK.webResults = ws + pages;
+                  messages = messages.concat([{ role: "assistant", content: txt0.slice(0, 4000) },
+                                              { role: "user", content: "WEB LOOKUP RESULTS:\n" + ws +
+                                                (pages ? "\n\nThe lookups also RETURNED THE FULL TEXT of these documents/pages - read them before answering:" + pages : "") +
+                                               "\n\nAnswer the ORIGINAL USER REQUEST now using these results (cite sources); the required JSON format rules apply again." }]);
+                  setStatus("Answering with the fresh web results\u2026", "busy");
+                  return mainAsk2();
+                });
               }).catch(function (e) { return resp; });
             }
             if (pre.ok && pre.kind === "web_lookup" && !askedLookup) {
@@ -2358,11 +2389,16 @@ function applyOps(deck, ops, ctx) {
                            text: "No web-enabled model available for a live lookup (the model reported no web access). Re-phrase or check the profile/connection." };
                 }
                 SK.webResults = ws;
-                messages = messages.concat([{ role: "assistant", content: pre.text || '{"kind":"web_lookup"}' },
-                                            { role: "user", content: "WEB LOOKUP RESULTS:\n" + ws +
-                                              "\n\nAnswer the ORIGINAL USER REQUEST now using these results (cite sources); the required JSON format rules apply again." }]);
-                setStatus("Answering with the fresh web results…", "busy");
-                return mainAsk2();
+                setStatus("Reading the found documents\u2026", "busy");
+                return gatherPageContents(ws).then(function (pages) {
+                  SK.webResults = ws + pages;
+                  messages = messages.concat([{ role: "assistant", content: pre.text || '{"kind":"web_lookup"}' },
+                                              { role: "user", content: "WEB LOOKUP RESULTS:\n" + ws +
+                                                (pages ? "\n\nThe lookups also RETURNED THE FULL TEXT of these documents/pages - read them before answering:" + pages : "") +
+                                               "\n\nAnswer the ORIGINAL USER REQUEST now using these results (cite sources); the required JSON format rules apply again." }]);
+                  setStatus("Answering with the fresh web results\u2026", "busy");
+                  return mainAsk2();
+                });
               }).catch(function (e) {
                 return { ok: true, kind: "reply", text: "The live web lookup failed: " + ((e && e.message) || e) };
               });

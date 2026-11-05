@@ -34,7 +34,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 APP = "OfficeKick"
-VERSION = "0.9.154"
+VERSION = "0.9.155"
 
 # --------------------------------------------------------------------------- #
 # Self-restart: the server watches for <cfg dir>/restart.flag. Whatever writes
@@ -1339,6 +1339,103 @@ def git_update_probe(store=None):
     return out
 
 
+def _html_to_text(html_text):
+    """Stdlib HTML -> readable plain text (no external deps)."""
+    from html.parser import HTMLParser
+
+    class _X(HTMLParser):
+        def __init__(self):
+            super().__init__(convert_charrefs=True)
+            self.out = []
+            self.skip = 0
+        def handle_starttag(self, tag, attrs):
+            if tag in ("script", "style", "noscript", "head"):
+                self.skip += 1
+            elif tag in ("p", "div", "br", "li", "tr", "h1", "h2", "h3", "h4"):
+                self.out.append("\n")
+            elif tag in ("td", "th", "li"):
+                self.out.append(" | ")
+        def handle_endtag(self, tag):
+            if tag in ("script", "style", "noscript", "head") and self.skip:
+                self.skip -= 1
+        def handle_data(self, d):
+            if not self.skip:
+                self.out.append(d)
+    x = _X()
+    try:
+        x.feed(html_text)
+    except Exception:
+        pass
+    txt = "".join(x.out)
+    txt = re.sub(r"[ \t\r\f\v]+", " ", txt)
+    txt = re.sub(r"\n\s*\n\s*\n+", "\n\n", txt)
+    return txt.strip()
+
+
+def fetch_url_text(store, raw_url, max_chars=8000):
+    """Server-side page fetch + text extraction (no external deps).
+
+    http(s) only, no private/loopback targets (SSRF guard), 15 s timeout,
+    3 MB body cap; returns {title, text, url} - pane research only."""
+    url = str(raw_url or "").strip()
+    if not re.match(r"^https?://", url, re.I):
+        raise ApiError(400, "only http(s) URLs are fetchable")
+    host = urllib.parse.urlsplit(url).netloc.lower()
+    if not host:
+        raise ApiError(400, "no host in URL")
+    hn = host.split(":")[0]
+    if hn in ("localhost", "127.0.0.1", "0.0.0.0", "::1", "0:0:0:0:0:0:0:1"):
+        raise ApiError(400, "localhost is not fetchable")
+    try:
+        infos = socket.getaddrinfo(hn, None)
+    except Exception:
+        raise ApiError(400, "cannot resolve host: " + hn)
+    import ipaddress as _ip
+    for info in infos:
+        try:
+            ip = _ip.ip_address(info[4][0])
+            if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_unspecified:
+                raise ApiError(400, "private addresses are not fetchable")
+        except ValueError:
+            pass
+    req = urllib.request.Request(url, headers={
+        "User-Agent": "Mozilla/5.0 (compatible; officekick/1.0; pane resource fetch)",
+        "Accept": "text/html,application/xhtml+xml,text/plain,*/*;q=0.8",
+        "Accept-Language": "en;q=0.9,*;q=0.5",
+    })
+    deadline = time.time() + 15
+    data = b""
+    title = ""
+    ctype = ""
+    try:
+        with urllib.request.urlopen(req, timeout=15) as r:
+            ctype = (r.headers.get("Content-Type") or "").lower()
+            url = r.geturl()
+            while len(data) < 3000000 and time.time() < deadline:
+                chunk = r.read(65536)
+                if not chunk:
+                    break
+                data += chunk
+    except ApiError:
+        raise
+    except Exception as exc:
+        raise ApiError(502, "fetch failed: %s" % str(exc)[:160])
+    if "text/html" in ctype or "<html" in data[:4000].decode("utf-8", "ignore").lower():
+        raw = data.decode("utf-8", "replace")
+        m = re.search(r"<title[^>]*>(.*?)</title>", raw, re.I | re.S)
+        if m:
+            title = re.sub(r"\s+", " ", m.group(1)).strip()[:200]
+        text = _html_to_text(raw)
+    else:
+        text = data.decode("utf-8", "replace")
+    text = re.sub(r"\n{3,}", "\n\n", text).strip()
+    if len(text) > max_chars:
+        text = text[:max_chars] + "\n…[page continues]"
+    if not text:
+        raise ApiError(502, "no readable text on that page")
+    return {"ok": True, "url": url, "title": title, "text": text, "chars": len(text)}
+
+
 def git_run(repo, args, timeout=30):
     """run git without any console window on Windows (the pane's server
     runs detached; a bare subprocess.run flashes a console per call)"""
@@ -1991,6 +2088,9 @@ class SlideKickHandler(BaseHTTPRequestHandler):
             elif path.startswith("/api/sessions/"):
                 sid = path[len("/api/sessions/"):]
                 self._send_json(self.store.sessions.get(sid))
+            elif path.startswith("/api/fetch-url"):
+                q2 = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
+                self._send_json(fetch_url_text(self.store, (q2.get("url") or [""])[0]))
             elif path == "/api/test-connection":
                 name = (query.get("connection") or [""])[0]
                 result = test_connection(self.store, name)
