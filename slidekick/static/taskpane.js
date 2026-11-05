@@ -1114,7 +1114,7 @@
     "- Make-over phase order per reply: (1) backgrounds + palette fields + overlay shapes, (2) layout moves + text restyle, (3) image generation requests. This keeps each approval batch reviewable and each design phase consistent.",
     "- Image requests: always return a create_image op (never generate the picture inline); SlideKick fetches it with the user's configured image model. Include a concrete, self-contained prompt in the op.",
     "- Image refinement ('refine/change the image'): write a FRESH self-contained image prompt describing the FULL desired result. Never embed previous prompts, the conversation, or op JSON into it - only the scene essentials plus the requested change. Prefer 200-600 words.",
-    "- READ SLIDES ON DEMAND: the outline shows full shape text only for small decks and for the selected slide(s) - in LARGE decks every other slide shows just its title and a short preview. When you need a slide's ACTUAL content (to answer a question about it, or before rewriting it), reply with only {\"kind\":\"read_slide\",\"slides\":[N]} (1-based outline numbers, max 12). SlideKick re-asks you with the COMPLETE text of those slides. Never guess content from a title.",
+    "- READ SLIDES FIRST: when the user asks you to READ, QUOTE, SHOW or PASTE a slide's content, ALWAYS reply read_slide for that slide BEFORE quoting anything - the outline previews are deliberately cut and quoting one produces wrong text. Full text then arrives from the pane. READ SLIDES ON DEMAND: the outline shows full shape text only for small decks and for the selected slide(s) - in LARGE decks every other slide shows just its title and a short preview. When you need a slide's ACTUAL content (to answer a question about it, or before rewriting it), reply with only {\"kind\":\"read_slide\",\"slides\":[N]} (1-based outline numbers, max 12). SlideKick re-asks you with the COMPLETE text of those slides. Never guess content from a title.",
     "- LIVE WEB LOOKUPS: when the request needs up-to-date info you cannot reliably know (current events, news, prices, recent releases, rankings, live data), reply with ONLY {\"kind\":\"web_lookup\"} - nothing else. SlideKick then runs a web-enabled lookup and re-asks you with fresh citable results. Never use it for deck/document/mail edits, styling, general concepts, or what the outline/context already answers. Lookups are INTERNAL actions - free (never gated/approved) - and you may reply with later rounds of {\"kind\":\"web_lookup\"} as well (up to 3 lookups per run). After a lookup you may also ask for the FULL text of one page from its results by replying with ONLY {\"kind\":\"read_page\",\"url\":\"https://...\"} (internal, free, up to 4 pages per run). When a page's text carries a \"…[page continues]\" ending and the info you need may sit deeper, read the NEXT part by replying with ONLY {\"kind\":\"read_page\",\"url\":\"https://...\",\"from\":<n>} using the part start the pane gave you (continuations are free and do not use the 4-page budget). You have no web access yourself and cannot run a search; the lookup channel belongs to SlideKick - never claim you tried a lookup or that the lookup channel is unavailable, and never refuse for lack of live data: reply with {\"kind\":\"web_lookup\"} instead. For CONTENT-CREATION requests (write an essay/article about... - or build/make the deck\'s slides): the pane has ALREADY run a web lookup before this ask and any fetched results sit in the context above - verify your claims against them, keep facts current and cite the sources you use; if you need MORE, reply {\"kind\":\"web_lookup\"} again (up to 3 rounds per run).",
 
   ].join("\n");
@@ -1174,7 +1174,7 @@
     "with the JSON object - no fences, no commentary, never an empty reply.";
 
   var HISTORY_MAX_EXCHANGES = 6; // oldest turns are dropped, newest kept
-  var HISTORY_MAX_CHARS = 2000;  // per stored message
+  var HISTORY_MAX_CHARS = 8000;  // per stored message (long answers must survive resume/history)
 
   // ------------------------- local sessions ------------------------- //
   function derivedSessionName() {
@@ -3954,6 +3954,50 @@ OfficeDeck.prototype.setNotes = function (i, text) {
       // 0.9.186: content-creation requests ALWAYS run the web lookup first
       // (standing rule: the pane owns the lookup channel - internal, free);
       // fetched results feed the generation ask; the 3-lookup budget still caps it.
+      // 0.9.189: when the user asks to READ/QUOTE a slide's content, the pane
+      // fetches the FULL slide text itself before the first ask - the compact
+      // outline's 900-char preview must never be the source of a quote.
+      var READ_ASK_RE = /\b(read|quote|paste|show|display|list|repeat|give|what('s| is)\b|what does)\b[^\n]{0,60}\bslides?\b/i;   // large decks only: the outline preview would be quoted
+      var SLIDE_NUM_RE = /\bslides?\s+((?:\d+\s*(?:,\s*|\+|to|through\s+)?\s*)+\d)\b/gi;
+      var preReadDone = null;
+      function preReadRun() {
+        if (preReadDone === null) {
+          var slideCount = SK.lastCtx ? SK.lastCtx.slideCount : 0;
+          var compact = SK.lastCtx ? ((SK.lastCtx.slides || []).length > 40) : false;
+          var wantRead = READ_ASK_RE.test(instruction || "");
+          var nums = [];
+          if (wantRead && instruction) {
+            var mm, re2 = /\bslides?\s+(\d+\b[^)]{0,40})/gi;
+            while ((mm = re2.exec(instruction)) !== null && nums.length < 6) {
+              var digits = mm[1].match(/\d+/g) || [];
+              for (var qi = 0; qi < digits.length; qi++) {
+                var n2 = parseInt(digits[qi], 10);
+                if (n2 >= 1 && (slideCount ? n2 <= slideCount : true) && nums.indexOf(n2) < 0) nums.push(n2);
+                if (nums.length >= 6) break;
+              }
+            }
+            nums.sort(function (a, b) { return a - b; });
+          }
+          if (wantRead && nums.length) {
+            SK.readRounds = (SK.readRounds || 0) + 1;   // the shared 2-read budget
+            setStatus("Reading slide(s) " + nums.join(", ") + " in full\u2026", "busy");
+            preReadDone = SK.deck.readSlides(nums).then(function (full) {
+              dbg("pre.read_slide", { slides: nums, chars: full.length });
+              messages = messages.concat([{ role: "user", content:
+                "FULL SLIDE TEXT of the slide(s) the user asked you to read (1-based, same numbering as the outline):\n" + full +
+                "\n\nUse this complete text for the ORIGINAL USER REQUEST; quote it accurately; do NOT reply with read_slide for these slide(s) again." }]);
+              return true;
+            }).catch(function (ePr) {
+              dbg("pre.read_slide.failed", { err: String(ePr && ePr.message || ePr).slice(0, 160) });
+              SK.readRounds = Math.max(0, (SK.readRounds || 1) - 1);
+              return null;
+            });
+          } else {
+            preReadDone = Promise.resolve(null);
+          }
+        }
+        return preReadDone;
+      }
       var CONTENT_WRITE_RE = /\b(write|create|generate|produce|draft|build|compose|make)\b[^\n]{0,90}?\b(slides?|deck|presentation|slideshow)\b/i;
       var preLookupDone = null;
       function preLookupRun() {
@@ -3984,7 +4028,7 @@ OfficeDeck.prototype.setNotes = function (i, text) {
         return preLookupDone;
       }
       function mainAsk() {
-        return preLookupRun().then(function () { return mainAskInner(); });
+        return preReadRun().then(function () { return preLookupRun(); }).then(function () { return mainAskInner(); });
       }
       function mainAskInner() {
         return askRetryable(function () { return apiJson("/api/chat", "POST", { connection: ref.connection, model: ref.model, messages: messages }); })

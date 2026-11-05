@@ -30,6 +30,19 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.189
+### Fixed
+- **Reading a slide quoted cut text**: in large decks (>40 slides) the
+  outline only carries a 900-char preview per shape, and a model asked to
+  READ slide 60 answered by quoting that preview - bullet text ended with
+  an ellipsis. The prompt now requires the model to reply read_slide FIRST
+  for any read/quote/show request, and the pane itself fetches the FULL
+  slide text before the first ask when the instruction reads/quotes slides
+  (the shared 2-read budget; errors fall through to a normal run).
+- **Long answers were truncated in History and resume**: every saved
+  exchange was capped at 2000 chars, so a multi-thousand-character reply
+  came back chopped on reopen and lost most of its content in later model
+  context. Raised to 8000 per message in all three add-ins.
 ## 0.9.188
 ### Docs
 - Full documentation review pass: README shows the new installer menu

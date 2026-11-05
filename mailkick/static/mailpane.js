@@ -945,7 +945,7 @@
   }
 
   var HISTORY_MAX_EXCHANGES = 6; // oldest turns are dropped, newest kept
-  var HISTORY_MAX_CHARS = 2000;  // per stored message
+  var HISTORY_MAX_CHARS = 8000;  // per stored message (long answers must survive resume/history)
 
   // ------------------------- local sessions ------------------------- //
   function derivedSessionName() {
