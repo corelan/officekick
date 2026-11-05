@@ -95,6 +95,11 @@ run to `~/Library/Containers/com.microsoft.Outlook/Data/Documents/wef/mailkick.x
    paste the path above). On macOS Outlook, **Get Add-ins lives behind the
    three-dot (...) button in the toolbar** - click the dots, then
    **Get Add-ins**.
+4. **About the icon URLs**: Outlook's Add-from-File dialog requires every
+   URL in the manifest to be https, so the manifest's icons point at the
+   project's GitHub assets (fetched once at install, then cached by
+   Office). The task pane itself is still served by your local server over
+   http://localhost - no data touches GitHub.
 4. If Outlook shows it as installed but the icon is missing, the Manifests
    folder and the manual entry are the two places to check - see
    Troubleshooting below.

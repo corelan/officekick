@@ -30,6 +30,16 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.192
+### Fixed
+- Outlook's Add-from-File dialog validates every manifest URL as https and
+  rejected the install with "The value of the IconUrl attribute ... contains
+  an unsupported URL". The manifest templates now point
+  IconUrl/HighResolutionIconUrl and the ribbon icon resources at the
+  project's public GitHub assets (fetched once at install, cached by
+  Office); the task-pane/pane URLs stay on the local server. A re-render is
+  picked up by the next install; the already-deployed MailKick manifest on
+  a machine can be patched in place without quitting Office.
 ## 0.9.191
 ### Docs
 - MailKick troubleshooting for a likely silent cause of "the add-in no

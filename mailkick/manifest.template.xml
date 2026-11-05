@@ -9,8 +9,8 @@
   <DefaultLocale>en-US</DefaultLocale>
   <DisplayName DefaultValue="Corelan MailKick"/>
   <Description DefaultValue="AI assistant for Outlook: summarize and translate email, draft replies, refine what you are composing, and categorize - using your own AI providers. Shares connections and profiles with SlideKick/DocKick. Never sends mail automatically."/>
-  <IconUrl DefaultValue="__SCHEME__://localhost:8765/mailkick/static/assets/icon32.png"/>
-  <HighResolutionIconUrl DefaultValue="__SCHEME__://localhost:8765/mailkick/static/assets/icon80.png"/>
+  <IconUrl DefaultValue="https://raw.githubusercontent.com/corelan/officekick/main/mailkick/static/assets/icon32.png"/>
+  <HighResolutionIconUrl DefaultValue="https://raw.githubusercontent.com/corelan/officekick/main/mailkick/static/assets/icon80.png"/>
   <SupportUrl DefaultValue="https://github.com/corelan/officekick"/>
   <AppDomains>
     <AppDomain>__SCHEME__://localhost:8765</AppDomain>
@@ -103,9 +103,9 @@
     </Hosts>
     <Resources>
       <bt:Images>
-        <bt:Image id="Icon.16x16" DefaultValue="__SCHEME__://localhost:8765/mailkick/static/assets/icon16.png"/>
-        <bt:Image id="Icon.32x32" DefaultValue="__SCHEME__://localhost:8765/mailkick/static/assets/icon32.png"/>
-        <bt:Image id="Icon.80x80" DefaultValue="__SCHEME__://localhost:8765/mailkick/static/assets/icon80.png"/>
+<bt:Image id="Icon.16x16" DefaultValue="https://raw.githubusercontent.com/corelan/officekick/main/mailkick/static/assets/icon16.png"/>
+<bt:Image id="Icon.32x32" DefaultValue="https://raw.githubusercontent.com/corelan/officekick/main/mailkick/static/assets/icon32.png"/>
+<bt:Image id="Icon.80x80" DefaultValue="https://raw.githubusercontent.com/corelan/officekick/main/mailkick/static/assets/icon80.png"/>
       </bt:Images>
       <bt:Urls>
         <bt:Url id="Taskpane.Url" DefaultValue="__SCHEME__://localhost:8765/mailkick/static/taskpane.html"/>
