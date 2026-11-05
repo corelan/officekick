@@ -30,6 +30,21 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.174
+### Fixed
+- Activity log label for Model lookup steps said the model name twice
+  (":online:online") - the step's model already carries the :online
+  suffix; it is shown once now.
+### Added
+- Search steps: drag & drop reordering with a grip handle (the dot
+  column before each row); a drop indicator line shows where the step
+  lands. Save search steps persists the new order.
+### Docs
+- New docs/settings.md: every setting explained - what it means and how
+  to configure it (General, Approval policy, Connections, Profiles,
+  Search, the activity log, where config/logs live).
+- The three add-in docs now point at it and keep only their own
+  specifics; the Search tab and web-lookup behavior are documented.
 ## 0.9.173
 ### Fixed
 - The server's VERSION stamp rides every release again: the 0.9.172

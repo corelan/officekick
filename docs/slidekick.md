@@ -172,6 +172,31 @@ of read_slide - and re-asks the model with the complete text, which it then
 uses to answer. Up to 2 read rounds per run keep a model from looping.
 The read itself needs no approval: it only reads, it never writes.
 
+## Web lookups and page reads
+
+For requests that need current facts, the model can ask the pane to search
+and read. These are internal actions: they never need approval and never
+produce a gate row.
+
+- **Where it searches**: Settings > **Search** - one ordered step list
+  shared by all three add-ins (see [settings.md](settings.md) for the
+  step types and the per-engine API keys). No steps = the free keyless
+  DuckDuckGo engine. A step that cannot run skips itself with a stated
+  reason; the lookup falls to the next step.
+- **Live lookups** (up to 3 rounds per run): the model replies with a
+  lookup request, the pane runs the steps, then re-asks the model with the
+  results - it answers with real sources or says it could not verify.
+- **Page reads** (up to 4 per run): the model may ask for the full text of
+  one specific page. A fetched page carries its first 8000 characters; the
+  follow-up states how much was shown and lets the model ask for the NEXT
+  part (up to 6 continuations per run, they do not use the page budget).
+- The model never claims a lookup it did not run: if no channel returned
+  anything, it says so instead of guessing.
+- **Activity log**: while anything of the above runs, the box under the
+  status line lists each step (newest on top, ~8-row window), plus every
+  request/repair/apply. It resets on each Run press.
+
+
 ## Supported requests in real life
 
 - `reword the current slide` - replaces wording, keeps meaning and slide count
@@ -204,64 +229,24 @@ actual pixels from a provider with an OpenAI-style images API, and inserts them
   limitation); Word: at the end of the document.
 - If the profile has no image model, the run says so instead of failing dark.
 
-## Settings reference
+## Settings
 
-Open the gear tab: five sub-tabs - **General**, **Approval policy**,
-**Connections**, **Profiles**, **Inspector**. Every value lives in
-`~/.officekick/config.json`, is re-read on each pane open (settings survive
-close/reopen and app restarts) and only ever stored locally.
+Open the gear tab: six sub-tabs - **General**, **Approval policy**,
+**Connections**, **Profiles**, **Search**, **Inspector**. What every setting
+means and how to configure it: [docs/settings.md](settings.md).
 
-### General
+Every value lives in `~/.officekick/config.json`, is re-read on each pane
+open and only ever stored locally. API keys are write-only from the pane.
 
-- **Pane text size** (Display group): scales the whole pane - 85% compact,
-  100% default, 115% large, 130% extra large. Applies immediately, saved
-  automatically, shared by all three add-ins.
-- **Check for updates automatically at startup** (default on): once per boot
-  the pane reads the released VERSION from GitHub and shows "Update available"
-  with the update steps when a newer release exists (see the README section
-  "How to update"). Token-free (plain HTTPS against the public repo); nothing
-  is ever downloaded or installed automatically. "Check now" runs the same
-  check on demand.
-- **Enable debug logging** (default off): appends AI interactions and
-  document/deck/mail traces to `~/.officekick/logs/debug-YYYY-MM-DD.log` (one
-  file per day). The log contains text content and full provider payloads -
-  keep it off for sensitive work.
-
-
-- **Auto-clean up history after X days** (Sessions section, enabled by
-  default, 120 days): when opening any of the add-ins, sessions whose
-  NEWEST message is older than the number of days are deleted from
-  `~/.officekick/sessions/` (the sweep runs at most once per hour). Disable it
-  or change the days with **Save session cleanup**; the change applies at the
-  next add-in open.
-
-### Approval policy
-
-- **Behaviour - "Auto apply approved actions (SlideKick)"**: per-add-in since
-  0.9.0 (one value for SlideKick, one for DocKick, one for MailKick; the old
-  global value keeps working as the default until an add-in gets its own).
-  When ON, every run ticks the run's "auto-apply" box; when OFF it stays
-  manual.
-- **Approval policy per action**: one block per action - name + "what it
-  does" on top, the three modes below:
-  `auto` = apply immediately (still shown in the summary with results),
-  `confirm` = waits for the checkbox + Apply in the gate,
-  `deny` = blocked, shown with a notice.
-  After the list (behind a divider) a per-action "don't ask again for 'X'
-  this session" option may appear - ticking it auto-approves THAT action type
-  for the REST OF THE PANE SESSION only (it resets when the pane reopens; it
-  does not change the stored policy). Actions the policy denies or rejects
-  are listed but marked, and never applied. **Save policy** persists the
-  whole table.
-- The gate itself: proposed actions appear with the description below the
-  action tag, a per-action checkbox (right) and a red x to remove an action
-  from the batch (two clicks: "sure?" confirm, auto-revert after ~3.5 s). A
-  divider separates the list from the "don't ask again" checkboxes.
+PowerPoint specifics on top of the shared settings:
 
 - **Generate speaker notes when creating or editing slides** (PowerPoint
   section, default off): when off, notes are never generated or written on
-  slides - notes actions from the model are skipped with a visible notice and
-  the model is told not to produce them.
+  slides - notes actions from the model are skipped with a visible notice
+  and the model is told not to produce them. When a host build refuses the
+  notes write anyway, the pane falls back to a per-slide copy-paste box.
+- Note generation being off NEVER refuses an explicit "add speaker notes
+  to slide 3" request: the pane asks you to confirm just that one write.
 
 ## Simulator & development (PowerPoint)
 

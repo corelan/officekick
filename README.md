@@ -200,6 +200,8 @@ you pass `--purge-config` or answer yes on the config question.
 
 ## More
 
+- [docs/settings.md](docs/settings.md) - every setting explained: what it
+  means, how to configure it (config, profiles, approvals, search steps).
 - [docs/slidekick.md](docs/slidekick.md) - the PowerPoint add-in: actions,
   approvals, design passes, simulator, troubleshooting.
 - [docs/dockick.md](docs/dockick.md) - the Word add-in: document actions,

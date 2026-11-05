@@ -383,6 +383,47 @@
     steps.forEach(function (st, i) {
       var row = document.createElement("div");
       row.className = "row row-tight";
+      var grip = document.createElement("span");
+      grip.className = "dragh";
+      grip.title = "Drag to reorder";
+      grip.draggable = true;
+      grip.addEventListener("dragstart", function (e) {
+        SK.dragStep = i;
+        try { e.dataTransfer.setData("text/plain", String(i)); e.dataTransfer.effectAllowed = "move"; } catch (e2) {}
+        row.classList.add("dragging");
+      });
+      grip.addEventListener("dragend", function () {
+        row.classList.remove("dragging");
+        SK.dragStep = null;
+      });
+      row.addEventListener("dragover", function (e) {
+        if (SK.dragStep === null || SK.dragStep === undefined) return;
+        var from = SK.dragStep;
+        if (from === i) return;
+        e.preventDefault();
+        try { e.dataTransfer.dropEffect = "move"; } catch (e2) {}
+        var r2 = row.getBoundingClientRect();
+        var above = (e.clientY - r2.top) < r2.height / 2;
+        row.classList.toggle("drop-above", above);
+        row.classList.toggle("drop-below", !above);
+      });
+      row.addEventListener("dragleave", function () { row.classList.remove("drop-above", "drop-below"); });
+      row.addEventListener("drop", function (e) {
+        e.preventDefault();
+        row.classList.remove("drop-above", "drop-below");
+        var from = SK.dragStep === undefined ? null : SK.dragStep;
+        if (from === null || from === undefined) return;
+        SK.dragStep = null;
+        var r2 = row.getBoundingClientRect();
+        var above = (e.clientY - r2.top) < r2.height / 2;
+        var to = above ? i : i + 1;
+        if (to === from || to === from + 1) return;   // dropped in place
+        var moved = p.steps.splice(from, 1)[0];
+        if (to > from) to -= 1;
+        p.steps.splice(to, 0, moved);
+        renderSearchSteps();
+      });
+      row.appendChild(grip);
       var n = document.createElement("span");
       n.className = "opnote";
       n.textContent = (i + 1) + ".";
@@ -579,7 +620,7 @@
     };
     var one = function (a) {
       actLog(a && a.server ? "Web search via " + (a.engine || "duckduckgo")
-                            : "Model lookup via " + (a.connection || "?") + "(model " + (a.model || "?") + ":online)");
+                            : "Model lookup via " + (a.connection || "?") + (a.model ? " (model " + a.model + ")" : ""));
       if (a && a.server) {
         return apiJson("/api/web-search?q=" + encodeURIComponent(instruction.slice(0, 240)) + "&engine=" + encodeURIComponent(a.engine || "duckduckgo"), "GET")
           .then(function (res) {

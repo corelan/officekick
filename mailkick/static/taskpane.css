@@ -860,3 +860,13 @@ body.dark .keystate-no { color: #f87171; }
 body.dark .activitybox { border-color: #2c3440; }
 body.dark .actrow { color: #c8cdd4; }
 body.dark .actts { color: #6e7783; }
+
+/* 0.9.174: drag handle for reordering the search steps */
+.dragh { width: 9px; height: 16px; margin-right: 2px; cursor: grab; flex: 0 0 auto;
+  background-image: radial-gradient(circle, #9aa2ab 1.6px, transparent 1.7px);
+  background-size: 5px 8px; background-position: 0 1px; }
+.dragh:active { cursor: grabbing; }
+.row.drop-above { box-shadow: 0 -2px 0 #4a90d9; }
+.row.drop-below { box-shadow: 0 2px 0 #4a90d9; }
+.row.dragging { opacity: 0.55; }
+body.dark .dragh { background-image: radial-gradient(circle, #778089 1.6px, transparent 1.7px); }
