@@ -4421,16 +4421,16 @@ function applyOps(deck, ops, ctx) {
           acBox.checked = !(cfg && cfg.autoClean === false);
           acDays.value = String((cfg && cfg.autoCleanDays) || 120);
         }
+        if (updAutoServer2) updAutoServer2.checked = !(cfg && cfg.serverAutoUpdate === false);
         if (updAuto.checked) updCheck();   // silent availability check at boot
       }, function () { updAuto.checked = true; updCheck(); });
+      var updAutoServer2 = $("upd-auto-server");
       updAuto.addEventListener("change", function () {
         apiJson("/api/settings", "PUT", { autoUpdateCheck: !!updAuto.checked });
       });
-      var updAutoServer = $("upd-auto-server");
-      if (updAutoServer) {
-        updAutoServer.checked = !(cfg && cfg.serverAutoUpdate === false);
-        updAutoServer.addEventListener("change", function () {
-          apiJson("/api/settings", "PUT", { serverAutoUpdate: !!updAutoServer.checked });
+      if (updAutoServer2) {
+        updAutoServer2.addEventListener("change", function () {
+          apiJson("/api/settings", "PUT", { serverAutoUpdate: !!updAutoServer2.checked });
         });
       }
     }

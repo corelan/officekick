@@ -34,7 +34,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 APP = "OfficeKick"
-VERSION = "0.9.180"
+VERSION = "0.9.181"
 
 # --------------------------------------------------------------------------- #
 # Self-restart: the server watches for <cfg dir>/restart.flag. Whatever writes
@@ -380,7 +380,7 @@ def _start_hint():
     if _os.name != "nt":
         return ("python3 install.py --start   (in your OfficeKick clone - usually "
                 "~/Dropbox (Corelan)/Dev/Git/officekick)")
-        return ("schtasks /run /tn OfficeKickServer   (or: py -3 install.py --start  "
+    return ("schtasks /run /tn OfficeKickServer   (or: py -3 install.py --start  "
             "in your OfficeKick clone, e.g. C:\\tools\\officekick)")
 
 START_HINT = _start_hint()

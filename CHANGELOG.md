@@ -30,6 +30,16 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.181
+### Fixed
+- **Panes dead at "starting..." with empty Connections/Profiles and the
+  default font (0.9.177 regression)**: the new "Update the server
+  automatically before it starts" checkbox was populated where the config
+  variable was out of scope; the ReferenceError aborted the event wiring
+  mid-boot on every platform. Population now happens inside the config
+  callback where it exists.
+- The Windows start-hint went null (unreachable return inside the macOS
+  branch) - the hint text is back for every platform.
 ## 0.9.180
 ### Fixed
 - The per-manifest result lines ("SlideKick manifest written: ...") used a
