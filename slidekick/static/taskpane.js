@@ -302,6 +302,8 @@
   // ------------------------- search profiles ------------------------- //
   function renderSearchProfiles() {
     if (!$("srp-steps")) return;
+    // the key-state labels follow the fresh config too
+    ["brave", "tavily", "firecrawl"].forEach(function (eng) { renderSearchKeyState(eng); });
     SK.srpDraft = null;   // rebuild the working copy of the ONE shared sequence
     currentSearchProfile();
     renderSearchSteps();
@@ -375,7 +377,7 @@
       n.textContent = (i + 1) + ".";
       row.appendChild(n);
       var kindSel = document.createElement("select");
-      kindSel.innerHTML = '<option value="server">server engine</option><option value="online">online lookup</option>';
+      kindSel.innerHTML = '<option value="server">Search engine</option><option value="online">Model lookup</option>';
       kindSel.value = st.kind;
       kindSel.addEventListener("change", function () { st.kind = kindSel.value; buildStepEditor(row, st); });
       row.appendChild(kindSel);
@@ -410,6 +412,46 @@
     $("srp-add-server").addEventListener("click", addSearchStepFn({ kind: "server", engine: "duckduckgo" }));
     $("srp-add-online").addEventListener("click", addSearchStepFn({ kind: "online", connection: "", model: "" }));
     $("srp-save").addEventListener("click", saveSearchProfile);
+    wireSearchKeys();
+  }
+
+  // per-engine API keys: type to replace, leave blank to clear (never stored
+  // in the pane or echoed back - only a set/unset marker is public)
+  function wireSearchKeys() {
+    var engines = ["brave", "tavily", "firecrawl"];
+    engines.forEach(function (eng) {
+      var inp = $("searchkey-" + eng), st = $("searchkey-" + eng + "-state");
+      if (!inp || !st) return;
+      renderSearchKeyState(eng);
+      inp.addEventListener("input", function () { renderSearchKeyState(eng); });
+    });
+    var btn = $("searchkeys-save");
+    if (!btn) return;
+    btn.addEventListener("click", function () {
+      var payload = {};
+      engines.forEach(function (eng) {
+        var inp2 = $("searchkey-" + eng);
+        if (inp2) payload[eng] = inp2.value || null;   // blank = clear
+      });
+      apiJson("/api/settings", "PUT", { searchKeys: payload }).then(function () {
+        engines.forEach(function (eng) {
+          var inp3 = $("searchkey-" + eng);
+          if (inp3) inp3.value = "";
+        });
+        flashSaved("saved-searchkeys", "\u2713 saved");
+        return loadConfigAndRender();
+      }).then(function () {
+        engines.forEach(function (eng) { renderSearchKeyState(eng); });   // state text = after the fresh cfg
+      }).catch(function (e) { flashSaved("saved-searchkeys", "save failed"); });
+    });
+  }
+
+  function renderSearchKeyState(eng) {
+    var inp = $("searchkey-" + eng), st = $("searchkey-" + eng + "-state");
+    if (!inp || !st) return;
+    var set = !!(SK.cfg && SK.cfg.searchKeysSet && SK.cfg.searchKeysSet[eng]);
+    var typing = !!inp.value;
+    st.textContent = typing ? "replacing key" : (set ? "key set" : "no key");
   }
 
   function addSearchStepFn(st) {

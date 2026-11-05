@@ -30,6 +30,13 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.165
+### Changed
+- Settings -> Search wording + keys: "Search engine" / "Model lookup" step
+  types, and per-engine API keys live in the Search tab (Brave / Tavily /
+  Firecrawl, password fields, "type to replace, blank to clear", masked
+  server-side as before). The engine dropdown steps all key their engines
+  from these fields.
 ## 0.9.164
 ### Fixed
 - "try again, you should have the ability to do a web search now" ended in
