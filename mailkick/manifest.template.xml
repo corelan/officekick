@@ -13,8 +13,8 @@
   <HighResolutionIconUrl DefaultValue="https://raw.githubusercontent.com/corelan/officekick/main/mailkick/static/assets/icon80.png"/>
   <SupportUrl DefaultValue="https://github.com/corelan/officekick"/>
   <AppDomains>
-    <AppDomain>__SCHEME__://localhost:8765</AppDomain>
-    <AppDomain>__SCHEME__://127.0.0.1:8765</AppDomain>
+    <AppDomain>__SCHEME__://localhost:__PORT__</AppDomain>
+    <AppDomain>__SCHEME__://127.0.0.1:__PORT__</AppDomain>
   </AppDomains>
   <Hosts>
     <Host Name="Mailbox"/>
@@ -27,13 +27,13 @@
   <FormSettings>
     <Form xsi:type="ItemRead">
       <DesktopSettings>
-        <SourceLocation DefaultValue="__SCHEME__://localhost:8765/mailkick/static/taskpane.html"/>
+        <SourceLocation DefaultValue="__SCHEME__://localhost:__PORT__/mailkick/static/taskpane.html"/>
         <RequestedHeight>350</RequestedHeight>
       </DesktopSettings>
     </Form>
     <Form xsi:type="ItemEdit">
       <DesktopSettings>
-        <SourceLocation DefaultValue="__SCHEME__://localhost:8765/mailkick/static/taskpane.html"/>
+        <SourceLocation DefaultValue="__SCHEME__://localhost:__PORT__/mailkick/static/taskpane.html"/>
       </DesktopSettings>
     </Form>
   </FormSettings>
@@ -108,7 +108,7 @@
 <bt:Image id="Icon.80x80" DefaultValue="https://raw.githubusercontent.com/corelan/officekick/main/mailkick/static/assets/icon80.png"/>
       </bt:Images>
       <bt:Urls>
-        <bt:Url id="Taskpane.Url" DefaultValue="__SCHEME__://localhost:8765/mailkick/static/taskpane.html"/>
+        <bt:Url id="Taskpane.Url" DefaultValue="__SCHEME__://localhost:__PORT__/mailkick/static/taskpane.html"/>
       </bt:Urls>
       <bt:ShortStrings>
         <bt:String id="CommandsGroup.Label" DefaultValue="AI"/>

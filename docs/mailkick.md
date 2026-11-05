@@ -74,6 +74,13 @@ certificate, no keychain import, and any previously staged MailKick
 manifest is removed from Outlook. SlideKick and DocKick install normally
 and remain plain-http.
 
+**A working certificate covers every add-in, not just MailKick.** Once a
+usable loopback certificate exists (the generated one or yours), the
+installer points SlideKick and DocKick manifests at the same
+`https://localhost:8766` listener - one trusted scheme for all panes.
+Without a usable certificate everything except the Outlook skip-gate
+falls back to `http://localhost:8765`.
+
 **If the prerequisites are not met, the installer skips MailKick for
 Outlook** and says so clearly - it never stages a manifest that cannot run.
 To retry later: quit Office, run `install.py --install` again (the

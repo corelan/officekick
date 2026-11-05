@@ -30,6 +30,22 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.204
+### Changed
+- When a loopback certificate is present AND working (expiry, localhost
+  SAN and trust validated), the installer activates it for Word and
+  PowerPoint as well: all three manifests point at the shared
+  https://localhost:8766 listener. Without a usable certificate the
+  add-ins stay on http://localhost:8765 (MailKick on macOS is skipped as
+  before; on Windows MailKick without a cert renders http - nothing can
+  listen on 8766 there).
+### Fixed
+- render_and_sideload used tls_pair before assigning it (UnboundLocal
+  error in the step label) and only checked file existence, not
+  usability; the mailkick manifest template hardcoded port 8765 so the
+  pane URL could end up as https://localhost:8765 (nothing listens
+  there). Both replaced by a validated, order-safe tls-pair check and a
+  __PORT__ normalisation.
 ## 0.9.203
 ### Changed
 - Option 1 (auto TLS) is now reuse-first: when a certificate is already on

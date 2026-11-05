@@ -641,7 +641,10 @@ def app_label(key):
     return {"slidekick": "PowerPoint", "wordkick": "Word", "mailkick": "Outlook"}[key]
 
 
-def render_manifest(addin_dir, port):
+def render_manifest(addin_dir, port, https_port=None):
+    """https_port: when a working loopback certificate exists, ALL add-in
+    panes are served over https://localhost:<port+1> (same TLS listener as
+    MailKick) and their manifests point there; None = plain http."""
     with open(repo_path(addin_dir, "manifest.template.xml"), "r", encoding="utf-8") as fh:
         t = fh.read()
     if RIBBON:
@@ -649,15 +652,14 @@ def render_manifest(addin_dir, port):
     else:
         t = re.sub(r"(?s)^[ \t]*__COMMANDS_BEGIN__[ \t]*\r?\n.*?^__COMMANDS_END__[ \t]*\r?\n?",
                    "", t, flags=re.M)
-    t = t.replace("__SCHEME__", "http").replace("__PORT__", str(port))
-    if addin_dir == "mailkick":
-        # 0.9.193: Outlook's Add-from-File requires https for EVERY manifest
-        # URL - MailKick serves its pane over the loopback TLS listener on
-        # port+1 (the certs come from ensure_tls_certs()).
-        t = t.replace("http://localhost:%d" % port,
-                      "https://localhost:%d" % (port + 1))
-        t = t.replace("http://127.0.0.1:%d" % port,
-                      "https://127.0.0.1:%d" % (port + 1))
+    # https_port set = the caller validated a working loopback certificate
+    # and EVERY pane rides the shared TLS listener on port+1 (0.9.204:
+    # Word/PowerPoint included; MailKick requires that listener).
+    scheme, pane_port = ("https", https_port) if https_port else ("http", port)
+    t = t.replace("__SCHEME__", scheme).replace("__PORT__", str(pane_port))
+    if scheme == "https":
+        t = t.replace("http://localhost:%d" % port, "https://localhost:%d" % pane_port)
+        t = t.replace("http://127.0.0.1:%d" % port, "https://127.0.0.1:%d" % pane_port)
     try:
         minidom.parseString(t)
     except Exception as e:
@@ -666,9 +668,28 @@ def render_manifest(addin_dir, port):
 
 
 def render_and_sideload():
+    # 0.9.204: a certificate that is already present AND working (validated
+    # by validate_existing_tls: expiry, localhost SAN, trusted chain) is
+    # activated for EVERY pane - the manifests for Word/PowerPoint/MailKick
+    # then point at the shared TLS listener on port+1. Only when no usable
+    # certificate exists do the add-ins stay on plain http (except MailKick,
+    # which requires the TLS prereqs and is skipped without them on macOS).
+    tls_pair = None
+    _crt = os.path.join(tls_cert_dir(), "server.crt")
+    _key = os.path.join(tls_cert_dir(), "server.key")
+    if os.path.isfile(_crt) and os.path.isfile(_key):
+        reason = validate_existing_tls(_crt)
+        if reason is None:
+            tls_pair = (_crt, _key)
+        else:
+            warn("loopback certificate present but not usable (%s) - the" % reason)
+            out("       add-ins will use http; re-run install.py --install to")
+            out("       regenerate and re-trust it.")
     out("")
-    step("rendering add-in manifests (http://localhost:%d, %s)" %
-         (PORT, "ribbon commands" if RIBBON else "list-mode"))
+    step("rendering add-in manifests (%s, %s)" %
+         (("https://localhost:%d via the loopback certificate" % (PORT + 1)) if tls_pair
+          else ("http://localhost:%d" % PORT),
+          "ribbon commands" if RIBBON else "list-mode"))
     if is_mac() and not DRY_RUN:
         if purge_stale_wef_manifests() < 0:   # Office running - dangling registrations win
             die("quit Office completely (Cmd+Q), then re-run install.py --update/--install")
@@ -679,12 +700,6 @@ def render_and_sideload():
     # is missing or the CA trust was declined, SKIP MailKick for Outlook
     # instead of staging a manifest that cannot run. The other add-ins
     # install normally; see docs/mailkick.md "Requirements for Outlook".
-    tls_pair = None
-    if is_mac():
-        _crt = os.path.join(tls_cert_dir(), "server.crt")
-        _key = os.path.join(tls_cert_dir(), "server.key")
-        if os.path.isfile(_crt) and os.path.isfile(_key):
-            tls_pair = (_crt, _key)
     skip_mailkick = is_mac() and MAILKICK_CHOICE == "skip"
     if skip_mailkick:
         warn("MailKick skipped for Outlook: the loopback TLS prerequisites")
@@ -705,7 +720,10 @@ def render_and_sideload():
                 except OSError:
                     pass
             continue
-        xml = render_manifest(folder, PORT)
+        if folder == "mailkick" and is_mac() and tls_pair is None:
+            warn("MailKick: no usable loopback certificate - skipped for Outlook")
+            continue
+        xml = render_manifest(folder, PORT, https_port=(PORT + 1) if tls_pair else None)
         mver = (re.search(r"<Version>([^<]+)</Version>", xml) or [None, "?"])[1]
         mpath = os.path.join(manifest_dir(), mfname)
         if DRY_RUN:

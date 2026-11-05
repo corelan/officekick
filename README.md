@@ -102,9 +102,13 @@ once with the repair tool - see the troubleshooting section in
 
 | Add-in | macOS | Windows |
 |---|---|---|
-| SlideKick (PowerPoint) | `http://localhost:8765` | `http://localhost:8765` |
-| DocKick (Word) | `http://localhost:8765` | `http://localhost:8765` |
-| MailKick (Outlook) | `https://localhost:8766` (loopback TLS) | `http://localhost:8765` |
+| SlideKick (PowerPoint) | `http://localhost:8765`, or `https://localhost:8766` when a working loopback certificate exists | `http://localhost:8765` |
+| DocKick (Word) | same as SlideKick | `http://localhost:8765` |
+| MailKick (Outlook) | `https://localhost:8766` (loopback TLS; skipped without it) | `http://localhost:8765` |
+
+On macOS the installer activates the certificate for **all three** add-ins
+once one is present and working - one trusted https listener serves every
+pane; without a usable certificate everything falls back to http.
 
 How to tell what a pane is actually using: the **bottom status line** in the
 task pane shows it - a 🔒 plus port **8766** means the pane is served over
