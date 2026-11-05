@@ -143,9 +143,9 @@ A profile = which model runs for what. Routes:
 - **content** - slide/document/email editing and generation.
 - **other** - advice, explanations, brainstorming.
 - **Image model (optional)** - generates pictures; empty = no image
-  generation. The model list shows image-capable models when the provider
-  exposes that (OpenRouter metadata; name hints elsewhere) - tick **show
-  all models** to bypass the filter. A custom model id field is available.
+  generation. The model list shows image-capable models only; tick the
+  **show all models** checkbox to load the full list (can be long, >420
+  on OpenRouter). A custom model id field is available.
 - **Web search model (optional)** - a model used when a lookup needs one
   (see [Search](#settings--search)); empty = the automatic channel.
 

@@ -4352,24 +4352,23 @@ function applyOps(deck, ops, ctx) {
         populateModelSelect(slot, connName, $(slot + "-model").value, cap);
       });
     });
-    $("prof-web-toggle").addEventListener("click", function () {
-      SK.profWebFilter = !SK.profWebFilter;
-      $("prof-web-toggle").textContent = SK.profWebFilter ? "web-capable only" : "show all models";
-      var connName = $("prof-web-conn").value;
-      if (connName) {
-        delete SK.modelsCache[connName + (SK.profWebFilter ? "::web" : "")];
-        populateModelSelect("prof-web", connName, "", SK.profWebFilter ? "web" : null);
-      }
-    });
-    $("prof-image-toggle").addEventListener("click", function () {
-      SK.profImageFilter = !SK.profImageFilter;
-      $("prof-image-toggle").textContent = SK.profImageFilter ? "image-capable only" : "show all models";
-      var connName = $("prof-image-conn").value;
-      if (connName) {
-        delete SK.modelsCache[connName + (SK.profImageFilter ? "::image" : "")];
-        populateModelSelect("prof-image", connName, "", SK.profImageFilter ? "image" : null);
-      }
-    });
+      var imAllToggle = $("prof-image-all");
+  var wbAllToggle = $("prof-web-all");
+  if (imAllToggle) imAllToggle.checked = !SK.profImageFilter;   // checkbox = SHOW ALL
+  if (wbAllToggle) wbAllToggle.checked = !SK.profWebFilter;
+  if (imAllToggle) imAllToggle.addEventListener("change", function () {
+    // unchecked (default) = image-capable models only; checked = full list
+    SK.profImageFilter = !imAllToggle.checked;
+    var connName = $("prof-image-conn").value;
+    if (connName) populateModelSelect("prof-image", connName, "", SK.profImageFilter ? "image" : null);
+  });
+  if (wbAllToggle) wbAllToggle.addEventListener("change", function () {
+    SK.profWebFilter = !wbAllToggle.checked;
+    var connName = $("prof-web-conn").value;
+    if (connName) populateModelSelect("prof-web", connName, "", SK.profWebFilter ? "web" : null);
+  });
+
+    
     ["content", "other", "image", "web"].forEach(function (slot) {
       $("prof-" + slot + "-conn").addEventListener("change", function () {
         populateModelSelect("prof-" + slot, $("prof-" + slot + "-conn").value, "",

@@ -30,6 +30,12 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.185
+### Changed
+- The profile editor's "show all models" is now a CHECKBOX (image slot +
+  web slot): unchecked (default) lists only image- / web-capable models,
+  checking it refreshes the select with the full list. State persists
+  across profile edits. (Was a toggling button.)
 ## 0.9.184
 ### Fixed
 - The bottom status bar (and the About tab) refreshed their version only
