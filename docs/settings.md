@@ -256,3 +256,34 @@ what happened).
 Related endpoints (same machine only): `http://127.0.0.1:8765/api/health`
 (server up + version), `POST /api/server-restart`, `POST /api/repo-update`
 (the pane's pull button).
+
+## Web search steps
+
+The add-ins' live web lookups run through one ordered list of steps,
+shared by every add-in.
+
+How a run uses the steps:
+
+- Steps run in the displayed order, top first.
+- A step that returns no results or cannot run falls through to the
+  next step; only when ALL steps fail or yield nothing does the pane
+  continue without web results.
+- With NO steps configured, the built-in keyless DuckDuckGo engine is
+  used automatically.
+
+Step types:
+
+- `DuckDuckGo` - free, keyless, always available.
+- `Brave Search` / `Tavily` / `Firecrawl` - paid search APIs; put the
+  API key in "Engine API keys" below (the pane marks which are set).
+  Without a key the step skips itself.
+- `Model lookup` - a step backed by one of your model connections:
+  - OpenRouter: pin a chat model; appends `:online` to enable its web
+    plugin.
+  - OpenAI-style APIs: pick a models-with-search variant
+    (e.g. a search-preview model).
+  - Ollama / llama.cpp: no native web capability; such a step skips
+    itself (the next step runs).
+
+API keys are stored in the shared config file (never sent anywhere but
+the respective search provider).

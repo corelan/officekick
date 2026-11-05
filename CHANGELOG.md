@@ -30,6 +30,13 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.229
+### Changed
+- GUI declutter: the Web search steps sheet's three-sentence explainer is
+  now two short lines (order + the free-DuckDuckGo default) with a
+  pointer to the docs. The full semantics (fall-through behavior,
+  per-engine key requirements, "model lookup" steps per connection type)
+  moved to docs/settings.md > "Web search steps".
 ## 0.9.228
 ### Changed
 - Image quality: every image prompt is now enriched at the single
