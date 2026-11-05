@@ -63,6 +63,8 @@
     modelsCache: {},     // connName -> {list:[...], at:ms}
     sessionApprovals: {},// opType -> 'auto' when approved for this session
     lastRecovered: 0,      // op count salvaged from a cut-off reply (gate note)
+    clarifyAnswer: null,   // 0.9.235: pending user pick from a clarify round
+    clarifyChain: 0,       // clarify rounds served since the original ask
     sessionManual: false,  // the user renamed this session: pause AI titles
     recoveredDupes: 0,     // of those, duplicates removed during the merge
     history: [],         // conversation turns shown to the model (session-only)
@@ -990,7 +992,7 @@
         if (o2 && typeof o2 === "object") {
           if (o2.kind === "slide_ops" && Array.isArray(o2.ops)) return o2;
           if (Array.isArray(o2.ops)) return o2;   // tolerate missing kind
-          if (o2.kind === "reply" || o2.kind === "read_slide" || o2.kind === "web_lookup") return o2;
+          if (o2.kind === "reply" || o2.kind === "clarify" || o2.kind === "read_slide" || o2.kind === "web_lookup") return o2;
           found.push(o2);
         }
         c2 = end; // skip past this object
@@ -1123,6 +1125,15 @@
 
   ].join("\n");
 
+  var CLARIFY_RULE =
+    "\nAMBIGUOUS RESULT FORM: when the user's ask could plausibly deliver a DIFFERENT FORM of the result " +
+    "(e.g. 'infographic', 'visual', 'diagram' = an AI-GENERATED PICTURE vs. EDITABLE SHAPES + text vs. both; " +
+    "a paragraph vs. a bulleted list), you may ask the user ONCE instead of guessing. Reply exactly:" +
+    " {\"kind\":\"clarify\",\"question\":\"<one short question>\",\"options\":[\"<short option>\",\"<short option>\"]} " +
+    "(2-4 short options, no JSON inside). The pane shows the question; the user's choice arrives in your next ask " +
+    "(look for CLARIFICATION) - then deliver the final result for that choice without asking again. Use it ONLY " +
+    "when the wording and the context do not already decide it; never for style/tone/size details you can decide " +
+    "yourself, and never twice in one chain.";
   var NOTES_OFF_RULE =
     "- Speaker-notes AUTO-generation is OFF in the user's Settings. For ordinary slide work:" +
     " omit notes fields and never invent set_notes ops. When the user explicitly asks for" +
@@ -1718,6 +1729,7 @@
   function assistantHistoryText(parsed) {
     // a compact recap for the next round; never the raw ops JSON (it bloats every
     // later request and pushes the models toward echoing blobs into new prompts)
+    if (parsed && parsed.kind === "clarify") return "(asked the user to pick: " + String(parsed.question || "").slice(0, 140) + ")";
     if (!parsed || !parsed.ok) {
       var rawT = (SK.lastModelText && SK.lastModelText.text) || "";
       rawT = String(rawT);
@@ -4049,6 +4061,7 @@ OfficeDeck.prototype.setNotes = function (i, text) {
       SK.webRounds = 0;
       SK.pageReads = 0;
       SK.webResults = "";
+      if (!(SK.clarifyAnswer && SK.clarifyAnswer.expect === instruction)) SK.clarifyChain = 0;   // a free new ask resets the clarify chain
       var webPromise = Promise.resolve("");
       return webPromise.then(function () {
       var sys = SYSTEM_PROMPT + "\nHost: " + (SK.sim ? "SlideKick simulator" : SK.deck.capabilities().host);
@@ -4057,8 +4070,15 @@ OfficeDeck.prototype.setNotes = function (i, text) {
         sys += "\n\nUSER CUSTOM INSTRUCTIONS (from Settings - obey these):\n" + _cp;
       }
       if (!(SK.cfg && SK.cfg.generateNotes)) sys += "\n" + NOTES_OFF_RULE;
+      sys += "\n" + CLARIFY_RULE;
       if (MAKEOVER_RE.test(instruction)) sys += "\n" + MAKEOVER_BRIEF;
       var user = (ctx ? formatContext(ctx) : "(no deck context requested)") + "\n\nUSER REQUEST:\n" + instruction;
+      if (SK.clarifyAnswer && SK.clarifyAnswer.expect === instruction) {
+        user += "\n\nCLARIFICATION: you asked the user: \"" + SK.clarifyAnswer.q + "\". The user chose: " + SK.clarifyAnswer.a +
+          ". Deliver the final result for that choice now - do not ask again.";
+        SK.clarifyAnswer = null;
+        dbg("clarify.answer", { delivered: true });
+      }
       if (SK.webResults) user += "\n\nWEB RESULTS (live lookup, cite them when relevant):\n" + SK.webResults;
       var messages = [
         { role: "system", content: sys },
@@ -4614,6 +4634,20 @@ OfficeDeck.prototype.setNotes = function (i, text) {
         }
         return parsed;
       }).then(function (parsed) {
+        if (parsed && parsed.kind === "clarify") {
+          // 0.9.235: the model asks the user to pick the form of the result
+          SK.clarifyChain = (SK.clarifyChain || 0) + 1;
+          dbg("clarify.asked", { chain: SK.clarifyChain, q: String(parsed.question || "").slice(0, 120) });
+          if (SK.clarifyChain > 2) {
+            parsed = { ok: true, kind: "reply", text: "The clarification limit for this chain is reached (your question, answered in text: " + String(parsed.question || "") + ")" };
+          } else {
+            SK.lastInstruction = instruction;   // the clarify pair files into the Previous box on the next run
+            renderClarify(parsed, instruction);
+            setStatus("Pick one of the options (or write your own answer) to continue.", "pending");
+            pushHistory(instruction, assistantHistoryText(parsed));
+            return Promise.resolve(null);
+          }
+        }
         var waitApply = renderParsed(parsed, ctx, instruction);
         pushHistory(instruction, assistantHistoryText(parsed));
         return Promise.resolve(waitApply);   // timer/busy wait for the auto-apply to finish
@@ -4678,6 +4712,15 @@ OfficeDeck.prototype.setNotes = function (i, text) {
     var obj = extractObject(stripped);
     if (Array.isArray(obj)) obj = { ops: obj };
     if (obj && typeof obj === "object") {
+      if (obj.kind === "clarify" && typeof obj.question === "string" && obj.question.trim()) {
+        // 0.9.235: the model asks the user to pick the form of the result;
+        // internal action, never gated - the pane renders the question and
+        // the re-ask carries the user's decision
+        return { ok: true, kind: "clarify", question: obj.question.trim().slice(0, 300),
+                 options: (Array.isArray(obj.options) ? obj.options : []).slice(0, 4)
+                   .map(function (o) { return String(o == null ? "" : o).trim(); }).filter(Boolean),
+                 text: stripped };
+      }
       if (obj.kind === "reply") {
         if (typeof obj.text === "string") return { ok: true, kind: "reply", text: obj.text };
         return { ok: true, kind: "reply", text: String(obj.text == null ? "" : JSON.stringify(obj.text)) };
@@ -4949,6 +4992,63 @@ OfficeDeck.prototype.setNotes = function (i, text) {
     });
     reqEcho.appendChild(cpBtn);
   }
+  // ---- clarify round (0.9.235): the model may ask the user to pick the ----
+  // form of the result instead of guessing; the pick re-asks internally.
+  function renderClarify(parsed, instruction) {
+    var out = $("chat-output");
+    if (!out) return;
+    var box = document.createElement("div");
+    box.className = "clarifybox";
+    var q = document.createElement("div");
+    q.className = "clarify-q";
+    q.textContent = String(parsed.question || "Which result do you want?");
+    box.appendChild(q);
+    var pick = function (val) {
+      Array.prototype.forEach.call(box.querySelectorAll("button, input"), function (el) { el.disabled = true; });
+      // the choice rides INSIDE the instruction: every later re-ask of this
+      // chain (pre-lookup / lookup / repair rounds echo the original request)
+      // carries it, not only the first ask after the pick
+      var augText = String(instruction) + "\n(your earlier choice on \"" + String(parsed.question || "") + "\": " + String(val) + ")";
+      SK.clarifyAnswer = { q: String(parsed.question || ""), a: String(val), expect: augText };
+      var inp = $("chat-input");
+      if (inp) { inp.value = augText; }
+      runPrompt();   // the re-ask carries the decision as a CLARIFICATION block
+    };
+    var opts = (parsed.options || []).slice(0, 4).filter(function (o) { return String(o || "").trim(); });
+    opts.forEach(function (o) {
+      var b = document.createElement("button");
+      b.className = "btn clarify-opt";
+      b.type = "button";
+      b.textContent = String(o);
+      b.addEventListener("click", function () { pick(String(o)); });
+      box.appendChild(b);
+    });
+    var row = document.createElement("div");
+    row.className = "clarify-row";
+    var ti = document.createElement("input");
+    ti.type = "text";
+    ti.className = "clarify-input";
+    ti.placeholder = "something else - type your own answer\u2026";
+    var go = document.createElement("button");
+    go.className = "btn";
+    go.type = "button";
+    go.textContent = "Answer";
+    go.disabled = true;
+    ti.addEventListener("input", function () { go.disabled = !ti.value.trim(); });
+    var send = function () {
+      var v = ti.value.trim();
+      if (v) pick(v);
+    };
+    go.addEventListener("click", send);
+    ti.addEventListener("keydown", function (eK) {
+      if (eK.key === "Enter") { eK.preventDefault(); send(); }
+    });
+    row.appendChild(ti);
+    row.appendChild(go);
+    box.appendChild(row);
+    out.appendChild(box);
+  }
+
   function renderParsed(parsed, ctx, instruction) {
     SK.lastInstruction = instruction;
     SK.opProgress = null;     // a fresh run gets fresh progressive tracking

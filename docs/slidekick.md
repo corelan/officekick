@@ -189,6 +189,17 @@ of read_slide - and re-asks the model with the complete text, which it then
 uses to answer. Up to 2 read rounds per run keep a model from looping.
 The read itself needs no approval: it only reads, it never writes.
 
+## The AI can ask you back (clarify round)
+When a request could plausibly produce a different form of the result - the
+"infographic" case: an AI-generated picture vs. editable shapes + text vs.
+both - the model may ask ONCE instead of guessing. It replies with a
+clarify object; the pane shows the question with clickable option buttons
+and a free-text answer row under the prompt. Your pick re-asks the model
+immediately (the choice rides inside the request, so every later lookup or
+repair round carries it) and the final result follows without another
+question. Internal action, never gated; at most two clarify rounds per
+chain; the Q&A pair stays in Previous requests and in the session history.
+
 ## Web lookups and page reads
 
 For requests that need current facts, the model can ask the pane to search

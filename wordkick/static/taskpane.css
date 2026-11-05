@@ -837,3 +837,12 @@ body.dark .actts { color: #6e7783; }
 .row.drop-below { box-shadow: 0 2px 0 #4a90d9; }
 .row.dragging { opacity: 0.55; }
 body.dark .dragh { background-image: radial-gradient(circle, #778089 1.6px, transparent 1.7px); }
+
+/* clarify round (0.9.235): the model asks the user to pick the result form */
+.clarifybox { margin: 6px 0 2px 0; padding: 8px 10px; border: 1px solid #6366f1; border-radius: 6px; background: rgba(99, 102, 241, 0.06); }
+body.dark .clarifybox { background: rgba(129, 140, 248, 0.08); }
+.clarifybox .clarify-q { font-weight: 600; margin: 0 0 6px 0; color: #4338ca; }
+body.dark .clarifybox .clarify-q { color: #a5b4fc; }
+.clarifybox .clarify-opt { display: block; width: 100%; margin: 4px 0; text-align: left; }
+.clarifybox .clarify-row { display: flex; gap: 6px; margin-top: 6px; }
+.clarifybox .clarify-input { flex: 1 1 auto; min-width: 0; }

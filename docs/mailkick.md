@@ -145,6 +145,15 @@ machine except model calls you trigger.
 The pane adapts to the read/compose mode; ops that don't match the mode are
 rejected up front (e.g. compose_body on a received message).
 
+## The AI can ask you back (clarify round)
+When a request could plausibly produce a different deliverable and the email
+context does not decide it (summarize vs. draft replies; one reply vs. a
+batch), the model may ask ONCE instead of guessing. The pane shows the
+question with clickable option buttons and a free-text answer row; your pick
+re-asks the model immediately and the deliverable follows. Internal action,
+never gated (MailKick still never sends anything); at most two clarify
+rounds per chain.
+
 ## Web lookups
 MailKick keeps the REACTIVE lookup only: when drafting a reply needs fresh
 facts, the model answers `{"kind":"web_lookup"}` and the pane fetches and

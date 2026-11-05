@@ -72,6 +72,8 @@
     mailEmailId: null,            // 0.9.233: identity (itemId) of the open email
     mailStaleResumeDropUntil: 0,  // one-shot window in which a boot resume is dropped
     mnsUserTouched: false,        // user changed the new-session-per-email toggle
+    clarifyAnswer: null,          // 0.9.235: pending user pick from a clarify round
+    clarifyChain: 0,              // clarify rounds served since the original ask
   };
 
   var CONN_TYPES = [
@@ -940,6 +942,15 @@
     "- LIVE WEB LOOKUPS: when the request needs up-to-date info you cannot reliably know (current events, news, prices, recent releases, rankings, live data), reply with ONLY {\"kind\":\"web_lookup\"} - nothing else. MailKick then runs a web-enabled lookup and re-asks you with fresh citable results. Never use it for mail edits, styling, general concepts, or what the email context already answers. Lookups are INTERNAL actions - free (never gated/approved) - and you may reply with later rounds of {\"kind\":\"web_lookup\"} as well (up to 3 lookups per run). After a lookup you may also ask for the FULL text of one page from its results by replying with ONLY {\"kind\":\"read_page\",\"url\":\"https://...\"} (internal, free, up to 4 pages per run). When a page's text carries a \"…[page continues]\" ending and the info you need may sit deeper, read the NEXT part by replying with ONLY {\"kind\":\"read_page\",\"url\":\"https://...\",\"from\":<n>} using the part start the pane gave you (continuations are free and do not use the 4-page budget). You have no web access yourself and cannot run a search; the lookup channel belongs to MailKick - never claim you tried a lookup or that the lookup channel is unavailable, and never refuse for lack of live data: reply with {\"kind\":\"web_lookup\"} instead.",
   ].join("\n");
 
+  var CLARIFY_RULE =
+    "\nAMBIGUOUS DELIVERABLE: when the request could plausibly produce a DIFFERENT deliverable and the email " +
+    "context does not decide it (summarize the thread vs. draft replies; one reply vs. one per open thread; " +
+    "who should be answered), you may ask the user ONCE instead of guessing. Reply exactly:" +
+    " {\"kind\":\"clarify\",\"question\":\"<one short question>\",\"options\":[\"<short option>\",\"<short option>\"]} " +
+    "(2-4 short options). This replaces the ops/reply round - it is NOT an action: the pane shows the question; " +
+    "the user's choice arrives in your next ask (look for CLARIFICATION) - then produce the deliverable for that " +
+    "choice without asking again. Only when the wording and the context do not already decide it; never for " +
+    "tone/length details you can decide yourself, and never twice in one chain.";
   var NOTES_OFF_RULE = "";
 
   var REPAIR_ASK =
@@ -1688,6 +1699,7 @@ var nw = $("sess-new");
 
   function assistantHistoryText(parsed) {
     // a compact recap for the next round; never the raw ops JSON
+    if (parsed && parsed.kind === "clarify") return "(asked the user to pick: " + String(parsed.question || "").slice(0, 140) + ")";
     if (!parsed || !parsed.ok) {
       var rawT = (SK.lastModelText && SK.lastModelText.text) || "";
       return String(rawT).slice(0, 400);
@@ -2579,12 +2591,21 @@ function applyOps(deck, ops, ctx) {
       SK.webRounds = 0;
       SK.pageReads = 0;
       SK.webResults = "";
+      if (!(SK.clarifyAnswer && SK.clarifyAnswer.expect === instruction)) SK.clarifyChain = 0;   // a free new ask resets the clarify chain
       var webPromise = Promise.resolve("");
       return webPromise.then(function () {
       if (!(SK.cfg && SK.cfg.generateNotes)) sys += "\n" + NOTES_OFF_RULE;
+      sys += "\n" + CLARIFY_RULE;
       var ctxText = ctx ? formatContext(ctx) : "(no email could be read - make sure an email is open or selected and the reading pane stays open)";
+      var clarifyBlock = "";
+      if (SK.clarifyAnswer && SK.clarifyAnswer.expect === instruction) {
+        clarifyBlock = "\n\nCLARIFICATION: you asked the user: \"" + SK.clarifyAnswer.q + "\". The user chose: " + SK.clarifyAnswer.a +
+          ". Produce the deliverable for that choice now - do not ask again.";
+        SK.clarifyAnswer = null;
+        dbg("clarify.answer", { delivered: true });
+      }
       return getTemplateBlock(instruction).then(function (tplBlock) {
-        var user = ctxText + "\n\n" + (tplBlock ? tplBlock + "\n" : "") + "\nUSER REQUEST:\n" + instruction;
+        var user = ctxText + "\n\n" + (tplBlock ? tplBlock + "\n" : "") + "\nUSER REQUEST:\n" + instruction + clarifyBlock;
         if (SK.webResults) user += "\n\nWEB RESULTS (live lookup, cite them when relevant):\n" + SK.webResults;
         var messages = [
           { role: "system", content: sys },
@@ -2756,6 +2777,7 @@ function applyOps(deck, ops, ctx) {
                   return { ok: true, kind: "slide_ops", ops: parsed.ops.concat(extra), recovered: true };
                 });
             }
+            if (parsed.ok) return parsed;   // clean parse: never repair (the missing escape re-asked every clean mail run)
           var repairRound = function (nudge, prevText, level) {
             var repairMsgs = messages.concat([
               { role: "assistant", content: prevText || "" },
@@ -2798,6 +2820,20 @@ function applyOps(deck, ops, ctx) {
             });
           });
         }).then(function (parsed) {
+          if (parsed && parsed.kind === "clarify") {
+            // 0.9.235: the model asks the user to pick the deliverable
+            SK.clarifyChain = (SK.clarifyChain || 0) + 1;
+            dbg("clarify.asked", { chain: SK.clarifyChain, q: String(parsed.question || "").slice(0, 120) });
+            if (SK.clarifyChain > 2) {
+              parsed = { ok: true, kind: "reply", text: "The clarification limit for this chain is reached (your question, answered in text: " + String(parsed.question || "") + ")" };
+            } else {
+              SK.lastInstruction = instruction;   // the clarify pair files into the Previous box on the next run
+              renderClarify(parsed, instruction);
+              setStatus("Pick one of the options (or write your own answer) to continue.", "pending");
+              pushHistory(instruction, assistantHistoryText(parsed));
+              return Promise.resolve(null);
+            }
+          }
           var waitApply = renderParsed(parsed, ctx, instruction);
           pushHistory(instruction, assistantHistoryText(parsed));
           return Promise.resolve(waitApply);   // timer/busy wait for the auto-apply to finish
@@ -2871,6 +2907,15 @@ function applyOps(deck, ops, ctx) {
         // Models sometimes emit look-up-plus-actions in one reply: keep the
         // ops so the runner can apply them after the lookup round.
         return { ok: true, kind: "web_lookup", ops: Array.isArray(obj.ops) ? obj.ops : null, text: stripped };
+      }
+      if (obj.kind === "clarify" && typeof obj.question === "string" && obj.question.trim()) {
+        // 0.9.235: the model asks the user to pick the deliverable; internal
+        // action, never gated - the pane renders the question and the re-ask
+        // carries the user's decision
+        return { ok: true, kind: "clarify", question: obj.question.trim().slice(0, 300),
+                 options: (Array.isArray(obj.options) ? obj.options : []).slice(0, 4)
+                   .map(function (o) { return String(o == null ? "" : o).trim(); }).filter(Boolean),
+                 text: stripped };
       }
       if (obj.kind === "reply" && typeof obj.text === "string") return { ok: true, kind: "reply", text: obj.text };
       if (obj.kind === "slide_ops" && Array.isArray(obj.ops)) return { ok: true, kind: "slide_ops", ops: obj.ops };
@@ -3139,6 +3184,63 @@ function applyOps(deck, ops, ctx) {
     });
     reqEcho.appendChild(cpBtn);
   }
+  // ---- clarify round (0.9.235): the model may ask the user to pick the ----
+  // deliverable instead of guessing; the pick re-asks internally.
+  function renderClarify(parsed, instruction) {
+    var out = $("chat-output");
+    if (!out) return;
+    var box = document.createElement("div");
+    box.className = "clarifybox";
+    var q = document.createElement("div");
+    q.className = "clarify-q";
+    q.textContent = String(parsed.question || "Which result do you want?");
+    box.appendChild(q);
+    var pick = function (val) {
+      Array.prototype.forEach.call(box.querySelectorAll("button, input"), function (el) { el.disabled = true; });
+      // the choice rides INSIDE the instruction: every later re-ask of this
+      // chain (pre-lookup / lookup / repair rounds echo the original request)
+      // carries it, not only the first ask after the pick
+      var augText = String(instruction) + "\n(your earlier choice on \"" + String(parsed.question || "") + "\": " + String(val) + ")";
+      SK.clarifyAnswer = { q: String(parsed.question || ""), a: String(val), expect: augText };
+      var inp = $("chat-input");
+      if (inp) { inp.value = augText; }
+      runPrompt();   // the re-ask carries the decision as a CLARIFICATION block
+    };
+    var opts = (parsed.options || []).slice(0, 4).filter(function (o) { return String(o || "").trim(); });
+    opts.forEach(function (o) {
+      var b = document.createElement("button");
+      b.className = "btn clarify-opt";
+      b.type = "button";
+      b.textContent = String(o);
+      b.addEventListener("click", function () { pick(String(o)); });
+      box.appendChild(b);
+    });
+    var row = document.createElement("div");
+    row.className = "clarify-row";
+    var ti = document.createElement("input");
+    ti.type = "text";
+    ti.className = "clarify-input";
+    ti.placeholder = "something else - type your own answer\u2026";
+    var go = document.createElement("button");
+    go.className = "btn";
+    go.type = "button";
+    go.textContent = "Answer";
+    go.disabled = true;
+    ti.addEventListener("input", function () { go.disabled = !ti.value.trim(); });
+    var send = function () {
+      var v = ti.value.trim();
+      if (v) pick(v);
+    };
+    go.addEventListener("click", send);
+    ti.addEventListener("keydown", function (eK) {
+      if (eK.key === "Enter") { eK.preventDefault(); send(); }
+    });
+    row.appendChild(ti);
+    row.appendChild(go);
+    box.appendChild(row);
+    out.appendChild(box);
+  }
+
   function renderParsed(parsed, ctx, instruction) {
     SK.lastInstruction = instruction;
     var out = $("chat-output");

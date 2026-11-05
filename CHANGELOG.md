@@ -30,6 +30,26 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.235
+### Added (all add-ins)
+- Clarification round: when a request could plausibly deliver a DIFFERENT
+  form of the result (the "infographic" case: an AI-generated image vs.
+  editable shapes + text vs. both), the model can now ask the user once
+  instead of guessing. It replies {"kind":"clarify","question":...,
+  "options":[2-4 short options]}; the pane shows the question with clickable
+  option buttons plus a free-text answer row; the pick re-asks immediately
+  (the choice rides inside the instruction so every later lookup/repair
+  re-ask carries it) and the model delivers the final result without asking
+  again. Internal action, never gated; max 2 clarify rounds per chain; the
+  Q&A pair lands in Previous requests and in the session history. Rules
+  added to all three system prompts (MailKick's version says a clarify reply
+  replaces - not supplements - the ops/reply round).
+### Fixed (MailKick)
+- The response chain never escaped the repair ladder on a clean parse: every
+  MailKick run re-asked the model at least once (silently doubling cost and
+  latency on every reply since the 0.9.217 repair wave). Added the missing
+  "clean parse returns immediately" escape.
+
 ## 0.9.234
 ### Fixed (SlideKick)
 - Real-Office textbox creation: PowerPoint 16.114 (mac) rejected

@@ -89,6 +89,15 @@ in the pane with the comment text and its anchor, instead of failing.
 - `rewrite this document: executive summary, then sections ...` - the gated
   full-document rewrite
 
+## The AI can ask you back (clarify round)
+When a request could plausibly produce a different form of the result -
+"visual section" = an AI-generated picture vs. a table vs. formatted text -
+the model may ask ONCE instead of guessing. The pane shows the question with
+clickable option buttons and a free-text answer row; your pick re-asks the
+model immediately (the choice rides inside the request) and the final result
+follows without another question. Internal action, never gated; at most two
+clarify rounds per chain.
+
 ## Web lookups
 
 Content-creation requests (write an essay / article / report / letter /
