@@ -398,9 +398,9 @@ def choose_mailkick_tls():
         return None            # caller falls back to the auto/self-signed path
     out("")
     step("MailKick for Outlook (macOS) - choose the install mode")
-    out("   MailKick needs an https:// loopback pane for Outlook (Outlook")
-    out("   validates every manifest URL as https) and only works in the")
-    out("   CLASSIC Outlook UI (New Outlook cannot run desktop task panes).")
+    out("   MailKick needs an https:// loopback pane (Outlook validates every")
+    out("   manifest URL as https). The pane can then be added from NEW and")
+    out("   classic Outlook alike - what matters is the trusted https cert.")
     out("   1) auto: generate a self-signed loopback CA + localhost certificate")
     out("      and trust it in your login keychain (default; no admin rights)")
     out("   2) provide my OWN already-trusted certificate + key (PEM files)")

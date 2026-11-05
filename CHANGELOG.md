@@ -30,6 +30,14 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.202
+### Fixed
+- Mode-vs-https correction (verified by Corelan on the real machine): the
+  MailKick pane installs from BOTH New and classic macOS Outlook - https
+  + a trusted certificate was the actual gate, not the Outlook mode. The
+  installer's mode prompt, README, and docs/mailkick.md (requirements +
+  the old "switch to classic" troubleshooting entry) now say so; the
+  stale New-Outlook limitation claims are gone.
 ## 0.9.201
 ### Changed
 - Boot self-update throttle: 12 h -> 5 min. Urgent updates need a restart,

@@ -5,7 +5,7 @@ and Windows and share one technology stack.
 
 - **Corelan SlideKick** - the PowerPoint add-in ([docs/slidekick.md](docs/slidekick.md))
 - **Corelan DocKick** - the Word add-in ([docs/dockick.md](docs/dockick.md))
-- **Corelan MailKick** - the Outlook add-in: summarize, translate, draft replies (you send), categories ([docs/mailkick.md](docs/mailkick.md); macOS Outlook = classic mode + a one-time loopback-TLS setup - [requirements](docs/mailkick.md#requirements-for-outlook-macos---read-before-installing); skipped automatically when they are not met)
+- **Corelan MailKick** - the Outlook add-in: summarize, translate, draft replies (you send), categories ([docs/mailkick.md](docs/mailkick.md); macOS Outlook = one-time loopback-TLS setup (needs a trusted https pane; works in New and classic Outlook) - [requirements](docs/mailkick.md#requirements-for-outlook-macos---read-before-installing); skipped automatically when they are not met)
 
 ## How it works
 

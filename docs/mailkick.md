@@ -10,17 +10,13 @@ drafts; you review and send.
 
 ## Requirements for Outlook (macOS) - read before installing
 
-MailKick runs **only in classic macOS Outlook** and needs a one-time
-loopback TLS setup. If any of these don't suit you, choose not to install
-MailKick in Outlook - neither the installer nor the other two add-ins are
-affected:
+MailKick runs in **both New and classic macOS Outlook** (verified: with a
+trusted certificate the pane is added from either mode; the mode itself is
+NOT the gate) and needs a one-time loopback TLS setup. If any of these
+don't suit you, choose not to install MailKick in Outlook - neither the
+installer nor the other two add-ins are affected. The requirements:
 
-1. **Classic mode required.** New Outlook cannot run desktop task-pane
-   add-ins (a Microsoft platform boundary, not an add-in bug). The mode
-   toggle sits at the top of Outlook's toolbar; the installer cannot switch
-   it for you. Shell check: `defaults read com.microsoft.Outlook` shows
-   `IsRunningNewOutlook = 1` in New Outlook.
-2. **A loopback TLS certificate, generated and trusted once.** Outlook's
+1. **A loopback TLS certificate, generated and trusted once.** Outlook's
    Add-from-File (and this build's WEF pickup) requires every manifest URL
    to be https, so the installer creates `~/.officekick/certs/`: a per-user
    "OfficeKick Loopback CA" plus a localhost certificate (issued via
@@ -184,12 +180,16 @@ run to `~/Library/Containers/com.microsoft.Outlook/Data/Documents/wef/mailkick.x
 
 ## Troubleshooting (Outlook)
 - **MailKick disappeared / Add from File fails repeatedly** - the likeliest
-  cause: Outlook runs in **"New Outlook" mode**. New Outlook is a different
-  client that cannot run desktop task-pane add-ins (and its Add-from-File
-  dialog fails for our manifest even though the XML is correct). Verify:
-  the toggle sits at the **top of Outlook's toolbar** ("New Outlook");
-  switch it OFF and relaunch Outlook - the classic client reads the
-  manifest again and the icon returns. Shell check:
+  old diagnosis - WRONG: the mode itself was never the gate (the pane is
+  added from New and classic Outlook alike once the certificate is
+  trusted; verified). The real cause of "the icon won't appear in New
+  Outlook" was the macOS Certificate Transparency check rejecting the
+  loopback https certificate (see the cert entries above) plus the old
+  http-only manifest, both fixed for good. If the icon still misbehaves in
+  one mode: remove the add-in (Get Add-ins > My add-ins > MailKick >
+  remove), quit and reopen Outlook, and re-add from
+  `~/Library/Containers/.../wef/mailkick.xml` or the served URL - Outlook
+  reads the manifest again and the icon returns. Shell check:
   `defaults read com.microsoft.Outlook` shows
   `IsRunningNewOutlook = 1` when the toggle is on. Note that Microsoft's
   16.x update rollouts can flip this mode on by themselves (an update
