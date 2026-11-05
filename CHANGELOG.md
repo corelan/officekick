@@ -30,6 +30,12 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.200
+### Fixed
+- The update notice no longer tells an OLD pane to "click the update
+  notice": the click-to-pull button exists only in newer panes. The
+  message now says the pane cannot update itself while it IS the old
+  build, and points at install.py --update for that first hop.
 ## 0.9.199
 ### Added
 - MailKick-for-Outlook install modes on macOS, chosen interactively during
