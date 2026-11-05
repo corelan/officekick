@@ -570,9 +570,24 @@ def render_and_sideload():
             die("quit Office completely (Cmd+Q), then re-run install.py --update/--install")
     apps = office_apps_present()
     rendered = []
+    # 0.9.196: macOS Outlook requires the loopback TLS prerequisites
+    # (https-only validation in Add-from-File + the WEF pickup). If openssl
+    # is missing or the CA trust was declined, SKIP MailKick for Outlook
+    # instead of staging a manifest that cannot run. The other add-ins
+    # install normally; see docs/mailkick.md "Requirements for Outlook".
+    tls_pair = ensure_tls_certs() if is_mac() else None
+    skip_mailkick = is_mac() and not DRY_RUN and tls_pair is None
+    if skip_mailkick:
+        warn("MailKick skipped for Outlook: the loopback TLS prerequisites")
+        warn("are not met (openssl missing, or the CA trust was declined).")
+        out("       See docs/mailkick.md > Requirements for Outlook -")
+        out("       SlideKick and DocKick are not affected. Retry any time with")
+        out("       quit-Office + install.py --install once the prerequisites pass.")
     for (folder, name, mfname) in OURS:
         if not os.path.isfile(repo_path(folder, "manifest.template.xml")):
             warn("%s not built in this checkout - skipped" % name)
+            continue
+        if skip_mailkick and folder == "mailkick":
             continue
         xml = render_manifest(folder, PORT)
         mver = (re.search(r"<Version>([^<]+)</Version>", xml) or [None, "?"])[1]

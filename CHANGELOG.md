@@ -30,6 +30,20 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.196
+### Changed
+- **MailKick for Outlook is now prerequisite-gated on macOS.** The
+  installer documents the requirements (classic Outlook mode - New Outlook
+  cannot run desktop task-pane add-ins; openssl for the per-user loopback
+  CA + certificate; the one-time CA trust in the login keychain; port
+  8766). When openssl is missing or the CA trust is declined, MailKick is
+  SKIPPED for Outlook with a clear message instead of staging a manifest
+  that cannot run; SlideKick and DocKick install normally and the
+  prerequisites are re-checked on every install.
+### Docs
+- docs/mailkick.md: a "Requirements for Outlook (macOS) - read before
+  installing" section listing what is needed, why, how to inspect/revoke
+  the certificate, and how to retry later; the README points at it.
 ## 0.9.195
 ### Fixed
 - New Outlook rejected the loopback certificate ("not signed by a valid

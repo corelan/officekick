@@ -8,6 +8,39 @@ server - see the README's "macOS permissions" section ("Errno 65 / No
 route to host" = that grant missing). **MailKick never sends email** - it
 drafts; you review and send.
 
+## Requirements for Outlook (macOS) - read before installing
+
+MailKick runs **only in classic macOS Outlook** and needs a one-time
+loopback TLS setup. If any of these don't suit you, choose not to install
+MailKick in Outlook - neither the installer nor the other two add-ins are
+affected:
+
+1. **Classic mode required.** New Outlook cannot run desktop task-pane
+   add-ins (a Microsoft platform boundary, not an add-in bug). The mode
+   toggle sits at the top of Outlook's toolbar; the installer cannot switch
+   it for you. Shell check: `defaults read com.microsoft.Outlook` shows
+   `IsRunningNewOutlook = 1` in New Outlook.
+2. **A loopback TLS certificate, generated and trusted once.** Outlook's
+   Add-from-File (and this build's WEF pickup) requires every manifest URL
+   to be https, so the installer creates `~/.officekick/certs/`: a per-user
+   "OfficeKick Loopback CA" plus a localhost certificate (issued via
+   `openssl`, backdated to Jan 2018 to satisfy macOS' Certificate
+   Transparency policy), and trusts the CA in your login keychain
+   (`security add-trusted-cert`, no admin rights; macOS may show one
+   confirmation dialog). You can inspect or revoke it any time in Keychain
+   Access.
+3. **Dependency: `openssl`** (every macOS ships it at `/usr/bin/openssl`;
+   nothing else is downloaded). Without it no certificate can be issued.
+4. **Port 8766** - the loopback TLS listener lives in the same server
+   process, localhost only (127.0.0.1 / ::1).
+
+**If the prerequisites are not met, the installer skips MailKick for
+Outlook** and says so clearly - it never stages a manifest that cannot run.
+SlideKick and DocKick install normally. To retry later: quit Office, run
+`install.py --install` again (the prerequisites are re-checked), quit and
+reopen Outlook; the last step is the Get Add-ins re-add from the
+Troubleshooting section below.
+
 ## What it does
 - **Read context**: when a message is selected (the reading pane keeps the
   add-in alive), MailKick sees from/to/subject/body/categories. The
