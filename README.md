@@ -120,9 +120,9 @@ How it starts automatically:
 Check whether it is up: open `http://127.0.0.1:8765/api/health` in a
 browser, or `python3 install.py --status` from the checkout.
 
-The pane also checks for updates itself. See **Settings -> Check now** (or the
-"Check for updates automatically at startup" option). Your config, profiles and
-sessions survive every update.
+The pane also checks for updates itself (Settings > General: **Check now**,
+or the "Check for updates automatically at startup" option). Your config,
+profiles and sessions survive every update.
 
 Config lives in `~/.officekick/config.json` (`%USERPROFILE%\.officekick` on
 Windows, chmod 600). API keys never leave your machine except to the provider
@@ -149,11 +149,22 @@ you configured.
 
 First run:
 
-1. **Connections** tab: add a provider (type + Base URL + optional API key).
+1. **Connections** tab: add a provider (Type + Base URL + optional API key).
    "Test connection" lists its models.
-2. **Profiles** tab: pick the content model (edits and generation) and the
-   other-actions model (advice and brainstorming).
-3. Type an instruction in the pane and hit **Run** (Cmd/Ctrl+Enter).
+   See [settings.md > Connections](docs/settings.md#settings--connections).
+2. **Profiles** tab: pick the two model routes - **content** (edits and
+   generation) and **other** (advice and brainstorming). Optional slots:
+   **Image model** (picture generation) and **Web search model** (a lookup
+   channel the pane can use itself).
+   See [settings.md > Profiles](docs/settings.md#settings--profiles).
+3. **Settings > Search**: the steps the model's web lookups follow. No
+   steps configured = the free keyless DuckDuckGo engine.
+   See [settings.md > Search](docs/settings.md#settings--search).
+4. Type the request in the **Sessions** tab and press **Run**
+   (Cmd/Ctrl+Enter). The run reports every step in the activity log under
+   the status line; the approval policy decides what gets applied - set it
+   in Settings > Approval policy
+   ([settings.md > Approval policy](docs/settings.md#settings--approval-policy)).
 
 ## macOS permissions (locally hosted models)
 

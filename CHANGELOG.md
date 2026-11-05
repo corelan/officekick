@@ -30,6 +30,12 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.176
+### Docs
+- README "Use it": current tab names (the prompt sheet is the Sessions
+  tab), both optional profile slots, the Search step, and direct links
+  into the matching sections of docs/settings.md; "Check now" points at
+  Settings > General.
 ## 0.9.175
 ### Fixed
 - Saving the approval policy failed with "Unknown action type:
