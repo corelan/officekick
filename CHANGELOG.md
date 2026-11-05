@@ -30,6 +30,12 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.194
+### Fixed
+- MailKick pane died at boot ("parsed is not defined", caught by the new
+  pane-error log on the first real https://localhost:8766 load): a stray
+  orphaned statement left at the top level of mailpane.js by an earlier
+  splice. Removed; the file was already deployed with the fix.
 ## 0.9.193
 ### Fixed
 - **MailKick was rejected by Outlook's Add-from-File AND the wef-folder

@@ -4356,5 +4356,4 @@ function applyOps(deck, ops, ctx) {
     boot();
   }
 
-          if (parsed.ok) return parsed;
 })();
