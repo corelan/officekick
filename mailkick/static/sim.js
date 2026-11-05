@@ -22,7 +22,7 @@
   var lastWin = null;       // most recently opened simulated window
   var log = [];
 
-  class FriendlyError extends Error {}
+  class FriendlyError extends Error { constructor(m) { super(m); this.friendly = true; } }
 
   var SimAPI = {
     sim: true,

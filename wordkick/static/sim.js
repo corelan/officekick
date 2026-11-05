@@ -35,7 +35,7 @@
   }
   reset();
 
-  class FriendlyError extends Error {}
+  class FriendlyError extends Error { constructor(m) { super(m); this.friendly = true; } }
 
   function styleName(kind) {
     if (!kind) return "Normal";

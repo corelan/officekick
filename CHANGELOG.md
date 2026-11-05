@@ -30,6 +30,28 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.170
+### Fixed
+- format_text / format_text-substring on a shape with no text (table,
+  chart, picture) now fail with a clear message naming the shape type,
+  instead of a bare PowerPoint "InvalidArgument" (retrying it never
+  helps). The model prompt says the same rule.
+- Validation: format/move ops may now target shapes the SAME batch has
+  just added to an existing slide (create_table/create_shape/
+  create_image) - a run failed all of them with "shape 4 not in the
+  context list for slide 113" although the shapes existed after the
+  batch created them.
+### Changed
+- Search steps: a step that cannot run is skipped and reported ("no API
+  key set", "no model pinned", "no native web search") - when every
+  step is unconfigured the free DuckDuckGo engine still runs, so a
+  keyless Brave + modelless OpenRouter sequence no longer dead-ends.
+  The activity log and the give-up reply list skipped steps.
+- Activity box shows a fixed 8-row window (newest on top, older lines
+  scroll below).
+- Simulator parity: sim deck failures carry the friendly-error marker,
+  so a failing op reports and retries like a real host instead of
+  aborting the remaining batch.
 ## 0.9.169
 ### Added
 - Run activity log: while a run works, a box under the status line lists

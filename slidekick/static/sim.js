@@ -58,7 +58,7 @@ window.__SK_SIM__ = true;
   }
   reset();
 
-  class FriendlyError extends Error {}
+  class FriendlyError extends Error { constructor(m) { super(m); this.friendly = true; } }
 
   function normalizeLayout(kind) {
     if (!kind) return "blank";
@@ -139,12 +139,16 @@ window.__SK_SIM__ = true;
     async formatText(slideIndex, shapeIndex, font) {
       const sh = slides[slideIndex] && slides[slideIndex].shapes[shapeIndex];
       if (!sh) throw new FriendlyError("Shape " + shapeIndex + " on slide " + slideIndex + " does not exist");
+      const ty = String(sh.type || "");
+      if (/^(table|chart|picture|image|media|ole|graphic|unsupported)/i.test(ty)) throw new FriendlyError("Shape " + (shapeIndex + 1) + " on slide " + (slideIndex + 1) + " has no text to format (it is a " + ty + " shape) - format_text needs a text shape; a table's text lives in its cells.");
       Object.assign(sh, { font: Object.assign(sh.font || {}, font) });
       return { ok: true };
     }
     async formatTextSubstring(slideIndex, shapeIndex, findText, font) {
       const sh = slides[slideIndex] && slides[slideIndex].shapes[shapeIndex];
       if (!sh) throw new FriendlyError("Shape " + shapeIndex + " on slide " + slideIndex + " does not exist");
+      const ty = String(sh.type || "");
+      if (/^(table|chart|picture|image|media|ole|graphic|unsupported)/i.test(ty)) throw new FriendlyError("Shape " + (shapeIndex + 1) + " on slide " + (slideIndex + 1) + " has no text to format (it is a " + ty + " shape) - format_text needs a text shape; a table's text lives in its cells.");
       const t = String(sh.text || "");
       const i = t.toLowerCase().indexOf(String(findText).toLowerCase());
       if (i < 0) throw new FriendlyError('"' + findText + '" not found in the current text of that shape.');

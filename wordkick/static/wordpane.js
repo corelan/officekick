@@ -521,23 +521,31 @@
   // capability and skips itself (no model = no search).
   function buildSearchLadder(prof) {
     var attempts = [];
+    var skipped = [];
     var savedSteps = (SK.cfg && SK.cfg.searchSteps) || [];
     var steps = savedSteps.length ? savedSteps : [{ kind: "server", engine: "duckduckgo" }];
     steps.forEach(function (st) {
       if (st.kind === "server") {
-        attempts.push({ server: true, engine: st.engine, label: "server:" + st.engine });
+        var eng = st.engine || "duckduckgo";
+        if (eng !== "duckduckgo" && !(SK.cfg && SK.cfg.searchKeysSet && SK.cfg.searchKeysSet[eng])) {
+          // no key = the step cannot run - skip it like a modelless lookup step
+          skipped.push(eng + " (no API key set)");
+          return;
+        }
+        attempts.push({ server: true, engine: eng, label: "server:" + eng });
       } else {
         var c = ((SK.cfg && SK.cfg.connections) || []).filter(function (x) { return x.name === st.connection; })[0];
-        if (!c) return;
-        if (c.type === "ollama" || c.type === "llamacpp") return;   // cannot look up -> next step
+        if (!c) { skipped.push(String(st.connection) + " (connection not found)"); return; }
+        if (c.type === "ollama" || c.type === "llamacpp") { skipped.push(String(st.connection) + " (no native web search)"); return; }
         var model = String(st.model || "");
         if ((c.type === "openai" || c.type === "generic-openai") && !/search-preview/i.test(model)) {
           // no native searching model selected: skip this step
+          skipped.push(String(st.connection) + " (no search-preview model selected)");
           return;
         }
         // ":online" cannot run bare - OpenRouter needs a base model id; a
         // step with no model pinned = "no search model = no search" -> skip
-        if (c.type === "openrouter" && !model) return;
+        if (c.type === "openrouter" && !model) { skipped.push(String(st.connection) + " (no model pinned)"); return; }
         var online = c.type === "openrouter" ? model + ":online" : model;
         if (!online) return;
         attempts.push({ connection: st.connection, model: online, label: st.connection + " : " + online });
@@ -552,7 +560,7 @@
       }
     }
     if (!attempts.length) attempts.push({ server: true, engine: "duckduckgo", label: "server:duckduckgo" });
-    return { attempts: attempts, profileUsed: savedSteps.length ? "steps" : "" };
+    return { attempts: attempts, skipped: skipped, profileUsed: savedSteps.length ? "steps" : "" };
   }
 
   function webLookup(prof, instruction) {
@@ -573,7 +581,8 @@
     // then the SERVER-SIDE keyless search (works for every connection kind);
     // then an OpenAI search-preview model (native search) when present.
     var ladder = buildSearchLadder(prof);
-    var attempts = ladder.attempts;    // (the explicit single-engine unshift is retired: the search profile
+    var attempts = ladder.attempts;
+    if (ladder.skipped && ladder.skipped.length) actLog("Lookup steps skipped - " + ladder.skipped.join(", "));    // (the explicit single-engine unshift is retired: the search profile
     // tab owns the sequence now - see buildSearchLadder)
     var webNoHit = function (t) {
       return !t || /^NO_WEB_ACCESS\b/i.test(t) || /cannot access (the )?web/i.test(t) ||
@@ -2682,8 +2691,11 @@ function applyOps(deck, ops, ctx) {
           if (!ws) {
             var ladderInfo = buildSearchLadder(prof);
             var ran = (ladderInfo.attempts || []).map(function (a) { return a.label || ((a.connection || "") + ":" + (a.model || "")); }).join(" -> ");
+            var skippedTxt = (ladderInfo.skipped || []).join(", ");
             return { ok: true, kind: "reply",
-                     text: "No live results came back from any lookup step in the search profile (" + (ran || "no steps configured") + "). The model was not re-asked with web content." };
+                     text: "No live results came back from any lookup step in the search profile (" + (ran || "no steps configured") +
+                           (skippedTxt ? "); skipped as unconfigured: " + skippedTxt : "") +
+                           ". The model was not re-asked with web content." };
           }
           SK.webResults = ws;
           if (pre.ops && pre.ops.length) SK.pendingWebOps = pre.ops;   // look-up-then-act in one reply

@@ -526,23 +526,31 @@
   // capability and skips itself (no model = no search).
   function buildSearchLadder(prof) {
     var attempts = [];
+    var skipped = [];
     var savedSteps = (SK.cfg && SK.cfg.searchSteps) || [];
     var steps = savedSteps.length ? savedSteps : [{ kind: "server", engine: "duckduckgo" }];
     steps.forEach(function (st) {
       if (st.kind === "server") {
-        attempts.push({ server: true, engine: st.engine, label: "server:" + st.engine });
+        var eng = st.engine || "duckduckgo";
+        if (eng !== "duckduckgo" && !(SK.cfg && SK.cfg.searchKeysSet && SK.cfg.searchKeysSet[eng])) {
+          // no key = the step cannot run - skip it like a modelless lookup step
+          skipped.push(eng + " (no API key set)");
+          return;
+        }
+        attempts.push({ server: true, engine: eng, label: "server:" + eng });
       } else {
         var c = ((SK.cfg && SK.cfg.connections) || []).filter(function (x) { return x.name === st.connection; })[0];
-        if (!c) return;
-        if (c.type === "ollama" || c.type === "llamacpp") return;   // cannot look up -> next step
+        if (!c) { skipped.push(String(st.connection) + " (connection not found)"); return; }
+        if (c.type === "ollama" || c.type === "llamacpp") { skipped.push(String(st.connection) + " (no native web search)"); return; }
         var model = String(st.model || "");
         if ((c.type === "openai" || c.type === "generic-openai") && !/search-preview/i.test(model)) {
           // no native searching model selected: skip this step
+          skipped.push(String(st.connection) + " (no search-preview model selected)");
           return;
         }
         // ":online" cannot run bare - OpenRouter needs a base model id; a
         // step with no model pinned = "no search model = no search" -> skip
-        if (c.type === "openrouter" && !model) return;
+        if (c.type === "openrouter" && !model) { skipped.push(String(st.connection) + " (no model pinned)"); return; }
         var online = c.type === "openrouter" ? model + ":online" : model;
         if (!online) return;
         attempts.push({ connection: st.connection, model: online, label: st.connection + " : " + online });
@@ -557,7 +565,7 @@
       }
     }
     if (!attempts.length) attempts.push({ server: true, engine: "duckduckgo", label: "server:duckduckgo" });
-    return { attempts: attempts, profileUsed: savedSteps.length ? "steps" : "" };
+    return { attempts: attempts, skipped: skipped, profileUsed: savedSteps.length ? "steps" : "" };
   }
 
   function webLookup(prof, instruction) {
@@ -578,7 +586,8 @@
     // then the SERVER-SIDE keyless search (works for every connection kind);
     // then an OpenAI search-preview model (native search) when present.
     var ladder = buildSearchLadder(prof);
-    var attempts = ladder.attempts;    // (the explicit single-engine unshift is retired: the search profile
+    var attempts = ladder.attempts;
+    if (ladder.skipped && ladder.skipped.length) actLog("Lookup steps skipped - " + ladder.skipped.join(", "));    // (the explicit single-engine unshift is retired: the search profile
     // tab owns the sequence now - see buildSearchLadder)
     var webNoHit = function (t) {
       return !t || /^NO_WEB_ACCESS\b/i.test(t) || /cannot access (the )?web/i.test(t) ||
@@ -992,6 +1001,7 @@
     '- {"type":"create_image","prompt":"detailed image description","slide":N|null,"width":400} (generate an image from the description and insert it; slide null = the slide the user currently has open; only when the user asks for a picture/image/illustration/logo)',
     '- {"type":"apply_layout","slide":N,"layout":"title_content|title_only|section|blank"} (only when the user asks for layout/design changes)',
     '- {"type":"format_text","slide":N,"shape":N,"font":{"bold":true},"align":"center","bullet":true} (format ONE shape from the outline: font = {"bold","italic","color","size","name","underline","allCaps"} subset only, colors as HTML hex/red/green/...; align = left|center|right; bullet = true adds bullets; only requested properties)',
+    '- format_text needs a TEXT shape (textbox or placeholder): tables, charts and pictures have no formattable text range - for formatted prose next to a table, add a textbox (create_shape) and format that',
     '- When a bullet/slide contains code, commands, protocol fragments or syntax (not ordinary prose), make a separate format_text op setting font {"name":"Consolas"} (Courier New acceptable) on that shape so the technical text is monospaced; leave prose as-is.',
     '- Office.js cannot CREATE SmartArt, stock icons or 3D models. If the user asks for those, say so and offer shape/textbox-based alternatives (create_shape) or an AI-generated picture (create_image) instead. The outline marks existing SmartArt/model3D shapes so you can reference them.',
     '- {"type":"create_shape","slide":N,"kind":"textbox|rectangle|ellipse|roundedRectangle|hexagon|diamond|triangle|line","text":"only for textbox","left":120,"top":200,"width":240,"height":80} (points, slide-local; line = start point left/top + width/height = endpoint offsets; other shapes: no text; optional "fill":"#RRGGBB", "line":"#RRGGBB", "transparency":0.25 to style the created shape immediately)',
@@ -2387,13 +2397,19 @@ OfficeDeck.prototype.formatSelection = function (font) {
 OfficeDeck.prototype.formatTextSubstring = function (slideIndex, shapeIndex, findText, font) {
     return this.run("formatTextSubstring", function (ctx) {
       var shape = ctx.presentation.slides.getItemAt(slideIndex).shapes.getItemAt(shapeIndex);
+      shape.load("type");
       var range = shape.textFrame.textRange;
       range.load("text");
       return ctx.sync().then(function () {
+        var ty = String(shape.type || "");
+        if (/^(table|chart|picture|media|ole|graphic|unsupported)/i.test(ty)) {
+          throw new FriendlyError("shape " + (shapeIndex + 1) + " on slide " + (slideIndex + 1) +
+            " has no text to format (it is a " + ty.toLowerCase() + " shape) - format_text needs a text shape (textbox or placeholder); a table\'s text lives in its cells.");
+        }
         var idx = String(range.text || "").toLowerCase().indexOf(String(findText).toLowerCase());
-        if (idx < 0) throw new FriendlyError("\"" + findText + "\" not found in that shape\'s current text.");
+        if (idx < 0) throw new FriendlyError("\"" + findText + "\" not found in that shape's current text.");
         var sub = range.getSubstring(idx, String(findText).length);
-        if ((findText, font.bold) != null) sub.font.bold = font.bold;
+        if (font.bold != null) sub.font.bold = font.bold;
         if (font.italic != null) sub.font.italic = font.italic;
         if (font.allCaps != null) sub.font.allCaps = font.allCaps;
         if (font.underline != null) sub.font.underline = font.underline;
@@ -2529,20 +2545,28 @@ OfficeDeck.prototype.getSelectionInfo = function () {
     out.slides = Object.keys(set).map(Number).sort(function (a, b) { return a - b; });
   }
 
-OfficeDeck.prototype.formatText =OfficeDeck.prototype.formatText = function (slideIndex, shapeIndex, font) {
+OfficeDeck.prototype.formatText = function (slideIndex, shapeIndex, font) {
     return this.run("formatText", function (ctx) {
       var shape = ctx.presentation.slides.getItemAt(slideIndex).shapes.getItemAt(shapeIndex);
-      var range = shape.textFrame.textRange;
+      shape.load("type");
+      return ctx.sync().then(function () {
+        var ty = String(shape.type || "");
+        if (/^(table|chart|picture|media|ole|graphic|unsupported)/i.test(ty)) {
+          throw new FriendlyError("shape " + (shapeIndex + 1) + " on slide " + (slideIndex + 1) +
+            " has no text to format (it is a " + ty.toLowerCase() + " shape) - format_text needs a text shape (textbox or placeholder); a table\'s text lives in its cells.");
+        }
+        var range = shape.textFrame.textRange;
       if (font.bold != null) range.font.bold = font.bold;
-      if (font.italic != null) range.font.italic = font.italic;
-      if (font.allCaps != null) range.font.allCaps = font.allCaps;
-      if (font.name) range.font.name = font.name;
-      if (font.color) range.font.color = font.color;
-      if (font.size) range.font.size = font.size;
-      if (font.underline != null) range.font.underline = font.underline;
-      if (font.align) range.paragraphFormat.horizontalAlignment = font.align.charAt(0).toUpperCase() + font.align.slice(1);
-      if (font.bullet != null) range.paragraphFormat.bulletFormat.visible = font.bullet;
-      return ctx.sync().then(function () { return { ok: true }; });
+        if (font.italic != null) range.font.italic = font.italic;
+        if (font.allCaps != null) range.font.allCaps = font.allCaps;
+        if (font.name) range.font.name = font.name;
+        if (font.color) range.font.color = font.color;
+        if (font.size) range.font.size = font.size;
+        if (font.underline != null) range.font.underline = font.underline;
+        if (font.align) range.paragraphFormat.horizontalAlignment = font.align.charAt(0).toUpperCase() + font.align.slice(1);
+        if (font.bullet != null) range.paragraphFormat.bulletFormat.visible = font.bullet;
+        return ctx.sync().then(function () { return { ok: true }; });
+      });
     });
   };
 
@@ -2932,6 +2956,11 @@ OfficeDeck.prototype.setNotes = function (i, text) {
     // op being validated) count as valid targets: the validator sees the deck
     // as it will be AFTER those creates, not only as it is right now
     var virtualCount = ctx ? ctx.slideCount : 0;
+    // shapes the batch itself adds to an EXISTING slide (create_table /
+    // create_shape / create_image) shift the post-batch shape numbering:
+    // format/move ops may target those fresh shapes (declared OUTSIDE the
+    // op loop - a per-op accumulator would reset on every op)
+    var plannedShapes = {};
     (rawOps || []).forEach(function (op, index) {
       if (!op || typeof op !== "object") { invalid.push({ op: op, reason: "not an object" }); return; }
       var t = op.type;
@@ -2949,6 +2978,14 @@ OfficeDeck.prototype.setNotes = function (i, text) {
       var shapeOk = function (sl, sh) {
         if (!ctx || !ctx.slides[sl - 1]) return false;
         return (ctx.slides[sl - 1].shapes || []).some(function (s) { return s.idx === sh - 1 && s.text != null; });
+      };
+      // post-batch shape targets: counts the fresh shapes the batch added
+      // (plannedShapes lives at validateOps scope, see above)
+      var shapeIdxOk = function (sl, sh) {
+        if (typeof sh !== "number" || sh < 1 || !ctx || !ctx.slides[sl - 1]) return false;
+        var cs = ctx.slides[sl - 1].shapes;
+        if (!cs || !cs.length) return true;   // ctx does not detail this slide (not selected) - defer to apply time
+        return sh <= cs.length + (plannedShapes[sl] || 0);
       };
       var out = { type: t };
       if (t === "create_slide") {
@@ -3021,9 +3058,7 @@ OfficeDeck.prototype.setNotes = function (i, text) {
         out.geometry = geoT;
       } else if (t === "move_shape") {
         if (!slideOk(op.slide)) { bad("bad slide index"); return; }
-        var shapeInCtx = ctx && ctx.slides[op.slide - 1] &&
-          (ctx.slides[op.slide - 1].shapes || []).some(function (s) { return s.idx === op.shape - 1; });
-        if (!futureSlide(op.slide) && !shapeInCtx) { bad("shape " + op.shape + " not in the context list for slide " + op.slide); return; }
+        if (!futureSlide(op.slide) && !shapeIdxOk(op.slide, op.shape)) { bad("shape " + op.shape + " not in the context list for slide " + op.slide); return; }
         var anyM = false, geoM = {};
         ["left", "top", "width", "height"].forEach(function (p3) {
           if (typeof op[p3] === "number") { geoM[p3] = op[p3]; anyM = true; }
@@ -3050,9 +3085,7 @@ OfficeDeck.prototype.setNotes = function (i, text) {
             : "bad slide index: slide must be a number (1-" + (ctx ? ctx.slideCount : 0) + ")");
           return;
         }
-        var shapeInCtxF = ctx && ctx.slides[op.slide - 1] &&
-          (ctx.slides[op.slide - 1].shapes || []).some(function (sh) { return sh.idx === op.shape - 1; });
-        if (!futureSlide(op.slide) && !shapeInCtxF) { bad("shape " + op.shape + " not in the context list for slide " + op.slide); return; }
+        if (!futureSlide(op.slide) && !shapeIdxOk(op.slide, op.shape)) { bad("shape " + op.shape + " not in the context list for slide " + op.slide); return; }
         var fontF = {}, hasAny = false;
         ["bold", "italic", "allCaps", "underline"].forEach(function (k2) {
           if (typeof op.font !== "undefined" && typeof op.font[k2] === "boolean") { fontF[k2] = op.font[k2]; hasAny = true; }
@@ -3192,6 +3225,9 @@ OfficeDeck.prototype.setNotes = function (i, text) {
       } else if (t === "delete_slide") {
         if (!slideOk(op.slide)) { bad("bad slide index"); return; }
         out.slide = op.slide;
+      }
+      if ((t === "create_table" || t === "create_shape" || t === "create_image") && typeof out.slide === "number") {
+        plannedShapes[out.slide] = (plannedShapes[out.slide] || 0) + 1;
       }
       ops.push(out);
     });
@@ -3845,8 +3881,11 @@ OfficeDeck.prototype.setNotes = function (i, text) {
           if (!ws) {
             var ladderInfo = buildSearchLadder(prof);
             var ran = (ladderInfo.attempts || []).map(function (a) { return a.label || ((a.connection || "") + ":" + (a.model || "")); }).join(" -> ");
+            var skippedTxt = (ladderInfo.skipped || []).join(", ");
             return { ok: true, kind: "reply",
-                     text: "No live results came back from any lookup step in the search profile (" + (ran || "no steps configured") + "). The model was not re-asked with web content." };
+                     text: "No live results came back from any lookup step in the search profile (" + (ran || "no steps configured") +
+                           (skippedTxt ? "); skipped as unconfigured: " + skippedTxt : "") +
+                           ". The model was not re-asked with web content." };
           }
           SK.webResults = ws;
           if (pre.ops && pre.ops.length) SK.pendingWebOps = pre.ops;   // look-up-then-act in one reply
