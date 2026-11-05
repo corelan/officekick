@@ -30,6 +30,14 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.172
+### Fixed
+- Validation: "find text not found" now checks what EARLIER ops in the
+  same batch left in the shape/paragraph. A batch like replace_text ->
+  format_text (find: a fragment of the NEW text) used to fail both
+  format ops although the text exists by apply time. Trackers live at
+  validator scope; replace/edit_paragraph update them. Word documents
+  carry the same fix (edit_paragraph / replace_text / format find).
 ## 0.9.171
 ### Added
 - read_page continuations: a fetched page carries only its first 8000

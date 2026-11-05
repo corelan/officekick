@@ -2961,6 +2961,11 @@ OfficeDeck.prototype.setNotes = function (i, text) {
     // format/move ops may target those fresh shapes (declared OUTSIDE the
     // op loop - a per-op accumulator would reset on every op)
     var plannedShapes = {};
+    // text mutations the batch itself makes (replace_text earlier in the
+    // batch changes what a later op's "find" matches at apply time - the
+    // snapshot only knows the pre-batch text). key = "slide:shape".
+    // (accumulator rule: lives at validateOps scope, NOT per-op)
+    var textState = {};
     (rawOps || []).forEach(function (op, index) {
       if (!op || typeof op !== "object") { invalid.push({ op: op, reason: "not an object" }); return; }
       var t = op.type;
@@ -2986,6 +2991,19 @@ OfficeDeck.prototype.setNotes = function (i, text) {
         var cs = ctx.slides[sl - 1].shapes;
         if (!cs || !cs.length) return true;   // ctx does not detail this slide (not selected) - defer to apply time
         return sh <= cs.length + (plannedShapes[sl] || 0);
+      };
+      // best-known text of a shape: what earlier batch ops left there,
+      // else the pre-batch snapshot; null = unknown (defer find to apply)
+      var textOf = function (sl, sh) {
+        var k2 = sl + ":" + sh;
+        if (textState[k2] !== undefined) return textState[k2];
+        var snap = ((ctx && ctx.slides[sl - 1] && ctx.slides[sl - 1].shapes) || []).filter(function (s2) { return s2.idx === sh - 1; })[0];
+        return (snap && typeof snap.text === "string") ? snap.text : null;
+      };
+      var cutReplace = function (base, findS, repS) {
+        var i2 = base.toLowerCase().indexOf(findS.toLowerCase());
+        if (i2 < 0) return null;
+        return base.slice(0, i2) + repS + base.slice(i2 + findS.length);
       };
       var out = { type: t };
       if (t === "create_slide") {
@@ -3019,13 +3037,16 @@ OfficeDeck.prototype.setNotes = function (i, text) {
         if (typeof op.find === "string" && op.find.trim()) {
           var findR = op.find.trim();
           if (findR.length > 200) { bad("find text too long (200 chars max)"); return; }
-          var curSlR = ctx && ctx.slides[op.slide - 1];   // future slides: no ctx row yet
-        var shapeTxtR = (((curSlR && curSlR.shapes) || []).find(function (sh) { return sh.idx === op.shape - 1; }) || {}).text || "";
-        if (!futureSlide(op.slide) && shapeTxtR.toLowerCase().indexOf(findR.toLowerCase()) === -1) {
+          var shapeTxtR = textOf(op.slide, op.shape);   // earlier batch ops may already have rewritten this shape
+        if (!futureSlide(op.slide) && shapeTxtR !== null && shapeTxtR.toLowerCase().indexOf(findR.toLowerCase()) === -1) {
           bad("find text not found in that shape's current text"); return;
         }
           out.find = findR;
         }
+        // remember what THIS op leaves in the shape for later find checks
+        var curTr = textOf(op.slide, op.shape);
+        textState[op.slide + ":" + op.shape] = out.find ?
+          (typeof curTr === "string" ? (cutReplace(curTr, findR, op.text)) : null) : op.text;
       } else if (t === "set_notes") {
         // notes-off no longer drops the op: it goes through as "confirm"
         // (renderOpsPreview forces confirm when generateNotes is off)
@@ -3101,9 +3122,8 @@ OfficeDeck.prototype.setNotes = function (i, text) {
         if (typeof op.find === "string" && op.find.trim()) {
           var findS = op.find.trim();
           if (findS.length > 200) { bad("find text too long (200 chars max)"); return; }
-          var curSlF = ctx && ctx.slides[op.slide - 1];   // future slides: no ctx row yet
-          var shapeTxtF = (((curSlF && curSlF.shapes) || []).find(function (sh) { return sh.idx === op.shape - 1; }) || {}).text || "";
-        if (!futureSlide(op.slide) && shapeTxtF.toLowerCase().indexOf(findS.toLowerCase()) === -1) {
+          var shapeTxtF = textOf(op.slide, op.shape);   // earlier batch ops may already have rewritten this shape
+        if (!futureSlide(op.slide) && shapeTxtF !== null && shapeTxtF.toLowerCase().indexOf(findS.toLowerCase()) === -1) {
           bad("find text not found in that shape's current text"); return;
         }
           out.find = findS;

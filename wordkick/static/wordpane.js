@@ -1996,6 +1996,16 @@ function normalizeWordStyle(v) {
 
   function validateOps(rawOps, ctx) {
     var ops = [], invalid = [];
+    // paragraph text mutations the batch itself makes (edit_paragraph /
+    // replace_text earlier in the batch change what a later op's "find"
+    // matches at apply time - the snapshot only knows the pre-batch text)
+    // (accumulator rule: lives at validateOps scope, NOT per-op)
+    var paraState = {};
+    var paraTextOf = function (p) {
+      if (paraState[p] !== undefined) return paraState[p];
+      var snap = (ctx && ctx.paragraphs ? ctx.paragraphs[p - 1] : null) || null;
+      return (snap && typeof snap.text === "string") ? snap.text : null;
+    };
     (rawOps || []).forEach(function (op, index) {
       if (!op || typeof op !== "object") { invalid.push({ op: op, reason: "not an object" }); return; }
       var t = op.type;
@@ -2022,10 +2032,23 @@ function normalizeWordStyle(v) {
         if (!paraOk(op.para)) { bad("bad paragraph index"); return; }
         if (typeof op.text !== "string") { bad("missing text"); return; }
         out.para = op.para; out.text = op.text;
+        paraState[op.para] = op.text;
       } else if (t === "replace_text") {
         if (typeof op.find !== "string" || op.find.length < 2) { bad("find must be at least 2 chars"); return; }
         if (typeof op.replace !== "string") { bad("missing replace"); return; }
         out.find = op.find; out.replace = op.replace; out.all = op.all !== false;
+        for (var pi = 1; pi <= 4096; pi++) {
+          var curW = paraTextOf(pi);
+          if (typeof curW !== "string") continue;
+          // document-wide replace: hit every paragraph whose text carries it
+          var low = curW.toLowerCase(), f2 = op.find.toLowerCase(), ix;
+          if (low.indexOf(f2) < 0) continue;
+          var updated = curW;
+          while ((ix = updated.toLowerCase().indexOf(f2)) >= 0) {
+            updated = updated.slice(0, ix) + op.replace + updated.slice(ix + op.find.length);
+          }
+          paraState[pi] = updated;
+        }
       } else if (t === "create_table") {
         var vals = Array.isArray(op.values) ? op.values : null;
         if (!vals) { bad("missing values (2D array)"); return; }
@@ -2124,8 +2147,8 @@ function normalizeWordStyle(v) {
         out.para = op.para; out.font = fontW;
         if (typeof op.find === "string" && op.find.trim()) {
           var findW = op.find.trim().slice(0, 200);
-          var paraTxtW = (ctx.paragraphs[op.para - 1] || {}).text || "";
-          if (paraTxtW.toLowerCase().indexOf(findW.toLowerCase()) === -1) { bad("find text not found in that paragraph"); return; }
+          var paraTxtW = paraTextOf(op.para);   // earlier batch ops may already have rewritten this paragraph
+          if (paraTxtW !== null && paraTxtW.toLowerCase().indexOf(findW.toLowerCase()) === -1) { bad("find text not found in that paragraph"); return; }
           out.find = findW;
         }
       } else if (t === "insert_image") {
