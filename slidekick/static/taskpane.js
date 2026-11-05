@@ -2482,7 +2482,20 @@ OfficeDeck.prototype.moveSlide = function (from, to) {
   };
 
 OfficeDeck.prototype.createShape = function (slideIndex, op) {
-    return this.run("createShape", function (ctx) {
+  // 0.9.233/234: PowerPoint 16.114 (mac) rejected shapes.addTextBox(text,
+  // opts) with RichApi InvalidArgument at sync for EVERY textbox op of a
+  // 12-op run while the four addGeometricShape calls with IDENTICAL
+  // ShapeAddOptions succeeded, and MS documents no InvalidArgument
+  // condition that those arguments could trigger (width/height are
+  // positive ints). Ladder the textbox op across three creation paths,
+  // each attempt in its OWN PowerPoint.run (a failed sync poisons the
+  // context): v1 native addTextBox(text, opts); v2 the docs-sample form
+  // addTextBox(text) with geometry written as shape properties; v3
+  // emulated - a no-fill/no-outline rectangle + textFrame.textRange.text
+  // (1.5). Non-textbox kinds keep the single native attempt.
+  var self = this;
+  var runVariant = function (vi) {
+    return self.run("createShape(v" + vi + ")", function (ctx) {
       if (!Office.context.requirements.isSetSupported("PowerPointApi", "1.4")) {
         throw new FriendlyError("shape creation needs PowerPointApi 1.4 - update PowerPoint (16.62+ on Mac).");
       }
@@ -2492,8 +2505,27 @@ OfficeDeck.prototype.createShape = function (slideIndex, op) {
         if (op.geometry && op.geometry[gk] != null) opts[gk] = op.geometry[gk];
       });
       var created;
+      var txt = String(op.text || "");
       if (op.kind === "textbox") {
-        created = shapes.addTextBox(String(op.text || ""), opts);
+        if (vi === 1) {
+          created = shapes.addTextBox(txt, opts);
+        } else if (vi === 2) {
+          created = shapes.addTextBox(txt);
+          ["left", "top", "width", "height"].forEach(function (gk) {
+            if (opts[gk] != null) { try { created[gk] = opts[gk]; } catch (eG) { /* geometry optional */ } }
+          });
+        } else {
+          if (!Office.context.requirements.isSetSupported("PowerPointApi", "1.5")) {
+            throw new FriendlyError("writing textbox text needs PowerPointApi 1.5 - update PowerPoint (16.64+ on Mac).");
+          }
+          created = shapes.addGeometricShape("rectangle", opts);
+          try { created.fill.clear(); } catch (eF0) { /* keep the default fill */ }
+          try { created.lineFormat.visible = false; } catch (eL0) { /* keep the default line */ }
+          if (txt.trim()) {
+            created.textFrame.wordWrap = true;
+            created.textFrame.textRange.text = txt;
+          }
+        }
       } else if (op.kind === "line") {
         created = shapes.addLine("Straight", opts);
       } else {
@@ -2518,9 +2550,22 @@ OfficeDeck.prototype.createShape = function (slideIndex, op) {
           throw new FriendlyError("rotating shapes needs PowerPointApi 1.10 - update PowerPoint (16.105+ on Mac).");
         created.rotation = op.geometry.rotation;
       }
-      return ctx.sync().then(function () { return { ok: true }; });
+      return ctx.sync().then(function () {
+        if (vi > 1) dbg("office.createShape.fallback", { variant: vi, kind: op.kind, slide: op.slide });
+        return { ok: true, variant: vi };
+      });
+    }).catch(function (err) {
+      var msg = String((err && err.message) || err);
+      if (op.kind === "textbox" && vi < 3 && !/needs PowerPointApi/.test(msg)) {
+        // this build rejected the textbox creation path - try the next one
+        dbg("office.createShape.attempt", { variant: vi, kind: op.kind, error: msg.slice(0, 120) });
+        return runVariant(vi + 1);
+      }
+      throw err;
     });
   };
+  return runVariant(1);
+};
 
 OfficeDeck.prototype.formatSelection = function (font) {
     return this.run("formatSelection", function (ctx) {

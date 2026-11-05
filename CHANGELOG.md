@@ -30,6 +30,19 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.234
+### Fixed (SlideKick)
+- Real-Office textbox creation: PowerPoint 16.114 (mac) rejected
+  `shapes.addTextBox(text, options)` with RichApi InvalidArgument at sync for
+  EVERY textbox op of an infographic run while identical-args
+  addGeometricShape calls succeeded in the same batch. create_shape textbox
+  ops now ladder across three creation paths (each in its own run): native
+  addTextBox(text+options), the docs-sample form (text only, geometry as
+  shape properties), and an emulated no-fill/no-outline rectangle with the
+  text written through the text frame (1.5). Failed attempts log
+  `office.createShape.attempt`, the served path logs
+  `office.createShape.fallback`; other shape kinds keep the single attempt.
+
 ## 0.9.233
 ### Added (MailKick)
 - New setting "create a new session when opening a new email" (Settings >
