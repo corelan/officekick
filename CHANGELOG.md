@@ -30,6 +30,18 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.238
+### Added (clarify: placement)
+- The clarify round now also covers PLACEMENT ambiguity: the model may ask
+  where the result belongs (open slide vs a named one vs a new slide after
+  the named one; DocKick: where in the document; MailKick: which of the
+  multi-selected items). When the ASK names a specific slide and the reply's
+  ops aim at a DIFFERENT one (live case: 'turn slide 124 into an
+  infographic' with slide 125 open landed on 125), the pane re-asks ONCE
+  with the reason (WRONG TARGET) and re-checks before rendering the gate;
+  a model that stays put runs as before. After a clarify pick, the re-ask
+  carries a slide reminder when the request named a slide.
+
 ## 0.9.237
 ### Changed (all add-ins)
 - The clarify question now renders in its own slot RIGHT below the status

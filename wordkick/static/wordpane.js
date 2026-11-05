@@ -1006,14 +1006,14 @@
   ].join("\n");
 
   var CLARIFY_RULE =
-    "\nAMBIGUOUS RESULT FORM: when the user's ask could plausibly deliver a DIFFERENT FORM of the result " +
-    "(e.g. 'make it visual' = an AI-GENERATED PICTURE vs. a TABLE vs. formatted text; 'infographic' vs. " +
-    "structured text), you may ask the user ONCE instead of guessing. Reply exactly:" +
+    "\nAMBIGUOUS RESULT FORM or PLACEMENT: (FORM) when the user's ask could plausibly deliver a DIFFERENT FORM of the " +
+    "result (e.g. 'make it visual' = an AI-GENERATED PICTURE vs. a TABLE vs. formatted text; 'infographic' vs. " +
+    "structured text), or (PLACEMENT) when it is unclear WHERE in the document the result belongs, you may ask the " +
+    "user ONCE instead of guessing. Reply exactly:" +
     " {\"kind\":\"clarify\",\"question\":\"<one short question>\",\"options\":[\"<short option>\",\"<short option>\"]} " +
     "(2-4 short options, no JSON inside). The pane shows the question; the user's choice arrives in your next ask " +
-    "(look for CLARIFICATION) - then deliver the final result for that choice without asking again. Use it ONLY " +
-    "when the wording and the document context do not already decide it; never for style/tone details you can " +
-    "decide yourself, and never twice in one chain.";
+    "(look for CLARIFICATION) - then deliver the final result for that choice without asking again. Never use clarify " +
+    "for style/tone details you can decide yourself, and never twice in one chain.";
   var NOTES_OFF_RULE = "";
 
   var REPAIR_ASK =

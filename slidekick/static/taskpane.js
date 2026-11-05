@@ -1126,14 +1126,17 @@
   ].join("\n");
 
   var CLARIFY_RULE =
-    "\nAMBIGUOUS RESULT FORM: when the user's ask could plausibly deliver a DIFFERENT FORM of the result " +
-    "(e.g. 'infographic', 'visual', 'diagram' = an AI-GENERATED PICTURE vs. EDITABLE SHAPES + text vs. both; " +
-    "a paragraph vs. a bulleted list), you may ask the user ONCE instead of guessing. Reply exactly:" +
+    "\nAMBIGUOUS RESULT FORM or PLACEMENT: (FORM) when the user's ask could plausibly deliver a DIFFERENT FORM " +
+    "of the result (e.g. 'infographic', 'visual', 'diagram' = an AI-GENERATED PICTURE vs. EDITABLE SHAPES + text vs. " +
+    "both; a paragraph vs. a bulleted list), or (PLACEMENT) when many slides are open and it is unclear WHERE the " +
+    "result belongs (the open slide? a named one? a new slide after the named one?), you may ask the user ONCE " +
+    "instead of guessing. Reply exactly:" +
     " {\"kind\":\"clarify\",\"question\":\"<one short question>\",\"options\":[\"<short option>\",\"<short option>\"]} " +
     "(2-4 short options, no JSON inside). The pane shows the question; the user's choice arrives in your next ask " +
-    "(look for CLARIFICATION) - then deliver the final result for that choice without asking again. Use it ONLY " +
-    "when the wording and the context do not already decide it; never for style/tone/size details you can decide " +
-    "yourself, and never twice in one chain.";
+    "(look for CLARIFICATION) - then deliver the final result for that choice without asking again. When the ask " +
+    "DOES name a slide (e.g. 'turn slide 124 into...'), deliver on that slide and never silently move the result " +
+    "to the open/selected slide. Never use clarify for style/tone/size details you can decide yourself, and never " +
+    "twice in one chain.";
   var NOTES_OFF_RULE =
     "- Speaker-notes AUTO-generation is OFF in the user's Settings. For ordinary slide work:" +
     " omit notes fields and never invent set_notes ops. When the user explicitly asks for" +
@@ -4145,6 +4148,10 @@ OfficeDeck.prototype.setNotes = function (i, text) {
       if (SK.clarifyAnswer && SK.clarifyAnswer.expect === instruction) {
         user += "\n\nCLARIFICATION: you asked the user: \"" + SK.clarifyAnswer.q + "\". The user chose: " + SK.clarifyAnswer.a +
           ". Deliver the final result for that choice now - do not ask again.";
+        var namedCl = /(?:^|[\s(,.])slides?\s+(\d{1,4})\b/i.exec(instruction);
+        if (namedCl) {
+          user += "\nRemember: the request names slide " + namedCl[1] + " - deliver on slide " + namedCl[1] + " (1-based outline numbering), never on the open/selected slide.";
+        }
         SK.clarifyAnswer = null;
         dbg("clarify.answer", { delivered: true });
       }
@@ -4712,6 +4719,44 @@ OfficeDeck.prototype.setNotes = function (i, text) {
                      question: "Infographic as an AI-generated image, as editable shapes + text, or both?",
                      options: ["AI image", "Editable shapes", "Both"] };
         }
+        return parsed;   // chain continues into the target-guard / clarify steps
+      }).then(function (parsed) {
+        if (parsed && parsed.ok && parsed.kind === "slide_ops" && (parsed.ops || []).length) {
+          // 0.9.238: the ask names a specific slide, but the reply aims its
+          // ops at a DIFFERENT one (typically the open slide; hit live:
+          // "turn slide 124 into an infographic" with slide 125 open landed
+          // on 125). Re-ask ONCE with the reason; keep the original when the
+          // model stays put.
+          var namedTarget = (function () {
+            var m2 = /(?:^|[\s(,.])[\w-]{1,20}\s*slides?\s+(\d{1,4})\b/i.exec(instruction) ||
+                     /(?:^|[\s(,.])slides?\s+(\d{1,4})\b/i.exec(instruction);
+            return m2 ? parseInt(m2[1], 10) : 0;
+          })();
+          if (namedTarget && ctx && ctx.slides && namedTarget <= ctx.slides.length) {
+            var tmap = {};
+            (parsed.ops || []).forEach(function (op2) { if (op2 && op2.slide) tmap[op2.slide] = 1; });
+            var tl = Object.keys(tmap).map(Number);
+            if (tl.length && tl.indexOf(namedTarget) < 0) {
+              dbg("target.mismatch", { named: namedTarget, ops: tl.join(",") });
+              var reMsg = messages.concat([
+                { role: "assistant", content: String((SK.lastModelText || {}).text || "") },
+                { role: "user", content: "WRONG TARGET: the user's request names slide " + namedTarget + " (1-based, same numbering as the outline), but your ops target slide " +
+                  tl.join(", ") + " (that is the currently open slide). Re-emit the SAME plan with every slide number aimed at slide " + namedTarget +
+                  ". Slide_ops JSON only, same rules." },
+              ]);
+              setStatus("The ask names slide " + namedTarget + " but the plan aims at slide " + tl.join(", ") + " - re-asking\u2026", "busy");
+              return askRetryable(function () { return apiJson("/api/chat", "POST", { connection: ref.connection, model: ref.model, messages: reMsg }); })
+                .then(function (r4) {
+                  dbg("target.reask.response", { text: r4.text, elapsedMs: r4.elapsedMs });
+                  SK.lastModelText = { text: r4.text };
+                  var p4 = tryParse(r4.text);
+                  return p4.ok ? p4 : parsed;
+                }).catch(function () { return parsed; });
+            }
+          }
+        }
+        return parsed;
+      }).then(function (parsed) {
         if (parsed && parsed.kind === "clarify") {
           // 0.9.235: the model asks the user to pick the form of the result
           SK.clarifyChain = (SK.clarifyChain || 0) + 1;

@@ -943,9 +943,10 @@
   ].join("\n");
 
   var CLARIFY_RULE =
-    "\nAMBIGUOUS DELIVERABLE: when the request could plausibly produce a DIFFERENT deliverable and the email " +
-    "context does not decide it (summarize the thread vs. draft replies; one reply vs. one per open thread; " +
-    "who should be answered), you may ask the user ONCE instead of guessing. Reply exactly:" +
+    "\nAMBIGUOUS DELIVERABLE or SCOPE: when the request could plausibly produce a DIFFERENT deliverable and the email " +
+    "context does not decide it (summarize the thread vs. draft replies; one reply vs. one per open thread; who " +
+    "should be answered; which of the MULTI-SELECTED items when several are open), you may ask the user ONCE instead " +
+    "of guessing. Reply exactly:" +
     " {\"kind\":\"clarify\",\"question\":\"<one short question>\",\"options\":[\"<short option>\",\"<short option>\"]} " +
     "(2-4 short options). This replaces the ops/reply round - it is NOT an action: the pane shows the question; " +
     "the user's choice arrives in your next ask (look for CLARIFICATION) - then produce the deliverable for that " +
