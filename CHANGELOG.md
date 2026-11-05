@@ -30,6 +30,19 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.233
+### Added (MailKick)
+- New setting "create a new session when opening a new email" (Settings >
+  General > Sessions, off by default): when a different email is opened, the
+  pane starts a clean session for it instead of continuing the open
+  conversation. Real Outlook detects the switch through the mailbox
+  SelectedItemsChanged event (Mailbox 1.13); every run and the refresh
+  button re-check as a fallback. A boot-resumed session that belongs to a
+  different email is dropped. Sessions with no requests are never saved -
+  and the previous conversation stays in History (resumable manually).
+- The simulator now serves three distinct emails ("open email" buttons in
+  the Sim email panel), each with its own itemId, to exercise the setting
+  E2E.
 ## 0.9.232
 ### Changed (MailKick)
 - Button layout: Run / Cancel / timer on the first row; the quick-reply

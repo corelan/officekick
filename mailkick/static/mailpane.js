@@ -69,6 +69,9 @@
     connBaseDirty: false,
     lastCtx: null,
     activeTab: "chat",
+    mailEmailId: null,            // 0.9.233: identity (itemId) of the open email
+    mailStaleResumeDropUntil: 0,  // one-shot window in which a boot resume is dropped
+    mnsUserTouched: false,        // user changed the new-session-per-email toggle
   };
 
   var CONN_TYPES = [
@@ -1160,6 +1163,13 @@
 
   function resumeSession(sessId) {
     apiJson("/api/sessions/" + sessId, "GET").then(function (doc) {
+      if (SK.mailStaleResumeDropUntil && Date.now() < SK.mailStaleResumeDropUntil) {
+        // 0.9.233: the resumed session belongs to a different email and the
+        // new-session-per-email setting is on - drop it once, don't apply
+        SK.mailStaleResumeDropUntil = 0;
+        dbg("mail.resumeDropped", { id: sessId });
+        return;
+      }
       SK.history = (doc.exchanges || []).slice(-HISTORY_MAX_EXCHANGES * 2);
       SK.sessionId = doc.id;
       try { localStorage.setItem("sk-resume-session-mailkick", doc.id); } catch (eS) {}
@@ -1781,6 +1791,117 @@ var nw = $("sess-new");
     dbg("history.reset", {});
   }
 
+  // ---------------- new session per email (0.9.233, MailKick) -------- //
+  // Setting "create a new session when opening a new email" (off by
+  // default): the identity of the open email (Outlook itemId; the sim maps
+  // it to its own ids) is remembered whenever the pane sees it. When it
+  // changes, the chat drops into a clean new session. Sessions with no
+  // requests are never persisted (saveSessionNow returns on empty history),
+  // and the old conversation stays saved in History.
+  function mailIdentityFromItem(item) {
+    try {
+      if (!item) return "";
+      var isCompose = (item.getAsync !== undefined && item.subject && item.subject.getAsync);
+      if (isCompose) return "";   // a compose draft has no stable itemId
+      return String(item.itemId || "");
+    } catch (eId) { return ""; }
+  }
+  function mailCurrentIdentity() {
+    if (SK.sim) {
+      try {
+        return (window.SimAPI && window.SimAPI.currentEmailId) ? String(window.SimAPI.currentEmailId()) : "";
+      } catch (eS) { return ""; }
+    }
+    var item = null;
+    try { item = Office.context.mailbox.item; } catch (eO) { return ""; }
+    return mailIdentityFromItem(item);
+  }
+  function mailIdentityRemember(id) {
+    try { if (id) localStorage.setItem("mailkick-lastmail", String(id).slice(0, 400)); } catch (eL) {}
+  }
+  function mailIdentityLast() {
+    try { return localStorage.getItem("mailkick-lastmail") || ""; } catch (eL) { return ""; }
+  }
+  function mailBlankChat() {
+    var zone0 = $("chat-output");
+    if (zone0) zone0.innerHTML = "";   // a stale resume notice / last-run render leaves the top zone
+    var body0 = $("past-body");
+    if (body0) body0.innerHTML = "";   // a new session = a clean Previous requests box
+    updatePastBox();
+  }
+  function mailSessionForIdentity(id, source) {
+    id = String(id || "").slice(0, 400);
+    if (!(SK.cfg && SK.cfg.newSessionPerEmail)) return false;
+    if (!id) return false;
+    if (SK.mailEmailId === null) {   // first sighting: baseline only, no reset
+      SK.mailEmailId = id;
+      mailIdentityRemember(id);
+      return false;
+    }
+    if (id === SK.mailEmailId) return false;
+    resetHistory();   // clears history + the boot-resume pointer
+    mailBlankChat();
+    SK.mailEmailId = id;
+    mailIdentityRemember(id);
+    setStatus("New email opened - started a new session.", "ok");
+    actLog("New session for this email (" + source + ").");
+    dbg("mail.newSessionPerEmail", { source: source });
+    return true;
+  }
+  function applyMailSessionBootPolicy() {
+    // on every config load: set the baseline and drop a resumed session
+    // when the open email is not the one the last conversation belongs to
+    if (!(SK.cfg && SK.cfg.newSessionPerEmail)) return;
+    var cur = mailCurrentIdentity();
+    if (!cur) return;
+    var last = mailIdentityLast();
+    if (SK.mailEmailId === null) {
+      // first policy pass after boot: when the pane remembers a DIFFERENT
+      // email, any in-flight boot resume is a different email's session
+      // - block it for a bounded window and clean the slate
+      if (last && last !== cur) {
+        SK.mailStaleResumeDropUntil = Date.now() + 10000;
+        resetHistory();
+        mailBlankChat();
+        setStatus("New session for this email (the previous conversation belongs to a different email).", "ok");
+        dbg("mail.staleResumeDropped", {});
+      }
+      SK.mailEmailId = cur;
+      mailIdentityRemember(cur);
+      return;
+    }
+    if (last && last !== cur) {
+      // a boot resume of another email's session may still be in flight -
+      // block it for a bounded window, then clean the slate
+      SK.mailStaleResumeDropUntil = Date.now() + 10000;
+      resetHistory();
+      mailBlankChat();
+      setStatus("New session for this email (the previous conversation belongs to a different email).", "ok");
+      dbg("mail.staleResumeDropped", {});
+    }
+    SK.mailEmailId = cur;
+    mailIdentityRemember(cur);
+  }
+  var mailSelTimer = null;
+  function onMailSelectionChanged() {
+    if (SK.busy) return;   // never reset mid-run: the next run's check catches it
+    if (mailSelTimer) clearTimeout(mailSelTimer);
+    mailSelTimer = setTimeout(function () {
+      mailSelTimer = null;
+      if (SK.busy) return;
+      mailSessionForIdentity(mailCurrentIdentity(), "selection");
+    }, 350);
+  }
+  function watchMailSelection() {
+    try {
+      if (SK.sim || !SK.deck) return;
+      if (!Office.context.requirements.isSetSupported("Mailbox", "1.13")) return;
+      if (!Office.context.mailbox || !Office.context.mailbox.addHandlerAsync) return;
+      Office.context.mailbox.addHandlerAsync(Office.EventType.SelectedItemsChanged, onMailSelectionChanged,
+        function (ar) { dbg("mail.selection.watch", { ok: !!(ar && ar.status === "succeeded") }); });
+    } catch (eW) { dbg("mail.selection.watchFailed", { msg: String((eW && eW.message) || eW) }); }
+  }
+
   function updateChatMeta() {
     var el = $("chat-history-note");
     if (!el) return;
@@ -1870,6 +1991,7 @@ var nw = $("sess-new");
         var out = { host: "Outlook", mode: "", subject: "", sender: "", to: "", bodyText: "", categories: [], warnings: [], minimal: minimal };
         var isCompose = (item.getAsync !== undefined && item.subject && item.subject.getAsync);
         out.mode = isCompose ? "compose" : "read";
+        try { out.itemId = mailIdentityFromItem(item); } catch (eI0) { out.itemId = ""; }
         Promise.all([
           new Promise(function (res, rej) {
             if (isCompose) item.subject.getAsync(function (r) { r.status === "succeeded" ? res(r.value) : rej(new FriendlyError(r.error.message)); });
@@ -2445,6 +2567,10 @@ function applyOps(deck, ops, ctx) {
 
     ctxPromise.then(function (ctx) {
       SK.lastCtx = ctx;
+      // 0.9.233: when the selection event was missed (hosts without it, or
+      // the sim), the run start detects the different email and resets the
+      // session BEFORE the history is consumed for this ask
+      mailSessionForIdentity((ctx && ctx.itemId) || mailCurrentIdentity(), "run");
       var sys = SYSTEM_PROMPT + "\nHost: " + (SK.sim ? "MailKick simulator" : SK.deck.capabilities().host);
       var _cp = SK.cfg ? (String(SK.cfg.customPrompt || "").trim() ? String(SK.cfg.customPrompt).trim() : String(SK.cfg.customPromptDefault || "").trim()) : "";
       if (_cp) {
@@ -3988,6 +4114,9 @@ function applyOps(deck, ops, ctx) {
   function loadConfigAndRender() {
     return apiJson("/api/config", "GET").then(function (cfg) {
       SK.cfg = cfg;
+      applyMailSessionBootPolicy();   // 0.9.233: baseline + stale-resume drop
+      var nspBox2 = $("settings-newsessionpermail");
+      if (nspBox2 && !SK.mnsUserTouched) nspBox2.checked = !!SK.cfg.newSessionPerEmail;
       applyPaneFontSize(cfg.paneFontSize || 100);
       // custom-prompt field: show the effective prompt (custom, else the
       // built-in default); only when the user is not typing in it right now
@@ -4043,7 +4172,11 @@ function applyOps(deck, ops, ctx) {
       if ((ev.metaKey || ev.ctrlKey) && ev.key === "Enter") { ev.preventDefault(); runPrompt(); }
     });
     $("chat-new").addEventListener("click", function () { startNewSession($("chat-new")); });
-    $("chat-refresh-deck").addEventListener("click", function () { updateDeckSummary(); setStatus("Email refreshed.", ""); });
+    $("chat-refresh-deck").addEventListener("click", function () {
+      var mailReset = mailSessionForIdentity(mailCurrentIdentity(), "refresh");
+      updateDeckSummary();
+      if (!mailReset) setStatus("Email refreshed.", "");   // a mail change reports itself
+    });
 
     $("conn-new").addEventListener("click", function () {
       resetConnForm();
@@ -4178,6 +4311,16 @@ function applyOps(deck, ops, ctx) {
     };
     $("settings-autoclean").addEventListener("change", _acSave);
     $("settings-autoclean-days").addEventListener("change", _acSave);
+    var _nspBox = $("settings-newsessionpermail");
+    if (_nspBox) _nspBox.addEventListener("change", function () {
+      SK.mnsUserTouched = true;   // background config loads must not undo this
+      var nspOn = !!_nspBox.checked;
+      apiJson("/api/settings", "PUT", { newSessionPerEmail: nspOn }).then(function () {
+        if (SK.cfg) SK.cfg.newSessionPerEmail = nspOn;
+        flashSaved("saved-newsessionpermail", nspOn ? "\u2713 saved - every new email starts a new session" : "\u2713 saved - the session continues across emails");
+        mailSessionForIdentity(mailCurrentIdentity(), "setting");   // enabling: sets the baseline, never resets
+      }).catch(function () { flashSaved("saved-newsessionpermail", "save failed"); });
+    });
     var fsSel2 = $("settings-fontsize");
     if (fsSel2) fsSel2.addEventListener("change", function () {
       var v = parseInt(fsSel2.value, 10) || 100;
@@ -4281,6 +4424,7 @@ function applyOps(deck, ops, ctx) {
       badge.style.display = "";
       badge.textContent = "MAIL";
       SK.deck = new MailDeck();
+      watchMailSelection();   // 0.9.233: reset the session when a different email opens
       applyTheme();
       watchTheme();
       finishBoot();

@@ -51,6 +51,14 @@ add-ins share ONE config:
   hour.
 - Disable it or change the days, then use **Save session cleanup**. The
   change applies at the next add-in open.
+- **Create a new session when opening a new email** (MailKick only, default
+  off): when a different email is opened, the chat drops into a clean new
+  session instead of continuing the open conversation, so each email gets
+  its own conversation. The previous session stays in History (resume it
+  manually from the Sessions tab). A session with no requests is never
+  saved. Detection: the Outlook mailbox selection-changed event
+  (Mailbox 1.13+), with a re-check on every run and on the refresh button
+  as fallback.
 
 ### Display
 

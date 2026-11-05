@@ -155,6 +155,9 @@ draft - a reply is anchored to the thread you are answering.
 ## Shared features
 Same as the other two add-ins: Sessions (auto-saved, AI-named, resumable,
 renamable from the History tab; the chat tab itself is now called Sessions),
+the optional **new session per email** setting (Settings > General >
+Sessions, off by default - a different open email starts a clean session and
+a session with no requests is never saved),
 the **Previous-requests box** (below the prompt: every run with its timestamp
 first, the request text below, +/- to expand - all runs of the resumed
 session), the Inspector request/response log with

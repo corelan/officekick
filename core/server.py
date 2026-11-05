@@ -34,7 +34,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 APP = "OfficeKick"
-VERSION = "0.9.232"
+VERSION = "0.9.233"
 
 # --------------------------------------------------------------------------- #
 # Self-restart: the server watches for <cfg dir>/restart.flag. Whatever writes
@@ -795,6 +795,9 @@ class Store:
         self.data.setdefault("autoApplyApproved", False)  # legacy global auto-apply (fallback for autoApplyByApp)
         self.data.setdefault("autoApplyByApp", {})
         self.data.setdefault("trackedChanges", False)  # DocKick revision setting  # per-add-in auto-apply: slidekick/wordkick/mailkick
+        # 0.9.233 MailKick session behaviour: a different open email starts
+        # a clean session (opt-in; the mail pane tracks the itemId)
+        self.data.setdefault("newSessionPerEmail", False)
         self.data.setdefault("autoClean", True)        # delete old sessions on pane open
         self.data.setdefault("autoCleanDays", 120)     # session older than N days -> removed
         self.data.setdefault("logCleanDays", 30)        # debug/access logs older than N days -> removed
@@ -1135,6 +1138,7 @@ class Store:
             "searchKeysSet": {k: bool(v) for k, v in (d.get("searchKeys") or {}).items() if k in ("brave", "tavily", "firecrawl")},
             "customPromptDefault": DEFAULT_CUSTOM_PROMPT,
             "trackedChanges": bool(d.get("trackedChanges", False)),
+            "newSessionPerEmail": bool(d.get("newSessionPerEmail", False)),
             "autoClean": bool(d.get("autoClean", True)),
             "autoCleanDays": int(d.get("autoCleanDays", 120)),
             "autoUpdateCheck": bool(d.get("autoUpdateCheck", True)),
@@ -2956,6 +2960,9 @@ class SlideKickHandler(BaseHTTPRequestHandler):
                     changed = True
                 if "trackedChanges" in body and body["trackedChanges"] is not None:
                     self.store.data["trackedChanges"] = bool(body["trackedChanges"])
+                    changed = True
+                if "newSessionPerEmail" in body and body["newSessionPerEmail"] is not None:
+                    self.store.data["newSessionPerEmail"] = bool(body["newSessionPerEmail"])
                     changed = True
                 if "autoClean" in body and body["autoClean"] is not None:
                     self.store.data["autoClean"] = bool(body["autoClean"])
