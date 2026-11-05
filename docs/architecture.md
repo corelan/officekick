@@ -151,7 +151,7 @@ anchored to the thread).
   install (`--ff-only`) or downloads the GitHub zip for non-git installs,
   redeploys server.py + the add-in static trees and hands off to the
   OS-native restart helper, so the server that starts answering IS the new
-  code (once per 12 h; failures never block the boot; the
+  code (once per 5 min; failures never block the boot; the
   `serverAutoUpdate` setting). (3) `install.py --update` re-deploys
   everything including manifests (needed only when those changed).
 - **Approval policy lives server-side, enforced client-side** (the server

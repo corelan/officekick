@@ -72,7 +72,7 @@ add-ins share ONE config:
   zip) and restarts through the OS-native start mechanism, so the running
   server IS the new release. Server code + pane files only - run
   `install.py --update` when manifests changed. Failures never block the
-  boot; the next start retries (checked at most once per 12 h).
+  boot; the next start retries (checked at most once per 5 min).
 - **Update available**: shows the pull/installer steps:
   1. Reload the pane first (About > **Reload add-in**, or close/reopen the
      add-in) - the new UI is live immediately.

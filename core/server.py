@@ -34,7 +34,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 APP = "OfficeKick"
-VERSION = "0.9.200"
+VERSION = "0.9.201"
 
 # --------------------------------------------------------------------------- #
 # Self-restart: the server watches for <cfg dir>/restart.flag. Whatever writes
@@ -169,8 +169,8 @@ def _restart_watcher(store, servers, port):
 # the same detached restart helper mechanism, so the NEXT process serves the
 # updated code. Failures (offline, git error, disk) are swallowed: an update
 # never blocks the boot - the server just serves what it already has.
-BOOT_UPDATE_TICK = "auto_update_tick"   # 12 h throttle marker, in the cfg dir
-BOOT_UPDATE_SECS = 12 * 3600
+BOOT_UPDATE_TICK = "auto_update_tick"   # 5 min throttle marker, in the cfg dir
+BOOT_UPDATE_SECS = 5 * 60
 BOOT_UPDATE_SRC = "boot_update_src"     # extracted zip staging dir, cfg dir
 
 

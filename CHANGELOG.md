@@ -30,6 +30,12 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.201
+### Changed
+- Boot self-update throttle: 12 h -> 5 min. Urgent updates need a restart,
+  not a wait; the 5 min window still keeps pathological restart loops from
+  hammering GitHub (failed checks are never stamped and retry on the next
+  boot, as before).
 ## 0.9.200
 ### Fixed
 - The update notice no longer tells an OLD pane to "click the update
