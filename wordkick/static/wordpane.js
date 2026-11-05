@@ -307,6 +307,14 @@
     // connection has no web plugin, fall back to ANY OpenRouter connection
     // with a cheap always-available web-enabled model. The pane owns the
     // lookup channel - the model the user chats with often has none.
+    // capability ladder: OpenRouter's :online plugin first (native search);
+    // then the SERVER-SIDE keyless search (works for every connection kind);
+    // then an OpenAI search-preview model (native search) when present.
+    var openaiSearch = null;
+    (SK.cfg.connections || []).forEach(function (c) {
+      if (openaiSearch || (c.type !== "openai" && c.type !== "generic-openai")) return;
+      openaiSearch = { connection: c.name, model: "gpt-4o-mini-search-preview" };
+    });
     var attempts = [];
     if (connOf(ref.connection).type === "openrouter") {
       attempts.push({ connection: ref.connection, model: ref.model + ":online" });
@@ -317,12 +325,31 @@
       if (dup) return;
       attempts.push({ connection: c.name, model: "openai/gpt-4o-mini:online" });
     });
+    // when no model-side channel answers, the server searches itself + the
+    // pane turns results into facts; OpenAI's native search-preview model
+    // is the last model-side attempt
+    attempts.push({ server: true });
+    if (openaiSearch) attempts.push(openaiSearch);
+    var chosenEngine = String((SK.cfg && SK.cfg.webSearchEngine) || "auto");
+    if (chosenEngine === "duckduckgo" || chosenEngine === "brave" || chosenEngine === "tavily") {
+      attempts.unshift({ server: true });   // the user picked this engine: use it first
+    }
     var webNoHit = function (t) {
       return !t || /^NO_WEB_ACCESS\b/i.test(t) || /cannot access (the )?web/i.test(t) ||
         /can'?t browse/i.test(t) || /no web access/i.test(t) ||
         /lookup channel isn'?t available/i.test(t);
     };
     var one = function (a) {
+      if (a && a.server) {
+        return apiJson("/api/web-search?q=" + encodeURIComponent(instruction.slice(0, 240)), "GET")
+          .then(function (res) {
+            if (!res || !res.ok || !(res.results || []).length) return "";
+            var lines = (res.results || []).slice(0, 8).map(function (r) {
+              return "- " + r.title + (r.snippet ? " - " + r.snippet : "") + "\n  " + r.url;
+            }).join("\n");
+            return "SERVER-SIDE WEB SEARCH (live, DuckDuckGo via the local server) for the lookup:\n" + lines;
+          }).catch(function () { return ""; });
+      }
       return askRetryable(function () {
         return apiJson("/api/chat", "POST", {
           connection: a.connection, model: a.model,
@@ -2357,9 +2384,12 @@ function applyOps(deck, ops, ctx) {
           .then(function (resp) {
             var pre = tryParse(resp.text);
             var txt0 = String(resp.text || "");
-            if (!askedLookup && !pre.ok && !SK.noLookupRedo &&
-                /lookup channel|don'?t have (web|live)|no (web|live|internet) (access|connection)|can'?t (access|browse|search|pull|verify|run|do) [a-z ]{0,24}(web|internet|search|lookup|online|current|fresh|live)|stale\b/i.test(txt0) &&
-                /(rankings?|current|latest|today|news|price|prices|release|releases|live|up[- ]?to[- ]?date|fresh|who is|what happened)/i.test(instruction || "")) {
+            var noWebSaid = !pre.ok &&
+                /lookup channel|don'?t have (web|live)|no (web|live|internet) (access|connection)|can'?t (access|browse|search|pull|verify|run|do) [a-z ]{0,24}(web|internet|search|lookup|online|current|fresh|live)|won'?t guess|cannot verify|can'?t verify|without (a )?(live |real )?(web|internet|search|lookup|live access)|stale\b/i.test(txt0);
+            if (!askedLookup && !SK.noLookupRedo &&
+                (noWebSaid || (pre.ok && pre.kind === "reply" &&
+                  /can'?t verify|cannot verify|no (live |web |internet )?(access|search|lookup|connection|data)|without (a )?(live )?(web|internet|search|live access)/i.test(txt0))) &&
+                /(rankings?|current|latest|today|news|price|prices|release|releases|live|up[- ]?to[- ]?date|fresh|who is|what happened|version|release|check|search|web|online)/i.test(instruction || "")) {
               // The model believes IT must search and refuses. The pane owns
               // the lookup channel - run the web lookup HERE and re-ask once
               // with the results.
@@ -3868,6 +3898,22 @@ function applyOps(deck, ops, ctx) {
           if (SK.cfg) SK.cfg.customPrompt = cpEl.value;
           flashSaved("saved-customprompt", "\u2713 saved");
         }).catch(function () { flashSaved("saved-customprompt", "save failed"); });
+      });
+    }
+    var seEl = $("settings-searchengine"), skEl = $("settings-searchkey");
+    if (seEl) {
+      seEl.value = String((SK.cfg && SK.cfg.webSearchEngine) || "auto");
+      // the API key never round-trips: placeholder only shows whether one is set
+      if (skEl) skEl.placeholder = (SK.cfg && SK.cfg.webSearchKeySet) ? "API key set - type to replace" : "API key (only for the paid engines)";
+      var seSave = $("settings-search-save");
+      if (seSave) seSave.addEventListener("click", function () {
+        var body = { webSearchEngine: seEl.value };
+        if (skEl && skEl.value.trim()) body.webSearchKey = skEl.value.trim();
+        apiJson("/api/settings", "PUT", body).then(function () {
+          if (SK.cfg) { SK.cfg.webSearchEngine = seEl.value; SK.cfg.webSearchKeySet = SK.cfg.webSearchKeySet || !!body.webSearchKey; }
+          if (skEl) skEl.value = "";
+          flashSaved("saved-search", "✓ saved");
+        }).catch(function (e) { flashSaved("saved-search", "save failed"); });
       });
     }
     $("settings-debug").addEventListener("change", function () { saveDebugOption(); flashSaved("saved-debug", SK.cfg && SK.cfg.debug ? "\u2713 saved - debug logging ON" : "\u2713 saved - debug logging OFF"); });

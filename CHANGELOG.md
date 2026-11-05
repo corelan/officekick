@@ -30,6 +30,16 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.156
+### Added
+- Settings -> General -> "Web search (all add-ins)": pick the search
+  engine - Automatic (provider lookup first, then the free engine) /
+  DuckDuckGo (free, keyless) / Brave Search / Tavily (the last two take an
+  API key, stored only in the local config, never echoed to the panes or
+  shown again). The chosen engine runs first in the lookup ladder;
+  provider-native channels (OpenRouter :online, OpenAI search-preview
+  models, the Anthropic web_search server tool) = the documented natives.
+  Free DuckDuckGo = always available, no key.
 ## 0.9.155
 ### Added
 - The live-lookup channel now READS THE DOCUMENTS IT FINDS: after web

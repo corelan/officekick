@@ -113,6 +113,18 @@
       </div>
       <span class="savedflash" id="saved-debug" aria-live="polite"></span>
       </div>
+      <div class="setgroup"><h2 class="setgh">Web search (all add-ins)</h2>
+      <div class="row"><label class="field-inline">Search engine:
+        <select id="settings-searchengine" style="max-width: 230px">
+          <option value="auto">Automatic (provider lookup, else free engine)</option>
+          <option value="duckduckgo">DuckDuckGo (free, no key)</option>
+          <option value="brave">Brave Search (API key)</option>
+          <option value="tavily">Tavily (API key)</option>
+        </select></label></div>
+      <div class="row"><input id="settings-searchkey" type="password" placeholder="API key (only for the paid engines)" autocomplete="off" /></div>
+      <div class="row"><button id="settings-search-save" class="btn" type="button">Save search settings</button><span class="savedflash" id="saved-search" aria-live="polite"></span></div>
+      <p class="muted" style="margin:0 0 4px 0">The key is stored only in the local config and is never shown again.</p>
+      </div>
       <div class="setgroup"><h2 class="setgh">Custom system prompt (all add-ins)</h2>
       <textarea id="settings-customprompt" rows="16" spellcheck="false" placeholder="Optional instructions appended to every AI request - e.g. writing style, tone, formatting house rules..."></textarea>
       <p class="muted" style="margin:0 0 4px 0">Appended to the system prompt of every ask. Click Save when done. Clearing this and saving falls back to the built-in quality/style prompt.</p>

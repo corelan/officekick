@@ -34,7 +34,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 APP = "OfficeKick"
-VERSION = "0.9.155"
+VERSION = "0.9.156"
 
 # --------------------------------------------------------------------------- #
 # Self-restart: the server watches for <cfg dir>/restart.flag. Whatever writes
@@ -605,6 +605,10 @@ class Store:
         # custom instructions appended to every system prompt (style, tone,
         # house rules); empty by default for fresh installs
         self.data.setdefault("customPrompt", "")
+        # web search: engine + optional API key (paid engines); "auto" uses
+        # the free keyless engine
+        self.data.setdefault("webSearchEngine", "auto")
+        self.data.setdefault("webSearchKey", "")
         # AI edits as tracked changes (Word; opt-in)
         self.data.setdefault("trackedChanges", True)
         self.save()
@@ -850,6 +854,9 @@ class Store:
             "generateNotes": bool(d.get("generateNotes", False)),
             "paneFontSize": int(d.get("paneFontSize", 100)),
             "customPrompt": str(d.get("customPrompt", "") or ""),
+            "webSearchEngine": str(d.get("webSearchEngine", "auto") or "auto"),
+            # the key never leaves the box: only a set/unset marker is public
+            "webSearchKeySet": bool(d.get("webSearchKey", "")),
             "customPromptDefault": DEFAULT_CUSTOM_PROMPT,
             "trackedChanges": bool(d.get("trackedChanges", False)),
             "autoClean": bool(d.get("autoClean", True)),
@@ -1370,6 +1377,118 @@ def _html_to_text(html_text):
     txt = re.sub(r"[ \t\r\f\v]+", " ", txt)
     txt = re.sub(r"\n\s*\n\s*\n+", "\n\n", txt)
     return txt.strip()
+
+
+def _search_duckduckgo(q, max_results=8):
+    """Free keyless search (DuckDuckGo HTML endpoint, stdlib)."""
+    req = urllib.request.Request("https://html.duckduckgo.com/html/", method="POST",
+        data=urllib.parse.urlencode({"q": q}).encode(),
+        headers={"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36",
+                 "Accept-Language": "en;q=0.9,*;q=0.5"})
+    deadline = time.time() + 15
+    data = b""
+    try:
+        with urllib.request.urlopen(req, timeout=15) as r:
+            while len(data) < 2_000_000 and time.time() < deadline:
+                chunk = r.read(65536)
+                if not chunk:
+                    break
+                data += chunk
+    except Exception as exc:
+        raise ApiError(502, "search failed: %s" % str(exc)[:160])
+    html = data.decode("utf-8", "replace")
+    links = re.findall(r'class="result__a"[^>]*href="([^"]+)"[^>]*>(.*?)</a>', html, re.S)
+    snips = re.findall(r'class="result__snippet"[^>]*>(.*?)</[a-z]+', html, re.S)
+    out = []
+    for i2, (href, title) in enumerate(links):
+        m = re.search(r"uddg=([^&]+)", href)
+        url = urllib.parse.unquote(m.group(1)) if m else href
+        if not url or url.startswith("//duckduckgo.com/y.js"):   # ads
+            continue
+        title = re.sub(r"<[^>]+>", "", title).strip()
+        out.append({"title": title[:180], "url": url[:400],
+                    "snippet": re.sub(r"<[^>]+>", "", snips[i2]).strip()[:300] if i2 < len(snips) else ""})
+        if len(out) >= max_results:
+            break
+    return out
+
+
+def _search_brave(q, key, max_results=8):
+    """Brave Search API (paid, key X-Subscription-Token; generous free tier)."""
+    if not key:
+        raise ApiError(400, "Brave search needs an API key - set it in Settings")
+    req = urllib.request.Request(
+        "https://api.search.brave.com/res/v1/web/search?q=" + urllib.parse.quote(q),
+        headers={"Accept": "application/json",
+                 "Accept-Encoding": "gzip",
+                 "X-Subscription-Token": key})
+    try:
+        with urllib.request.urlopen(req, timeout=15) as r:
+            data = r.read()
+            if r.headers.get("Content-Encoding") == "gzip":
+                import gzip
+                data = gzip.decompress(data)
+    except Exception as exc:
+        raise ApiError(502, "brave search failed: %s" % str(exc)[:160])
+    try:
+        j = json.loads(data.decode("utf-8", "replace"))
+    except Exception:
+        raise ApiError(502, "brave search returned unreadable data")
+    out = []
+    for r2 in (j.get("web") or {}).get("results", [])[:max_results]:
+        out.append({"title": str(r2.get("title") or "")[:180],
+                    "url": str(r2.get("url") or "")[:400],
+                    "snippet": str(r2.get("description") or "")[:300]})
+    return out
+
+
+def _search_tavily(q, key, max_results=8):
+    """Tavily search API (key in the POST body; free tier)."""
+    if not key:
+        raise ApiError(400, "Tavily search needs an API key - set it in Settings")
+    req = urllib.request.Request("https://api.tavily.com/search", method="POST",
+        data=json.dumps({"api_key": key, "query": q[:400], "max_results": max_results}).encode(),
+        headers={"Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=15) as r:
+            j = json.loads(r.read().decode("utf-8", "replace"))
+    except Exception as exc:
+        raise ApiError(502, "tavily search failed: %s" % str(exc)[:160])
+    out = []
+    for r2 in (j.get("results") or [])[:max_results]:
+        out.append({"title": str(r2.get("title") or "")[:180],
+                    "url": str(r2.get("url") or "")[:400],
+                    "snippet": str(r2.get("content") or "")[:300]})
+    return out
+
+
+def web_search(store, query, max_results=8):
+    """Server-side web search. Engine = the webSearchEngine setting;
+    "auto" = the free keyless DuckDuckGo channel. brave/tavily need an API
+    key in the webSearchKey setting (Settings -> General). Returns
+    [{title, url, snippet}] - the pane may then fetch pages via
+    /api/fetch-url."""
+    q = str(query or "").strip()
+    if not q:
+        raise ApiError(400, "empty search query")
+    if len(q) > 300:
+        q = q[:300]
+    engine = "duckduckgo"
+    key = ""
+    if store is not None:
+        engine = str(store.data.get("webSearchEngine") or "auto") or "auto"
+        key = str(store.data.get("webSearchKey") or "")
+        if engine == "auto":
+            engine = "duckduckgo"   # the free option also = the auto default
+    if engine == "brave":
+        results = _search_brave(q, key, max_results)
+    elif engine == "tavily":
+        results = _search_tavily(q, key, max_results)
+    else:
+        results = _search_duckduckgo(q, max_results)
+    if not results:
+        raise ApiError(502, "search returned no results for that query")
+    return {"ok": True, "query": q, "engine": engine, "results": results}
 
 
 def fetch_url_text(store, raw_url, max_chars=8000):
@@ -2088,6 +2207,9 @@ class SlideKickHandler(BaseHTTPRequestHandler):
             elif path.startswith("/api/sessions/"):
                 sid = path[len("/api/sessions/"):]
                 self._send_json(self.store.sessions.get(sid))
+            elif path.startswith("/api/web-search"):
+                q2 = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
+                self._send_json(web_search(self.store, (q2.get("q") or [""])[0]))
             elif path.startswith("/api/fetch-url"):
                 q2 = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
                 self._send_json(fetch_url_text(self.store, (q2.get("url") or [""])[0]))
@@ -2309,6 +2431,15 @@ class SlideKickHandler(BaseHTTPRequestHandler):
                     changed = True
                 if "generateNotes" in body and body["generateNotes"] is not None:
                     self.store.data["generateNotes"] = bool(body["generateNotes"])
+                    changed = True
+                if "webSearchEngine" in body and body["webSearchEngine"] is not None:
+                    eng = str(body["webSearchEngine"] or "auto")
+                    if eng not in ("auto", "duckduckgo", "brave", "tavily"):
+                        raise ApiError(400, "unknown web search engine: %r" % eng)
+                    self.store.data["webSearchEngine"] = eng
+                    changed = True
+                if body.get("webSearchKey") is not None:
+                    self.store.data["webSearchKey"] = str(body["webSearchKey"] or "")[:200]
                     changed = True
                 if "customPrompt" in body and body["customPrompt"] is not None:
                     _cp = str(body["customPrompt"] or "")
