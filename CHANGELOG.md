@@ -30,6 +30,14 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.205
+### Changed
+- The installer's user-facing output is scheme-truthful now: the transport
+  banner, the "add-ins talk to a local server" note and the simulator URL
+  print BOTH listeners (with each pane's actual scheme) whenever a working
+  loopback certificate exists, and plain http when it does not. New
+  helpers: tls_active() (validated cert present), pane_listener_line()
+  and the simulator base switch.
 ## 0.9.204
 ### Changed
 - When a loopback certificate is present AND working (expiry, localhost

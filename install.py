@@ -17,7 +17,8 @@ On Windows use: py -3 install.py (the py launcher; plain `python` is often
 the Microsoft Store alias that does not run scripts).
 
 Design notes:
-- the add-in transport is plain http://localhost:<port>: Office allows localhost
+- the add-in transport is http://localhost:<port> (https://localhost:<port+1>
+  wherever a working loopback certificate exists): Office allows localhost
   over http, so there is NO certificate, NO trusted CA, NO keychain step;
 - no admin rights are needed on either platform (everything is per-user);
 - autostart: macOS = login item (the "OfficeKickServer" app bundle, registered
@@ -354,6 +355,28 @@ def pythonw_path():
 def tls_cert_dir():
     return os.path.join(config_dir(), "certs")
 
+
+def tls_active():
+    """True when a WORKING loopback certificate exists right now (used to
+    decide what the installer should TELL the user, 0.9.205)."""
+    _crt = os.path.join(tls_cert_dir(), "server.crt")
+    _key = os.path.join(tls_cert_dir(), "server.key")
+    return (os.path.isfile(_crt) and os.path.isfile(_key)
+            and validate_existing_tls(_crt) is None)
+
+
+def _sim_base():
+    return "https://localhost:%d" % (PORT + 1) if tls_active() else "http://127.0.0.1:%d" % PORT
+
+
+def pane_listener_line():
+    """One line describing where the panes are served, honest about TLS."""
+    if tls_active():
+        return (
+            "  https://localhost:%d  <- task panes + AI requests (TLS, user-trusted CA)\n"
+            "  http://127.0.0.1:%d   <- same statics, plain http" % (PORT + 1, PORT)
+        )
+    return "  http://127.0.0.1:%d   <- task panes + AI requests (no certificate)" % PORT
 
 def validate_user_cert(crt, key):
     """Check a user-supplied MailKick TLS pair. Returns (ok, problems[])."""
@@ -1229,11 +1252,17 @@ def preflight(mode):
     out("OfficeKick %s - %s (SlideKick + DocKick + MailKick)" % (VERSION, mode))
     out("  platform  : %s (%s) | python %s" % (
         platform.system(), platform.release(), platform.python_version()))
-    out("  transport : Word/PowerPoint/OpenOffice panes -> http://localhost:<port>")
-    out("              (Office allows localhost over http).")
-    out("              macOS Outlook -> https://localhost:<port+1> (loopback TLS with")
-    out("              a per-user CA generated + trusted once) - Outlook validates")
-    out("              every manifest URL as https, so MailKick must go over TLS.")
+    if tls_active():
+        out("  transport : https://localhost:<port+1> - ALL panes (loopback TLS,")
+        out("              per-user CA generated + trusted; Outlook validates every")
+        out("              manifest URL as https).")
+        out("              http://localhost:<port> also serves the same statics.")
+    else:
+        out("  transport : panes -> http://localhost:<port> (Office allows localhost")
+        out("              over http; no certificate in use).")
+        out("              macOS Outlook needs https://localhost:<port+1> (loopback") 
+        out("              TLS, per-user CA generated + trusted) - Outlook validates")
+        out("              every manifest URL as https, so MailKick must go over TLS.")
     out("  admin     : not required - every step here is per-user.")
     if is_mac():
         out("  popups    : macOS may show -")
@@ -1254,7 +1283,7 @@ def preflight(mode):
 def ask_autostart():
     out("")
     out("  About autostart: the add-ins talk to a small LOCAL server (python) that")
-    out("  serves http://127.0.0.1:%d - the Office task panes and the AI requests." % PORT)
+    out("  %s" % pane_listener_line())
     out("  Without autostart the panes only work while that server is running.")
     if is_mac():
         return ask_yes("Add autostart to the login items (a hidden 'OfficeKickServer' app"
@@ -1327,7 +1356,7 @@ def done_note(mode_name):
     out("")
     out("  Quit and REOPEN your Office apps so the task panes load the new build")
     out("  (About tab -> 'Pane build' should say %s)." % read_version())
-    out("  Simulator (no Office needed): http://127.0.0.1:%d/slidekick/static/simulator.html" % PORT)
+    out("  Simulator (no Office needed): %s/slidekick/static/simulator.html" % _sim_base())
     out("  Config: %s - API keys stay local (chmod 600)." % config_dir())
     check_pane_errors()
 
