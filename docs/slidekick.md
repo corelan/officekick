@@ -199,6 +199,9 @@ immediately (the choice rides inside the request, so every later lookup or
 repair round carries it) and the final result follows without another
 question. Internal action, never gated; at most two clarify rounds per
 chain; the Q&A pair stays in Previous requests and in the session history.
+When the request names a slide but the model's plan aims at another (e.g.
+the open one), the pane re-asks once with the reason before showing the
+proposal - the ops must match the named target.
 
 ## Web lookups and page reads
 
