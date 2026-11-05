@@ -1168,14 +1168,14 @@ def main():
         out("OfficeKick %s - installer (auto-detected: %s)" % (VERSION, platform.system()))
         out("  1) Install (or repair the current install)")
         out("  2) Update the current install (also pulls the repo with git)")
-        out("  2b) Start (or restart) the local server only")
-        out("  3) Uninstall")
-        out("  q) quit")
+        out("  3) Start (or restart) the local server only")
+        out("  x) Uninstall")
+        out("  0) exit")
         try:
             if not sys.stdin.isatty():
                 out("  (non-interactive: no choice given - pass --install / --update / --uninstall)")
                 return
-            choice = input("  > choose [1/2/3, default 1]: ").strip().lower()
+            choice = input("  > choose [1/2/3, x, 0; default 1]: ").strip().lower()
         except EOFError:
             return
         if choice in ("", "1"):
@@ -1185,16 +1185,16 @@ def main():
             git_pull()
             install("Update", interactive=False)
             return
-        if choice == "2b":
+        if choice == "3":
             stop_server()
             start_only()
             return
-        if choice == "3":
+        if choice in ("x", "uninstall"):
             do_uninstall(None)
             return
-        if choice in ("q", "quit", "exit"):
+        if choice in ("0", "q", "quit", "exit"):
             return
-        out("  please choose 1, 2, 3 or q")
+        out("  please choose 1, 2, 3, x or 0")
 
 
 if __name__ == "__main__":

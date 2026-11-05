@@ -100,7 +100,7 @@ py -3 install.py --start        # Windows
 `--start` brings the server up and health-checks it; it changes nothing
 else. Related flags: `--status` (shows the running version or exits
 non-zero), `--stop`. In the interactive installer the same action is
-menu item **(2b) Start (or restart) the local server only**.
+menu item **(3) Start (or restart) the local server only** (or run `install.py --restart`).
 
 How it starts automatically:
 

@@ -30,6 +30,11 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.187
+### Changed
+- The installer's interactive menu is numbered 1 / 2 / 3 (Install / Update /
+  Start-restart), Uninstall is `x` and `0` exits instead of the old
+  1/2/3-uninstall + "2b" arrangement. README menu wording follows.
 ## 0.9.186
 ### Added
 - **Content-writing runs always check the web first** (standing rule: the
