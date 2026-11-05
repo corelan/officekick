@@ -30,6 +30,13 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.184
+### Fixed
+- The bottom status bar (and the About tab) refreshed their version only
+  at pane boot: when the server updated under an open pane, "Check now"
+  truthfully said up to date while the bottom indicator still showed the
+  older build. The 5 s server heartbeat now detects the served version
+  change and repaints the banner + About tab without a pane reload.
 ## 0.9.183
 ### Added
 - **Pane error log (timestamped)**: every uncaught task-pane error -

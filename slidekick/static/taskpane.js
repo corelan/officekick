@@ -6119,6 +6119,15 @@ OfficeDeck.prototype.setNotes = function (i, text) {
     if (good) {
       el.className = "";
       el.title = "Local server reachable (v" + (ver || "?") + ") - checked " + (stamp || "");
+    if (ver && SK.cfg && SK.cfg.version && SK.cfg.version !== ver) {
+      // the server updated (or restarted) under the pane: refresh the
+      // bottom banner + the About tab so the version is never stale (0.9.184)
+      SK.cfg.version = ver;
+      el.textContent = "SlideKick v" + ver +
+        (window.location && String(window.location.protocol) === "https:" ? " - \u{1F512} " : " - ") +
+        "server 127.0.0.1:" + SK.cfg.port + (SK.cfg.debug ? " - debug ON" : "");
+      try { renderAbout(); } catch (eVer) {}
+    }
       var hintEl2 = $("statusbar-hint");
       if (hintEl2) { hintEl2.style.display = "none"; hintEl2.textContent = ""; }
     } else {
