@@ -30,6 +30,12 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.224
+### Changed (DocKick)
+- A "the model proposed 0 actions" run is no longer a bare "Done": the
+  pane now shows the model's actual reply text (what it chose to say
+  instead of acting) plus a one-click "Ask again (same request)" button,
+  so a silent success with no visible result is readable and repeatable.
 ## 0.9.223
 ### Fixed
 - move_text/copy_text still crashed with the style-proxy error on the

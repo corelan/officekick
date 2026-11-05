@@ -3778,13 +3778,31 @@ function applyOps(deck, ops, ctx) {
       validation = validateOps(parsed.ops, ctx);
     }
     if (!validation.ops.length && !validation.invalid.length) {
+      // 0.9.224: a silent "Done" here hides what the model actually said -
+      // show its reply text (why it chose to do nothing) + a one-click re-ask.
       var box3 = document.createElement("div");
       box3.className = "reply-text";
-      box3.textContent = (SK.webResults || SK.pendingWebOps) ?
-        "(model returned an empty action list - web lookup ran; the model chose not to change the document)" :
-        "(model returned an empty action list)";
+      var said = "";
+      try { said = String((SK.lastModelText && SK.lastModelText.text) || ""); } catch (eM) { }
+      box3.textContent = said ? ("The model proposed 0 actions. It answered:\n" + said.slice(0, 600))
+                              : "(model returned an empty action list)";
       out.appendChild(box3);
-      setStatus("Done.", "ok");
+      var reRow = document.createElement("div");
+      reRow.className = "row";
+      var reBtn = document.createElement("button");
+      reBtn.className = "btn";
+      reBtn.type = "button";
+      reBtn.textContent = "Ask again (same request)";
+      reBtn.addEventListener("click", function () {
+        var inp = $("chat-input");
+        if (SK.busy) return;
+        if (!inp.value.trim() && SK.lastInstruction) { inp.value = SK.lastInstruction; }
+        runPrompt();
+      });
+      reRow.appendChild(reBtn);
+      out.appendChild(reRow);
+      if (SK.lastAsk) { SK.lastAsk.rounds = 0; }   // the re-request gets fresh repair rounds too
+      setStatus("Done - the model proposed 0 actions.", "ok");
       return;
     }
     // auto-apply: skip the preview entirely when every action's policy is 'auto'
