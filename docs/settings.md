@@ -66,6 +66,13 @@ add-ins share ONE config:
   from GitHub. Nothing is downloaded or installed automatically. The probe
   result is cached for two minutes.
 - **Check now**: the same check on demand.
+- **Update the server automatically before it starts** (default on): when
+  the server boots and the released code is newer, it updates itself first
+  (git clone: `git pull --ff-only`; otherwise it downloads the GitHub repo
+  zip) and restarts through the OS-native start mechanism, so the running
+  server IS the new release. Server code + pane files only - run
+  `install.py --update` when manifests changed. Failures never block the
+  boot; the next start retries (checked at most once per 12 h).
 - **Update available**: shows the pull/installer steps:
   1. Reload the pane first (About > **Reload add-in**, or close/reopen the
      add-in) - the new UI is live immediately.

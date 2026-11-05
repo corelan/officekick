@@ -30,6 +30,22 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.177
+### Added
+- **Update before serving**: at boot the server compares the released
+  VERSION with the running one (once per 12 h) and, when a newer release
+  exists, updates the install BEFORE it starts serving - a git clone is
+  pulled (`git pull --ff-only`), any other install downloads the GitHub
+  repo zip (codeload). server.py + the add-in static folders are
+  re-deployed and the process hands off to the OS-native restart helper,
+  so the running server is the new release by the time it answers.
+  Office and manifests are never touched by the boot update - run
+  `install.py --update` when the manifests changed. Failures never block
+  the boot: offline or a failed pull just serves the current code and
+  retries on the next start.
+- The new setting is Settings > General: "Update the server automatically
+  before it starts" (default on), stored as `serverAutoUpdate`.
+  `OFFICEKICK_NO_BOOT_UPDATE=1` also skips it for one run.
 ## 0.9.176
 ### Docs
 - README "Use it": current tab names (the prompt sheet is the Sessions

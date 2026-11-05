@@ -5982,6 +5982,13 @@ OfficeDeck.prototype.setNotes = function (i, text) {
       updAuto.addEventListener("change", function () {
         apiJson("/api/settings", "PUT", { autoUpdateCheck: !!updAuto.checked });
       });
+      var updAutoServer = $("upd-auto-server");
+      if (updAutoServer) {
+        updAutoServer.checked = !(cfg && cfg.serverAutoUpdate === false);
+        updAutoServer.addEventListener("change", function () {
+          apiJson("/api/settings", "PUT", { serverAutoUpdate: !!updAutoServer.checked });
+        });
+      }
     }
     // a pane reload lands on Settings -> General (the caller tags the URL)
     try {

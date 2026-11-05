@@ -34,7 +34,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 APP = "OfficeKick"
-VERSION = "0.9.176"
+VERSION = "0.9.177"
 
 # --------------------------------------------------------------------------- #
 # Self-restart: the server watches for <cfg dir>/restart.flag. Whatever writes
@@ -157,6 +157,202 @@ def _restart_watcher(store, servers, port):
             except Exception:
                 pass
         return
+
+
+# -------------------------------------------------------- boot self-update #
+# 0.9.177: BEFORE serving, quietly update this install when the repo's
+# release is newer. A recorded git checkout is pulled (--ff-only); any other
+# install downloads the GitHub repo zip (codeload) into the config dir.
+# server.py + the three add-in static folders are then re-deployed into the
+# running install (manifests are NOT touched here - rendering those wants
+# Office closed; install.py --update does that) and the process hands off to
+# the same detached restart helper mechanism, so the NEXT process serves the
+# updated code. Failures (offline, git error, disk) are swallowed: an update
+# never blocks the boot - the server just serves what it already has.
+BOOT_UPDATE_TICK = "auto_update_tick"   # 12 h throttle marker, in the cfg dir
+BOOT_UPDATE_SECS = 12 * 3600
+BOOT_UPDATE_SRC = "boot_update_src"     # extracted zip staging dir, cfg dir
+
+
+def _boot_self_update(store, port):
+    import shutil as _sh
+    if store.data.get("serverAutoUpdate") is False or \
+            os.environ.get("OFFICEKICK_NO_BOOT_UPDATE") == "1":
+        return False
+    cfg_dir = os.path.dirname(str(store.path))
+    tick = os.path.join(cfg_dir, BOOT_UPDATE_TICK)
+    try:
+        if time.time() - os.path.getmtime(tick) < BOOT_UPDATE_SECS:
+            return False   # throttled: checked within the last 12 hours
+    except OSError:
+        pass
+    repo = store.data.get("repoPath") or ""
+    src_root, how, fail = None, None, None
+    if repo and os.path.isdir(os.path.join(repo, ".git")) and _sh.which("git"):
+        p = git_run(repo, ["fetch", "origin", "--quiet"], timeout=25)
+        if p.returncode != 0:
+            fail = "git fetch failed: %s" % ((p.stderr or "offline").strip()[:160])
+        else:
+            probe = git_update_probe(store)
+            rv = probe.get("remoteVer") if probe.get("usable") else None
+            if rv and _version_tuple(rv) > _version_tuple(VERSION):
+                pr = git_run(repo, ["pull", "--ff-only"], timeout=180)
+                if pr.returncode == 0:
+                    src_root, how = repo, "git pull (%s)" % repo
+                else:
+                    fail = "git pull failed: %s" % ((pr.stderr or "").strip()[:160])
+            else:
+                dbg_line(store, "boot_update", "current",
+                         {"running": VERSION, "remote": rv or "?"})
+                _stamp_boot_tick(cfg_dir)
+                return False
+    if src_root is None:
+        state, info = _zip_boot_source(store)
+        if state == "newer":
+            src_root, how = info[0], "github zip (v%s)" % info[1]
+        elif state == "current":
+            dbg_line(store, "boot_update", "current",
+                     {"running": VERSION, "remote": info})
+            _stamp_boot_tick(cfg_dir)
+            return False
+        else:
+            fail = (fail + "; " if fail else "") + "zip download failed: " + info
+    if src_root is None:
+        # do NOT stamp the tick: the next boot retries (offline boot boxes)
+        try:
+            print("boot self-update: no update (%s) - retrying on next boot" % fail,
+                  flush=True)
+        except Exception:
+            pass
+        dbg_line(store, "boot_update", "left-out", {"reason": fail or "unknown"})
+        return False
+    changed = _deploy_boot_code(store, src_root)
+    _sh.rmtree(os.path.join(cfg_dir, BOOT_UPDATE_SRC), ignore_errors=True)
+    _stamp_boot_tick(cfg_dir)
+    dbg_line(store, "boot_update", "updated",
+             {"how": how, "serverChanged": bool(changed), "from": VERSION})
+    print("self-updated from %s (%s) - restarting to serve the new code ... "
+          % (VERSION, how), flush=True)
+    helper_cmd = prepare_restart(store, port)
+    try:   # @self = relaunch this exact command line - correct on every OS
+        with open(os.path.join(cfg_dir, _RESTART_PAYLOAD), "r",
+                  encoding="utf-8") as f:
+            payload = json.load(f)
+        payload["cmd"] = ["@self"]
+        with open(os.path.join(cfg_dir, _RESTART_PAYLOAD), "w",
+                  encoding="utf-8") as f:
+            json.dump(payload, f)
+    except Exception:
+        pass
+    flags = 0
+    kwargs = {}
+    if os.name == "nt":
+        flags = 0x00000008 | 0x00000200 | 0x08000000
+    else:
+        kwargs["start_new_session"] = True
+    subprocess.Popen(helper_cmd, cwd=cfg_dir, creationflags=flags,
+                     stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                     stderr=subprocess.DEVNULL, **kwargs)
+    return True
+
+
+def boot_self_update(store, port):
+    """Update before serving when a newer release exists. True = a restart
+    was launched (serve nothing this run). Any failure just boots normally."""
+    try:
+        return _boot_self_update(store, port)
+    except Exception as exc:
+        try:
+            print("boot self-update skipped: %s" % exc, flush=True)
+            dbg_line(store, "boot_update", "skipped", {"err": str(exc)[:300]})
+        except Exception:
+            pass
+        return False
+
+
+def _stamp_boot_tick(cfg_dir):
+    try:
+        with open(os.path.join(cfg_dir, BOOT_UPDATE_TICK), "w") as f:
+            f.write(time.strftime("%Y-%m-%d %H:%M:%S"))
+    except OSError:
+        pass
+
+
+def _deploy_boot_code(store, src_root):
+    """Copy fresh code (core/server.py + 3 add-in static trees) from
+    src_root into this running install. True when server.py changed."""
+    import shutil as _sh
+    here = os.path.abspath(sys.argv[0])
+    src = os.path.join(src_root, "core", "server.py")
+    if os.path.abspath(src) == here:
+        return False   # running from the updated tree itself (git clone / unzip)
+    changed = False
+    try:
+        with open(src, encoding="utf-8") as f:
+            fresh = f.read()
+        try:
+            with open(here, encoding="utf-8") as f:
+                changed = f.read() != fresh
+        except OSError:
+            changed = False
+        root = os.path.dirname(here)
+        for addin in ("slidekick", "wordkick", "mailkick"):
+            adir = os.path.join(src_root, addin)
+            if os.path.isdir(adir):
+                dst = os.path.join(root, addin)
+                _sh.rmtree(dst, ignore_errors=True)
+                _sh.copytree(adir, dst,
+                             ignore=_sh.ignore_patterns("__pycache__", "*.pyc", ".DS_Store"),
+                             dirs_exist_ok=True)
+        if changed:
+            tmpf = here + ".new"
+            with open(tmpf, "w", encoding="utf-8") as f:
+                f.write(fresh)
+            os.replace(tmpf, here)
+        return changed
+    except OSError as exc:
+        dbg_line(store, "boot_update", "deploy.failed", {"err": str(exc)[:300]})
+        return False
+
+
+def _zip_boot_source(store):
+    """Download the GitHub repo zip for a NON-git install.
+    Returns ('newer', (staging_dir, version)), ('current', version) or
+    ('error', message)."""
+    import io as _io
+    import shutil as _sh
+    import zipfile as _zip
+    url = "https://codeload.github.com/corelan/officekick/zip/refs/heads/main"
+    req = urllib.request.Request(url, headers={"User-Agent": "officekick/" + VERSION})
+    try:
+        with urllib.request.urlopen(req, timeout=90) as r:
+            blob = r.read(40 * 1024 * 1024)
+        with _zip.ZipFile(_io.BytesIO(blob)) as zf:
+            names = zf.namelist()
+            top = names[0].split("/")[0]
+            vname = top + "/VERSION"
+            if vname not in names:
+                return ("error", "repo zip has no VERSION file")
+            ver = zf.read(vname).decode("utf-8", "replace").strip()
+            if _version_tuple(ver) <= _version_tuple(VERSION):
+                return ("current", ver)
+            cfg_dir = os.path.dirname(str(store.path))
+            tmp = os.path.join(cfg_dir, BOOT_UPDATE_SRC)
+            _sh.rmtree(tmp, ignore_errors=True)
+            zf.extractall(cfg_dir)
+            extracted = os.path.join(cfg_dir, top)
+            if extracted != tmp:
+                try:
+                    os.rename(extracted, tmp)
+                except OSError:
+                    _sh.rmtree(tmp, ignore_errors=True)
+                    _sh.move(extracted, tmp)
+            if not os.path.isfile(os.path.join(tmp, "core", "server.py")):
+                _sh.rmtree(tmp, ignore_errors=True)
+                return ("error", "repo zip has no core/server.py")
+            return ("newer", (tmp, ver))
+    except Exception as exc:
+        return ("error", str(exc)[:200])
 
 
 # Built-in quality/style prompt: used when the user's customPrompt is empty
@@ -591,6 +787,7 @@ class Store:
             self.data = {}
         self.data.setdefault("version", 1)
         self.data.setdefault("autoUpdateCheck", True)   # check GitHub at boot (no git)
+        self.data.setdefault("serverAutoUpdate", True)  # 0.9.177: update this install before serving
         self.data.setdefault("autoApplyApproved", False)  # legacy global auto-apply (fallback for autoApplyByApp)
         self.data.setdefault("autoApplyByApp", {})
         self.data.setdefault("trackedChanges", False)  # DocKick revision setting  # per-add-in auto-apply: slidekick/wordkick/mailkick
@@ -937,6 +1134,7 @@ class Store:
             "autoClean": bool(d.get("autoClean", True)),
             "autoCleanDays": int(d.get("autoCleanDays", 120)),
             "autoUpdateCheck": bool(d.get("autoUpdateCheck", True)),
+            "serverAutoUpdate": bool(d.get("serverAutoUpdate", True)),
             "autoApplyApproved": bool(d.get("autoApplyApproved", False)),
             "autoApplyByApp": {
                 app: bool((d.get("autoApplyByApp") or {}).get(app, d.get("autoApplyApproved", False)))
@@ -2669,6 +2867,9 @@ class SlideKickHandler(BaseHTTPRequestHandler):
                 if "autoUpdateCheck" in body and body["autoUpdateCheck"] is not None:
                     self.store.data["autoUpdateCheck"] = bool(body["autoUpdateCheck"])
                     changed = True
+                if "serverAutoUpdate" in body and body["serverAutoUpdate"] is not None:
+                    self.store.data["serverAutoUpdate"] = bool(body["serverAutoUpdate"])
+                    changed = True
                 if "trackedChanges" in body and body["trackedChanges"] is not None:
                     self.store.data["trackedChanges"] = bool(body["trackedChanges"])
                     changed = True
@@ -2866,6 +3067,10 @@ def main(argv=None):
     except Exception:
         pass
     store.force_debug = args.debug
+    # 0.9.177: update this install BEFORE serving (git pull / GitHub zip);
+    # when it updated + relaunched, do not serve the stale code.
+    if boot_self_update(store, args.port):
+        return
     tls = (args.cert, args.key) if (args.cert and args.key) else None
 
     if args.host:

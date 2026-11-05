@@ -4104,6 +4104,13 @@ function applyOps(deck, ops, ctx) {
       updAuto.addEventListener("change", function () {
         apiJson("/api/settings", "PUT", { autoUpdateCheck: !!updAuto.checked });
       });
+      var updAutoServer = $("upd-auto-server");
+      if (updAutoServer) {
+        updAutoServer.checked = !(cfg && cfg.serverAutoUpdate === false);
+        updAutoServer.addEventListener("change", function () {
+          apiJson("/api/settings", "PUT", { serverAutoUpdate: !!updAutoServer.checked });
+        });
+      }
     }
     updateSessionLabel();
     wireSessions();

@@ -121,8 +121,12 @@ Check whether it is up: open `http://127.0.0.1:8765/api/health` in a
 browser, or `python3 install.py --status` from the checkout.
 
 The pane also checks for updates itself (Settings > General: **Check now**,
-or the "Check for updates automatically at startup" option). Your config,
-profiles and sessions survive every update.
+or the "Check for updates automatically at startup" option). The server can
+also update itself: at start, when a newer release is out, a git install is
+pulled and any other install downloads the GitHub zip, and the server
+restarts on the new code before it answers requests
+(settings.md > General). Your config, profiles and sessions survive every
+update.
 
 Config lives in `~/.officekick/config.json` (`%USERPROFILE%\.officekick` on
 Windows, chmod 600). API keys never leave your machine except to the provider
