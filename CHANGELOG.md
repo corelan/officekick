@@ -30,6 +30,10 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.232
+### Changed (MailKick)
+- Button layout: Run / Cancel / timer on the first row; the quick-reply
+  buttons (reply +, reply −, propose) live on their own row BELOW it.
 ## 0.9.231
 ### Changed (MailKick)
 - The "propose" quick action no longer prescribes 2-3 replies: the model
