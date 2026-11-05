@@ -30,6 +30,11 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.180
+### Fixed
+- The per-manifest result lines ("SlideKick manifest written: ...") used a
+  one-space [ok] prefix while everything else uses three - they align with
+  the rest of the installer output now.
 ## 0.9.179
 ### Fixed
 - Installer summary: the per-app lines ("SlideKick installed for

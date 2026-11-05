@@ -471,12 +471,12 @@ def render_and_sideload():
         mver = (re.search(r"<Version>([^<]+)</Version>", xml) or [None, "?"])[1]
         mpath = os.path.join(manifest_dir(), mfname)
         if DRY_RUN:
-            out("  [..]  [dry-run] would render %s -> %s" % (name, mpath))
+            out("  [..]   [dry-run] would render %s -> %s" % (name, mpath))
         else:
             with open(mpath, "w", encoding="utf-8") as fh:
                 fh.write(xml)
             if not is_mac():
-                out("  [ok] %s manifest written: %s (identity version %s, pane build %s)" % (name, mpath, mver, VERSION))
+                out("  [ok]   %s manifest written: %s (identity version %s, pane build %s)" % (name, mpath, mver, VERSION))
         rendered.append(name + " (id v" + mver + ")")
         if is_mac():
             sideload_mac(folder, mfname, apps.get(folder))
