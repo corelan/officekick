@@ -30,6 +30,15 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.191
+### Docs
+- MailKick troubleshooting for a likely silent cause of "the add-in no
+  longer works": Outlook running in "New Outlook" mode cannot run desktop
+  task-pane add-ins (the Add-from-File dialog fails even with a correct
+  manifest) - switch New Outlook off and relaunch. Also documents where
+  Get Add-ins lives (behind the three-dot toolbar button on macOS).
+### Changed
+- The installer's WEF-clear note now mentions the New Outlook check too.
 ## 0.9.190
 ### Changed
 - The installer's add-in cache/WEF clear now warns that macOS Outlook holds

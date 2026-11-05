@@ -92,7 +92,32 @@ run to `~/Library/Containers/com.microsoft.Outlook/Data/Documents/wef/mailkick.x
    windows.
 3. If your build does not read the wef folder: sideload once via the dialog
    (Get Add-ins -> My add-ins -> Custom Addins -> Add from File, Cmd+Shift+G,
-   paste the path above).
+   paste the path above). On macOS Outlook, **Get Add-ins lives behind the
+   three-dot (...) button in the toolbar** - click the dots, then
+   **Get Add-ins**.
+4. If Outlook shows it as installed but the icon is missing, the Manifests
+   folder and the manual entry are the two places to check - see
+   Troubleshooting below.
+
+## Troubleshooting (Outlook)
+- **MailKick disappeared / Add from File fails repeatedly** - the likeliest
+  cause: Outlook runs in **"New Outlook" mode**. New Outlook is a different
+  client that cannot run desktop task-pane add-ins (and its Add-from-File
+  dialog fails for our manifest even though the XML is correct). Verify:
+  the toggle sits at the **top of Outlook's toolbar** ("New Outlook");
+  switch it OFF and relaunch Outlook - the classic client reads the
+  `~/Library/Containers/com.microsoft.Outlook/Data/Documents/wef/mailkick.xml`
+  manifest again and the icon returns. Shell check:
+  `defaults read com.microsoft.Outlook` shows
+  `IsRunningNewOutlook = 1` when the toggle is on.
+- **"Installation failed" on Add from File** - some builds report a timeout
+  although the add-in installed; retry once after an Outlook restart. The
+  **My add-ins list is the truth**: if MailKick is listed there as
+  "custom add-in", the re-install worked even if the dialog claimed failure.
+- **Server unreachable in the pane** - same shared checks as SlideKick:
+  http://127.0.0.1:8765/api/health and the About tab's "Pane build" row
+  (must match the server version); a mismatch = a stale pane, close and
+  reopen it.
 4. If Outlook ever shows "Installation failed": retry after a restart of
    Outlook. Some builds report a timeout although the add-in installed; the
    My add-ins list is the truth.

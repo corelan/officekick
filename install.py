@@ -678,6 +678,9 @@ def clear_office_caches():
         warn("note: Outlook holds MailKick as a MANUALLY added add-in - after this"
              " clear, re-add it once via Get Add-ins > My add-ins > Custom Add-ins"
              " > Add a custom add-in > Add from File (Cmd+Shift+G), file:")
+        warn("ALSO check Outlook is NOT in 'New Outlook' mode (the toggle sits at"
+             " the top of Outlook's toolbar; when the toggle is on, desktop"
+             " task-pane add-ins such as MailKick cannot run or install at all)")
         out("           ~/Library/Containers/com.microsoft.Outlook/Data/Documents/wef/mailkick.xml")
 
 
