@@ -30,6 +30,13 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.228
+### Changed
+- Image quality: every image prompt is now enriched at the single
+  server-side /api/image choke point (all add-ins) with a fill-the-canvas
+  directive: content should fill the whole image, no large whitespace
+  margins, tight full-bleed composition. Skipped when the prompt already
+  mentions whitespace so refinements are never doubled up.
 ## 0.9.227
 ### Fixed
 - Anchored inserts no longer split sentences: every anchor resolution

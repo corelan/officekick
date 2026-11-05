@@ -34,7 +34,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 APP = "OfficeKick"
-VERSION = "0.9.227"
+VERSION = "0.9.228"
 
 # --------------------------------------------------------------------------- #
 # Self-restart: the server watches for <cfg dir>/restart.flag. Whatever writes
@@ -2859,6 +2859,16 @@ class SlideKickHandler(BaseHTTPRequestHandler):
                 prompt = body.get("prompt") or ""
                 if not model or not prompt:
                     raise ApiError(400, "image request needs 'model' and 'prompt'")
+                # 0.9.228: quality directive appended to every image prompt
+                # (single choke point for Docs/Slides/Mail image ops) - the
+                # artwork must FILL the whole canvas: no big whitespace
+                # margins, content cropped comfortably inside the frame.
+                if "whitespace" not in prompt.lower():
+                    prompt = (prompt.rstrip()
+                              + " - Fill the entire image canvas with the subject; "
+                                "no large empty whitespace or blank margins around it; "
+                                "composition fills the frame edge-to-edge, "
+                                "tight full-bleed composition.")
                 size = body.get("size") or None
                 b64 = provider_generate_image(conn, model, prompt, size)
                 self._send_json({"ok": True, "b64": b64, "model": model})
