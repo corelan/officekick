@@ -30,6 +30,14 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.169
+### Added
+- Run activity log: while a run works, a box under the status line lists
+  what the add-in is doing and has done, most recent on top - "Sending
+  request to <connection> (model)", "Web search via <engine>", "Model
+  lookup via <connection> (model <model>:online)", plus the status trail
+  (lookups, page reads, repairs, applies). Cleared on every Run press.
+  All three add-ins.
 ## 0.9.168
 ### Changed
 - Settings > General: the retired "Web search (all add-ins)" group is gone

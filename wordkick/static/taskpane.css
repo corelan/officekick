@@ -818,3 +818,12 @@ body.dark .sesscard.current .sessmeta { color: #a5b4fc; }
 .keystate-no { color: #b91c1c; }
 body.dark .keystate-ok { color: #7ee787; }
 body.dark .keystate-no { color: #f87171; }
+
+/* 0.9.169: run activity log below the status line (most recent first) */
+.activitybox { border: 1px solid #d9dde3; border-radius: 6px; padding: 4px 8px; margin: 4px 0 6px 0; max-height: 150px; overflow-y: auto; font-size: 12px; }
+.actrow { display: flex; gap: 6px; padding: 1px 0; color: #3c4043; }
+.actts { color: #8a9199; font-variant-numeric: tabular-nums; flex: 0 0 auto; }
+.acttx { flex: 1 1 auto; word-break: break-word; }
+body.dark .activitybox { border-color: #2c3440; }
+body.dark .actrow { color: #c8cdd4; }
+body.dark .actts { color: #6e7783; }

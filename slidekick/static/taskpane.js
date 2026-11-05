@@ -96,6 +96,34 @@
     var el = $("chat-status");
     el.className = "status" + (cls ? " " + cls : "") + (text ? "" : " hidden");
     el.textContent = text || "";
+    if (SK.actRunOn && text) actLog(text);   // the activity box mirrors the status trail
+  }
+  // Run activity log (0.9.169): high-level trail of what the add-in does
+  // while it works with the model - sent requests, lookups, page reads and
+  // applies. Most recent first; cleared on every Run press.
+  function actLog(text) {
+    var box = $("chat-activity");
+    if (!box) return;
+    var t = new Date();
+    var hh = ("0" + t.getHours()).slice(-2) + ":" + ("0" + t.getMinutes()).slice(-2) + ":" + ("0" + t.getSeconds()).slice(-2);
+    var row = document.createElement("div");
+    row.className = "actrow";
+    var ts = document.createElement("span");
+    ts.className = "actts";
+    ts.textContent = hh;
+    var tx = document.createElement("span");
+    tx.className = "acttx";
+    tx.textContent = text;
+    row.appendChild(ts);
+    row.appendChild(tx);
+    box.insertBefore(row, box.firstChild);
+    while (box.children.length > 80) box.removeChild(box.lastChild);
+    box.style.display = "";
+  }
+  function actReset() {
+    SK.actRunOn = true;   // only run-time statuses mirror; boot/idle ones never do
+    var box = $("chat-activity");
+    if (box) { box.innerHTML = ""; box.style.display = ""; }
   }
 
   // theme: follow the Office host (isDarkTheme covers Black/Dark Gray; fall
@@ -558,6 +586,8 @@
         /lookup channel isn'?t available/i.test(t);
     };
     var one = function (a) {
+      actLog(a && a.server ? "Web search via " + (a.engine || "duckduckgo")
+                            : "Model lookup via " + (a.connection || "?") + "(model " + (a.model || "?") + ":online)");
       if (a && a.server) {
         return apiJson("/api/web-search?q=" + encodeURIComponent(instruction.slice(0, 240)) + "&engine=" + encodeURIComponent(a.engine || "duckduckgo"), "GET")
           .then(function (res) {
@@ -3711,6 +3741,8 @@ OfficeDeck.prototype.setNotes = function (i, text) {
     input.disabled = true;   // the text stays visible but locked while working
     setRunEnabled(false);
     chatTimerStart();
+    actReset();
+    actLog("Sending request to " + ref.connection + (ref.model ? " (" + ref.model + ")" : ""));
     // the deck/document/email readout refreshes automatically on every run
     updateDeckSummary();
     renderSimDeck();
@@ -4224,6 +4256,7 @@ OfficeDeck.prototype.setNotes = function (i, text) {
     }).then(function () {
       stopChatTimer();
       SK.busy = false;
+      SK.actRunOn = false;
       setRunEnabled(true);
       input.disabled = false;
       // the box clears the moment the result (and its echoed request)
