@@ -5775,22 +5775,6 @@ OfficeDeck.prototype.setNotes = function (i, text) {
         }).catch(function () { flashSaved("saved-customprompt", "save failed"); });
       });
     }
-    var seEl = $("settings-searchengine"), skEl = $("settings-searchkey");
-    if (seEl) {
-      seEl.value = String((SK.cfg && SK.cfg.webSearchEngine) || "auto");
-      // the API key never round-trips: placeholder only shows whether one is set
-      if (skEl) skEl.placeholder = (SK.cfg && SK.cfg.webSearchKeySet) ? "API key set - type to replace" : "API key (only for the paid engines)";
-      var seSave = $("settings-search-save");
-      if (seSave) seSave.addEventListener("click", function () {
-        var body = { webSearchEngine: seEl.value };
-        if (skEl && skEl.value.trim()) body.webSearchKey = skEl.value.trim();
-        apiJson("/api/settings", "PUT", body).then(function () {
-          if (SK.cfg) { SK.cfg.webSearchEngine = seEl.value; SK.cfg.webSearchKeySet = SK.cfg.webSearchKeySet || !!body.webSearchKey; }
-          if (skEl) skEl.value = "";
-          flashSaved("saved-search", "✓ saved");
-        }).catch(function (e) { flashSaved("saved-search", "save failed"); });
-      });
-    }
     $("settings-debug").addEventListener("change", function () { saveDebugOption(); flashSaved("saved-debug", SK.cfg && SK.cfg.debug ? "\u2713 saved - debug logging ON" : "\u2713 saved - debug logging OFF"); });
     $("settings-notes").addEventListener("change", function () { saveNotesOnly(); flashSaved("saved-notes", "\u2713 saved"); });
     var _acTimer = null;

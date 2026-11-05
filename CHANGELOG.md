@@ -30,6 +30,12 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.168
+### Changed
+- Settings > General: the retired "Web search (all add-ins)" group is gone
+  (leftover engine/key controls from the pre-Search-tab era). Web search
+  lives only in Settings > Search: the steps sequence + the per-engine
+  API keys.
 ## 0.9.167
 ### Changed
 - Search tab: the key-state labels are colored - "key set" green,
