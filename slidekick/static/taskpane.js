@@ -1447,6 +1447,8 @@
         if (el0) el0.innerHTML = "";
         var body0 = $("past-body");
         if (body0) body0.innerHTML = "";
+        var cslot = $("clarify-slot");
+        if (cslot) { cslot.innerHTML = ""; cslot.style.display = "none"; }
         updatePastBox();
         updateSessionLabel();
         renderSessions();
@@ -1708,6 +1710,8 @@
     if (el) el.innerHTML = "";
     var body0 = $("past-body");
     if (body0) body0.innerHTML = "";   // a new session = a clean Previous requests box
+    var cslot = $("clarify-slot");
+    if (cslot) { cslot.innerHTML = ""; cslot.style.display = "none"; }
     updatePastBox();
     switchTab("chat");
     setStatus("New session - the current one stays saved in History.", "ok");
@@ -5017,16 +5021,19 @@ OfficeDeck.prototype.setNotes = function (i, text) {
     var zone = $("chat-output");
     var body = $("past-body");
     if (!body || !$("pastbox")) return;
-    if (zone && zone.childNodes.length && SK.lastInstruction) {
+    var clSlot = $("clarify-slot");
+    var clTxt = clSlot ? String(clSlot.textContent || "").replace(/\s+/g, " ").trim() : "";
+    if (zone && (zone.childNodes.length || (clTxt && SK.lastInstruction))) {
       var lastUser = null;
       for (var hi = SK.history.length - 1; hi >= 0; hi--) {
         if (SK.history[hi].role === "user") { lastUser = SK.history[hi]; break; }
       }
       var row = pastTurnRow(
         { content: SK.lastInstruction, ts: (lastUser && lastUser.ts) || "" },
-        { content: zone.textContent || "", ts: (lastUser && lastUser.ts) || "" });
+        { content: (clTxt ? clTxt + (zone.textContent ? "\n" + zone.textContent : "") : (zone.textContent || "")), ts: (lastUser && lastUser.ts) || "" });
       body.insertBefore(row, body.firstChild);   // newest on top
       while (zone.firstChild) zone.removeChild(zone.firstChild);
+      if (clSlot) { clSlot.innerHTML = ""; clSlot.style.display = "none"; }   // the clarify box lives between status and activity
     }
     updatePastBox();
   }
@@ -5069,8 +5076,10 @@ OfficeDeck.prototype.setNotes = function (i, text) {
   // ---- clarify round (0.9.235): the model may ask the user to pick the ----
   // form of the result instead of guessing; the pick re-asks internally.
   function renderClarify(parsed, instruction) {
-    var out = $("chat-output");
+    var out = $("clarify-slot");   // sits right below the status line, above the activity box
     if (!out) return;
+    out.innerHTML = "";   // one clarify box at a time
+    out.style.display = "";
     var box = document.createElement("div");
     box.className = "clarifybox";
     var q = document.createElement("div");
@@ -5079,6 +5088,10 @@ OfficeDeck.prototype.setNotes = function (i, text) {
     box.appendChild(q);
     var pick = function (val) {
       Array.prototype.forEach.call(box.querySelectorAll("button, input"), function (el) { el.disabled = true; });
+      var pickedRow = document.createElement("div");
+      pickedRow.className = "clarify-picked";
+      pickedRow.textContent = "Your answer: " + String(val);
+      box.appendChild(pickedRow);
       // the choice rides INSIDE the instruction: every later re-ask of this
       // chain (pre-lookup / lookup / repair rounds echo the original request)
       // carries it, not only the first ask after the pick

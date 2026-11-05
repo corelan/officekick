@@ -849,3 +849,5 @@ body.dark .clarifybox .clarify-q { color: #a5b4fc; }
 .clarifybox .clarify-opt { display: block; width: 100%; margin: 4px 0; text-align: left; }
 .clarifybox .clarify-row { display: flex; gap: 6px; margin-top: 6px; }
 .clarifybox .clarify-input { flex: 1 1 auto; min-width: 0; }
+.clarifybox .clarify-picked { margin-top: 6px; font-weight: 600; color: #4338ca; }
+body.dark .clarifybox .clarify-picked { color: #a5b4fc; }

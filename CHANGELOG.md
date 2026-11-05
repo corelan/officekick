@@ -30,6 +30,14 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.237
+### Changed (all add-ins)
+- The clarify question now renders in its own slot RIGHT below the status
+  line and above the run's activity trail (the box previously landed in the
+  response zone, below the activity log). The pick shows 'Your answer: ...'
+  in the box and the Q&A pair files into Previous requests from the slot;
+  session/New-session cleanup paths clear the slot too.
+
 ## 0.9.236
 ### Added (all add-ins)
 - The clarify round no longer depends on the model volunteering: the word
