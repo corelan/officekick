@@ -3778,8 +3778,16 @@ function applyOps(deck, ops, ctx) {
       allbad.className = "status error";
       allbad.textContent = "None of the " + validation.invalid.length + " action(s) survived validation" +
         (SK.lastRecovered ? " (they came from a cut-off reply)" : "") +
-        " - the paragraphs/targets they reference do not match this document. No changes were applied.";
+        " - no changes were applied. Reasons:";   // 0.9.215: the ACTUAL per-op reason(s) instead of a guess
       box.appendChild(allbad);
+      validation.invalid.forEach(function (entry) {
+        var r = document.createElement("div");
+        r.className = "opnote";
+        var ot = (entry.op && entry.op.type) || "?";
+        var place = (entry.op && entry.op.place) ? " place='" + String(entry.op.place).slice(0, 40) + "'" : "";
+        r.textContent = "  - " + ot + place + ": " + (entry.reason || "unknown");
+        box.appendChild(r);
+      });
       var reRow = document.createElement("div");
       reRow.className = "row";
       var reBtn = document.createElement("button");
@@ -3796,6 +3804,7 @@ function applyOps(deck, ops, ctx) {
       box.appendChild(reRow);
       SK.lastRecovered = 0;
       out.appendChild(box);
+      setStatus("Rejected - see the reasons above", "error");   // 0.9.215: the spinner DID keep running after this path
       return box;
     }
 

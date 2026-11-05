@@ -30,6 +30,14 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.215
+### Fixed
+- "None of the N action(s) survived validation" no longer guesses ("the
+  paragraphs/targets they reference do not match this document"): the
+  box now lists EACH rejected op with its ACTUAL validation reason (and
+  its place target) so the fix is obvious instead of hidden. The status
+  line after this path now ends the busy spinner ("Rejected - see the
+  reasons above") instead of leaving it running.
 ## 0.9.214
 ### Fixed
 - anchor-based inserts crashed with "The property 'items' is not
