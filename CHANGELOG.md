@@ -30,6 +30,14 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.173
+### Fixed
+- The server's VERSION stamp rides every release again: the 0.9.172
+  wave shipped pane changes only and left /api/health (and the About
+  tab) at 0.9.171.
+- Update-check freshness: the probe result is cached for 2 minutes
+  (was 10), so a just-pushed release is not reported as "up to date"
+  from a stale cache entry.
 ## 0.9.172
 ### Fixed
 - Validation: "find text not found" now checks what EARLIER ops in the

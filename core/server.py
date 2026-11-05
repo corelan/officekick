@@ -34,7 +34,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 APP = "OfficeKick"
-VERSION = "0.9.171"
+VERSION = "0.9.173"
 
 # --------------------------------------------------------------------------- #
 # Self-restart: the server watches for <cfg dir>/restart.flag. Whatever writes
@@ -1769,7 +1769,7 @@ def update_check(force_latest=None, store=None):
     now = time.time()
     if not force_latest:
         cached = UPDATE_CACHE["data"]
-        if cached and now - UPDATE_CACHE["t"] < 600:
+        if cached and now - UPDATE_CACHE["t"] < 120:
             return cached
     latest = force_latest or None
     source = "github"
