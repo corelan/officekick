@@ -379,7 +379,20 @@
       var kindSel = document.createElement("select");
       kindSel.innerHTML = '<option value="server">Search engine</option><option value="online">Model lookup</option>';
       kindSel.value = st.kind;
-      kindSel.addEventListener("change", function () { st.kind = kindSel.value; buildStepEditor(row, st); });
+      kindSel.addEventListener("change", function () {
+        st.kind = kindSel.value;
+        // switching the type refreshes the row's option selects; normalize the
+        // fields so a switched step stays a valid {server|online} step
+        if (st.kind === "server") {
+          delete st.connection; delete st.model;
+          if (!st.engine) st.engine = "duckduckgo";
+        } else {
+          delete st.engine;
+          if (!st.connection) st.connection = (((SK.cfg || {}).connections || [])[0] || {}).name || "";
+          if (typeof st.model !== "string") st.model = "";
+        }
+        renderSearchSteps();
+      });
       row.appendChild(kindSel);
       row.appendChild(buildStepEditor(document.createElement("span"), st));
       var del = document.createElement("button");
@@ -409,8 +422,7 @@
 
   function wireSearchProfiles() {
     if (!$("srp-steps")) return;
-    $("srp-add-server").addEventListener("click", addSearchStepFn({ kind: "server", engine: "duckduckgo" }));
-    $("srp-add-online").addEventListener("click", addSearchStepFn({ kind: "online", connection: "", model: "" }));
+    $("srp-add").addEventListener("click", addSearchStepFn({ kind: "server", engine: "duckduckgo" }));
     $("srp-save").addEventListener("click", saveSearchProfile);
     wireSearchKeys();
   }
@@ -452,13 +464,14 @@
     var set = !!(SK.cfg && SK.cfg.searchKeysSet && SK.cfg.searchKeysSet[eng]);
     var typing = !!inp.value;
     st.textContent = typing ? "replacing key" : (set ? "key set" : "no key");
+    st.className = typing ? "opnote" : (set ? "opnote keystate-ok" : "opnote keystate-no");
   }
 
   function addSearchStepFn(st) {
     return function () {
       var p = currentSearchProfile();   // creates the working copy lazily
       st = JSON.parse(JSON.stringify(st));
-      st.connection = (((SK.cfg || {}).connections || [])[0] || {}).name || "";
+      if (st.kind === "online") st.connection = (((SK.cfg || {}).connections || [])[0] || {}).name || "";
       p.steps.push(st);
       renderSearchSteps();
     };

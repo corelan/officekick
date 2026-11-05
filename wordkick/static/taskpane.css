@@ -812,3 +812,9 @@ body.dark .sessionlabel > span { color: #a5b4fc; }
 /* the History "current session" indicator = accent-colored too */
 .sesscard.current .sessmeta { color: #4338ca; }
 body.dark .sesscard.current .sessmeta { color: #a5b4fc; }
+
+/* 0.9.167: search-key state colors (user: green = key set, red = no key, both themes) */
+.keystate-ok { color: #1a7f37; }
+.keystate-no { color: #b91c1c; }
+body.dark .keystate-ok { color: #7ee787; }
+body.dark .keystate-no { color: #f87171; }

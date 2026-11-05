@@ -278,7 +278,7 @@
         </div>
     <div class="subpanel" id="sub-search">
       <h2 class="sheettitle">Web search steps</h2>
-      <p class="muted" style="margin:0 0 6px 0">The search steps = one ordered sequence used by every add-in. Top step runs first; a step without results falls to the next; all failed = the lookup gives up. No steps = the free keyless DuckDuckGo engine. A "model lookup" step uses one of your connections (OpenRouter attaches its web plugin to any model; OpenAI-style needs a model that searches natively - the step skips itself when no such model is selected). Paid search engines need their API key set below (DuckDuckGo is always free).</p>
+      <p class="muted" style="margin:0 0 6px 0">The search steps = one ordered sequence used by every add-in. Top step runs first; a step without results falls to the next; all failed = the lookup gives up. No steps = the free keyless DuckDuckGo engine. A "model lookup" step uses one of your connections (OpenRouter: pin a model - :online attaches to it. OpenAI-style: pick a search-preview model. Ollama/llama.cpp: no native search, the step skips itself). Paid search engines need their API key set below (DuckDuckGo is always free).</p>
       <div class="setgroup"><div class="setgh">Engine API keys</div>
       <div class="row row-tight"><label class="grow">Brave Search key
         <input id="searchkey-brave" type="password" autocomplete="off" spellcheck="false" style="max-width:300px" /></label>
@@ -294,8 +294,7 @@
       </div>
       <div id="srp-steps"></div>
       <div class="row">
-        <button id="srp-add-server" class="btn subtle" type="button">+ search engine step</button>
-        <button id="srp-add-online" class="btn subtle" type="button">+ model lookup step</button>
+        <button id="srp-add" class="btn subtle" type="button">+ add step</button>
       </div>
       <div class="row">
         <button id="srp-save" class="btn primary" type="button">Save search steps</button>

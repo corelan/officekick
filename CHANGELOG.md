@@ -30,6 +30,17 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.167
+### Changed
+- Search tab: the key-state labels are colored - "key set" green,
+  "no key" red (both themes); typing keeps the neutral state.
+- One "+ add step" button. Every step row carries its own type select
+  (Search engine / Model lookup); switching the type refreshes the row's
+  selects and normalizes the fields. Fixed: switching the type used to
+  rebuild only the editor and wiped the row's numbering, type select and
+  remove button.
+- Intro copy updated to the 0.9.166 capability rules (OpenRouter step
+  skips itself when no model is pinned).
 ## 0.9.166
 ### Fixed
 - ":online is not a valid model ID": a Model lookup step on OpenRouter
