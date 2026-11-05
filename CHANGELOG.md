@@ -30,6 +30,13 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.217
+### Changed (MailKick)
+- The same "don't reject fast" treatment as 0.9.216 for MailKick: when
+  every proposed action fails validation, the pane re-asks the model with
+  the exact rejection reasons (up to 2 rounds) before the manual "Ask
+  again" fallback. Scope fix for the recursion (SK.lastInstruction) so
+  the re-ask works from the ops-preview context.
 ## 0.9.216
 ### Changed (DocKick + SlideKick)
 - "Don't reject fast": when EVERY proposed action fails validation, the
