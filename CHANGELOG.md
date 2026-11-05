@@ -30,6 +30,15 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.216
+### Changed (DocKick + SlideKick)
+- "Don't reject fast": when EVERY proposed action fails validation, the
+  pane now re-asks the model up to 2 extra rounds WITH the exact
+  per-op rejection reasons included in the prompt, before falling back to
+  the manual "Ask again" box. Status shows "re-asking the model with the
+  reasons (round N/2)…". This applies to Word documents and slide decks
+  alike; the syntax-repair rounds (clean JSON) are unchanged and still
+  run first.
 ## 0.9.215
 ### Fixed
 - "None of the N action(s) survived validation" no longer guesses ("the

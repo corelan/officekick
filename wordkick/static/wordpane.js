@@ -2911,6 +2911,7 @@ function applyOps(deck, ops, ctx) {
         { role: "system", content: sys },
       ].concat(SK.history.slice(-(HISTORY_MAX_EXCHANGES * 2)))
        .concat([{ role: "user", content: user }]);
+      SK.lastAsk = { messages: messages, connection: ref.connection, model: ref.model, rounds: 0 };   // 0.9.216: repair rounds can re-ask on validation rejects
       dbg("prompt", { profile: prof.name, route: route, model: ref.model, connection: ref.connection, instruction: instruction, hadContext: !!ctx, messages: messages });
       setStatus("Asking " + ref.model + " (via " + ref.connection + ")…", "busy");
       var askedLookup = false;
@@ -3774,6 +3775,36 @@ function applyOps(deck, ops, ctx) {
     });
 
     if (!validation.ops.length && validation.invalid.length > 0) {
+      // 0.9.216 - DON'T reject fast: when nothing survives validation, show
+      // the reasons AND re-ask the model with them (up to 2 repair rounds),
+      // only then fall back to the manual "Ask again" box.
+      var reasons = (validation.invalid || []).map(function (entry) {
+        var ot = (entry.op && entry.op.type) || "?";
+        var plc = (entry.op && entry.op.place) ? " place='" + String(entry.op.place).slice(0, 40) + "'" : "";
+        return "  - " + ot + plc + ": " + (entry.reason || "unknown");
+      }).join("\n");
+      var ask = SK.lastAsk;
+      if (ask && ask.messages && ask.rounds < 2) {
+        ask.rounds++;
+        setStatus("All " + validation.invalid.length + " action(s) were rejected - re-asking the model with the reasons (round " + ask.rounds + "/2)…", "busy");
+        var repairMsgs = ask.messages.concat([
+          { role: "assistant", content: (SK.lastModelText && SK.lastModelText.text) || "" },
+          { role: "user", content:
+            "NONE of your proposed actions passed validation. The EXACT reasons:\n" + reasons +
+            "\nFix every problem and reply again with ONLY the JSON object " +
+            '({"kind":"reply","text":"..."} or {"kind":"slide_ops","ops":[...]}) - no prose, no fences. ' +
+            "For insert_paragraphs/move_text/copy_text use a 'place' that is an EXACT text snippet from the outline (or \"end\"/\"cursor\"); " +
+            "for para-referencing ops use only outline numbers; for insert_paragraphs keep styles normal/heading1/heading2/quote/listParagraph." },
+        ]);
+        return askRetryable(function () { return apiJson("/api/chat", "POST", { connection: ask.connection, model: ask.model, messages: repairMsgs }); })
+          .then(function (rR) {
+            SK.lastModelText = { text: rR.text };
+            var pR = tryParse(rR.text);
+            return renderParsed(pR.ok ? pR : { ok: false, text: rR.text }, ctx, instruction);
+          }).catch(function (eR) {
+            setStatus("Re-ask failed: " + ((eR && eR.message) || eR), "error");
+          });
+      }
       var allbad = document.createElement("div");
       allbad.className = "status error";
       allbad.textContent = "None of the " + validation.invalid.length + " action(s) survived validation" +

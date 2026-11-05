@@ -4019,6 +4019,7 @@ OfficeDeck.prototype.setNotes = function (i, text) {
         { role: "system", content: sys },
       ].concat(SK.history.slice(-(HISTORY_MAX_EXCHANGES * 2)))
        .concat([{ role: "user", content: user }]);
+      SK.lastAsk = { messages: messages, connection: ref.connection, model: ref.model, rounds: 0 };   // 0.9.216: repair rounds on validation rejects
       dbg("prompt", { profile: prof.name, route: route, model: ref.model, connection: ref.connection, instruction: instruction, hadContext: !!ctx, messages: messages });
       setStatus("Asking " + ref.model + " (via " + ref.connection + ")…", "busy");
       var askedLookup = false;
@@ -5150,6 +5151,33 @@ OfficeDeck.prototype.setNotes = function (i, text) {
     });
 
     if (!validation.ops.length && validation.invalid.length > 0) {
+      // 0.9.216 - don't reject fast: re-ask the model WITH the reasons first
+      var reasons = (validation.invalid || []).map(function (entry) {
+        var ot = (entry.op && entry.op.type) || "?";
+        var sl = (entry.op && entry.op.slide) ? " slide='" + entry.op.slide + "'" : "";
+        return "  - " + ot + sl + ": " + (entry.reason || "unknown");
+      }).join("\n");
+      var ask = SK.lastAsk;
+      if (ask && ask.messages && ask.rounds < 2) {
+        ask.rounds++;
+        setStatus("All " + validation.invalid.length + " action(s) were rejected - re-asking the model with the reasons (round " + ask.rounds + "/2)…", "busy");
+        var repairMsgs = ask.messages.concat([
+          { role: "assistant", content: (SK.lastModelText && SK.lastModelText.text) || "" },
+          { role: "user", content:
+            "NONE of your proposed actions passed validation. The EXACT reasons:\n" + reasons +
+            "\nFix every problem and reply again with ONLY the JSON object " +
+            '({"kind":"reply","text":"..."} or {"kind":"slide_ops","ops":[...]}) - no prose, no fences. ' +
+            "Slide/shape numbers must come from the outline you were given (1-based); use only the allowed op types; keep geometry fields as numbers." },
+        ]);
+        return askRetryable(function () { return apiJson("/api/chat", "POST", { connection: ask.connection, model: ask.model, messages: repairMsgs }); })
+          .then(function (rR) {
+            SK.lastModelText = { text: rR.text };
+            var pR = tryParse(rR.text);
+            return renderParsed(pR.ok ? pR : { ok: false, text: rR.text }, ctx, instruction);
+          }).catch(function (eR) {
+            setStatus("Re-ask failed: " + ((eR && eR.message) || eR), "error");
+          });
+      }
       // nothing survived validation: no per-row wall of failures - one clear
       // box + a one-click re-ask of the same instruction
       var allbad = document.createElement("div");
