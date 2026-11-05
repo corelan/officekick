@@ -964,7 +964,8 @@
     "",
     "Allowed op types:",
     '- {"type":"insert_paragraphs","items":[{"text":"...","style":"normal|title|heading1|heading2|heading3|quote|listParagraph"}],"place":"cursor | end | an anchor text"} (same placement as insert_image; default end; anchor places are what you want for placeholders)',
-    '- {"type":"move_text","find":"exact-ish existing text","place":"anchor text to insert AFTER"} (relocates that whole paragraph right after the anchor; preserves style)',
+    '- {"type":"move_text","find":"existing text","until":"last paragraph text","place":"anchor text"} (CUT one or more consecutive paragraphs - from the one containing find through the one containing until, or when using "count":N the N paragraphs from find - and paste right after the anchor; preserves styles)',
+    '- {"type":"copy_text","find":"existing text","until":"last paragraph text or omit","place":"anchor text"} (a paste-COPY: same as move_text but the original block stays put)',
     '- {"type":"edit_paragraph","para":N,"text":"..."} (keeps the paragraph style)',
     '- {"type":"replace_text","find":"exact text","replace":"new text","all":true} (all matches by default)',
     '- {"type":"create_table","values":[["h1","h2"],["a","b"]]} (inserted at the end of the document)',
@@ -1871,57 +1872,94 @@ var nw = $("sess-new");
     });
   };
 
-  WordDeck.prototype.moveText = function (op) {
-    // 0.9.211: move the paragraph containing `find` so it sits right after
-    // `place` (an anchor text), or at the end when place is "end"/missing.
-    // Implementation = copy the text, insert after the anchor, delete the
-    // original paragraph. Style is preserved via the source snapshot.
-    return this.run("moveText", function (ctx) {
-      var find = String(op.find || "");
-      var place = (typeof op.place === "string" && op.place.trim()) ? op.place.trim() : "end";
-      if (!find) throw new FriendlyError("move_text: missing find text");
+  WordDeck.prototype._blockSlice = function (paras, op) {
+    // 0.9.212: resolve the paragraph block op.describe: from the para
+    // containing op.find, up to (including) para containing op.until, or
+    // op.count consecutive paragraphs (default 1).
+    var find = String(op.find || "");
+    if (!find) throw new FriendlyError("missing find text");
+    var items = (paras.items || []);
+    var fromI = -1;
+    for (var i = 0; i < items.length; i++) {
+      var txt = items[i].text || "";
+      if (txt.indexOf(find) >= 0) { fromI = i; break; }
+    }
+    if (fromI < 0) throw new FriendlyError("text not found: " + find.slice(0, 60));
+    var toI = fromI;
+    if (typeof op.until === "string" && op.until.trim()) {
+      var until = op.until.trim();
+      for (var j = fromI; j < items.length; j++) {
+        if ((items[j].text || "").indexOf(until) >= 0) { toI = j; break; }
+      }
+      if (toI === fromI && (items[fromI].text || "").indexOf(until) < 0) {
+        throw new FriendlyError("until text not found after '" + find.slice(0, 50) + "'");
+      }
+    } else if (typeof op.count === "number" && op.count >= 1) {
+      toI = Math.min(fromI + Math.floor(op.count) - 1, items.length - 1);
+    }
+    var block = [];
+    for (var k = fromI; k <= toI; k++) block.push(items[k]);
+    return block;
+  };
+
+  WordDeck.prototype._insertBlockAfter = function (ctx, block, place) {
+    // inserts block paragraphs (text+style) after `place` ("end" or anchor);
+    // returns a string describing the result.
+    var body = ctx.document.body;
+    var doInsert = function (rng) {
+      var last = null;
+      block.forEach(function (pr) {
+        last = rng ? rng.insertParagraph(pr.text || "", "After") : body.insertParagraph(pr.text || "", "End");
+        if (pr.style) last.style = pr.style;
+        rng = last;   // keep appending AFTER the previously inserted one
+      });
+      return ctx.sync();
+    };
+    if (!place || place === "end") {
+      return doInsert(null).then(function () { return { how: "end of document" }; });
+    }
+    var rs = body.search(place);
+    return ctx.sync().then(function () {
+      var rng = rs && rs.items && rs.items[0];
+      if (!rng) {
+        return doInsert(null).then(function () {
+          return { how: "anchor '" + place.slice(0, 60) + "' not found - end of document" };
+        });
+      }
+      return doInsert(rng).then(function () {
+        return { how: "after '" + place.slice(0, 60) + "'" };
+      });
+    });
+  };
+
+  WordDeck.prototype._pasteBlock = function (op, cut) {
+    var self = this;
+    return this.run(cut ? "moveText" : "copyText", function (ctx) {
       var paras = ctx.document.body.paragraphs;
       paras.load("text");
-      var found = ctx.document.body.search(find, { matchCase: false, matchWholeWord: false });
-      found.load("items");
       return ctx.sync().then(function () {
-        var hit = found.items && found.items[0];
-        if (!hit) throw new FriendlyError("move_text: text not found: " + find.slice(0, 60));
-        // resolve the source paragraph object (the body paragraph that contains the hit)
-        var srcText = null;
-        var srcPara = null;
-        (paras.items || []).some(function (pr) {
-          if (pr.text && pr.text.indexOf(find) >= 0) { srcText = pr.text; srcPara = pr; return true; }
-          return false;
-        });
-        if (srcPara == null) throw new FriendlyError("move_text: paragraph containing '" + find.slice(0, 50) + "' not resolved");
-        var style = srcPara.style;
-        if (place === "end") {
-          var p = ctx.document.body.insertParagraph(srcText, "End");
-          p.style = style || undefined;
-          srcPara.delete();
-          return ctx.sync().then(function () { return { ok: true, how: "moved to end of document" }; });
-        }
-        var rs = ctx.document.body.search(place);
-        return ctx.sync().then(function () {
-          var rng = rs && rs.items && rs.items[0];
-          if (!rng) {
-            var pe = ctx.document.body.insertParagraph(srcText, "End");
-            pe.style = style || undefined;
-            srcPara.delete();
-            return ctx.sync().then(function () {
-              return { ok: true, how: "anchor '" + place.slice(0, 60) + "' not found - moved to end" };
-            });
-          }
-          var pm = rng.insertParagraph(srcText, "After");
-          pm.style = style || undefined;
-          srcPara.delete();
+        var block = self._blockSlice(paras, op);
+        var place = (typeof op.place === "string" && op.place.trim()) ? op.place.trim() : "end";
+        return self._insertBlockAfter(ctx, block, place).then(function (res) {
+          if (cut) block.forEach(function (pr) { pr.delete(); });
           return ctx.sync().then(function () {
-            return { ok: true, how: "after '" + place.slice(0, 60) + "'" };
+            return { ok: true, how: res.how, moved: cut ? block.length : 0, count: block.length };
           });
         });
       });
     });
+  };
+
+  WordDeck.prototype.moveText = function (op) {
+    // 0.9.212: cut/paste-grade - moves the paragraph containing `find`
+    // (optionally through `until` or `count` paragraphs) to sit right
+    // after `place` (anchor) or at the end. 0.9.211 single-para kept.
+    return this._pasteBlock(op, true);
+  };
+
+  WordDeck.prototype.copyText = function (op) {
+    // duplicate the block: same find/until/count/place, no delete.
+    return this._pasteBlock(op, false);
   };
 
   WordDeck.prototype.deleteParagraph = function (index) {
@@ -2293,11 +2331,16 @@ function normalizeWordStyle(v) {
         if (p0 === "cursor" || p0 === "end") out.place = p0;
         else if (p0.length >= 3) out.place = p0.slice(0, 200);  // an anchor text to insert after
       }
-      if (t === "move_text") {
+      if (t === "move_text" || t === "copy_text") {
         if (typeof op.find === "string" && op.find.trim()) out.find = op.find.trim().slice(0, 200);
-        else { invalid.push({ op: op, reason: "move_text needs find (the text to relocate)" }); return; }
+        else { invalid.push({ op: op, reason: t + " needs find (the text to " + (t === "move_text" ? "relocate" : "duplicate") + ")" }); return; }
+        if (typeof op.until === "string" && op.until.trim()) out.until = op.until.trim().slice(0, 200);
+        if (typeof op.count === "number" && op.count >= 1 && op.count <= 200) out.count = Math.floor(op.count);
         if (typeof op.place === "string" && op.place.trim() && op.place.trim() !== "end") {
           out.place = op.place.trim() === "cursor" ? "end" : op.place.trim().slice(0, 200);
+        }
+        if (typeof op.until !== "undefined" && typeof op.count !== "undefined") {
+          invalid.push({ op: op, reason: t + ": give until OR count, not both" }); return;
         }
       }
       if (t === "insert_paragraphs") {
@@ -2488,8 +2531,13 @@ function normalizeWordStyle(v) {
         return "Insert " + op.items.length + " paragraph(s) -> " + pl2 + " (" +
           op.items.map(function (i) { return i.style; }).filter(function (s, k, a) { return a.indexOf(s) === k; }).join(", ") + ")"; }
       case "move_text":
-        return "Move '" + op.find.slice(0, 60) + "' -> " +
+        return "Move " + (op.until || op.count ? (op.until ? "'" + op.until.slice(0, 30) + "'" : String(op.count) + " paragraph(s)") : "1") + // from '" + op.find.slice(0, 40) + "'
+          "' -> " +
           (op.place ? "after '" + op.place.slice(0, 40) + "'" : "end of document");
+      case "copy_text":
+        return "Copy " + (op.until || op.count ? (op.until ? "'" + op.until.slice(0, 30) + "'" : String(op.count) + " paragraph(s)") : "1") + // from '" + op.find.slice(0, 40) + "'
+          "' -> " +
+          (op.place ? "after '" + op.place.slice(0, 40) + "'" : "end of document") + " (original kept)";
       case "edit_paragraph":
         return "Paragraph " + op.para + paraRef(op.para) + ": -> " + op.text.slice(0, 80);
       case "replace_text":
@@ -2572,6 +2620,11 @@ function applyOps(deck, ops, ctx) {
           return deck.moveText(op).then(function (res2) {
             lines.push({ ok: true, text: "moved '" + op.find.slice(0, 50) + "' -> " +
               ((res2 && res2.how) || "after target") });
+          });
+        case "copy_text":
+          return deck.copyText(op).then(function (res3) {
+            lines.push({ ok: true, text: "copied " + (res3 && res3.count != null ? res3.count + " paragraph(s)" : String(op.find || "").slice(0, 50)) +
+              " -> " + ((res3 && res3.how) || "after target") + " (original kept)" });
           });
         case "edit_paragraph":
           return deck.editParagraph(adj(op.para - 1), op.text).then(function () {

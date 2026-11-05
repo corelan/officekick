@@ -30,6 +30,16 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.212
+### Added (DocKick / Word)
+- Cut/paste-grade block ops: move_text now accepts `until` (move from the
+  paragraph containing `find` through the one containing `until`) or
+  `count` (N consecutive paragraphs); new op copy_text = the same
+  find/until/count/place block semantics without deleting the original
+  (paste-copy). Styles preserved; anchor-not-found falls back to the end
+  and says so. Both default to user confirmation like other destructive
+  ops. PowerPoint is a different object model: shape repositioning
+  (move_shape) already exists there; text-flow cut/paste does not apply.
 ## 0.9.211
 ### Added
 - insert_paragraphs accepts the same `place` vocabulary as insert_image

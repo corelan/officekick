@@ -34,7 +34,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 APP = "OfficeKick"
-VERSION = "0.9.211"
+VERSION = "0.9.212"
 
 # --------------------------------------------------------------------------- #
 # Self-restart: the server watches for <cfg dir>/restart.flag. Whatever writes
@@ -420,6 +420,8 @@ DEFAULT_APPROVALS = {
     "delete_paragraph": "confirm",
     "rewrite_doc": "confirm",
     "insert_image": "confirm",
+    "move_text": "confirm",
+    "copy_text": "confirm",
     "apply_layout": "confirm",
     "draft_reply": "auto",
     "forward": "auto",
