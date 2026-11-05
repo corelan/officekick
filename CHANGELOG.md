@@ -30,6 +30,26 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.199
+### Added
+- MailKick-for-Outlook install modes on macOS, chosen interactively during
+  install (and non-interactively via flags):
+  1) the default self-signed route (per-user loopback CA generated +
+     imported into the trusted keychains);
+  2) bring your own already-trusted certificate: `--mailkick-cert` +
+     `--mailkick-key` - the installer validates PEM/unencrypted key,
+     subjectAltName DNS:localhost, serverAuth EKU and macOS trust
+     (security verify-cert) and installs nothing if a check fails;
+  3) `--skip-mailkick`: no https, no certificate, no keychain import;
+     any previously staged MailKick manifest is removed from Outlook.
+  Prerequisite failures keep skipping MailKick for Outlook automatically;
+  SlideKick/DocKick are unaffected in every mode.
+### Docs
+- docs/mailkick.md: "Your three options" - what the default self-signed
+  route does (and why the generated CA must be imported into the trusted
+  keychains), the exact compliance list for a user-provided certificate,
+  and the skip behavior; the README install section now summarises the
+  three routes.
 ## 0.9.198
 ### Docs
 - README: the transport story now covers both schemes - Word/PowerPoint on

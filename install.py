@@ -60,7 +60,11 @@ MAC_APP_REL = ("Applications", "OfficeKickServer.app")
 REPO_DIR = os.path.dirname(os.path.abspath(__file__))
 PORT = DEFAULT_PORT
 DRY_RUN = False
-RIBBON = False     # set per-platform in main(): default ON on Windows, OFF on macOS
+RIBBON = False
+SKIP_MAILKICK = False
+MAILKICK_CERT = ""
+MAILKICK_KEY = ""
+MAILKICK_CHOICE = None     # set per-platform in main(): default ON on Windows, OFF on macOS
 
 
 def is_windows():
@@ -346,6 +350,85 @@ def pythonw_path():
     return cand if os.path.isfile(cand) else sys.executable
 
 
+# ------------------------------------------------- MailKick/Outlook choice #
+def tls_cert_dir():
+    return os.path.join(config_dir(), "certs")
+
+
+def validate_user_cert(crt, key):
+    """Check a user-supplied MailKick TLS pair. Returns (ok, problems[])."""
+    problems = []
+    if not os.path.isfile(crt): problems.append("certificate file not found: %s" % crt)
+    if not os.path.isfile(key): problems.append("key file not found: %s" % key)
+    if problems: return False, problems
+    rc, o = run_quiet(["openssl", "x509", "-in", crt, "-noout", "-checkend", "0"])
+    if rc != 0: problems.append("the certificate has expired or is not yet valid")
+    rc, o = run_quiet(["openssl", "pkey", "-in", key, "-noout"])
+    if rc != 0: problems.append("the private key cannot be read (wrong file or passphrase-protected? the key must be unencrypted PEM)")
+    san = run_quiet(["openssl", "x509", "-in", crt, "-noout", "-text"])[1]
+    if "DNS:localhost" not in san and "IP Address:127.0.0.1" not in san:
+        problems.append("the certificate must contain subjectAltName DNS:localhost (and ideally IP:127.0.0.1) - the pane is loaded from https://localhost")
+    if "TLS Web Server Authentication" not in san and "serverAuth" not in san:
+        warn("note: the certificate lacks the serverAuth extended key usage (usually harmless for localhost, but stricter clients may care)")
+    rc, o = run_quiet(["security", "verify-cert", "-c", crt, "-p", "ssl"])
+    if rc != 0:
+        problems.append("the certificate chain is NOT trusted by this Mac (security verify-cert failed: %s)" %
+                        (o or "untrusted").strip()[:140] +
+                        " - import the issuing CA into a keychain first (Keychain Access or security add-trusted-cert)")
+    return len(problems) == 0, problems
+
+
+def choose_mailkick_tls():
+    """Interactive decision (macOS): install MailKick for Outlook at all, and
+    which TLS route. Returns 'auto' | 'custom' | 'skip'. Non-interactive and
+    --skip-mailkick/-cert/-key flags bypass the prompts."""
+    global MAILKICK_CERT, MAILKICK_KEY
+    if SKIP_MAILKICK:
+        return "skip"
+    custom = False
+    if MAILKICK_CERT or MAILKICK_KEY:
+        custom = True
+        ok, problems = validate_user_cert(MAILKICK_CERT, MAILKICK_KEY)
+        if not ok:
+            for pr in problems:
+                warn("provided MailKick certificate: " + pr)
+            return "skip"
+        return "custom"
+    if (not sys.stdin.isatty()) or DRY_RUN:
+        return None            # caller falls back to the auto/self-signed path
+    out("")
+    step("MailKick for Outlook (macOS) - choose the install mode")
+    out("   MailKick needs an https:// loopback pane for Outlook (Outlook")
+    out("   validates every manifest URL as https) and only works in the")
+    out("   CLASSIC Outlook UI (New Outlook cannot run desktop task panes).")
+    out("   1) auto: generate a self-signed loopback CA + localhost certificate")
+    out("      and trust it in your login keychain (default; no admin rights)")
+    out("   2) provide my OWN already-trusted certificate + key (PEM files)")
+    out("   3) skip MailKick for Outlook (SlideKick/DocKick install normally)")
+    try:
+        if not sys.stdin.isatty():
+            return None
+        choice = input("  > choose [1/2/3, default 1]: ").strip().lower()
+    except EOFError:
+        return None
+    if choice == "2":
+        for attempt in range(3):
+            crt = input("  path to your TLS certificate (PEM): ").strip()
+            key = input("  path to the matching private key (PEM, unencrypted): ").strip()
+            ok, problems = validate_user_cert(crt, key)
+            if ok:
+                MAILKICK_CERT, MAILKICK_KEY = crt, key
+                return "custom"
+            for pr in problems:
+                warn(pr)
+            out("       (attempt %d/3)" % (attempt + 1))
+        out("  giving up - MailKick will be skipped for Outlook.")
+        return "skip"
+    if choice == "3":
+        return "skip"
+    return "auto"
+
+
 # ------------------------------------------------------------ loopback TLS #
 def ensure_tls_certs():
     """Generate a per-user CA + localhost server cert (0.9.193) and trust the
@@ -575,8 +658,13 @@ def render_and_sideload():
     # is missing or the CA trust was declined, SKIP MailKick for Outlook
     # instead of staging a manifest that cannot run. The other add-ins
     # install normally; see docs/mailkick.md "Requirements for Outlook".
-    tls_pair = ensure_tls_certs() if is_mac() else None
-    skip_mailkick = is_mac() and not DRY_RUN and tls_pair is None
+    tls_pair = None
+    if is_mac():
+        _crt = os.path.join(tls_cert_dir(), "server.crt")
+        _key = os.path.join(tls_cert_dir(), "server.key")
+        if os.path.isfile(_crt) and os.path.isfile(_key):
+            tls_pair = (_crt, _key)
+    skip_mailkick = is_mac() and MAILKICK_CHOICE == "skip"
     if skip_mailkick:
         warn("MailKick skipped for Outlook: the loopback TLS prerequisites")
         warn("are not met (openssl missing, or the CA trust was declined).")
@@ -588,6 +676,13 @@ def render_and_sideload():
             warn("%s not built in this checkout - skipped" % name)
             continue
         if skip_mailkick and folder == "mailkick":
+            wef = wef_dir()
+            if wef and os.path.isfile(os.path.join(wef, mfname)):
+                try:
+                    os.remove(os.path.join(wef, mfname))
+                    out("  [..] MailKick: previous Outlook registration removed (%s)" % mfname)
+                except OSError:
+                    pass
             continue
         xml = render_manifest(folder, PORT)
         mver = (re.search(r"<Version>([^<]+)</Version>", xml) or [None, "?"])[1]
@@ -1145,7 +1240,22 @@ def install(mode_name="Install", interactive=True):
             want = True
     stop_server()
     deploy_files()
-    ensure_tls_certs()
+    global MAILKICK_CHOICE
+    MAILKICK_CHOICE = choose_mailkick_tls() if is_mac() else None
+    if MAILKICK_CHOICE == "custom":
+        import shutil as _sh
+        cdir = tls_cert_dir()
+        os.makedirs(cdir, exist_ok=True)
+        _sh.copyfile(MAILKICK_CERT, os.path.join(cdir, "server.crt"))
+        _sh.copyfile(MAILKICK_KEY, os.path.join(cdir, "server.key"))
+        os.chmod(os.path.join(cdir, "server.key"), 0o600)
+        ok("using YOUR certificate for MailKick's https listener (copied to %s)" % cdir)
+    elif MAILKICK_CHOICE == "auto":
+        ensure_tls_certs()
+    elif MAILKICK_CHOICE == "skip":
+        out("  [..] MailKick for Outlook: skipped by your choice. SlideKick/DocKick install normally.")
+    else:  # non-interactive default: keep historic behaviour (generate + trust)
+        ensure_tls_certs()
     if is_windows():
         relax_windows_config_acl()
     if office_app_running():
@@ -1244,6 +1354,12 @@ def main():
     ap.add_argument("--uninstall", action="store_true", help="remove the add-ins + server")
     ap.add_argument("--start", action="store_true", help="start the local server only (no install changes)")
     ap.add_argument("--restart", action="store_true", help="stop the local server, then start it again")
+    ap.add_argument("--skip-mailkick", action="store_true",
+                    help="do not install MailKick in Outlook (macOS); Word/PowerPoint install normally")
+    ap.add_argument("--mailkick-cert", default="", metavar="PEM",
+                    help="use YOUR OWN already-trusted TLS certificate for MailKick's https listener (PEM, SAN must cover localhost)")
+    ap.add_argument("--mailkick-key", default="", metavar="PEM",
+                    help="matching unencrypted private key for --mailkick-cert (PEM)")
     ap.add_argument("--stop", action="store_true", help="stop the local server")
     ap.add_argument("--status", action="store_true", help="show whether the local server is running")
     ap.add_argument("--purge-config", action="store_true",
@@ -1255,6 +1371,10 @@ def main():
                     help="Windows: leave the commands out (list-mode only)")
     ap.add_argument("--dry-run", action="store_true", help="print the actions, run none")
     args = ap.parse_args()
+    global SKIP_MAILKICK, MAILKICK_CERT, MAILKICK_KEY
+    SKIP_MAILKICK = args.skip_mailkick
+    MAILKICK_CERT = args.mailkick_cert
+    MAILKICK_KEY = args.mailkick_key
     PORT = args.port if 1024 <= args.port <= 65535 else DEFAULT_PORT
     DRY_RUN = args.dry_run
     # ribbon commands: opt-in on both platforms. macOS: 16.114 renders

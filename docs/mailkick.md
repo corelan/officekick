@@ -34,10 +34,50 @@ affected:
 4. **Port 8766** - the loopback TLS listener lives in the same server
    process, localhost only (127.0.0.1 / ::1).
 
+### Your three options (the installer asks on macOS)
+
+**Option 1 - the default: a self-signed, per-user loopback CA.** The
+installer generates a small CA plus a `localhost` certificate and *imports
+that generated CA into your trusted keychains* (login keychain, per-user
+`security add-trusted-cert`, no admin rights; macOS may show one
+confirmation). That import is what makes the self-signed certificate work:
+until the CA is trusted, **every** https client on this machine - Outlook
+included - will call the pane "signed by an invalid certificate". You can
+inspect or revoke the entry at any time in Keychain Access (look for
+"OfficeKick Loopback CA").
+
+**Option 2 - bring your own already-trusted certificate.** If a CA your Mac
+already trusts (a corporate/internal CA, or an mkcert-style root you
+installed yourself) can issue you a `localhost` certificate, the installer
+can use it and then creates/trusts **nothing**. Choose `2` at the installer
+prompt, or pass
+`--mailkick-cert PATH --mailkick-key PATH`. The certificate must comply
+with:
+
+- PEM format, matching key = unencrypted PEM (the server reads it at boot).
+- `subjectAltName` containing **`DNS:localhost`** (add `IP:127.0.0.1`;
+  ideally `::1` too) - the pane is loaded from `https://localhost:8766`.
+- Extended key usage **serverAuth**.
+- The issuing chain trusted by this Mac *system- or user-wide*. Pre-check
+  with `security verify-cert -c yourcert.pem -p ssl` - it must say
+  "successful" (macOS' Certificate Transparency policy additionally rejects
+  post-2019 certificates without SCT timestamps when the root only carries
+  user trust; the installer-generated CA falls under the cutoff, your own
+  CA must too).
+
+The installer validates all of the above when you provide the files and
+skips MailKick with a clear per-item message if any check fails.
+
+**Option 3 - no https at all: skip MailKick for Outlook.** Answer `3` at
+the prompt or pass `--skip-mailkick`: no TLS listener changes, no
+certificate, no keychain import, and any previously staged MailKick
+manifest is removed from Outlook. SlideKick and DocKick install normally
+and remain plain-http.
+
 **If the prerequisites are not met, the installer skips MailKick for
 Outlook** and says so clearly - it never stages a manifest that cannot run.
-SlideKick and DocKick install normally. To retry later: quit Office, run
-`install.py --install` again (the prerequisites are re-checked), quit and
+To retry later: quit Office, run `install.py --install` again (the
+prerequisites are re-checked, and the mode prompt re-appears), quit and
 reopen Outlook; the last step is the Get Add-ins re-add from the
 Troubleshooting section below.
 

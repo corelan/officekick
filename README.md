@@ -71,10 +71,14 @@ Good to know:
   `localhost` over http, so SlideKick and DocKick need no certificates.
   **Exception - MailKick on macOS Outlook**: Outlook validates every URL in
   its add-in manifest as https, so on macOS the server opens a second
-  listener, `https://localhost:8766` (loopback TLS with a per-user
-  "OfficeKick Loopback CA" the installer generates and trusts once; see
-  [docs/mailkick.md](docs/mailkick.md) > Requirements). Word and PowerPoint
-  keep plain http and never touch the certificate.
+  listener, `https://localhost:8766`. The installer asks which route you
+  want: (1) the default - a self-signed per-user loopback CA generated and
+  imported into your trusted keychains; (2) your own already-trusted
+  certificate (`--mailkick-cert/--mailkick-key`, nothing is generated or
+  imported); or (3) skip MailKick for Outlook entirely (`--skip-mailkick`)
+  - Word/PowerPoint are unaffected and keep plain http. Details + the
+  exactly-what-your-certificate-must-contain checklist:
+  [docs/mailkick.md](docs/mailkick.md) > Requirements.
 - The macOS server wrapper restarts the server if it crashes.
 - Re-running the installer is safe. It repairs and updates in place.
 
