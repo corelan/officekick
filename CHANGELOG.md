@@ -30,6 +30,12 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.179
+### Fixed
+- Installer summary: the per-app lines ("SlideKick installed for
+  PowerPoint" / "DocKick installed for Word" / "MailKick installed for
+  Outlook") no longer pad the names to a fixed column - they align with
+  every other status line now.
 ## 0.9.178
 ### Added
 - `install.py --restart` - stop the local server, then start it again (the

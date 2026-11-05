@@ -1040,7 +1040,7 @@ def done_note(mode_name):
     out("")
     for (folder, name, _mf) in OURS:
         if os.path.isdir(repo_path(folder)) and apps.get(folder):
-            ok("%-9s %s %s" % (name, verb, app_label(folder)))
+            ok("%s %s %s" % (name, verb, app_label(folder)))
     out("")
     out("  Quit and REOPEN your Office apps so the task panes load the new build")
     out("  (About tab -> 'Pane build' should say %s)." % read_version())
