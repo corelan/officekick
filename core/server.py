@@ -34,7 +34,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 APP = "OfficeKick"
-VERSION = "0.9.206"
+VERSION = "0.9.207"
 
 # --------------------------------------------------------------------------- #
 # Self-restart: the server watches for <cfg dir>/restart.flag. Whatever writes
@@ -2598,7 +2598,16 @@ class SlideKickHandler(BaseHTTPRequestHandler):
                 # (Id, Version) pair = the host's registration identity)
                 mvs = {}
                 try:
-                    mroot = Path(self.static_dir or Path.cwd()) / "manifest"
+                    sroot = Path(self.static_dir or Path.cwd())
+                    # the manifests live in <install>/manifest; when the
+                    # server runs with the per-addin static dir instead of
+                    # the install root, walk up one level (0.9.207) so the
+                    # About identity never shows "?" for a present manifest.
+                    for mroot in (sroot / "manifest", sroot.parent / "manifest"):
+                        if mroot.is_dir():
+                            break
+                    else:
+                        mroot = sroot / "manifest"
                     for f in sorted(mroot.glob("*.xml")):
                         t = f.read_text(encoding="utf-8")
                         mm = re.search(r"<Version>([^<]+)</Version>", t)

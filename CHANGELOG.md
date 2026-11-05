@@ -30,6 +30,13 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.207
+### Fixed
+- About tab "Add-in identity (this manifest)" showed "?" whenever the
+  server ran with a per-addin static dir instead of the install root:
+  /api/config read <static_dir>/manifest/*.xml only. The lookup now also
+  tries <static_dir parent>/manifest, so the identity version is found
+  regardless of how the server was launched.
 ## 0.9.206
 ### Fixed
 - Update notice is SHORT (one line + the button): "Click 'Pull update
