@@ -157,6 +157,11 @@ the form, changes save back into the profile.
 
 Web lookups are INTERNAL actions: the model asks for them freely, they
 never need approval, and the results feed the next step of the run.
+CONTENT-CREATION requests (write an essay/article/report in DocKick,
+build slides about a topic in SlideKick) ALWAYS trigger a lookup before
+the model is asked: the pane fetches the results itself and hands them to
+the model with the run, so facts are verified and cited. Pure edit /
+reword / restyle requests do not look anything up.
 
 ### The steps sequence
 

@@ -30,6 +30,25 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.186
+### Added
+- **Content-writing runs always check the web first** (standing rule: the
+  lookup channel is internal + free): when a SlideKick instruction asks for
+  deck CONTENT (write/create/build slides about ...) or a DocKick
+  instruction asks for document content (essay/article/report/letter/plan
+  ...), the pane runs the search ladder + its keyless DuckDuckGo fallback
+  BEFORE the first model ask and feeds the fetched results into it, so
+  facts get verified and cited. It uses the same 3-lookup budget (2
+  reactive rounds remain for the model) and is skipped for pure edit /
+  reword / styled requests. MailKick keeps the reactive lookup (drafts are
+  anchored to the thread).
+### Fixed
+- **DocKick essays came out in huge type**: the model had styled running
+  text with title/heading styles or giant font sizes. Now guarded
+  mechanically + taught in the prompt: body paragraphs = Normal style
+  (title = ONE title paragraph, heading1/2 = headings), font.size > 28pt
+  rejected with an explanation, and a batch where EVERY inserted paragraph
+  (4+) is title/heading1 gets sent back to the model with the style law.
 ## 0.9.185
 ### Changed
 - The profile editor's "show all models" is now a CHECKBOX (image slot +

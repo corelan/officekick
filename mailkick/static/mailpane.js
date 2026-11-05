@@ -3466,6 +3466,10 @@ function applyOps(deck, ops, ctx) {
       p2.classList.toggle("active", p2.id === "sub-" + id);
     });
     if (id === "inspector" && typeof renderRequests === "function") renderRequests();
+    if (id === "general") {   // a fresh General view: no stale check-now result
+      var info = document.getElementById("upd-info");
+      if (info) info.textContent = "";
+    }
   }
 
   function switchTab(id) {

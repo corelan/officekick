@@ -6,6 +6,40 @@
  * stripping -> JSON ops extraction (hidden repair round on unclear output)
  * -> validation against deck context -> approval gate -> Office.js apply.
  */
+  // PANIC TRAP (0.9.182): every uncaught pane error (window.onerror /
+  // unhandledrejection) reports to the local server -> a timestamped,
+  // app-tagged JSON line in ~/.officekick/logs/pane-errors-<day>.log.
+  // Installed FIRST so even boot/wiring crashes are reported; never throws.
+  var _errLastMsg = "", _errLastT = 0;
+  function _paneErr(kind, msg, extra) {
+    try {
+      var t = +new Date();
+      if (msg === _errLastMsg && t - _errLastT < 4000) return;   // 4 s dedupe
+      _errLastMsg = msg; _errLastT = t;
+      var payload = {
+        kind: String(kind || "uncaught"),
+        message: String(msg == null ? "" : msg).slice(0, 800),
+        stack: String((extra && extra.stack) || "").slice(0, 2000),
+        at: String((extra && extra.fileName) || "").slice(0, 200),
+        line: (extra && extra.lineNumber) || 0,
+        ua: String(navigator.userAgent).slice(0, 200),
+        pane: String(window.location.pathname).slice(0, 120),
+        href: String(window.location.href).slice(0, 200)
+      };
+      var xr = new XMLHttpRequest();
+      xr.open("POST", "/api/pane-error", true);
+      xr.setRequestHeader("Content-Type", "application/json");
+      xr.send(JSON.stringify(payload));
+    } catch (eP) { /* the trap must never break the pane */ }
+  }
+  window.onerror = function (m, s, l, c, e) {
+    _paneErr("uncaught", m + " @" + (s || "?") + ":" + l, e);
+  };
+  window.addEventListener("unhandledrejection", function (ev) {
+    var r = ev && ev.reason;
+    _paneErr("rejection", String((r && (r.message || r.stack)) || r), (r instanceof Error) ? r : "");
+  });
+
 (function () {
 
   // PANIC TRAP (0.9.182): every uncaught pane error (window.onerror /
@@ -933,13 +967,15 @@
 
     '- {"type":"set_track_changes","on":true|false} (turns the DOCUMENT\'s Track Changes mode on/off - the Review-tab toggle; use when the user asks to start/stop tracking; turning it off does NOT remove existing revisions - offer accept_changes for those; the pane\'s separate "AI edits as tracked changes" lives in Settings)',
     "",
+    "- STYLES AND SIZES (document typography law): RUNNING TEXT (the body of an essay, article, report or letter) is ALWAYS style \"normal\". Use \"title\" for AT MOST ONE document title paragraph, \"heading1\" for section titles, \"heading2\" for subsections. Emphasis inside body text = bold/italic, never a larger size. If you set font.size, keep it near the document's existing scale (body typically 10-14pt, Title at most 28pt) - never upscale running text.",
+    "",
     "Rules:",
     "- Paragraph numbers are 1-based (para 1 = the first paragraph) and MUST come from the outline below. If the user says \"the 3rd paragraph\", that is para 3. Never invent them.",
     "- Rewrite/improve requests: keep the meaning and structure; reword only.",
     "- If the request is a question/explanation/brainstorm rather than a document change, use format A.",
     "- Image requests: always return an insert_image op (never generate the picture inline); DocKick fetches it with the user's configured image model. Include a concrete, self-contained prompt in the op.",
     "- Image refinement ('refine/change the image'): write a FRESH self-contained image prompt describing the FULL desired result. Never embed previous prompts, the conversation, or op JSON into it - only the scene essentials plus the requested change. Prefer 200-600 words.",
-    "- LIVE WEB LOOKUPS: when the request needs up-to-date info you cannot reliably know (current events, news, prices, recent releases, rankings, live data), reply with ONLY {\"kind\":\"web_lookup\"} - nothing else. SlideKick then runs a web-enabled lookup and re-asks you with fresh citable results. Never use it for deck/document/mail edits, styling, general concepts, or what the outline/context already answers. Lookups are INTERNAL actions - free (never gated/approved) - and you may reply with later rounds of {\"kind\":\"web_lookup\"} as well (up to 3 lookups per run). After a lookup you may also ask for the FULL text of one page from its results by replying with ONLY {\"kind\":\"read_page\",\"url\":\"https://...\"} (internal, free, up to 4 pages per run). When a page's text carries a \"…[page continues]\" ending and the info you need may sit deeper, read the NEXT part by replying with ONLY {\"kind\":\"read_page\",\"url\":\"https://...\",\"from\":<n>} using the part start the pane gave you (continuations are free and do not use the 4-page budget). You have no web access yourself and cannot run a search; the lookup channel belongs to SlideKick - never claim you tried a lookup or that the lookup channel is unavailable, and never refuse for lack of live data: reply with {\"kind\":\"web_lookup\"} instead.",
+    "- LIVE WEB LOOKUPS: when the request needs up-to-date info you cannot reliably know (current events, news, prices, recent releases, rankings, live data), reply with ONLY {\"kind\":\"web_lookup\"} - nothing else. SlideKick then runs a web-enabled lookup and re-asks you with fresh citable results. Never use it for deck/document/mail edits, styling, general concepts, or what the outline/context already answers. Lookups are INTERNAL actions - free (never gated/approved) - and you may reply with later rounds of {\"kind\":\"web_lookup\"} as well (up to 3 lookups per run). After a lookup you may also ask for the FULL text of one page from its results by replying with ONLY {\"kind\":\"read_page\",\"url\":\"https://...\"} (internal, free, up to 4 pages per run). When a page's text carries a \"…[page continues]\" ending and the info you need may sit deeper, read the NEXT part by replying with ONLY {\"kind\":\"read_page\",\"url\":\"https://...\",\"from\":<n>} using the part start the pane gave you (continuations are free and do not use the 4-page budget). You have no web access yourself and cannot run a search; the lookup channel belongs to SlideKick - never claim you tried a lookup or that the lookup channel is unavailable, and never refuse for lack of live data: reply with {\"kind\":\"web_lookup\"} instead. For CONTENT-CREATION requests (write me an essay/article/report/letter/plan/...): the pane has ALREADY run a web lookup before this ask and any fetched results sit in the context above - verify your claims against them, keep facts current and cite the sources you use; if you need MORE, reply {\"kind\":\"web_lookup\"} again (up to 3 rounds per run).",
 
     "- Picture placement: 'here / at the cursor / current position' = the image lands at the caret (the pane's 'insert at cursor' checkbox); default = end of document. Keep insert_image minimal (type + prompt only).",
   ].join("\n");
@@ -2132,6 +2168,13 @@ function normalizeWordStyle(v) {
           itemsOk.push({ text: it.text == null ? "" : String(it.text), style: it.style || "normal" });
         }
         if (!itemsOk.length) { bad("empty items"); return; }
+        var headingsOnly = itemsOk.length >= 4;
+        for (var ih = 0; ih < itemsOk.length; ih++) {
+          var stH = itemsOk[ih].style || "normal";
+          if (stH === "normal" || stH === "quote" || stH === "listParagraph" ||
+              stH === "heading2" || stH === "heading3") { headingsOnly = false; break; }
+        }
+        if (headingsOnly) { bad("every item uses style title/heading1 - the document BODY must be 'normal' paragraphs; use title for ONE title paragraph and heading1 for section titles only, then continue the text as normal"); return; }
         out.items = itemsOk;
       } else if (t === "edit_paragraph") {
         if (!paraOk(op.para)) { bad("bad paragraph index"); return; }
@@ -2181,6 +2224,13 @@ function normalizeWordStyle(v) {
           var it3 = items2[i3];
           items3.push({ text: (it3 && it3.text != null) ? String(it3.text) : "", style: (it3 && it3.style) || "normal" });
         }
+        var headOnly2 = items3.length >= 4;
+        for (var ih3 = 0; ih3 < items3.length; ih3++) {
+          var stH3 = items3[ih3].style || "normal";
+          if (stH3 === "normal" || stH3 === "quote" || stH3 === "listParagraph" ||
+              stH3 === "heading2" || stH3 === "heading3") { headOnly2 = false; break; }
+        }
+        if (headOnly2) { bad("every item uses style title/heading1 - the document BODY must be 'normal' paragraphs; title = ONE title paragraph, heading1 = section titles only"); return; }
         out.items = items3;
       } else if (t === "create_template") {
         if (typeof op.title !== "string" || !op.title.trim()) { bad("template needs a title"); return; }
@@ -2241,7 +2291,11 @@ function normalizeWordStyle(v) {
         if (op.font && typeof op.font.color === "string" && /^[\w#\(\), .%]+$/.test(op.font.color)) { fontW.color = op.font.color; hasAnyW = true; }
         if (op.font && typeof op.font.highlightColor === "string" && /^[\w#]+$/.test(op.font.highlightColor)) { fontW.highlightColor = op.font.highlightColor; hasAnyW = true; }
         if (op.font && typeof op.font.name === "string" && op.font.name) { fontW.name = op.font.name; hasAnyW = true; }
-        if (op.font && typeof op.font.size === "number" && op.font.size >= 6 && op.font.size <= 400) { fontW.size = op.font.size; hasAnyW = true; }
+        if (op.font && typeof op.font.size === "number" && op.font.size !== 0) {
+          if (op.font.size < 6) { bad("font size must be at least 6pt"); return; }
+          if (op.font.size > 28) { bad("font.size " + op.font.size + "pt is far too large for document text - body text stays near the document's default (about 10-14pt; Word's Title style tops out at 28pt). For big section emphasis use Heading styles, not sizes."); return; }
+          fontW.size = op.font.size; hasAnyW = true;
+        }
         if (typeof op.align === "string" && /^(left|center|right|justify)$/i.test(op.align)) { fontW.align = op.align.toLowerCase(); hasAnyW = true; }
         if (typeof op.style === "string" && op.style.trim()) {
           var stN = normalizeWordStyle(op.style);
@@ -2763,7 +2817,42 @@ function applyOps(deck, ops, ctx) {
           });
         });
       }
+      // 0.9.186: content-creation requests ALWAYS run the web lookup first
+      // (standing rule: the pane owns the lookup channel - internal, free);
+      // fetched results feed the writing ask; the 3-lookup budget still caps it.
+      var CONTENT_WRITE_RE = /\b(write|draft|compose|create|generate|produce|make)\b[^\n]{0,90}?\b(essay|article|report|letter|proposal|story|summaries|summary|overview|introduction|conclusion|section|paragraph|paper|guide|description|blog|post|plan|bio|announcement|review|analysis|document|manual|notes|note|memo|whitepaper|white paper|case study|press release|abstract|bulletin|statement|brief)\b/i;
+      var preLookupDone = null;
+      function preLookupRun() {
+        if (preLookupDone === null) {
+          if (CONTENT_WRITE_RE.test(instruction || "")) {
+            SK.webRounds = (SK.webRounds || 0) + 1;   // the shared 3-lookup budget
+            setStatus("Checking the web for current info to write from\u2026", "busy");
+            preLookupDone = webLookup(prof, instruction).then(function (ws) {
+              if (!ws) { SK.webRounds = Math.max(0, (SK.webRounds || 1) - 1); return null; }
+              SK.webResults = ws;
+              setStatus("Reading the found documents\u2026", "busy");
+              return gatherPageContents(ws).then(function (pages) {
+                SK.webResults = ws + pages;
+                messages = messages.concat([{ role: "user", content:
+                  "WEB LOOKUP RESULTS (the pane fetched these proactively before this content-writing request - verify facts against them, keep them current, cite what you use; do NOT invent numbers/dates):\n" + ws +
+                  (pages ? "\n\nThe lookups also RETURNED THE FULL TEXT of matched pages - read before writing:\n" + pages : "") }]);
+                return true;
+              });
+            }).catch(function (ePl) {
+              dbg("prelookup.failed", { msg: String(ePl && ePl.message || ePl) });
+              SK.webRounds = Math.max(0, (SK.webRounds || 1) - 1);
+              return null;
+            });
+          } else {
+            preLookupDone = Promise.resolve(null);
+          }
+        }
+        return preLookupDone;
+      }
       function mainAsk() {
+        return preLookupRun().then(function () { return mainAskInner(); });
+      }
+      function mainAskInner() {
         return askRetryable(function () { return apiJson("/api/chat", "POST", { connection: ref.connection, model: ref.model, messages: messages }); })
           .then(function (resp) {
             var pre = tryParse(resp.text);
@@ -3796,6 +3885,10 @@ function applyOps(deck, ops, ctx) {
       p2.classList.toggle("active", p2.id === "sub-" + id);
     });
     if (id === "inspector" && typeof renderRequests === "function") renderRequests();
+    if (id === "general") {   // a fresh General view: no stale check-now result
+      var info = document.getElementById("upd-info");
+      if (info) info.textContent = "";
+    }
   }
 
   function switchTab(id) {
