@@ -127,6 +127,8 @@
     create_table:      { label: "insert table", hint: "Inserts a table with the given cell values (WordApi 1.3)." },
     insert_comment:    { label: "insert comment", hint: "Adds a comment anchored to the matching text (WordApi 1.4)." },
     delete_paragraph:  { label: "delete paragraph", hint: "Removes a paragraph by index." },
+    move_text:         { label: "move text", hint: "CUT+paste: relocates the paragraph(s) containing find (through until, or count paragraphs) to sit right after place (an anchor text; or end). Styles preserved." },
+    copy_text:         { label: "copy text", hint: "Paste-COPY: the same block semantics as move_text but the original paragraph(s) stay put." },
     rewrite_doc:       { label: "rewrite document", hint: "Replaces the document body with a new set of paragraphs (destructive - review)." },
     insert_image:      { label: "insert image", hint: "Generates a picture from a description with the profile's image model and inserts it WHERE THE MODEL CHOOSES (place: cursor / an anchor text / end); without a place value, the pane's insert-at-cursor setting applies." },
     format_text:      { label: "format text", hint: "bold/italic/color/size/underline/allCaps/highlight + alignment on one paragraph." },

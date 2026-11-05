@@ -30,6 +30,14 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.219
+### Fixed
+- THE reason "All 6 action(s) were rejected": move_text and copy_text
+  were missing from OPS_META, so OP_TYPES rejected them as "unknown op
+  type" while the model prompt ADVERTISED them - the model could only
+  ever emit invalid ops. Registered in OPS_META (20 types now); audited
+  that every op advertised in the model schema exists in OP_TYPES for
+  all three panes (Docs 20, Slides 23, Mail 7).
 ## 0.9.218
 ### Fixed
 - DocKick still crashed the validation re-ask with "instruction is not
