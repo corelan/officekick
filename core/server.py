@@ -34,7 +34,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 APP = "OfficeKick"
-VERSION = "0.9.192"
+VERSION = "0.9.193"
 
 # --------------------------------------------------------------------------- #
 # Self-restart: the server watches for <cfg dir>/restart.flag. Whatever writes
@@ -3138,6 +3138,26 @@ def main(argv=None):
             if alt:
                 print("Port %s busy; suggest --port %s" % (args.port, alt), file=sys.stderr)
             sys.exit(2)
+        # 0.9.193: macOS Outlook's Add-from-File validates EVERY manifest URL
+        # as https - including the pane URL. When a cert pair exists in the
+        # config dir, serve the SAME pane + APIs additionally over TLS on
+        # port+1 (https://localhost:8766) in this same process. MailKick's
+        # manifest points at the TLS listener; SlideKick/DocKick keep http.
+        tls_p2 = os.path.join(os.path.dirname(str(store.path)), "certs", "server.crt")
+        tls_k2 = os.path.join(os.path.dirname(str(store.path)), "certs", "server.key")
+        if not tls and os.path.isfile(tls_p2) and os.path.isfile(tls_k2):
+            try:
+                tls_servers = build_dual_servers(args.port + 1, store,
+                                                 args.static_dir, args.verbose,
+                                                 (tls_p2, tls_k2))
+                if tls_servers:
+                    servers.extend(tls_servers)
+                    print("TLS listener ready on https://localhost:%d "
+                          "(Outlook's Add-from-File needs https URLs)"
+                          % (args.port + 1), flush=True)
+            except OSError as exc:
+                print("TLS listener on port %d skipped: %s"
+                      % (args.port + 1, exc), file=sys.stderr)
 
     port = servers[0].server_address[1]
     # self-restart bookkeeping: every boot clears a stale flag, stamps the

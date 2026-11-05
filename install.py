@@ -346,6 +346,75 @@ def pythonw_path():
     return cand if os.path.isfile(cand) else sys.executable
 
 
+# ------------------------------------------------------------ loopback TLS #
+def ensure_tls_certs():
+    """Generate a per-user CA + localhost server cert (0.9.193) and trust the
+    CA in the USER keychain, so the macOS server can additionally answer
+    https://localhost:8766 - Outlook's Add-from-File validates every manifest
+    URL as https. Returns (crt, key) or None. No admin rights.""
+    """
+    if not is_mac():
+        return None
+    import shutil as _sh
+    if not _sh.which("openssl"):
+        return None
+    cert_dir = os.path.join(config_dir(), "certs")
+    crt = os.path.join(cert_dir, "server.crt")
+    key = os.path.join(cert_dir, "server.key")
+    ca_crt = os.path.join(cert_dir, "ca.crt")
+    ca_key = os.path.join(cert_dir, "ca.key")
+    os.makedirs(cert_dir, exist_ok=True)
+    try:
+        os.chmod(cert_dir, 0o700)
+    except OSError:
+        pass
+    if os.path.isfile(crt) and os.path.isfile(key) and os.path.isfile(ca_crt):
+        return (crt, key)
+    if DRY_RUN:
+        out("  [..]  [dry-run] would generate loopback TLS certs under " + cert_dir)
+        return None
+    ext = os.path.join(cert_dir, "localhost.ext")
+    with open(ext, "w") as fh:
+        fh.write("subjectAltName=DNS:localhost,IP:127.0.0.1,IP:0:0:0:0:0:0:0:1\n"
+                 "keyUsage = digitalSignature, keyEncipherment\n"
+                 "extendedKeyUsage = serverAuth\n")
+    cmds = [
+        ["openssl", "req", "-x509", "-newkey", "rsa:2048", "-sha256", "-days", "3650",
+         "-nodes", "-keyout", ca_key, "-out", ca_crt,
+         "-subj", "/CN=OfficeKick Loopback CA"],
+        ["openssl", "req", "-newkey", "rsa:2048", "-nodes", "-keyout", key,
+         "-out", os.path.join(cert_dir, "server.csr"),
+         "-subj", "/CN=localhost", "-addext",
+         "subjectAltName=DNS:localhost,IP:127.0.0.1"],
+        ["openssl", "x509", "-req", "-in", os.path.join(cert_dir, "server.csr"),
+         "-CA", ca_crt, "-CAkey", ca_key, "-CAcreateserial", "-days", "3650",
+         "-sha256", "-out", crt, "-extfile", ext],
+    ]
+    for cmd in cmds:
+        rc, o = run_quiet(cmd)
+        if rc != 0:
+            warn("TLS cert generation failed (%s)" % (o or cmd[0]))
+            return None
+    try:
+        os.remove(os.path.join(cert_dir, "server.csr"))
+        os.remove(ext)
+    except OSError:
+        pass
+    try:
+        os.chmod(key, 0o600)
+    except OSError:
+        pass
+    keychain = os.path.expanduser("~/Library/Keychains/login.keychain-db")
+    rc, o = run_quiet(["security", "add-trusted-cert", "-r", "trustRoot",
+                       "-k", keychain, ca_crt])
+    if rc == 0:
+        ok("loopback CA trusted in your login keychain")
+    else:
+        warn("could not auto-trust the loopback CA - run once yourself, then restart the server:")
+        out("       security add-trusted-cert -r trustRoot -k $HOME/Library/Keychains/login.keychain-db " + ca_crt)
+    return (crt, key)
+
+
 # ------------------------------------------------------------------ deploy #
 def deploy_files():
     dst = install_dir()
@@ -448,6 +517,14 @@ def render_manifest(addin_dir, port):
         t = re.sub(r"(?s)^[ \t]*__COMMANDS_BEGIN__[ \t]*\r?\n.*?^__COMMANDS_END__[ \t]*\r?\n?",
                    "", t, flags=re.M)
     t = t.replace("__SCHEME__", "http").replace("__PORT__", str(port))
+    if addin_dir == "mailkick":
+        # 0.9.193: Outlook's Add-from-File requires https for EVERY manifest
+        # URL - MailKick serves its pane over the loopback TLS listener on
+        # port+1 (the certs come from ensure_tls_certs()).
+        t = t.replace("http://localhost:%d" % port,
+                      "https://localhost:%d" % (port + 1))
+        t = t.replace("http://127.0.0.1:%d" % port,
+                      "https://127.0.0.1:%d" % (port + 1))
     try:
         minidom.parseString(t)
     except Exception as e:
@@ -1021,6 +1098,7 @@ def install(mode_name="Install", interactive=True):
             want = True
     stop_server()
     deploy_files()
+    ensure_tls_certs()
     if is_windows():
         relax_windows_config_acl()
     if office_app_running():

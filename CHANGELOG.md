@@ -30,6 +30,20 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.193
+### Fixed
+- **MailKick was rejected by Outlook's Add-from-File AND the wef-folder
+  pickup: this Outlook build validates EVERY manifest URL as https,
+  including the pane URL** ("The value of the SourceLocation attribute ...
+  contains an unsupported URL"). The server now serves the same pane + APIs
+  additionally over **loopback TLS on port 8766** (same process; the cert
+  pair lives in ~/.officekick/certs). The macOS installer generates a
+  per-user "OfficeKick Loopback CA" + a localhost certificate with
+  openssl, trusts the CA in your login keychain (no admin rights; macOS may
+  show a confirmation), and MailKick's manifest points at
+  https://localhost:8766. SlideKick/DocKick keep their plain-http route.
+### Docs
+- mailkick.md: the https listener section + what the certificates are for.
 ## 0.9.192
 ### Fixed
 - Outlook's Add-from-File dialog validates every manifest URL as https and
