@@ -1887,7 +1887,7 @@ var nw = $("sess-new");
       if (!find) throw new FriendlyError("move_image: missing find text");
       var place = (typeof op.place === "string" && op.place.trim()) ? op.place.trim() : "end";
       var paras = ctx.document.body.paragraphs;
-      paras.load("text");
+      paras.load("text, style");   // 0.9.222
       var found = ctx.document.body.search(find, { matchCase: false, matchWholeWord: false });
       found.load("items");
       return ctx.sync().then(function () {

@@ -30,6 +30,14 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.222
+### Fixed
+- move_text/copy_text applied but failed at runtime for all 6 actions
+  ("The property 'style' is not available... call the load method"):
+  _pasteBlock loaded paragraphs as "text" only while _insertBlockAfter
+  reads each paragraph's style to preserve it. loads now "text, style"
+  (both _pasteBlock and moveImage); audited all remaining load sites -
+  no other unloaded-property reads on that path.
 ## 0.9.221
 ### Changed (all panes)
 - Re-ask failures now log their FULL stack trace into the pane's
