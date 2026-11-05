@@ -870,3 +870,10 @@ body.dark .actts { color: #6e7783; }
 .row.drop-below { box-shadow: 0 2px 0 #4a90d9; }
 .row.dragging { opacity: 0.55; }
 body.dark .dragh { background-image: radial-gradient(circle, #778089 1.6px, transparent 1.7px); }
+
+/* 0.9.230: stable button row - Reserve space for the hidden Cancel button and
+   the timer so the Run/reply row never jumps when a run starts */
+#chat-cancel.btn.subtle { min-width: 64px; }
+#chat-cancel[style*="display:none"], #chat-cancel:not([style*="display:none"]) { }
+#chat-timer.chattimer { display: inline-block; min-width: 52px; text-align: left; }
+

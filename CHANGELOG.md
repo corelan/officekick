@@ -30,6 +30,18 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.230
+### Added (MailKick)
+- New quick action "propose" next to reply +/reply -: the AI analyzes the
+  open conversation and proposes the 2-3 most natural replies (a
+  question, a positive/negative answer, a decision - different in kind,
+  not just wording). Each proposal arrives as its own draft_reply action
+  so they compare side-by-side in the approval list. Nothing is sent -
+  the usual gate applies.
+### Changed (MailKick)
+- The button row layout is stable: Cancel reserves its space while
+  hidden and the timer has a fixed slot, so the Run/reply row no longer
+  jumps when a run starts.
 ## 0.9.229
 ### Changed
 - GUI declutter: the Web search steps sheet's three-sentence explainer is

@@ -2371,21 +2371,37 @@ function applyOps(deck, ops, ctx) {
   }
 
   function runQuickReply(stance) {
-    // reply + / reply - quick actions: a canned instruction runs through the
-    // normal pipeline (the open email's conversation is attached as context);
-    // the model proposes a draft_reply action with the AI-written text and
-    // the usual approval gate applies (MailKick never sends by itself)
+    // reply + / reply - / propose quick actions: a canned instruction runs
+    // through the normal pipeline (the open email's conversation is attached
+    // as context); the model proposes draft_reply action(s) with the
+    // AI-written text and the usual approval gate applies (MailKick never
+    // sends by itself)
     if (SK.busy) return;
     var prof = currentProfile();
     if (!prof) { setStatus("No profile yet - create one on the Profiles tab first.", "error"); switchTab("settings"); switchSettingsSub("profiles"); return; }
     var inp = $("chat-input");
     if (!inp) return;
-    var stanceText = stance === "pos"
-      ? "positive and agreeable"
-      : "politely negative (declining) but still courteous";
+    var instruction;
+    if (stance === "propose") {
+      // 0.9.229: analyze the conversation and PROPOSE several plausible
+      // replies - not one canned stance. Each proposal = a draft_reply op,
+      // so they land in the approval list side by side.
+      instruction =
+        "Analyze this email conversation. What would be the most natural next replies? " +
+        "Consider: would a QUESTION make sense? a positive/agreeable answer? a politely negative answer? " +
+        "a concrete DECISION or commitment? Pick the 2-3 most useful variants (different in kind, not just wording). " +
+        "Then return one draft_reply action PER selected proposal, each with short marker text like [Proposal 1 - question] / " +
+        "[Proposal 2 - positive] / [Proposal 3 - decision] at the start of its body (simple inline HTML only). " +
+        "Reply entirely in the conversation's language and tone. Do not send anything.";
+    } else {
+      var stanceText = stance === "pos"
+        ? "positive and agreeable"
+        : "politely negative (declining) but still courteous";
+      instruction = "Draft a polite reply to this email conversation in the tone the conversation uses (formal or informal). Stance: " + stanceText +
+        ". Reply entirely in the same language as the conversation, in the same tone (formal or informal). Then propose one draft_reply action with the AI-generated reply text (simple inline HTML only). Do not send anything.";
+    }
     inp.disabled = false;
-    inp.value = "Draft a polite reply to this email conversation in the tone the conversation uses (formal or informal). Stance: " + stanceText +
-      ". Reply entirely in the same language as the conversation, in the same tone (formal or informal). Then propose one draft_reply action with the AI-generated reply text (simple inline HTML only). Do not send anything.";
+    inp.value = instruction;
     runPrompt();
   }
 
@@ -4015,9 +4031,10 @@ function applyOps(deck, ops, ctx) {
     $("chat-run").addEventListener("click", runPrompt);
     var cancelBtn = $("chat-cancel");
     if (cancelBtn) cancelBtn.addEventListener("click", cancelRun);
-    var rpos = $("reply-pos"), rneg = $("reply-neg");
+    var rpos = $("reply-pos"), rneg = $("reply-neg"), rprop = $("reply-propose");
     if (rpos) rpos.addEventListener("click", function () { runQuickReply("pos"); });
     if (rneg) rneg.addEventListener("click", function () { runQuickReply("neg"); });
+    if (rprop) rprop.addEventListener("click", function () { runQuickReply("propose"); });
     $("chat-input").addEventListener("keydown", function (ev) {
       if ((ev.metaKey || ev.ctrlKey) && ev.key === "Enter") { ev.preventDefault(); runPrompt(); }
     });
