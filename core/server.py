@@ -34,7 +34,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 APP = "OfficeKick"
-VERSION = "0.9.224"
+VERSION = "0.9.225"
 
 # --------------------------------------------------------------------------- #
 # Self-restart: the server watches for <cfg dir>/restart.flag. Whatever writes
@@ -2274,6 +2274,22 @@ def provider_chat(store, conn_name, model, messages, temperature, max_tokens, ti
             base + "/api/chat", method="POST", headers=headers,
             payload=payload, timeout=timeout,
         )
+        # 0.9.225: thinking-capable ollama models (cloud relays) count their
+        # chain-of-thought against num_predict. If the budget is exhausted by
+        # the "thinking" field, "content" arrives EMPTY - detected and retried
+        # once with thinking DISABLED so the answer itself gets the budget.
+        if isinstance(data, dict) and \
+                data.get("done_reason") == "length" and \
+                not str((data.get("message") or {}).get("content") or "") and \
+                (data.get("message") or {}).get("thinking"):
+            payload["think"] = False
+            try:
+                data = http_request(
+                    base + "/api/chat", method="POST", headers=headers,
+                    payload=payload, timeout=timeout,
+                )
+            except ApiError:
+                pass   # older ollama builds reject "think" - keep the empty text
         text = ""
         if isinstance(data, dict):
             message = data.get("message") or {}

@@ -30,6 +30,19 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.225
+### Fixed
+- THINKING BUDGET EXHAUSTION (root cause of the empty-replies / silent
+  "Done with 0 actions" on Ollama cloud models): glm-5.3-flash:cloud puts
+  its chain-of-thought in the "thinking" field, which is counted against
+  num_predict. With the pane's maxTokens 8192 the thinking consumed the
+  entire budget (done_reason "length", content empty), so the server
+  returned an empty reply while direct raw curls succeeded. The ollama
+  path now detects exactly that signature (length + empty content +
+  non-empty thinking) and retries ONCE with think:false (verified live:
+  valid move_text ops, done_reason stop). Reproduced with the exact
+  logged request on the box: with options = empty + 8192 eval; with
+  think:false = 7884 eval + content.
 ## 0.9.224
 ### Changed (DocKick)
 - A "the model proposed 0 actions" run is no longer a bare "Done": the
