@@ -301,6 +301,7 @@
   function currentSearchProfile() {
     var sel0 = $("srp-list");
     var name = sel0 ? sel0.value : "";
+    if (!name && SK.srpDraft) return SK.srpDraft;   // editing a not-yet-saved profile
     return ((SK.searchProfiles || []).filter(function (p) { return p.name === name; })[0]) || null;
   }
 
@@ -318,7 +319,8 @@
       var cs = document.createElement("select");
       cs.innerHTML = conns.map(function (c) { return '<option value="' + esc(c.name) + '">' + esc(c.name) + " (" + esc(c.type) + ")</option>"; }).join("");
       cs.value = st.connection || (conns.length ? conns[0].name : "");
-      cs.addEventListener("change", function () { st.connection = cs.value; st.model = ""; fillWebModelSelect(st, cs); });
+      if (!st.connection && conns.length) st.connection = cs.value;   // default = written back at build time
+      cs.addEventListener("change", function () { st.connection = cs.value; st.model = ""; renderSearchSteps(); });
       host.appendChild(cs);
       var ms = document.createElement("select");
       ms.id = "srp-step-model-" + (st.connection || "x");
@@ -417,7 +419,13 @@
   function addSearchStepFn(st) {
     return function () {
       var p = currentSearchProfile();
-      if (!p) { $("srp-status").textContent = "Type a name and save the profile first (or select one)."; return; }
+      if (!p) {
+        var draftName = ($("srp-name").value || "").trim();
+        p = { name: draftName, steps: [] };
+        SK.srpDraft = p;
+        if (!SK.searchProfiles) SK.searchProfiles = [];
+        SK.searchProfiles.push(p);
+      }
       p.steps.push(st);
       renderSearchSteps();
     };
@@ -429,12 +437,15 @@
     var p = currentSearchProfile();
     var steps = (p && p.steps) || [];
     apiJson("/api/search-profiles", "POST", { name: name, steps: steps }).then(function () {
+      SK.srpDraft = null;
       flashSaved("saved-srp", "\u2713 saved");
       return apiJson("/api/settings", "PUT", { selectedSearchProfile: name });
     }).then(function () {
       return loadConfigAndRender();
     }).then(function () {
       renderSearchProfiles();
+      $("srp-list").value = name;
+      renderSearchSteps();
       $("srp-status").textContent = "";
     }).catch(function (e) {
       $("srp-status").textContent = "Save failed: " + ((e && e.message) || e);
@@ -493,10 +504,8 @@
     // then the SERVER-SIDE keyless search (works for every connection kind);
     // then an OpenAI search-preview model (native search) when present.
     var ladder = buildSearchLadder(prof);
-    var attempts = ladder.attempts;    var chosenEngine = String((SK.cfg && SK.cfg.webSearchEngine) || "auto");
-    if (chosenEngine === "duckduckgo" || chosenEngine === "brave" || chosenEngine === "tavily") {
-      attempts.unshift({ server: true });   // the user picked this engine: use it first
-    }
+    var attempts = ladder.attempts;    // (the explicit single-engine unshift is retired: the search profile
+    // tab owns the sequence now - see buildSearchLadder)
     var webNoHit = function (t) {
       return !t || /^NO_WEB_ACCESS\b/i.test(t) || /cannot access (the )?web/i.test(t) ||
         /can'?t browse/i.test(t) || /no web access/i.test(t) ||

@@ -30,6 +30,16 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.160
+### Fixed
+- Search-profile editor flow: steps attach to a profile before its first
+  save (the draft carries over when "Save search profile" runs; the new
+  profile gets selected automatically), the online step's connection
+  defaults are written back at render time (no more empty-connection
+  steps), an online step's connection change rebuilds the row (the model
+  list refills), and the profile ladder no longer inherits the legacy
+  single-engine setting (the Search tab owns the sequence; the old
+  engine/key settings keep working as its migration source).
 ## 0.9.159
 ### Added
 - Settings -> "Search" tab: search PROFILES. A profile = a name + an
