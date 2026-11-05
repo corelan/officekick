@@ -30,6 +30,12 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.190
+### Changed
+- The installer's add-in cache/WEF clear now warns that macOS Outlook holds
+  MailKick as a manually-added add-in: after a clear, re-add it once via
+  Get Add-ins > My add-ins > Custom Add-ins > Add from File (the wef
+  manifest keeps being re-staged automatically).
 ## 0.9.189
 ### Fixed
 - **Reading a slide quoted cut text**: in large decks (>40 slides) the

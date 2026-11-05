@@ -674,6 +674,11 @@ def clear_office_caches():
         if os.path.isdir(wef_store):
             shutil.rmtree(wef_store, ignore_errors=True)
     ok("cleared Office add-in caches + WEF registration stores (rebuilt at launch)")
+    if is_mac():
+        warn("note: Outlook holds MailKick as a MANUALLY added add-in - after this"
+             " clear, re-add it once via Get Add-ins > My add-ins > Custom Add-ins"
+             " > Add a custom add-in > Add from File (Cmd+Shift+G), file:")
+        out("           ~/Library/Containers/com.microsoft.Outlook/Data/Documents/wef/mailkick.xml")
 
 
 def office_app_running():
