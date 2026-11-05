@@ -1795,6 +1795,7 @@ var nw = $("sess-new");
         });
       }
       var rs = body.search(place);
+      rs.load("items");
       return ctx.sync().then(function () {
         var rng = rs && rs.items && rs.items[0];
         if (!rng) {
@@ -1919,6 +1920,7 @@ var nw = $("sess-new");
       return doInsert(null).then(function () { return { how: "end of document" }; });
     }
     var rs = body.search(place);
+    rs.load("items");
     return ctx.sync().then(function () {
       var rng = rs && rs.items && rs.items[0];
       if (!rng) {
@@ -2220,6 +2222,7 @@ var nw = $("sess-new");
         return ctx.sync().then(function () { return { ok: true, how: "at end of document" }; });
       }
       var rs = ctx.document.body.search(place);
+      rs.load("items");
       return ctx.sync().then(function () {
         if (rs && rs.items && rs.items.length) {
           rs.items[0].insertInlinePictureFromBase64(String(payload.b64), "After");

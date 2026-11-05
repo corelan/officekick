@@ -30,6 +30,14 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.214
+### Fixed
+- anchor-based inserts crashed with "The property 'items' is not
+  available... call the load method": the Office-JS RangeCollection from
+  body.search must be loaded ("items") before sync/reading .items. All
+  three anchor sites fixed: insert_paragraphs, insert_image, and the
+  move_text/copy_text block paste. Retries re-failed by design, so a
+  whole batch of anchored inserts produced only errors; now they insert.
 ## 0.9.213
 ### Added (SlideKick / PowerPoint)
 - copy_shape {slide, shape, to, left/top/width/height}: duplicates a shape
