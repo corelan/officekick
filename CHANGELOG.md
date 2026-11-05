@@ -30,6 +30,13 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.197
+### Changed
+- Scope correction: only MailKick needs https URLs (Outlook's manifest
+  validation). SlideKick and DocKick manifest icons are back on the local
+  http server (offline-safe, fully local as before); their pane URLs were
+  always http and stay that way. The TLS sibling listener + CA remain
+  macOS-only and are used exclusively by MailKick's manifest.
 ## 0.9.196
 ### Changed
 - **MailKick for Outlook is now prerequisite-gated on macOS.** The

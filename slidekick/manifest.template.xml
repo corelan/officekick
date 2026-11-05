@@ -14,8 +14,8 @@
   <DefaultLocale>en-US</DefaultLocale>
   <DisplayName DefaultValue="Corelan SlideKick"/>
   <Description DefaultValue="AI assistant for PowerPoint: reword slides, generate new slides, write speaker notes and get design suggestions using your own AI providers (OpenAI, Anthropic, OpenRouter, OpenAI-compatible, Ollama, llama.cpp)."/>
-  <IconUrl DefaultValue="https://raw.githubusercontent.com/corelan/officekick/main/slidekick/static/assets/icon32.png"/>
-  <HighResolutionIconUrl DefaultValue="https://raw.githubusercontent.com/corelan/officekick/main/slidekick/static/assets/icon80.png"/>
+  <IconUrl DefaultValue="__SCHEME__://localhost:__PORT__/slidekick/static/assets/icon32.png"/>
+  <HighResolutionIconUrl DefaultValue="__SCHEME__://localhost:__PORT__/slidekick/static/assets/icon80.png"/>
   <SupportUrl DefaultValue="https://github.com/corelan/officekick"/>
   <AppDomains>
     <AppDomain>__SCHEME__://localhost:__PORT__</AppDomain>
@@ -80,9 +80,9 @@ __COMMANDS_BEGIN__
     </Hosts>
     <Resources>
       <bt:Images>
-<bt:Image id="Icon.16" DefaultValue="https://raw.githubusercontent.com/corelan/officekick/main/slidekick/static/assets/icon16.png"/>
-<bt:Image id="Icon.32" DefaultValue="https://raw.githubusercontent.com/corelan/officekick/main/slidekick/static/assets/icon32.png"/>
-<bt:Image id="Icon.80" DefaultValue="https://raw.githubusercontent.com/corelan/officekick/main/slidekick/static/assets/icon80.png"/>
+<bt:Image id="Icon.16" DefaultValue="__SCHEME__://localhost:__PORT__/slidekick/static/assets/icon16.png"/>
+<bt:Image id="Icon.32" DefaultValue="__SCHEME__://localhost:__PORT__/slidekick/static/assets/icon32.png"/>
+<bt:Image id="Icon.80" DefaultValue="__SCHEME__://localhost:__PORT__/slidekick/static/assets/icon80.png"/>
       </bt:Images>
       <bt:Urls>
         <bt:Url id="Taskpane.Url" DefaultValue="__SCHEME__://localhost:__PORT__/slidekick/static/taskpane.html"/>
