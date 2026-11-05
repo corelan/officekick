@@ -30,6 +30,19 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.206
+### Fixed
+- Update notice is SHORT (one line + the button): "Click 'Pull update
+  from git now' below, or run install.py --update ... and reload the
+  pane." The old pane gave a paragraph.
+- The 'Pull update from git now' button now exists in ALL three panes:
+  it was only ever in the SlideKick task pane, so Word/Outlook panes
+  showed only text even on builds that had the button for months - the
+  reason an 0.9.200 install still could not click-pull from those panes.
+### Note
+- The button still requires the installer-recorded clone probe
+  (repoPath -> git_update_probe) to mark pullAvailable; without it the
+  notice says to run install.py --update.
 ## 0.9.205
 ### Changed
 - The installer's user-facing output is scheme-truthful now: the transport

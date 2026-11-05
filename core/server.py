@@ -34,7 +34,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 APP = "OfficeKick"
-VERSION = "0.9.205"
+VERSION = "0.9.206"
 
 # --------------------------------------------------------------------------- #
 # Self-restart: the server watches for <cfg dir>/restart.flag. Whatever writes
@@ -2052,16 +2052,12 @@ def update_check(force_latest=None, store=None):
     data = {"ok": True, "current": VERSION, "latest": latest,
             "upToDate": up_to_date,
             "repo": "https://github.com/corelan/officekick",
-            "howToUpdate": ("Pull it here with the pane's 'Pull update from git now' button "
-                            "(present in panes NEWER than the build you are running - if you "
-                            "only see this text, your pane IS the old build and cannot update "
-                            "itself: run python3 install.py --update in %s and reload the task "
-                            "pane)." % (repo_info or {}).get("repoPath", "your OfficeKick clone")
+            "howToUpdate": ("Click \'Pull update from git now\' below, or run "
+                            "install.py --update in %s and reload the pane."
+                            % (repo_info or {}).get("repoPath", "your clone")
                             if pull_available else
-                            "To update: run python3 install.py --update in your OfficeKick "
-                            "clone (it pulls with git, redeploys the add-ins and restarts the "
-                            "local server), and reload the task pane (reopen the add-in; restart Office if it "
-                            "keeps showing the old UI). No automatic git pull is attempted."),
+                            "Run install.py --update in %s, then reload the pane."
+                            % ((repo_info or {}).get("repoPath", "your clone"))),
             "source": source, "pullAvailable": pull_available,
             "probeReason": out_unusable_reason}
     if not force_latest:

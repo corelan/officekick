@@ -786,6 +786,23 @@
         info.className = "opnote updavail";   // bold; gold/purple per theme
         info.textContent = "UPDATE AVAILABLE: " + data.latest + " (you run " + data.current + "). " +
           (data.howToUpdate || "");
+        if (data.pullAvailable) {
+          var pullBtn = document.createElement("button");
+          pullBtn.className = "btn";
+          pullBtn.textContent = "Pull update from git now";
+          pullBtn.addEventListener("click", function () {
+            pullBtn.disabled = true;
+            info.textContent = "Pulling...";
+            apiJson("/api/repo-update", "POST", {}).then(function (pr) {
+              info.className = "opnote";
+              info.textContent = pr && pr.ok
+                ? "Pulled. Reload the pane (About tab -> Reload pane); run install.py --update for manifests/server."
+                : "Pull failed: " + (pr && pr.error ? pr.error : "unknown");
+            }).catch(function (e2) { pullBtn.disabled = false; info.textContent = "Pull failed: " + (e2 && e2.message ? e2.message : e2); });
+          });
+          info.appendChild(document.createElement("br"));
+          info.appendChild(pullBtn);
+        }
       }
     }).catch(function (e) {
       btn.disabled = false;
