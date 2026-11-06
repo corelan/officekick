@@ -78,6 +78,15 @@
   Q&A pair lands in Previous requests and in the session history. Rules
   added to all three system prompts (MailKick's version says a clarify reply
   replaces - not supplements - the ops/reply round).
+## 0.9.252b
+
+### Changed
+- the menus now DEFAULT to what is already selected: the Transport menu's
+  cursor starts on the current mode (auto/http/https), the certificate-mode
+  submenu's cursor starts on the current certMode, and a bare Enter in the
+  typed fallback re-selects that pre-selected row instead of leaving the
+  menu.
+
 ## 0.9.252
 
 ### Fixed

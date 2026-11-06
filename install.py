@@ -3434,7 +3434,9 @@ def _cert_mode_menu():
     while True:
         clear_screen()
         r = rows()
-        sel = menu_pick(r, 0, "(1-3 = set the certificate mode, 0 = back)")
+        cm = _get_cert_mode()
+        mode_row = {"self_signed_leaf": 0, "ca": 1, "byo": 2}.get(cm, 0)
+        sel = menu_pick(r, mode_row, "(1-3 = set the certificate mode, 0 = back)")
         if sel is None:
             # typed fallback
             print("")
@@ -3448,11 +3450,16 @@ def _cert_mode_menu():
                 if not sys.stdin.isatty():
                     print("  (non-interactive: PUT /api/settings {certMode: ...} or re-run install.py)")
                     return
-                choice = input("  > choose [1/2/3, 0; default 0]: ").strip().lower()
+                choice = input("  > choose [1/2/3, 0] (%s is current; Enter = keep): "
+                               % {"self_signed_leaf": "1", "ca": "2", "byo": "3"}.get(
+                                   _get_cert_mode(), "0")).strip().lower()
             except EOFError:
                 return
-            if choice in ("", "0", "q", "back"):
+            if choice in ("0", "q", "back"):
                 return
+            if choice == "":
+                choice = {"self_signed_leaf": "1", "ca": "2", "byo": "3"}.get(
+                    _get_cert_mode(), "0")   # Enter = keep the current mode
             sel2 = next((i for i, (a, l, s) in enumerate(r) if a == choice), None)
             if sel2 is None:
                 print("  please choose 1, 2, 3 or 0")
@@ -3520,7 +3527,9 @@ def transport_menu():
         print("  listener ports: http %d / https %d   (server: %s)" % (
             hp, sp, ("running v%s" % h.get("version")) if h else "not running"))
         r = rows()
-        sel = menu_pick(r, 0, "(up/down + Enter, 1-5 direct, 0 = back)")
+        # the cursor AND the typed bare-Enter default sit on the CURRENT mode
+        mode_row = {"auto": 0, "http": 1, "https": 2}.get(cur, 0)
+        sel = menu_pick(r, mode_row, "(up/down + Enter, 1-6 direct, 0 = back)")
         if sel is None:
             print("")
             for (act, label, _st) in r:
@@ -3538,7 +3547,11 @@ def transport_menu():
                 return
             if choice in ("", "0", "q", "back"):
                 return
-            sel = {"1": 0, "2": 1, "3": 2, "4": 3, "5": 4}.get(choice)
+            mode_choice = {"auto": "1", "http": "2", "https": "3"}.get(choice)
+            if choice == "":
+                choice = {"auto": "1", "http": "2", "https": "3"}.get(
+                    cur, "0")   # bare Enter = keep the current (pre-selected) mode
+            sel = {"1": 0, "2": 1, "3": 2, "4": 3, "5": 4, "6": 5}.get(choice)
             if sel is None:
                 print("  please choose 1, 2, 3, 4, 5, 6 or 0")
                 continue
