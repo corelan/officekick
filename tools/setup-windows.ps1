@@ -7,8 +7,12 @@
 #   - Git for Windows (latest release)
 #
 # HOW TO RUN:
-#   powershell -NoProfile -ExecutionPolicy Bypass -File .\setup-windows.ps1
-#   (see docs/setup-windows.md for the execution-policy explanation)
+#   from the internet (no download needed):
+#     powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/corelan/officekick/main/tools/setup-windows.ps1 | iex"
+#   from a saved file:
+#     powershell -NoProfile -ExecutionPolicy Bypass -File .\setup-windows.ps1
+#   (see docs/setup-windows.md for the execution-policy explanation and
+#    how to pass -flags through the pipe)
 #
 # OPTIONS:
 #   -NoClone                skip the repository clone offer

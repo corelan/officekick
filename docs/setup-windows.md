@@ -26,7 +26,39 @@ Flags: `-Yes` (unattended), `-NoClone`, `-SkipPython`, `-SkipGit`,
 
 ---
 
-## Running the script
+## Running the script from the internet - the one-liner
+
+The Linux habit of piping a script from the web straight into the shell
+works on Windows too (`irm <url> | iex` is the `curl | bash` equivalent):
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/corelan/officekick/main/tools/setup-windows.ps1 | iex"
+```
+
+- **No administrator prompt is needed** (everything installs per user) -
+  an admin terminal works too, it just adds nothing.
+- The URL is the raw GitHub file; `irm` (Invoke-RestMethod) downloads it,
+  `iex` (Invoke-Expression) runs it in place. Older Windows PowerShell
+  builds default to ancient TLS - the same line with the TLS fix:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -Command "[Net.ServicePointManager]::SecurityProtocol='Tls12'; irm https://raw.githubusercontent.com/corelan/officekick/main/tools/setup-windows.ps1 | iex"
+```
+
+- Passing flags through the pipe: `iex` cannot take the script's
+  parameters, so run it as an explicit script block instead:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -Command "& ([scriptblock]::Create((irm https://raw.githubusercontent.com/corelan/officekick/main/tools/setup-windows.ps1))) -Yes -NoClone"
+```
+
+- The security trade-off of `| iex` is that the code runs without being
+  saved to disk first - only use it with URLs you trust (this one is the
+  OfficeKick repository's main branch). To inspect before running, save
+  it: `irm <url> -OutFile setup-windows.ps1`, read it, then run the saved
+  file as in the next section.
+
+## Running the script from a saved file
 
 Open PowerShell (`Win+X` -> "Terminal" or "Windows PowerShell"), then:
 
@@ -35,9 +67,9 @@ cd <where you saved the script>
 powershell -NoProfile -ExecutionPolicy Bypass -File .\setup-windows.ps1
 ```
 
-That one-liner is the RECOMMENDED way: **Bypass applies to that process
-only** and expires when the shell closes - nothing about your system's
-security posture changes.
+That form is the RECOMMENDED way for the saved file: **Bypass applies to
+that process only** and expires when the shell closes - nothing about your
+system's security posture changes.
 
 If you are already in a PowerShell window, the equivalent session-scoped
 change is:

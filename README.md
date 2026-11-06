@@ -63,8 +63,8 @@ The essentials:
   the trust out of band and offers the Root fallback Office requires
   (WebView2 leaf-trust is field-verified as rejected).
 - On Windows, run the installer with `py -3` instead of `python`. A
-  PowerShell bootstrap installs Python 3 + Git and can clone the repo for
-  you: `tools/setup-windows.ps1`
+  PowerShell one-liner installs the prerequisites + the repo for you:
+  `irm https://raw.githubusercontent.com/corelan/officekick/main/tools/setup-windows.ps1 | iex`
   ([docs/setup-windows.md](docs/setup-windows.md)).
 - No admin rights are needed. The full run log lands in `install.log`.
 
