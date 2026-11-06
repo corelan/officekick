@@ -78,6 +78,34 @@
   Q&A pair lands in Previous requests and in the session history. Rules
   added to all three system prompts (MailKick's version says a clarify reply
   replaces - not supplements - the ops/reply round).
+## 0.9.266
+
+### Changed
+- richer visual vocabulary for designs: create_shape accepts a curated
+  PowerPoint geometric-glyph set well beyond the basic 8 - chevron,
+  right/down/up/leftArrow, donut, plus, hexagon, star5/star8, teardrop,
+  parallelogram, pentagon, octagon, cube, can, moon, lightningBolt, sun,
+  heart, wave, doubleWave, arc, blockArc, pie, foldedCorner, halfFrame,
+  smileyFace - plus the model-friendly aliases circle/oval (ellipse) and
+  rect (rectangle). Unknown kinds still ladder down to a rectangle at
+  apply time with the substitution note.
+- MODERN VISUAL DESIGN contract added to the ask rules: whenever the ask
+  creates or redesigns an infographic/diagram/flow/timeline/dashboard, the
+  model composes in layers from the deck's own theme palette (background
+  statement -> structure + glyph accents -> text last), builds ICONS as
+  picture-filled circles/squares via set_shape_image (flat vector icon,
+  one accent color, soft padding; one image set per slide, max 4), uses
+  asymmetry + oversized scale contrast, and is steered away from the 80s
+  tells (1px outlines everywhere, saturated primary fills, equal centered
+  boxes). Honest limits named: no shadows/blur in the API (depth from
+  transparency layers only), roundedRectangle renders sharp on Mac builds.
+
+### Fixed
+- a validateOps regression from the vocabulary edit: the alias resolver
+  dropped the kind variable declaration (the pane is strict mode) - the
+  first create_shape batch died with "kindS is not defined". E2E-proven
+  the circle/chevron/star5/donut/rightArrow batch validates and applies.
+
 ## 0.9.265
 
 ### Fixed
