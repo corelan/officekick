@@ -78,6 +78,14 @@
   Q&A pair lands in Previous requests and in the session history. Rules
   added to all three system prompts (MailKick's version says a clarify reply
   replaces - not supplements - the ops/reply round).
+### Docs
+- README/architecture/add-in docs now describe BOTH transports everywhere
+  (http://localhost:8765 always on; one trusted https://localhost:8766
+  listener for all three add-ins on macOS once a loopback certificate
+  exists); the old 'MailKick-only exception' framing in README and the
+  'default plain-http' phrasing are gone; simulator URLs note the https
+  twin.
+
 ### Fixed (MailKick)
 - The response chain never escaped the repair ladder on a clean parse: every
   MailKick run re-asked the model at least once (silently doubling cost and

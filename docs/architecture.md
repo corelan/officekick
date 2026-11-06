@@ -25,7 +25,7 @@ officekick/
      approval gate + history            same shared gate            same shared gate
      OfficeDeck -> PowerPoint.run       WordDeck -> Word.run        MailDeck -> mailbox API
               |                                  |                            |
-              +--------------------- same origin http://127.0.0.1:8765 -----------+
+              +----- same origin: 127.0.0.1:8765 (http), or localhost:8766 (https) ---+
                                              v
 +---------------------------------------------------------------------------------------+
 |  core/server.py (python stdlib, threads, dual-stack loopback)                          |

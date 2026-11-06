@@ -56,7 +56,9 @@ What the installer does:
 - Registers the add-ins with each Office app (macOS: WEF sideload; Windows:
   a per-user trusted folder catalog. Outlook on Windows needs the one-time
   "Add from File" dialog - the installer prints the steps).
-- Starts the local server on `http://localhost:8765` and health-checks it.
+- Starts the local server on `http://localhost:8765` and health-checks it
+  (on macOS with a working loopback certificate it also serves the trusted
+  `https://localhost:8766` listener).
 - Asks whether to start the server at login. Default is **yes**.
   - macOS: a login item ("OfficeKickServer" via SMAppService).
   - Windows: a per-user scheduled task (windowless `pythonw`).
@@ -67,16 +69,18 @@ Good to know:
   instead of `python` - `python` alone is often the Store alias that opens
   the Microsoft Store instead of running your script.
 - No admin rights are needed.
-- The add-ins talk to the server over `http://localhost:8765`. Office allows
-  `localhost` over http, so SlideKick and DocKick need no certificates.
-  **Exception - MailKick on macOS Outlook**: Outlook validates every URL in
-  its add-in manifest as https, so on macOS the server opens a second
-  listener, `https://localhost:8766`. The installer asks which route you
-  want: (1) the default - a self-signed per-user loopback CA generated and
-  imported into your trusted keychains; (2) your own already-trusted
-  certificate (`--mailkick-cert/--mailkick-key`, nothing is generated or
-  imported); or (3) skip MailKick for Outlook entirely (`--skip-mailkick`)
-  - Word/PowerPoint are unaffected and keep plain http. Details + the
+- The add-ins talk to the local server over `http://localhost:8765` (Office
+  allows localhost over plain http). **On macOS a working loopback
+  certificate serves EVERY add-in** over one trusted listener,
+  `https://localhost:8766` - Outlook additionally requires https for every
+  URL in its manifest. The installer asks which route you want: (1) the
+  default - a self-signed per-user loopback CA generated and imported into
+  your trusted keychains; (2) your own already-trusted certificate
+  (`--mailkick-cert/--mailkick-key`, nothing is generated or imported); or
+  (3) skip MailKick for Outlook entirely (`--skip-mailkick`) - SlideKick and
+  DocKick then stay plain http and MailKick is not staged for Outlook.
+  A working certificate activates for **all three** add-ins, not just
+  MailKick (see the scheme table below). Details + the
   exactly-what-your-certificate-must-contain checklist:
   [docs/mailkick.md](docs/mailkick.md) > Requirements.
 - The macOS server wrapper restarts the server if it crashes.

@@ -296,12 +296,16 @@ npx -y office-addin-manifest validate "$HOME/Library/Application Support/OfficeK
 python3 tools/make_icons.py                         # rebuild icons from logo_corelan.png
 ```
 
+On a Mac with the loopback certificate active, the same simulator pages also
+answer on `https://localhost:8766` (same paths) - open them over https when
+checking Outlook-related behavior.
+
 The task pane runs unmodified in the simulator via `sim.js` (the same Deck
 interface the Office.js adapter implements), so prompt -> JSON ops ->
 validation -> approvals -> apply is fully testable in a browser.
 
 Validator note: the official validator passes fully in `--https` mode. In the
-default plain-http mode it reports "insecure URL" errors for the
+plain-http mode (no certificate) it reports "insecure URL" errors for the
 `http://localhost` pane URLs - expected: the validator has no localhost
 exception, while Office itself accepts http://localhost (the default mode's
 design).

@@ -245,7 +245,9 @@ Addins -> remove the add-in (it appears under the name Corelan MailKick).
 
 ## Simulators
 http://localhost:8765/mailkick/static/simulator.html exercises the whole
-pipeline in a browser (fake message + compose draft).
+pipeline in a browser (fake message + compose draft). With the loopback
+certificate active, the same page also answers on `https://localhost:8766`
+(macOS) - use that URL when checking Outlook-specific behavior.
 
 ## Settings
 
