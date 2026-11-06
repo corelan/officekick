@@ -1183,6 +1183,7 @@
         return;
       }
       SK.history = (doc.exchanges || []).slice(-HISTORY_MAX_EXCHANGES * 2);
+      SK.sessionApprovals = {};   // a remembered approval never travels between sessions
       SK.sessionId = doc.id;
       try { localStorage.setItem("sk-resume-session-mailkick", doc.id); } catch (eS) {}
       SK.sessionName = doc.name || "";
@@ -1635,6 +1636,7 @@
     SK.sessionId = null;
     SK.sessionName = "";
     SK.sessionManual = false;
+    SK.sessionApprovals = {};   // a new session asks again (session-scoped approvals)
     try { localStorage.removeItem("sk-res...kick"); } catch (eR) {}
     var inp0 = $("chat-input");
     if (inp0) { inp0.disabled = false; inp0.value = ""; }
@@ -1800,6 +1802,7 @@ var nw = $("sess-new");
 
   function resetHistory() {
     SK.history = [];
+    SK.sessionApprovals = {};   // approvals are session-scoped - a new session asks again
     SK.sessionId = null;
     try { localStorage.removeItem("sk-resume-session-mailkick"); } catch (eS) {}      // the next exchange saves as a NEW session
     SK.sessionName = "";
@@ -3676,14 +3679,20 @@ function applyOps(deck, ops, ctx) {
 
     applyBtn.addEventListener("click", function () {
       var chosen = [];
+      var rememberMsg = "";
       rows.forEach(function (row) {
         if (row.removed || row.done) return;   // X-ed away / already completed
         if (row.mode === "auto") chosen.push(row.op);
         else if (row.mode === "confirm" && row._cb && row._cb.checked) chosen.push(row.op);
       });
       Object.keys(remember).forEach(function (type) {
-        if (remember[type].checked && chosen.some(function (op) { return op.type === type; })) {
+        if (remember[type].checked) {
           SK.sessionApprovals[type] = "auto";
+          var rNote = document.createElement("div");
+          rNote.className = "opnote";
+          rNote.textContent = "remembered for this session: later '" + OPS_META[type].label +
+            "' actions run without asking";
+          result.appendChild(rNote);
         }
       });      // unapproved confirm rows would silently vanish - ask before skipping
       var skips = rows.filter(function (row) {
@@ -3693,7 +3702,10 @@ function applyOps(deck, ops, ctx) {
       skips.forEach(function (row) { counts[OPS_META[row.op.type].label] = (counts[OPS_META[row.op.type].label] || 0) + 1; });
       var skipList = Object.keys(counts).map(function (l) { return counts[l] + " " + l; }).join(", ");
       var skipNote = (skipList && chosen.length) ? skips.length + " action(s) skipped - not approved: " + skipList : "";
-      if (!chosen.length) { setStatus("Nothing approved - nothing applied.", ""); return; }
+      if (!chosen.length) {
+        setStatus(rememberMsg || "Nothing approved - nothing applied.", "");
+        return;
+      }
       dbg("ops.apply", { approved: chosen.map(function (op) { return op.type; }), count: chosen.length });
       applyBtn.disabled = true;
       // progressive tracking: executed actions leave the proposal list and

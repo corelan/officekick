@@ -78,6 +78,25 @@
   Q&A pair lands in Previous requests and in the session history. Rules
   added to all three system prompts (MailKick's version says a clarify reply
   replaces - not supplements - the ops/reply round).
+## 0.9.262
+
+### Fixed
+- the gate's "don't ask again for <type> this session" was effectively
+  "until the pane reloads": the remembered approvals were only ever SET,
+  never cleared. They are now session-scoped for real - a new chat session
+  (chat-tab New + History-tab New session) and any resumeSession clear
+  SK.sessionApprovals, so the new session asks again. Verified in the sim:
+  same-session ask 2 renders the type as auto (no approval needed); after a
+  new session the gate asks again as expected.
+- the remember checkbox only committed when the batch's apply ALSO approved
+  at least one action of that type - ticking it alone did nothing, silently.
+  It now always commits, and the gate result shows "remembered for this
+  session: later '<type>' actions run without asking".
+- behavior note (already true, now verified): a remembered type in a MIXED
+  batch renders as an auto row (no approval tick needed); when the pane's
+  auto-apply toggle is on and every action is remembered/auto, the proposal
+  box is skipped entirely.
+
 ## 0.9.261
 
 ### Fixed
