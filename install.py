@@ -751,8 +751,10 @@ def select_addins(interactive):
                              + _paint(" - Outlook is locked", "bold"))
             for rln in feas_why:
                 out_lines.append("    - " + rln)
-        out_lines.append(_paint("  Enabling Outlook sets up a local https certificate"
-                                " (self-signed leaf by default; CA or your own as options).", "dim"))
+        out_lines.append(_paint("  Enabling Outlook sets up a local https certificate."
+                                " The installer asks WHICH mode before its certificates step -"
+                                " self-signed leaf is the default (no CA created); change it any"
+                                " time under Transport options (main menu 4).", "dim"))
         return out_lines
 
     msg = []   # picker feedback lines (repainted with the screen, never duplicated)
@@ -799,16 +801,19 @@ def select_addins(interactive):
                 note("outlook enable refused: %s" % "; ".join(feas_why))
                 continue
             if folder == "mailkick" and not state[folder] and is_mac():
-                go = ask_yes("Outlook needs a local https certificate (self-signed"
-                             " leaf by default - no CA; CA mode or your own pair are"
-                             " options; trust goes into your keychain) - continue", False)
+                go = ask_yes("Outlook needs the local https certificate setup - the"
+                             " installer asks WHICH mode before its certificates step:"
+                             " 1 self-signed leaf (DEFAULT - no CA created, the leaf itself"
+                             " gets trusted), 2 loopback CA (imported + trusted), 3"
+                             " bring-your-own - continue", False)
                 note("outlook CA warning answer: %s" % ("yes" if go else "no"))
                 if not go:
                     state[folder] = False
                     msg = ["   - Outlook certificate setup declined - MailKick stays off."]
                     continue
-                msg = ["   - Outlook enabled - the certificate setup (self-signed leaf"
-                       " / CA / your own) runs during the certificate step."]
+                msg = ["   - Outlook enabled - the certificate question comes right"
+                       " before step 3 of 6 (certificates); self-signed leaf is the"
+                       " default answer."]
                 state[folder] = not state[folder]
                 continue
             state[folder] = not state[folder]
@@ -1900,7 +1905,8 @@ def _ask_cert_setup():
         note("no usable certificate pair on disk although mode '%s' is stored -"
              " it stays PRE-SELECTED below (Enter re-runs it)" % chosen)
     print("")
-    print("  " + _paint("Certificate setup for the local https server", "bold"))
+    print("  " + _paint("Certificate setup for the local https server", "bold")
+          + _paint("  (before step 3 of 6 - certificates)", "dim"))
     print("    1) self-signed leaf certificate, DIRECTLY trusted (no CA is created;")
     print("       the LEAF itself is imported into your keychain; your consent is")
     print("       asked again whenever it must be re-trusted)")
@@ -3260,6 +3266,94 @@ def check_pane_errors():
 
 
 # ------------------------------------------------------------------- flows #
+def _cert_mode_menu():
+    """Switch the certificate MODE (self-signed leaf / loopback CA /
+    bring-your-own) used for the next https certificate setup. A stored mode
+    only takes effect while no working pair blocks the question: with a pair
+    on disk the user may switch immediately (existing pair kept until the
+    regeneration consent)."""
+
+    def rows():
+        cur = _get_cert_mode()
+
+        def _mark(m):
+            return "  <-- current" if cur == m else ""
+        have = os.path.isfile(_leaf_paths()[1])
+        return [
+            ("1", "self-signed leaf   (no CA created - the LEAF itself is imported"
+                  " + trusted in your keychain)%s" % _mark("self_signed_leaf"), None),
+            ("2", "loopback CA        (the CA is created + trusted in your keychain;"
+                  " silent renewals afterwards)%s" % _mark("ca"), None),
+            ("3", "bring-your-own     (your own already-trusted PEM pair; the"
+                  " hostname for the manifests is configurable)%s" % _mark("byo"), None),
+            (None, "@SEP", None),
+            ("0", "back (mode stays: %s%s)" % (cur,
+                ", certificate pair on disk" if have else ", no certificates on disk"),
+             "magenta"),
+        ]
+
+    while True:
+        clear_screen()
+        r = rows()
+        sel = menu_pick(r, 0, "(1-3 = set the certificate mode, 0 = back)")
+        if sel is None:
+            # typed fallback
+            print("")
+            for (act, label, style) in r:
+                if label == "@" "SEP":
+                    print("")
+                    continue
+                print("  %s) %s" % (act, label) if act else "    %s" % label)
+            print("")
+            try:
+                if not sys.stdin.isatty():
+                    print("  (non-interactive: PUT /api/settings {certMode: ...} or re-run install.py)")
+                    return
+                choice = input("  > choose [1/2/3, 0; default 0]: ").strip().lower()
+            except EOFError:
+                return
+            if choice in ("", "0", "q", "back"):
+                return
+            sel2 = next((i for i, (a, l, s) in enumerate(r) if a == choice), None)
+            if sel2 is None:
+                print("  please choose 1, 2, 3 or 0")
+                continue
+            sel = sel2
+        act = r[sel][0]
+        if not act or act == "0":
+            return
+        new_mode = {"1": "self_signed_leaf", "2": "ca", "3": "byo"}[act]
+        cur = _get_cert_mode()
+        if new_mode == cur:
+            note("certificate mode already %s" % cur)
+            continue
+        _set_cert_mode(new_mode)
+        ok("certificate mode stored: %s" % new_mode)
+        crt0 = _leaf_paths()[1]
+        have_pair = os.path.isfile(crt0) and _pair_matches(
+            crt0, os.path.join(tls_cert_dir(), "server.key"))
+        if have_pair:
+            go = ask_yes("Switch the certificates to '%s' NOW? (the existing pair stays"
+                         " in use otherwise; re-running the installer converts it later)" % new_mode,
+                         False)
+            if go:
+                shutil.rmtree(tls_cert_dir(), ignore_errors=True)
+                got = _ask_cert_setup()
+                if got:
+                    try:
+                        _reapply_transport(_current_transport(), "cert-mode-switch")
+                        ok("server restarted on the new certificate setup")
+                    except Exception as exc:
+                        warn("restart after the certificate switch failed: %s"
+                             " (re-run install.py)" % exc)
+            else:
+                note("stored - the existing pair stays in use; re-run install.py (or this"
+                     " menu again) to rebuild the certificates")
+        else:
+            note("no certificates on disk yet - the mode applies when the installer"
+                 " builds them (run install.py)")
+
+
 def transport_menu():
     cur = _current_transport()
     hp, sp = _current_ports()
@@ -3273,6 +3367,7 @@ def transport_menu():
             (None, "@SEP", None),
             ("4", "set the http port   (current: %d)" % hp, None),
             ("5", "set the https port  (current: %d)" % sp, None),
+            ("6", "certificate mode   (current: %s - leaf no-CA / CA / bring-your-own)" % _get_cert_mode(), None),
             (None, "@SEP", None),
             ("0", "back (mode stays: %s, ports http %d / https %d)" % (cur, hp, sp), "magenta"),
         ]
@@ -3301,14 +3396,14 @@ def transport_menu():
                 if not sys.stdin.isatty():
                     print("  (non-interactive: pass --transport auto|http|https)")
                     return
-                choice = input("  > choose [1/2/3/4/5, 0; default 0]: ").strip().lower()
+                choice = input("  > choose [1/2/3/4/5/6, 0; default 0]: ").strip().lower()
             except EOFError:
                 return
             if choice in ("", "0", "q", "back"):
                 return
             sel = {"1": 0, "2": 1, "3": 2, "4": 3, "5": 4}.get(choice)
             if sel is None:
-                print("  please choose 1, 2, 3, 4, 5 or 0")
+                print("  please choose 1, 2, 3, 4, 5, 6 or 0")
                 continue
         act = r[sel][0]
         if act == "0" or not act:
@@ -3339,6 +3434,9 @@ def transport_menu():
                     _reapply_transport(nmode, act)
                     break
                 continue
+            continue
+        if act == "6":
+            _cert_mode_menu()
             continue
         mode = {"1": "auto", "2": "http", "3": "https"}[act]
         _reapply_transport(mode, act)
@@ -3585,8 +3683,8 @@ def main():
         ("2", "Update              (git pull + refresh; keeps your add-ins)", None),
         ("3", "Server              (start / restart / stop / status)", None),
         (None, "@SEP", None),
-        ("4", "Transport options   (mode: %s | ports: http %d / https %d)" % (
-            _current_transport(), _current_ports()[0], _current_ports()[1]), None),
+        ("4", "Transport options   (transport: %s | ports: http %d / https %d | certs: %s)" % (
+            _current_transport(), _current_ports()[0], _current_ports()[1], _get_cert_mode()), None),
         (None, "@SEP", None),
         ("5", "Uninstall          (removes the add-ins + this server)",
          "red"),
