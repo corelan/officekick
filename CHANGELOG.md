@@ -78,6 +78,38 @@
   Q&A pair lands in Previous requests and in the session history. Rules
   added to all three system prompts (MailKick's version says a clarify reply
   replaces - not supplements - the ops/reply round).
+## 0.9.246
+
+### Fixed
+- MailKick date anchoring: asking for a reminder/meeting "today" could land on
+  the email's own date or a remembered one (the November 2 instead of November
+  6 incident). Three layers:
+  1. the model-facing email context carries an explicit TODAY line (weekday +
+     date), with the rule that relative words anchor to it, never to the
+     email's date;
+  2. the prompt rule for new_meeting says the same and forbids past dates;
+  3. a deterministic WRONG DATE guard in validateOps re-asks with a
+     self-diagnosing reason (dates in the past are always rejected; an
+     explicit today/tonight ask must land on today), dbg date.mismatch.
+- the all-invalid gate collapse used to hard-code "the paragraphs/targets
+  they reference do not match this email" - it now names the ACTUAL reject
+  reasons (up to 3, then a count).
+- verified E2E (mail simulator + canned mocks): wrong-date reply is rejected
+  with the exact date mismatch spelled out; the corrected reply renders the
+  meeting gate row dated today.
+
+## 0.9.245
+
+### Added
+- Transport options menu (main menu 4) row 6 = certificate mode submenu
+  (self-signed leaf / loopback CA / bring-your-own, current mode marked).
+  Switching stores the mode; with a working pair it offers an immediate
+  conversion (pair wiped, three-way question preselected, consent, server
+  restart). Main-menu row 4 shows the current certificate mode.
+- the Outlook-enable ask names where the certificate-mode choice happens
+  (before step 3 of 6 - certificates) and its default (self-signed leaf);
+  the ask itself is a proper block (header + option list + one-line question).
+
 ## 0.9.244
 
 ### Fixed

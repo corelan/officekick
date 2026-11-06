@@ -935,7 +935,7 @@
     "- Named templates: when the request mentions a template, its content is listed in the EMAIL CONTEXT (NAMED TEMPLATE '<name>'). Use it as the structural/wording base for draft_reply/compose_body/new_message, then adapt per the user's instructions and the email context.",
     "- Choose ops that match the mode stated in the EMAIL CONTEXT; wrong-mode ops are rejected.",
     "- ACTION RULE (critical): any request to reply, draft, answer, respond, forward, fwd, send, write, notify, thank, confirm, decline, request, categorize or otherwise ACT on the mail is an ACTION request: answer with format B ops (draft_reply / forward / new_message / set_categories / compose_body / save_draft), NEVER with format A prose. Never write the reply/forward text into the chat, never say 'here is what I would say', never ask whether to do it - propose the op. Format A is ONLY for questions, summaries, translations and explanations about the content.",
-    "- 'reply'/'answer'/'respond' on the open mail means draft_reply (add \"all\":true when the user says reply to all/everyone). 'forward'/'fwd' means the forward op. Meeting/calendar/invite requests mean new_meeting.",
+    "- 'reply'/'answer'/'respond' on the open mail means draft_reply (add \"all\":true when the user says reply to all/everyone). 'forward'/'fwd' means the forward op. Meeting/calendar/invite requests mean new_meeting; resolve 'today'/'tomorrow'/'next week' from the TODAY line in the context (NEVER from the email's own date) and never schedule a meeting or reminder in the past.",
     "- The context may list ATTACHMENTS (names + sizes) of the open mail: reference them by name in drafts/explanations, but you CANNOT read their contents.",
     "- Reply/summary/translate/brainstorm requests that need no change: use format A.",
     "- Keep reply drafts short and human; greeting + body + signoff unless told otherwise.",
@@ -2239,6 +2239,11 @@ var nw = $("sess-new");
     return SK.sessionApprovals[opType] || (SK.cfg && SK.cfg.approvals && SK.cfg.approvals[opType]) || "confirm";
   }
 
+  function localDateStr(d) {
+    var z = function (n) { return (n < 10 ? "0" : "") + n; };
+    return d.getFullYear() + "-" + z(d.getMonth() + 1) + "-" + z(d.getDate());
+  }
+
   function validateOps(rawOps, ctx) {
     var ops = [], invalid = [];
     (rawOps || []).forEach(function (op, index) {
@@ -2306,6 +2311,27 @@ var nw = $("sess-new");
         var startM = new Date(String(op.start || "")), endM = new Date(String(op.end || ""));
         if (isNaN(startM.getTime()) || isNaN(endM.getTime())) {
           bad("start/end must be ISO date-times like 2026-11-02T14:00"); return;
+        }
+        // DATE GUARD (0.9.246): anchor "today" to the REAL current date, not
+        // to the email's date or whatever the model remembers. A past date is
+        // always wrong for a reminder/meeting; an explicit today/tonight ask
+        // must land on today. Self-diagnosing reasons feed the repair rounds.
+        var todayStr = localDateStr(new Date());
+        var startDay = String(op.start).slice(0, 10);
+        if (startDay < todayStr) {
+          dbg("date.mismatch", { op: t, found: startDay, today: todayStr, past: true });
+          bad("WRONG DATE: the meeting is scheduled for " + startDay +
+              ", which is in the PAST. Today is " + todayStr +
+              " - re-emit the op with a correct future date (resolve 'today' from" +
+              " the TODAY line in the context).");
+          return;
+        }
+        if (/\b(today|tonight|this evening)\b/i.test(SK.lastInstruction || "") && startDay !== todayStr) {
+          dbg("date.mismatch", { op: t, found: startDay, today: todayStr, askedToday: true });
+          bad("WRONG DATE: the user asked for TODAY (" + todayStr +
+              "), but the op is dated " + startDay +
+              " - re-emit the op dated " + todayStr + ".");
+          return;
         }
         out.start = String(op.start); out.end = String(op.end);
         if (typeof op.location === "string" && op.location.trim()) out.location = op.location.trim().slice(0, 200);
@@ -2455,6 +2481,16 @@ function applyOps(deck, ops, ctx) {
   function formatContext(ctx) {
     var lines = [];
     lines.push("EMAIL CONTEXT (host: " + ctx.host + ", mode: " + ctx.mode + "):");
+    {
+      var dNow = new Date();
+      var zN = function (n) { return (n < 10 ? "0" : "") + n; };
+      var wdNow = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday",
+                   "Friday", "Saturday"][dNow.getDay()];
+      lines.push("TODAY: " + wdNow + " " + dNow.getFullYear() + "-" +
+                 zN(dNow.getMonth() + 1) + "-" + zN(dNow.getDate()) +
+                 " (relative words in the user's request - today/tomorrow/next week -" +
+                 " refer to THIS date, never to the email's own date)");
+    }
     if (ctx.sender) lines.push("FROM: " + ctx.sender);
     if (ctx.to) lines.push("TO: " + ctx.to);
     if (ctx.subject) lines.push("SUBJECT: " + ctx.subject);
@@ -3430,9 +3466,18 @@ function applyOps(deck, ops, ctx) {
       }
       var allbad = document.createElement("div");
       allbad.className = "status error";
+      // self-diagnosing: name the ACTUAL reject reasons (e.g. WRONG DATE),
+      // never a one-size-fits-all guess
+      var reasons = validation.invalid.slice(0, 3).map(function (iv) {
+        return String(iv.reason || "invalid action");
+      });
+      var rs = reasons.length ? " - " + reasons.join("; ") : "";
+      if (validation.invalid.length > 3) {
+        rs += " (+" + (validation.invalid.length - 3) + " more; details in the activity log)";
+      }
       allbad.textContent = "None of the " + validation.invalid.length + " action(s) survived validation" +
         (SK.lastRecovered ? " (they came from a cut-off reply)" : "") +
-        " - the paragraphs/targets they reference do not match this email. No changes were applied.";
+        ". No changes were applied." + rs;
       box.appendChild(allbad);
       var reRow = document.createElement("div");
       reRow.className = "row";

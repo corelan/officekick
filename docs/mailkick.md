@@ -272,3 +272,15 @@ Moving/archiving/deleting messages and folder enumeration/selection are NOT
 possible for regular task-pane add-ins (the only move verb lives in the
 spam-report extension). Sending always happens in your Outlook client -
 MailKick never sends.
+
+## Calendar dates and "today"
+
+MailKick never sends on its own - a `new_meeting` op opens the meeting form
+for your review. When your ask says "today" / "tonight" / "tomorrow", the
+pane anchors those words to the real current date in two ways: the email
+context carries an explicit TODAY line the model must use, and a validator
+rejects (and re-asks about) any meeting scheduled in the past or on a day
+other than today when you asked for today. If a wrong date still reaches the
+gate, the proposal line names the mismatch (`WRONG DATE: ... scheduled for
+<date>, which is in the PAST. Today is <date>`) and the gate offers "Ask
+again (same request)".
