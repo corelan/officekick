@@ -4,3 +4,5 @@ __pycache__/
 install.log
 test*.py
 tests/
+.DS_Store
+**/.DS_Store
