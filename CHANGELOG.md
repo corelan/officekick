@@ -78,6 +78,26 @@
   Q&A pair lands in Previous requests and in the session history. Rules
   added to all three system prompts (MailKick's version says a clarify reply
   replaces - not supplements - the ops/reply round).
+## 0.9.255
+
+### Added
+- Windows leaf trust: Office's WebView2 does not always honour a leaf-only
+  trust from the Trusted People store. After the (silent, by design)
+  TrustedPeople import the installer now offers an explicit escape hatch:
+  also register the leaf in the CurrentUser ROOT store (the leaf is CA:FALSE,
+  so the Root entry trusts exactly that one certificate; Windows shows its
+  own confirmation dialog - the prompt the user looked for). The uninstall
+  removes the Root entry again (tracked by thumbprint in the cert metadata).
+- the Trusted People import is verified by thumbprint before the flow
+  continues.
+
+### Changed
+- status line alignment is uniform: one helper (_tagline) gives ok/warn/step
+  tags (and the manual dry-run lines) the same message column on both
+  platforms - the uninstall output no longer mixes 1/2/3-space paddings.
+- uninstall grouping: blank lines around the certificate question block and
+  between the two removal questions.
+
 ## 0.9.252b
 
 ### Changed

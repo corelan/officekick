@@ -141,8 +141,18 @@ def out(msg):
     _log(msg, ts=True)
 
 
+def _tagline(tag, msg):
+    """One ALIGNED status line - the message column is identical for every
+    tag on every platform (the old tags had 1/2/3 different space paddings)."""
+    if is_windows():
+        return "  %-7s %s" % ("[" + tag + "]", msg)
+    m, color = {"ok": ("v", "32"), "warn": ("!", "33"),
+                "step": ("~", "36"), "note": ("i", "36")}.get(tag, ("~", "36"))
+    return "   \x1b[%sm%s\x1b[0m  %s" % (color, m, msg)
+
+
 def ok(msg):
-    _con = ("  [ok]   " if is_windows() else "   \x1b[32mv\x1b[0m ") + msg
+    _con = _tagline("ok", msg)
     if not QUIET:
         print(_con)
     _log(msg, ts=True)
@@ -155,12 +165,12 @@ def warn(msg):
     if PHASE_DIRTY:
         print("")
         PHASE_DIRTY = False
-    print(("  [warn] " if is_windows() else "   \x1b[33m!\x1b[0m  ") + msg)
+    print(_tagline("warn", msg))
     _log(msg, ts=True)
 
 
 def step(msg):
-    _con = ("  [..]   " if is_windows() else "   \x1b[36m~\x1b[0m  ") + msg
+    _con = _tagline("step", msg)
     if not QUIET:
         print(_con)
     _log(msg, ts=True)
@@ -1118,7 +1128,7 @@ def start_only():
 
 def start_server():
     if DRY_RUN:
-        out("  [..]  [dry-run] would start the server on port %d" % PORT)
+        step("[dry-run] would start the server on port %d" % PORT)
         return True
     if not os.path.isdir(install_dir()):
         # self-heal: the deployed folder is missing (uninstalled or wiped) -
@@ -1907,6 +1917,12 @@ def _remove_leaf_trust(crt):
     if sha1:
         rc, o = run_quiet(["certutil", "-user", "-delstore", "TrustedPeople", sha1])
         _log("leaf removal from TrustedPeople (sha1=%s): rc %d %s" % (sha1, rc, o or ""))
+        meta = _leaf_meta_load()
+        if meta.get("rootThumbprint"):
+            rcr, orr = run_quiet(["certutil", "-user", "-delstore", "Root",
+                                  meta["rootThumbprint"]])
+            _log("leaf removal from Root (thumbprint=%s): rc %d %s"
+                 % (meta["rootThumbprint"], rcr, orr or ""))
         return rc == 0
     return False
 
@@ -2318,7 +2334,7 @@ def record_repo_info():
     gitdir = os.path.join(REPO_DIR, ".git")
     is_repo = os.path.isdir(gitdir) or os.path.isfile(gitdir)   # worktree file counts
     if is_repo and DRY_RUN:
-        out("  [..]  [dry-run] would record repoPath=%s" % REPO_DIR)
+        step("[dry-run] would record repoPath=%s" % REPO_DIR)
         return
     data["repoPath"] = REPO_DIR if is_repo else None
     url = None
@@ -2590,12 +2606,12 @@ def sideload_mac(folder, mfname, present):
     if target is None:
         target = cand[0]
     if DRY_RUN:
-        out("  [..]  [dry-run] would sideload %s -> %s" % (mfname, target))
+        step("[dry-run] would sideload %s -> %s" % (mfname, target))
         return
     try:
         os.makedirs(target, exist_ok=True)
         shutil.copyfile(os.path.join(manifest_dir(), mfname), os.path.join(target, mfname))
-        out("  [ok] %s sideloaded%s: %s" % (
+        out("  [ok]       %s sideloaded%s: %s" % (
             folder, "" if present is not False
             else " (Office app not detected - installed anyway)", target))
     except OSError as e:
@@ -2622,7 +2638,7 @@ def purge_stale_wef_manifests():
     # "This add-in is no longer available" on every open until the add-in is
     # refreshed. Refuse loudly instead.
     if DRY_RUN:
-        out("  [..]  [dry-run] would purge stale WEF manifests (real files untouched)")
+        step("[dry-run] would purge stale WEF manifests (real files untouched)")
         return 0
     ppt, word, outlook = office_apps_running()
     running = [n for n, gone in (("PowerPoint", ppt), ("Word", word), ("Outlook", outlook)) if gone]
@@ -2681,7 +2697,7 @@ def clear_office_caches():
     if is_windows():
         return
     if DRY_RUN:
-        out("  [..]  [dry-run] would clear the Office add-in caches (Webkit/WEF stores)")
+        step("[dry-run] would clear the Office add-in caches (Webkit/WEF stores)")
         return
     base_dir = hp("Library", "Containers")
     if not os.path.isdir(base_dir):
@@ -2725,7 +2741,7 @@ def build_app_bundle():
     out("  Local server app: " + a)
     exe_dir = os.path.join(a, "Contents", "MacOS")
     if DRY_RUN:
-        out("  [..]  [dry-run] would (re)write the bundle (http shim, no certificate flags),")
+        out("  [..]      [dry-run] would (re)write the bundle (http shim, no certificate flags),")
         out("        compile the SMAppService registrar and ad-hoc sign it")
         return None
     os.makedirs(exe_dir, exist_ok=True)
@@ -2841,7 +2857,7 @@ def autostart_mac():
     out("")
     step("registering autostart (macOS login item)")
     if DRY_RUN:
-        out("  [..]  [dry-run] would register the OfficeKickServer login item")
+        step("[dry-run] would register the OfficeKickServer login item")
         return True
     return mac_login_item_register()
 
@@ -2869,7 +2885,7 @@ def autostart_windows():
     out("")
     step("registering autostart (per-user scheduled task at logon)")
     if DRY_RUN:
-        out("  [..]  [dry-run] would create task '%s': %s" % (TASK_NAME, windows_task_cmd()))
+        out("  [..]      [dry-run] would create task '%s': %s" % (TASK_NAME, windows_task_cmd()))
         return True
     tr = windows_task_cmd()
     rc, o = run_quiet(["schtasks", "/create", "/f", "/sc", "onlogon",
@@ -2993,22 +3009,23 @@ def do_uninstall(purge, rm_certs=None):
         if DRY_RUN or (not sys.stdin.isatty()):
             rm_certs = False
             if anything_certs and DRY_RUN:
-                out("  [..]  [dry-run] would ask to remove %s %s - default: KEEP"
+                out("  [..]      [dry-run] would ask to remove %s %s - default: KEEP"
                     % (_describe_certs(), _describe_trust()))
         elif anything_certs:
             print("")
             out("  certificates in place: %s" % os.path.join(cdir, ""))
             out("    %s" % _paint(_describe_certs(), "cyan"))
+            print("")
             rm_certs = ask_yes("Also remove %s %s" % (_describe_certs(), _describe_trust()), False)
             _log("uninstall cert-removal answer: %s" % ("yes" if rm_certs else "no (kept)"), ts=True)
+            print("")
         else:
             rm_certs = False
     if purge is None:
         if DRY_RUN or (not sys.stdin.isatty()):
             purge = False
             if DRY_RUN:
-                out("  [..]  [dry-run] would ask to wipe the config folder (%s) -"
-                    " default: KEEP" % config_dir())
+                step("[dry-run] would ask to wipe the config folder - default: KEEP")
         else:
             purge = ask_yes("Also wipe the config folder (%s - config.json, stored"
                             " API keys, profiles, sessions%s)?" % (
@@ -3022,7 +3039,7 @@ def do_uninstall(purge, rm_certs=None):
     # --- platform unregistration (always) ---
     if is_mac():
         if DRY_RUN:
-            out("  [..]  [dry-run] would unregister the login item and remove %s" % app_bundle())
+            step("[dry-run] would unregister the login item and remove the server app")
         else:
             helper = os.path.join(app_bundle(), "Contents", "MacOS",
                                   "officekick-register-login-item")
@@ -3050,7 +3067,7 @@ def do_uninstall(purge, rm_certs=None):
             purge_stale_wef_manifests()
     else:
         if DRY_RUN:
-            out("  [..]  [dry-run] would remove task '%s', the Run key and the trusted catalog" % TASK_NAME)
+            step("[dry-run] would remove the task, the Run key and the trusted catalog")
         else:
             run_quiet(["schtasks", "/delete", "/f", "/tn", TASK_NAME])
             try:
@@ -3074,7 +3091,7 @@ def do_uninstall(purge, rm_certs=None):
         clear_office_caches()
     inst = install_dir()
     if DRY_RUN:
-        out("  [..]  [dry-run] would remove " + inst)
+        step("[dry-run] would remove " + inst)
     else:
         if os.path.isdir(inst):
             shutil.rmtree(inst, ignore_errors=True)
@@ -3112,7 +3129,7 @@ def do_uninstall(purge, rm_certs=None):
             except OSError:
                 pass
         if DRY_RUN:
-            out("  [..]  [dry-run] would delete " + cdir)
+            step("[dry-run] would delete " + cdir)
         else:
             shutil.rmtree(cdir, ignore_errors=True)
             if os.path.isdir(cdir):
@@ -3120,20 +3137,20 @@ def do_uninstall(purge, rm_certs=None):
             else:
                 ok("certificate + key files deleted: " + cdir)
     elif not rm_certs and anything_certs:
-        out("  [ok] certificates + keys kept at %s (trust untouched)" % cdir)
+        out("  [ok]       certificates + keys kept at %s (trust untouched)" % cdir)
 
     # --- config (wipe or keep) ---
     if purge:
         if DRY_RUN:
-            out("  [..]  [dry-run] would wipe " + config_dir())
+            step("[dry-run] would wipe " + config_dir())
         else:
             shutil.rmtree(config_dir(), ignore_errors=True)
             ok("config wiped: " + config_dir())
     else:
-        out("  [ok] config kept at %s (config.json, keys, profiles and sessions intact)"
+        out("  [ok]       config kept at %s (config.json, keys, profiles and sessions intact)"
             % config_dir())
         if _set_cert_mode("self_signed_leaf"):
-            out("  [ok] certificate mode reset to self-signed leaf (the default)")
+            out("  [ok]       certificate mode reset to self-signed leaf (the default)")
         else:
             warn("could not reset the certificate mode to self-signed leaf"
                  " - check the config file")
