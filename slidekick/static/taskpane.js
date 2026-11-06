@@ -2334,21 +2334,78 @@
   };
 
 OfficeDeck.prototype.addImage = function (payload) {
-  return new Promise(function (resolve, reject) {
-    try {
-      var opts = { coercionType: Office.CoercionType.Image };
-      var geo = payload.geometry || {};
-      if (geo.left != null) opts.imageLeft = geo.left;
-      if (geo.top != null) opts.imageTop = geo.top;
-      if (geo.width != null) opts.imageWidth = geo.width;
-      if (geo.height != null) opts.imageHeight = geo.height;
-      Office.context.document.setSelectedDataAsync(String(payload.b64), opts, function (ar) {
-        if (ar && ar.status === Office.AsyncResultStatus.Succeeded) resolve({ ok: true });
-        else reject(new FriendlyError("image insert failed: " + ((ar && ar.error && ar.error.message) || (ar && ar.status) || "unknown")));
+  // Laddered insert (0.9.263): PowerPoint-Mac rejects some payloads with a
+  // bare host error ("An internal error has occurred") - oversized PNGs are
+  // the usual trigger (setSelectedDataAsync data limit). Attempt 1: the raw
+  // bytes (prefix stripped). Attempt 2: re-encode via canvas to JPEG 0.85
+  // (white-backed - transparency is filled, not kept) and retry with the
+  // smaller payload. The failure carries the payload size so the next
+  // diagnosis starts from evidence.
+  function kb(s) { return (s.length * 0.75 / 1024).toFixed(0); }
+  function stripPrefix(b64) {
+    var s = String(b64 || "");
+    var m = s.match(/^data:[^;]+;base64,/);
+    return m ? s.slice(m[0].length) : s;
+  }
+  function reencode(b64, q) {
+    return new Promise(function (res) {
+      try {
+        var img = new Image();
+        var url = "data:image/png;base64," + b64;
+        img.onload = function () {
+          try {
+            var c = document.createElement("canvas");
+            c.width = img.naturalWidth || img.width || 1024;
+            c.height = img.naturalHeight || img.height || 1024;
+            var g2 = c.getContext("2d");
+            g2.fillStyle = "#FFFFFF";
+            g2.fillRect(0, 0, c.width, c.height);
+            g2.drawImage(img, 0, 0, c.width, c.height);
+            var out = String(c.toDataURL("image/jpeg", q)).split(",")[1];
+            res(out);
+          } catch (eC) { res(null); }
+        };
+        img.onerror = function () { res(null); };
+        img.src = url;
+      } catch (eT) { res(null); }
+    });
+  }
+  function attempt(b64) {
+    return new Promise(function (resolve, reject) {
+      try {
+        var opts = { coercionType: Office.CoercionType.Image };
+        var geo = payload.geometry || {};
+        if (geo.left != null) opts.imageLeft = geo.left;
+        if (geo.top != null) opts.imageTop = geo.top;
+        if (geo.width != null) opts.imageWidth = geo.width;
+        if (geo.height != null) opts.imageHeight = geo.height;
+        Office.context.document.setSelectedDataAsync(b64, opts, function (ar) {
+          if (ar && ar.status === Office.AsyncResultStatus.Succeeded) resolve({ ok: true });
+          else reject(new Error((ar && ar.error && ar.error.message) || (ar && ar.status) || "unknown"));
+        });
+      } catch (e) {
+        reject(new Error(e && e.message || e));
+      }
+    });
+  }
+  var raw0 = stripPrefix(payload.b64);
+  return attempt(raw0).catch(function (e1) {
+    var msg1 = String(e1.message || e1);
+    return reencode(raw0, 0.85).then(function (small) {
+      if (!small) {
+        throw new FriendlyError("image insert failed: " + msg1 +
+          " (payload " + kb(raw0) + " KB; re-encoding not available in this host)");
+      }
+      return attempt(small).then(function (r) {
+        r.note = "inserted as JPEG " + kb(small) + " KB (the host rejected the original " +
+          kb(raw0) + " KB payload)";
+        return r;
+      }, function (e2) {
+        throw new FriendlyError("image insert failed: " + msg1 +
+          " (payload " + kb(raw0) + " KB; also as JPEG " + kb(small) + " KB: " +
+          String((e2 && e2.message) || e2) + ")");
       });
-    } catch (e) {
-      reject(new FriendlyError("image insert failed: " + (e && e.message || e)));
-    }
+    });
   });
 };
 
@@ -3929,6 +3986,7 @@ OfficeDeck.prototype.setNotes = function (i, text) {
             return deck.addImage({ b64: img.b64, slide: cur, geometry: op.geometry }).then(function (ri) {
               var note = !SK.sim && op.slide != null && ctx && op.slide - 1 !== ctx.activeSlide
                 ? " (targeting the slide you have open in PowerPoint; requested slide " + op.slide + ")" : "";
+              if (ri && ri.note) note += (note ? " " : "") + "[" + ri.note + "]";
               lines.push({ ok: true, text: "image inserted (" + imgRef.connection + ":" + imgRef.model + ")" + note });
             });
           });

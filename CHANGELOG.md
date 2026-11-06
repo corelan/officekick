@@ -78,6 +78,19 @@
   Q&A pair lands in Previous requests and in the session history. Rules
   added to all three system prompts (MailKick's version says a clarify reply
   replaces - not supplements - the ops/reply round).
+## 0.9.263
+
+### Fixed
+- SlideKick image inserts ladder like the shape/textbox paths: attempt 1 =
+  the raw base64 (data: prefixes stripped defensively); attempt 2 = the
+  same image re-encoded IN-HOST via canvas (JPEG 0.85, white-backed) and
+  re-inserted at the requested geometry. PowerPoint-Mac rejects some
+  payloads with a bare host error ("An internal error has occurred") -
+  oversized generated PNGs are the usual trigger. Success reports the
+  conversion ("image inserted ... [inserted as JPEG M KB (the host
+  rejected the original N KB payload)]"); a double failure carries both
+  payload sizes.
+
 ## 0.9.262
 
 ### Fixed
