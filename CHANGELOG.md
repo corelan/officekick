@@ -87,6 +87,23 @@
   the re-run command. A declined tree caused the "Trusted People is empty"
   / blocked-add-in confusion on Windows.
 
+## 0.9.257
+
+### Fixed
+- the Windows leaf import is now PowerShell-FIRST, verified, and the flow
+  runs the decisive check: Import-Certificate (returns the thumbprint; we
+  compare it) with a certutil fallback, store-listing verification, and a
+  REAL https test request through the WINDOWS TLS stack (SChannel, PowerShell
+  Invoke-WebRequest). 200 = Office's webview will accept the leaf; anything
+  else is shown as "the Windows TLS handler REJECTS the leaf" with the
+  Root-store option offered right there. The Root thumbprint is recorded in
+  the cert metadata and removed again by the uninstall.
+
+### Note
+- python's own https probe uses OpenSSL with its own trust store - it never
+  consulted the Windows certificate stores, which is partly why the earlier
+  flow could not confirm what Office would see.
+
 ## 0.9.255
 
 ### Added

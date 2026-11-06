@@ -1829,10 +1829,48 @@ def _generate_leaf_cert(cdir, crt, key, days, install_id):
     return True
 
 
+def _win_import_trusted_people(crt):
+    """Import + VERIFY a certificate in the CURRENT USER Trusted People
+    store. PowerShell first (Import-Certificate - reliable and it RETURNS the
+    thumbprint), certutil as the fallback. Returns (ok, detail)."""
+    _sha256, sha1 = _leaf_fingerprints(crt)
+    ps = ("$p='%s'; $c = Import-Certificate -FilePath $p "
+          "-CertStoreLocation Cert:\\CurrentUser\\TrustedPeople; "
+          "if ($null -eq $c) { exit 3 }; Write-Output $c.Thumbprint" % crt)
+    rc, o = run_quiet(["powershell", "-NoProfile", "-ExecutionPolicy",
+                       "Bypass", "-Command", ps], timeout=60)
+    if rc == 0 and (o or "").strip().upper() == (sha1 or "").upper():
+        return True, "imported by PowerShell (thumbprint verified)"
+    warn("PowerShell Import-Certificate did not confirm (rc %d, %s) - trying certutil"
+         % (rc, (o or "")[:60]))
+    rc, o = run_quiet(["certutil", "-user", "-addstore", "TrustedPeople", crt])
+    rc2, o2 = run_quiet(["certutil", "-user", "-store", "TrustedPeople"], timeout=60)
+    listing = (o2 or "").replace(" ", "").upper()
+    if rc2 == 0 and sha1 and sha1.upper() in listing:
+        return True, "imported by certutil (thumbprint verified in the store)"
+    return False, "PowerShell rc %d + certutil rc %d - the leaf is NOT listed" % (rc, rc2)
+
+
+def _win_schannel_ok(port):
+    """The decisive Windows check: a REAL https request through the WINDOWS
+    TLS stack (SChannel). 200 = the OS accepts the leaf. python's ssl probe
+    uses OpenSSL with its own trust store, which says nothing about what
+    Office's WebView2 will do."""
+    ps = ("try { $r = Invoke-WebRequest -UseBasicParsing -TimeoutSec 6 "
+          "-Uri 'https://localhost:%d/api/health'; exit [int]$r.StatusCode } "
+          "catch { exit -1 }" % port)
+    rc, o = run_quiet(["powershell", "-NoProfile", "-ExecutionPolicy",
+                       "Bypass", "-Command", ps], timeout=30)
+    if rc == 200:
+        return True, "the Windows TLS handler accepts the leaf (test request: 200)"
+    return False, "the Windows TLS handler REJECTS the leaf (test request rc %s)" % rc
+
+
 def _install_leaf_trust(crt):
     """Platform trust for ONE self-signed leaf: macOS = user keychain
     per-certificate SSL trust (no CA involved); Windows = the CURRENT USER
-    Trusted People store (never the Root store; no admin needed)."""
+    Trusted People store (a WebView2-verified import, with an EXPLICITLY
+    consented Root store fallback; no admin needed)."""
     if is_mac():
         keychain = os.path.expanduser("~/Library/Keychains/login.keychain-db")
         rc, o = run_quiet(["security", "add-trusted-cert", "-r", "trustRoot",
@@ -1843,9 +1881,14 @@ def _install_leaf_trust(crt):
         warn("could not trust the leaf certificate (%s)" % (o or "security error")[:160])
         _log("leaf trust failure detail: %s" % (o or ""))
         return False
-    rc, o = run_quiet(["certutil", "-user", "-addstore", "TrustedPeople", crt])
-    if rc == 0:
-        ok("self-signed leaf added to the CURRENT USER Trusted People store")
+    got, detail = _win_import_trusted_people(crt)
+    if got:
+        ok("self-signed leaf added to the CURRENT USER Trusted People store (%s)" % detail)
+        tls_ok, tls_detail = _win_schannel_ok(HTTPS_PORT if HTTPS_PORT else PORT + 1)
+        if tls_ok:
+            ok(tls_detail)
+        else:
+            warn("%s - try the Root-store option below" % tls_detail)
         note("Windows does not prompt for this import - it is silent by design.")
         print("")
         print("  " + _paint("Where to see it:", "bold"))
@@ -1853,10 +1896,31 @@ def _install_leaf_trust(crt):
         print("    (CN=localhost). The simplified control-panel applet can")
         print("    hide this store; certmgr.msc always shows it. Or check:")
         print("        certutil -user -store TrustedPeople")
+        # WebView2 (Office's webview) does not always honour a leaf-only
+        # trust: offer the contained workaround explicitly (the leaf is
+        # CA:FALSE - a Root entry trusts exactly this one certificate;
+        # Windows shows its own confirmation dialog for Root adds).
+        go = ask_yes("Also trust the leaf in the CurrentUser ROOT store?"
+                     " (recommended if the add-in reports a certificate error;"
+                     " Windows will show its own dialog)", False)
+        if go:
+            rcr, orr = run_quiet(["certutil", "-user", "-addstore", "Root", crt])
+            if rcr == 0:
+                ok("leaf also registered in the CurrentUser ROOT store")
+                meta = _leaf_meta_load()
+                meta["rootThumbprint"] = (sha1 if 'sha1' in dir() else
+                                          _leaf_fingerprints(crt)[1])
+                _leaf_meta_save(meta)
+            else:
+                warn("Root-store import failed (%s)" % (orr or "certutil error")[:160])
+        else:
+            note("if the pane still reports a certificate error, re-run install.py"
+                 " and answer YES to the Root-store option, or switch to the CA mode"
+                 " (Transport options > certificate mode).")
         return True
-    warn("could not add the leaf certificate to Trusted People (%s)"
-         % (o or "certutil error")[:160])
-    _log("leaf trust failure detail (certutil): %s" % (o or ""))
+    warn("could not import + verify the leaf in Trusted People (%s)"
+         % detail[:160])
+    _log("leaf trust failure detail: %s" % detail)
     return False
 
 
