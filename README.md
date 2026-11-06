@@ -55,16 +55,34 @@ details: [docs/setup-windows.md](docs/setup-windows.md).)
 
 1. Install the dependencies with the PowerShell script above (or accept the
    defaults: Python 3 + Git land on your PATH).
-2. Clone the repository (the script offers to do this into
-   `%USERPROFILE%\Tools`), or download a zip and unpack it somewhere stable.
-3. Run the installer:
+2. Make the folder and clone the repository **manually** (the script offers
+   this too, but you never have to rely on it). In a normal command prompt
+   (cmd):
 
-```powershell
-cd $env:USERPROFILE\Tools\officekick
+```bat
+mkdir "%USERPROFILE%\Tools" 2>nul
+cd /d "%USERPROFILE%\Tools"
+git clone https://github.com/corelan/officekick.git
+cd officekick
 py -3 install.py
 ```
 
+   In PowerShell the equivalent:
+
+```powershell
+mkdir "$env:USERPROFILE\Tools" -Force
+cd "$env:USERPROFILE\Tools\officekick"
+```
+
+   (A download-zip instead of the clone works the same way - just unpack it
+   into the Tools folder and `cd` into the unpacked folder.)
+3. Run the installer: `py -3 install.py` in that folder.
+
 The Windows Office route for pane registration lives in [Using it](#using-it).
+
+> **cmd vs PowerShell folder syntax**: cmd uses `%USERPROFILE%` and needs
+> `cd /d` to switch drives; PowerShell uses `$env:USERPROFILE`. The examples
+> above are labeled per shell.
 
 ### macOS
 

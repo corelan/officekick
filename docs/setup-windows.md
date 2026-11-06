@@ -149,12 +149,35 @@ The OfficeKick installer needs no PowerShell scripts at runtime - this
 setup script is the only `.ps1` in the workflow - so `Process`-scope
 Bypass for this one run is the smallest, cleanest choice.
 
-## After the script
+## After the script - the folder and the clone, manually
 
-```powershell
-cd $env:USERPROFILE\Tools\officekick
+The script's clone step is a convenience; you never have to rely on it. The
+folder path uses **different syntax per prompt kind**:
+
+- In a **command prompt (cmd)** - `%USERPROFILE%` and `cd /d`:
+
+```bat
+mkdir "%USERPROFILE%\Tools" 2>nul
+cd /d "%USERPROFILE%\Tools"
+git clone https://github.com/corelan/officekick.git
+cd officekick
 py -3 install.py
 ```
+
+- In **PowerShell** - `$env:USERPROFILE`:
+
+```powershell
+cd "$env:USERPROFILE\Tools\officekick"      # if the script cloned it
+# or manually:
+mkdir "$env:USERPROFILE\Tools" -Force
+cd "$env:USERPROFILE\Tools"
+git clone https://github.com/corelan/officekick.git
+cd officekick
+py -3 install.py
+```
+
+(`cd $env:USERPROFILE\...` in a CMD window does nothing useful - cmd does
+not expand `$env:` variables. That is why both forms are spelled out.)
 
 The installer opens its menu (1 Install / repair -> the add-in picker ->
 the certificate question; see [installer.md](installer.md)). With https
