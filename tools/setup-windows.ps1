@@ -85,8 +85,11 @@ function Confirm([string]$question) {
 # ----------------------------------------------------------------------
 # Python 3 - via the official PYTHON INSTALL MANAGER from python.org
 # (never winget for Python). The manager MSIX installs per user; the
-# latest Python runtime comes from `py install latest` (bundled runtimes
-# already satisfy it).
+# latest Python runtime comes from `py install default` (the manager's
+# tag for the latest RECOMMENDED release; bundled runtimes may already
+# satisfy it). FIELD-VERIFIED: `py install latest` is not a tag in current
+# manager builds - it errors with 'Specify at least one tag to install,
+# or default'.
 # ----------------------------------------------------------------------
 if (-not $SkipPython) {
     $have = Get-PythonVersion
@@ -96,9 +99,9 @@ if (-not $SkipPython) {
         $installed = $false
         if (Have-Command "py") {
             Step "installing the latest Python via the Python install manager..."
-            py install latest
+            py install default
             if ($LASTEXITCODE -eq 0) { $installed = $true }
-            else { Warn "the existing py launcher could not install runtimes (it may be the classic launcher) - installing the manager from python.org" }
+            else { Warn "the existing py command could not install runtimes (it may be the classic launcher) - installing the manager from python.org" }
         }
         if (-not $installed) {
             Step "installing the Python install manager (python.org official MSIX, per user)..."
@@ -131,13 +134,19 @@ if (-not $SkipPython) {
             }
             Refresh-SessionPath
             Step "installing the latest Python via the install manager..."
-            py install latest
-            if ($LASTEXITCODE -ne 0) { Warn "py install latest failed - the manager may still be initializing; continuing to verification" }
+            py install default
+            if ($LASTEXITCODE -ne 0) {
+                Step "trying the explicit major-version tag..."
+                py install 3
+                if ($LASTEXITCODE -ne 0) {
+                    Fail "py install default failed - list what the manager offers with: py list --online   (then: py install <tag>), and re-run this script"
+                }
+            }
         }
         Refresh-SessionPath
         $have = Get-PythonVersion
         if ($have) { Ok "Python installed: $have" }
-        else { Fail "Python is not available yet - open a NEW terminal (PATH refresh) and re-run, or check with: py -V" }
+        else { Fail "Python is not available yet - open a NEW terminal (PATH refresh) and re-run this script" }
     }
 } else {
     Info "skipping Python (-SkipPython)"

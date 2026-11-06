@@ -16,7 +16,7 @@ package managers' install locations, the PATH, and the tools folder.
   repository cloned (`git clone ...` into `%USERPROFILE%\Tools`) - which is
   the recommended durable setup (updates become a `git pull`).
 - Both are installed by the one script below: it fetches the **Python
-  install manager** from python.org and runs `py install latest` (winget is
+  install manager** from python.org and runs `py install default` - the manager's tag for the latest RECOMMENDED release (winget is
   deliberately not used for Python), and installs Git for Windows (winget,
   with a github release fallback).
 
@@ -53,7 +53,7 @@ What the script does, in detail:
   `Add-AppxPackage -AppInstallerFile
   https://www.python.org/ftp/python/pymanager/pymanager.appinstaller`
   (per user, no admin; a direct python.org FTP-index MSIX download is the
-  fallback), then `py install latest` brings the newest Python runtime.
+  fallback), then `py install default` brings the newest Python runtime (the manager errors on `py install latest` - 'latest' is not a tag; use `default`).
   Skipped when a Python 3.x is already installed (`py -3` / `python`).
 - **Git for Windows** - via winget (`Git.Git`; winget is used for Git only,
   not Python), or the latest git-for-windows release asset from GitHub.
