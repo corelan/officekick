@@ -548,12 +548,15 @@ def select_addins(interactive):
     _prereq_block(feas, feas_why, feas_how)
     arrow_done = False
     if _uitty():
+        order = [f for (f, _l, _w) in rows]   # picker index -> folder
+
         def _rowdata():
             r = []
-            for (folder, label, _was) in rows:
-                # informational hints (https loopback, lock) live in the
-                # status block below the options - not on the rows
-                r.append((folder, state[folder], label, "", None))
+            # rows carry the digit keys the hints advertise (1/2/3 toggles,
+            # 0 back) - informational hints (https loopback, lock) live in
+            # the status block below the options, not on the rows
+            for (n, (folder, label, _was)) in zip(("1", "2", "3"), rows):
+                r.append((n, state[folder], label, "", None))
             r.append(("0", None, "back (nothing is installed yet)", "", "magenta"))
             return r
         while True:
@@ -571,7 +574,7 @@ def select_addins(interactive):
             if kind == "done":
                 arrow_done = True
                 break
-            folder = rows[val][0]
+            folder = order[val]
             if folder == "mailkick" and not state[folder] and not feas:
                 warn("Outlook cannot be enabled on this machine:")
                 for rr in feas_why:
