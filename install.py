@@ -1472,9 +1472,31 @@ def _pair_matches(crt, key):
     """True when the private key belongs to the certificate (modulus match)."""
     rc1, m1 = run_quiet(["openssl", "x509", "-in", crt, "-noout", "-modulus"])
     rc2, m2 = run_quiet(["openssl", "rsa", "-in", key, "-noout", "-modulus"])
-    if rc1 != 0 or rc2 != 0:
+    if rc1 == 0 and rc2 == 0:
+        return m1.strip() == m2.strip().replace("+", "").replace("*", "")
+    return _pair_matches_crypto(crt, key)
+
+
+def _pair_matches_crypto(crt, key):
+    """cryptography fallback for the pair check (field report 0.9.282: a
+    Windows box without an openssl binary validated the leaf's expiry/SAN
+    through cryptography but _pair_matches stayed openssl-only -> rc!=0 ->
+    'the private key does not match' on EVERY run -> the leaf regenerated +
+    re-consented + re-trusted on every install.py --update). DER-compare the
+    certificate's public key with the private key's public half - locale-,
+    algorithm- and openssl-independent."""
+    try:
+        from cryptography import x509
+        from cryptography.hazmat.primitives import serialization
+        cert = x509.load_pem_x509_certificate(open(crt, "rb").read())
+        pk = serialization.load_pem_private_key(open(key, "rb").read(),
+                                                password=None)
+        fmt = serialization.Encoding.DER
+        enc = serialization.PublicFormat.SubjectPublicKeyInfo
+        return (cert.public_key().public_bytes(fmt, enc)
+                == pk.public_key().public_bytes(fmt, enc))
+    except Exception:
         return False
-    return m1.strip() == m2.strip().replace("+", "").replace("*", "")
 
 
 def _ca_healthy(ca_crt):

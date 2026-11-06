@@ -42,6 +42,21 @@
   exact layout Office honors, and docs gain the manual Trust Center +
   reg-add unblock for machines that installed older builds.
 
+## 0.9.282
+
+### Fixed
+- the leaf certificate regenerated (and re-consented + re-trusted) on EVERY
+  install.py --update on a Windows box without an openssl binary.
+  validate_existing_tls already had a cryptography fallback for the
+  expiry/SAN checks, but the pair check (_pair_matches) was openssl-only:
+  with openssl absent it returned False unconditionally, so ensure_leaf_certs
+  saw "the private key does not match the certificate" every single run and
+  walked the whole consent flow again (field: the fresh Windows 11 box -
+  install at 17:47, update minutes later, certificates phase again). The
+  check now falls back to DER-comparing the certificate's public key with
+  the private key's public half via cryptography. Battery: openssl path,
+  forced no-openssl fallback (match/mismatch), junk inputs.
+
 ## 0.9.281
 
 ### Fixed
