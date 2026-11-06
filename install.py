@@ -1936,9 +1936,11 @@ def _byo_setup():
         good, problems, facts = _validate_byo(crt_path, key_path, host)
         if good:
             cdir, crt, key, _m = _leaf_paths()
-            if not os.path.samefile(crt_path, crt):
+            # copy unless the source IS the target (a missing target copies);
+            # samefile needs both files present
+            if not (os.path.exists(crt) and os.path.samefile(crt_path, crt)):
                 shutil.copyfile(crt_path, crt)
-            if not os.path.samefile(key_path, key):
+            if not (os.path.exists(key) and os.path.samefile(key_path, key)):
                 shutil.copyfile(key_path, key)
             _protect_secret(key)
             global CERT_FACTS
