@@ -1884,27 +1884,33 @@ def _ask_cert_setup():
         note("certificate setup skipped - the existing %s pair validates"
              " (mode %s stays)" % (host, chosen or "ca"))
         return None
-    if chosen == "self_signed_leaf":
-        ok("certificate mode: self-signed leaf (already selected)")
-        return ensure_leaf_certs()
-    if chosen == "ca":
-        ok("certificate mode: local CA + CA-signed certificate (already selected)")
-        return ensure_tls_certs()
-    if chosen == "byo":
-        return _byo_setup()
     win = is_windows()
-    print("")
-    print("  " + _paint("Certificate setup for the local https server", "bold"))
-    print("    1) self-signed leaf certificate, DIRECTLY trusted (no CA involved;")
-    print("       your consent is asked again whenever it must be re-trusted)")
-    if not win:
-        print("    2) local CA + CA-signed certificate (one consent; silent renewals)")
     byo_no = 3 if not win else 2
     ca_no = 2 if not win else None
+    default_no = 1
+    if chosen == "ca" and ca_no:
+        default_no = ca_no
+    elif chosen == "byo":
+        default_no = byo_no
+    if chosen:
+        # a stored mode only auto-runs while a usable pair exists (updates);
+        # with the certificates gone (e.g. the uninstall removed them) the
+        # question comes back, PRE-SELECTING the stored mode
+        print("")
+        note("no usable certificate pair on disk although mode '%s' is stored -"
+             " it stays PRE-SELECTED below (Enter re-runs it)" % chosen)
+    print("")
+    print("  " + _paint("Certificate setup for the local https server", "bold"))
+    print("    1) self-signed leaf certificate, DIRECTLY trusted (no CA is created;")
+    print("       the LEAF itself is imported into your keychain; your consent is")
+    print("       asked again whenever it must be re-trusted)")
+    if not win:
+        print("    2) local CA + CA-signed certificate (the CA is imported + trusted")
+        print("       in your keychain; renewals are silent after that)")
     print("    %d) bring your OWN already-trusted certificate + key (PEM files)" % byo_no)
     while True:
-        ans = input("  %s" % _paint("? choice [default 1 (self-signed leaf)]: ", "cyan")).strip() \
-            or "1"
+        ans = input("  %s" % _paint("? choice [default %s]: " % default_no, "cyan")).strip() \
+            or str(default_no)
         _log("certificate setup choice: %r" % ans, ts=True)
         if ans == "1":
             _set_cert_mode("self_signed_leaf")

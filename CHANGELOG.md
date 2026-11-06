@@ -78,6 +78,18 @@
   Q&A pair lands in Previous requests and in the session history. Rules
   added to all three system prompts (MailKick's version says a clarify reply
   replaces - not supplements - the ops/reply round).
+## 0.9.244
+
+### Fixed
+- the installer no longer silently re-runs a stored certificate mode when the
+  certificates were removed (e.g. an uninstall that kept the config): with NO
+  usable pair on disk the three-way question always returns, PRE-SELECTING the
+  stored mode (Enter re-runs it) instead of running it silently. Update runs
+  with a working pair keep skipping silently.
+- the three-way question labels now state the trust effect of each choice:
+  the leaf is imported and trusted (NO CA is created), while choosing the CA
+  explicitly says the CA is imported + trusted in your keychain.
+
 ## 0.9.243
 
 ### Changed
