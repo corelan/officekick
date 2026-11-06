@@ -78,6 +78,25 @@
   Q&A pair lands in Previous requests and in the session history. Rules
   added to all three system prompts (MailKick's version says a clarify reply
   replaces - not supplements - the ops/reply round).
+## 0.9.270
+
+### Fixed
+- the target guard is now a HARD WRITE GUARANTEE, not a nudge. Field proof:
+  the cut-off plan that lost its creates re-aimed and the pane auto-applied
+  20 actions to the user's real slide even after the guard's re-ask. An
+  insert-after ask now stashes its constraint at parse time; validateOps
+  DROPS any op that writes an existing slide outside the named one and the
+  slides that batch itself creates (visible invalid rows: "target guard:
+  this ask inserts slides after slide N - this action wrote to existing
+  slide M, which this batch does not create; dropped to protect your
+  content"). The constraint lives for the whole run (survives the
+  re-ask/repair/recovery re-validations - each round re-checks and re-asks
+  the model with the guard reasons), resets at every run start, and is
+  bypassed exactly where it should be: ops for the named slide and ops on
+  the slides the batch creates. Verified in the sim with a stubborn
+  wrong-aimed reply: guard re-ask -> still wrong -> all 2 actions dropped
+  with reasons -> nothing applied, no completed actions.
+
 ## 0.9.269
 
 ### Fixed

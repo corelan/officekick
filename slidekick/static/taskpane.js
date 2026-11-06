@@ -3390,7 +3390,7 @@ OfficeDeck.prototype.setNotes = function (i, text) {
   // ------------------------------------------------------------------ //
   // Ops validation / approvals
   // ------------------------------------------------------------------ //
-  function validateOps(rawOps, ctx) {
+  function validateOps(rawOps, ctx, preInvalid) {
     var ops = [], invalid = [];
     var notesDropped = 0;
     var notesOff = !(SK.cfg && SK.cfg.generateNotes);
@@ -3737,6 +3737,31 @@ OfficeDeck.prototype.setNotes = function (i, text) {
       });
       ops = others.length ? others : moved.slice(); // restore if nothing else remains
       if (others.length) moved.length = 0; else moved.forEach(function (op) { invalid.pop(); });
+    }
+    (preInvalid || []).forEach(function (pi) {
+      invalid.push({ op: pi.op || { type: "?" }, reason: pi.reason || "dropped by the target guard" });
+    });
+    // 0.9.270 HARD target guard: an insert-after ask may only write the named
+    // slide and the slides THIS batch creates - any other write to an
+    // EXISTING slide is dropped with a visible reason. Lives on SK for the
+    // whole run so repair/recovery re-validations stay protected too; reset
+    // at the next renderParsed.
+    var ig = SK.insertGuard;
+    if (ig && ig.named != null && ig.base != null && ctx) {
+      var cCt = ops.filter(function (o5) { return o5.type === "create_slide"; }).length;
+      for (var ix5 = ops.length - 1; ix5 >= 0; ix5--) {
+        var o6 = ops[ix5];
+        var s6 = o6 ? o6.slide : undefined;
+        if (o6.type === "create_slide" || s6 == null) continue;
+        if (s6 <= ctx.slideCount && s6 !== ig.named &&
+            !(s6 > ig.named && s6 <= ig.named + cCt)) {
+          invalid.push({ op: o6,
+            reason: "target guard: this ask inserts slides after slide " + ig.named +
+              " - this action wrote to existing slide " + s6 +
+              ", which this batch does not create; dropped to protect your content" });
+          ops.splice(ix5, 1);
+        }
+      }
     }
     return { ops: ops, invalid: invalid, notesDropped: notesDropped };
   }
@@ -4302,6 +4327,7 @@ OfficeDeck.prototype.setNotes = function (i, text) {
     filePreviousRun();  // the previous request/response moves into the history box NOW
     SK.busy = true;
     SK.runCancelled = false;
+    SK.insertGuard = null;   // a new run rebuilds the target guard from its own parse (0.9.270)
     input.disabled = true;   // the text stays visible but locked while working
     setRunEnabled(false);
     chatTimerStart();
@@ -4973,13 +4999,16 @@ OfficeDeck.prototype.setNotes = function (i, text) {
                 { role: "assistant", content: String((SK.lastModelText || {}).text || "") },
                 { role: "user", content: reBody },
               ]);
+              // 0.9.270: stash the insert constraint for the VALIDATOR - the
+              // hard drop must hold through repair/recovery re-validations
+              SK.insertGuard = { named: namedTarget, base: ctx.slides.length };
               setStatus("The ask names slide " + namedTarget + " but the plan aims at slide " + tl.join(", ") + " - re-asking\u2026", "busy");
               return askRetryable(function () { return apiJson("/api/chat", "POST", { connection: ref.connection, model: ref.model, messages: reMsg }); })
                 .then(function (r4) {
                   dbg("target.reask.response", { text: r4.text, elapsedMs: r4.elapsedMs });
                   SK.lastModelText = { text: r4.text };
                   var p4 = tryParse(r4.text);
-                  return p4.ok ? p4 : parsed;
+                  return p4.ok ? p4 : parsed;   // validation enforces SK.insertGuard
                 }).catch(function () { return parsed; });
             }
           }
@@ -5444,7 +5473,7 @@ OfficeDeck.prototype.setNotes = function (i, text) {
       setStatus("Done.", "ok");
       return;
     }
-    var validation = validateOps(parsed.ops, ctx);
+    var validation = validateOps(parsed.ops, ctx, parsed.preInvalid);
     SK.contrastFixes = adjustForContrast(validation.ops);   // mechanical readability guard
     if (!validation.ops.length && !validation.invalid.length && (SK.pendingWebOps || []).length) {
       // the look-up-then-act ops attached to the intent = the real payload
