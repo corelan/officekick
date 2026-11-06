@@ -751,10 +751,11 @@ def select_addins(interactive):
                              + _paint(" - Outlook is locked", "bold"))
             for rln in feas_why:
                 out_lines.append("    - " + rln)
-        out_lines.append(_paint("  Enabling Outlook sets up a local https certificate."
-                                " The installer asks WHICH mode before its certificates step -"
-                                " self-signed leaf is the default (no CA created); change it any"
-                                " time under Transport options (main menu 4).", "dim"))
+        out_lines.append(_paint("  Enabling Outlook sets up a local https certificate:"
+                                " the installer asks WHICH mode before its certificates"
+                                " step - self-signed leaf is the default (no CA created);", "dim"))
+        out_lines.append(_paint("  change it any time under Transport options (main menu 4).",
+                                "dim"))
         return out_lines
 
     msg = []   # picker feedback lines (repainted with the screen, never duplicated)
@@ -801,11 +802,18 @@ def select_addins(interactive):
                 note("outlook enable refused: %s" % "; ".join(feas_why))
                 continue
             if folder == "mailkick" and not state[folder] and is_mac():
-                go = ask_yes("Outlook needs the local https certificate setup - the"
-                             " installer asks WHICH mode before its certificates step:"
-                             " 1 self-signed leaf (DEFAULT - no CA created, the leaf itself"
-                             " gets trusted), 2 loopback CA (imported + trusted), 3"
-                             " bring-your-own - continue", False)
+                print("")
+                print("  " + _paint("Outlook needs the local https certificate setup.", "bold"))
+                print("    1) self-signed leaf  - DEFAULT; no CA is created:")
+                print("                          the LEAF itself is imported + trusted")
+                print("                          in your keychain")
+                print("    2) loopback CA       - the CA is imported + trusted;")
+                print("                          renewals stay silent afterwards")
+                print("    3) bring-your-own    - your own already-trusted PEM pair")
+                print("  the mode is asked right before the certificates step;")
+                print("  change it later in Transport options.")
+                go = ask_yes("Enable Outlook (choose the certificate mode during"
+                             " install)", False)
                 note("outlook CA warning answer: %s" % ("yes" if go else "no"))
                 if not go:
                     state[folder] = False
@@ -3333,9 +3341,7 @@ def _cert_mode_menu():
         have_pair = os.path.isfile(crt0) and _pair_matches(
             crt0, os.path.join(tls_cert_dir(), "server.key"))
         if have_pair:
-            go = ask_yes("Switch the certificates to '%s' NOW? (the existing pair stays"
-                         " in use otherwise; re-running the installer converts it later)" % new_mode,
-                         False)
+            go = ask_yes("Switch the certificates to '%s' NOW" % new_mode, False)
             if go:
                 shutil.rmtree(tls_cert_dir(), ignore_errors=True)
                 got = _ask_cert_setup()
@@ -3347,8 +3353,8 @@ def _cert_mode_menu():
                         warn("restart after the certificate switch failed: %s"
                              " (re-run install.py)" % exc)
             else:
-                note("stored - the existing pair stays in use; re-run install.py (or this"
-                     " menu again) to rebuild the certificates")
+                note("the existing pair stays in use until the next install"
+                     " (re-running install.py converts it)")
         else:
             note("no certificates on disk yet - the mode applies when the installer"
                  " builds them (run install.py)")
