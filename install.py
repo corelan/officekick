@@ -300,6 +300,7 @@ def select_addins(interactive):
     feas, feas_why = https_feasible()
     print("")
     print("  Add-ins (Word + PowerPoint are enabled by default, Outlook is not):")
+    print("")
     while True:
         for (folder, label, _was) in rows:
             box = "[x]" if state[folder] else "[ ]"
@@ -312,6 +313,7 @@ def select_addins(interactive):
                 else:
                     extra = "  (rides the plain-http localhost listener - no certificate)"
             print("    %d) %-24s %s%s" % (rows.index((folder, label, _was)) + 1, label, box, extra))
+        print("")
         choice = input("  > toggle 1/2/3 + Enter to toggle, EMPTY = continue, q = abort: ").strip().lower()
         _log("add-in selection input: %r" % choice, ts=True)
         if choice in ("q", "quit", "abort", "0"):
@@ -338,6 +340,7 @@ def select_addins(interactive):
                 print("   macOS will ask to trust the CA - accept to let the pane")
                 print("   load. Nothing else is installed; removed again by uninstall.")
                 print("  -------------------------------------------------------------")
+                print("")
                 go = ask_yes("Continue with the certificate setup for Outlook", False)
                 note("outlook CA warning answer: %s" % ("yes" if go else "no"))
                 if not go:
@@ -659,9 +662,11 @@ def pick_mailkick_route():
     print("")
     print("  Outlook pane transport: the self-signed loopback CA + certificate")
     print("  from the earlier warning (default), or your own trusted pair.")
+    print("")
     if ask_yes("Use the self-signed loopback CA (recommended)", True):
         return "auto"
     for attempt in range(3):
+        print("")
         crt = input("  path to your TLS certificate (PEM): ").strip()
         key = input("  path to the matching private key (PEM, unencrypted): ").strip()
         good, problems = validate_user_cert(crt, key)
@@ -1472,6 +1477,7 @@ def do_uninstall(purge):
             ok("removed " + inst)
     cfg = config_dir()
     if purge is None:
+        print("")
         purge = (not DRY_RUN) and ask_yes(
             "Also remove the config (%s - stored API keys, profiles, sessions)?" % cfg, False)
     if purge:
@@ -1687,14 +1693,18 @@ def server_menu():
     while True:
         h = health(PORT)
         print("")
-        print("  ----- server (%s) -----" %
-              ("running v%s on port %d" % (h.get("version"), PORT)) if h else
-              "  ----- server (not running) -----")
+        if h:
+            print("  ----- server -----")
+            print("  running v%s on port %d" % (h.get("version"), PORT))
+        else:
+            print("  ----- server (not running) -----")
+        print("")
         print("    1) start")
         print("    2) restart")
         print("    3) stop")
         print("    4) status")
         print("    0) back")
+        print("")
         try:
             if not sys.stdin.isatty():
                 print("  (non-interactive: pass --start/--stop/--restart/--status)")
@@ -1818,6 +1828,7 @@ def main():
         print("  4) Uninstall")
         print("")
         print("  0) exit")
+        print("")
         try:
             if not sys.stdin.isatty():
                 print("  (non-interactive: no choice given - pass --install / --update / --uninstall)")
