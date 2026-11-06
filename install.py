@@ -582,7 +582,7 @@ def _set_transport(mode, http_port=None, https_port=None):
         with open(config_file(), "w", encoding="utf-8") as fh:
             json.dump(cfg, fh, indent=2)
         try:
-            os.chmod(config_file(), 0o600)
+            _protect_secret(config_file())
         except OSError:
             pass
         note("transport persisted (config file written): %s" % json.dumps(body))
@@ -622,13 +622,37 @@ def _set_transport(mode):
         with open(config_file(), "w", encoding="utf-8") as fh:
             json.dump(cfg, fh, indent=2)
         try:
-            os.chmod(config_file(), 0o600)
+            _protect_secret(config_file())
         except OSError:
             pass
         note("transportMode set to %s (config file written)" % mode)
         return True
     except Exception as exc:
         warn("could not write %s: %s" % (config_file(), exc))
+        return False
+
+
+def _protect_secret(path, writable=True):
+    """chmod 0600 on macOS/POSIX. On Windows os.chmod is a stub (only the
+    read-only bit), so the real protection is NTFS ACLs via icacls: strip
+    inheritance and grant ONLY the current user (full access for a private
+    key / config, read-only would break writes)."""
+    try:
+        if is_windows():
+            user = os.environ.get("USERNAME") or "SYSTEM"
+            perm = "F" if writable else "R"
+            rc1, _o = run_quiet(["icacls", path, "/inheritance:r"])
+            rc2, _o = run_quiet(["icacls", path, "/grant:r", "%s:%s" % (user, perm)])
+            if rc1 == 0 and rc2 == 0:
+                _log("protected (NTFS ACL, user-only) %s" % path)
+                return True
+            warn("icacls could not harden %s (rc %d/%d) - check it manually"
+                 % (path, rc1, rc2))
+            return False
+        os.chmod(path, 0o600 if writable else 0o400)
+        return True
+    except OSError as exc:
+        warn("could not protect %s: %s" % (path, exc))
         return False
 
 
@@ -1325,10 +1349,13 @@ def ensure_tls_certs():
     ca_crt = os.path.join(cert_dir, "ca.crt")
     ca_key = os.path.join(cert_dir, "ca.key")
     os.makedirs(cert_dir, exist_ok=True)
-    try:
-        os.chmod(cert_dir, 0o700)
-    except OSError:
-        pass
+    if is_windows():
+        _protect_secret(cert_dir)          # NTFS ACL: user-only
+    else:
+        try:
+            os.chmod(cert_dir, 0o700)
+        except OSError:
+            pass
 
     def _record(mode, extra_note=""):
         leaf = _cert_facts(crt)
@@ -1417,10 +1444,7 @@ distinguished_name = req_dn
                 os.remove(ext)
             except OSError:
                 pass
-            try:
-                os.chmod(key, 0o600)
-            except OSError:
-                pass
+            _protect_secret(key)
             _record("reissued from the existing CA (no new CA, no re-trust)")
             if validate_existing_tls(crt) is None:
                 return (crt, key)
@@ -1486,10 +1510,7 @@ distinguished_name = req_dn
         os.remove(ext)
     except OSError:
         pass
-    try:
-        os.chmod(key, 0o600)
-    except OSError:
-        pass
+    _protect_secret(key)
     keychain = os.path.expanduser("~/Library/Keychains/login.keychain-db")
     rc, o = run_quiet(["security", "add-trusted-cert", "-r", "trustRoot",
                        "-k", keychain, ca_crt])
@@ -1528,7 +1549,7 @@ def deploy_files():
     cfgjson = os.path.join(config_dir(), "config.json")
     if os.path.exists(cfgjson):
         try:
-            os.chmod(cfgjson, 0o600)
+            _protect_secret(cfgjson)
         except OSError:
             pass
     record_repo_info()
@@ -1564,7 +1585,7 @@ def record_repo_info():
         with open(cfgjson, "w", encoding="utf-8") as fh:
             json.dump(data, fh, indent=1)
         if os.name != "nt":
-            os.chmod(cfgjson, 0o600)
+            _protect_secret(cfgjson)
         if is_repo:
             ok("repo recorded for update checks: %s%s" % (REPO_DIR, (" (" + url + ")") if url else ""))
         else:
@@ -2346,7 +2367,7 @@ def tls_phase():
             os.makedirs(cdir, exist_ok=True)
             shutil.copyfile(MAILKICK_CERT, os.path.join(cdir, "server.crt"))
             shutil.copyfile(MAILKICK_KEY, os.path.join(cdir, "server.key"))
-            os.chmod(os.path.join(cdir, "server.key"), 0o600)
+            _protect_secret(os.path.join(cdir, "server.key"))
             f = _cert_facts(crt)
             CERT_FACTS.update({"mode": "your own certificate (PEM, validated + copied)",
                                "ca_path": os.path.join(cdir, "ca.crt"),

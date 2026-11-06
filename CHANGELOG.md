@@ -79,6 +79,16 @@
   added to all three system prompts (MailKick's version says a clarify reply
   replaces - not supplements - the ops/reply round).
 ## 0.9.240
+### Fixed (Windows secret protection)
+- `os.chmod(0600)` is a no-op stub on Windows (only the read-only bit), so
+  config.json and any certificate files were effectively unprotected there.
+  New `_protect_secret()`: chmod 0o600 on macOS/POSIX; on Windows NTFS ACL
+  hardening via icacls (`/inheritance:r` to strip inherited ACEs, then
+  `/grant:r <current user>:F` so only the owning user keeps access). Applied
+  to config.json (API keys), the certs directory and every private key
+  (server.key/ca.key). Order-safe with `relax_windows_config_acl` (grants
+  the same user only).
+
 ### Added (configurable listener ports + menu renumbering)
 - Settings `transportHttpPort` (default 8765) and `transportHttpsPort`
   (default 8766): whitelisted, range-validated (1024-65535, must differ),
