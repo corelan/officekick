@@ -30,6 +30,20 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.273
+
+### Fixed
+- field report (first real Windows box): choosing a transport in the menu on
+  a machine where install.py had never run crashed with FileNotFoundError -
+  _persist_file wrote ~/.officekick/config.json without the config folder
+  existing. The writer now creates the folder (a fresh-machine transport
+  switch stores its mode cleanly, before any deploy). Battery-verified:
+  no config dir -> set https -> file created + mode stored; a second set
+  merges ports. Also on this box (all shipped earlier): py install default
+  (the manager rejects 'latest' as a tag), manual-first clone instructions
+  for cmd + PowerShell (%USERPROFILE% vs $env:USERPROFILE), the bootstrap
+  script's self-identifying version line + empty-ToolsDir guard.
+
 ## 0.9.238
 ### Added (clarify: placement)
 - The clarify round now also covers PLACEMENT ambiguity: the model may ask
