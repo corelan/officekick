@@ -78,6 +78,38 @@
   Q&A pair lands in Previous requests and in the session history. Rules
   added to all three system prompts (MailKick's version says a clarify reply
   replaces - not supplements - the ops/reply round).
+## 0.9.241
+### Added (self-signed leaf certificate mode, no CA)
+- New server setting `certMode` (`ca` - the existing classic mode - or
+  `self_signed_leaf`); PUT-validated, pub()'d, persisted across launches.
+- Leaf mode: a unique self-signed leaf per installation (CN=localhost +
+  OU=officekick-<install id> for identification, SAN DNS:localhost +
+  IP:127.0.0.1 + IP:::1, critical basicConstraints CA:FALSE,
+  digitalSignature key usage, serverAuth EKU, SHA-256, RSA 3072; configurable
+  validity with renewal). No CA key/certificate is generated in this mode.
+- Trust: macOS - per-certificate SSL trust of the leaf in the user login
+  keychain (user scope); Windows - the leaf goes to the CURRENT USER
+  Trusted People store via certutil (never the Root store; no admin).
+  Generation on Windows uses the `cryptography` package; when absent the
+  installer prints the exact command and refuses to weaken anything.
+- First-run CONSENT block (exact wording, SHA-256 fingerprint + expiry) with
+  an explicit yes; declining leaves the trust store untouched with a clear
+  https-will-not-work warning. Renewal (expiry/invalidity) requires renewed
+  consent; the previous trust is removed on replacement (by fingerprint) and
+  during uninstallation - only OUR certificate, identified via
+  certs/cert_meta.json (never relying on CN=localhost alone).
+- Lifecycle: reuse of a valid leaf (no regeneration per launch), expiry and
+  invalidity checks on every install, 30-day renewal window, duplicate
+  trust-store entries avoided via fingerprint bookkeeping.
+- python3 install.py --cert-check: SAN, CA:FALSE, EKU, key match, validity,
+  localhost TLS handshake, platform trust acceptance - and the explicit
+  "store trust is NOT Office compatibility" verdict with the documented
+  Office verification procedure (docs/certificates.md).
+- The Office/WebView2/WKWebView acceptance of per-certificate trust is
+  documented as REQUIRES OFFICE TESTING; nothing claims compatibility from
+  store-trust success alone.
+- tests: 31 (leaf lifecycle suite + certMode round-trip).
+
 ## 0.9.240
 ### Fixed (Windows secret protection)
 - `os.chmod(0600)` is a no-op stub on Windows (only the read-only bit), so

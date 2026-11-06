@@ -1523,6 +1523,434 @@ distinguished_name = req_dn
     return (crt, key)
 
 
+
+# ----------------------------------------------- self-signed leaf mode ---- #
+CERT_META_NAME = "cert_meta.json"
+
+
+def _leaf_paths():
+    cdir = tls_cert_dir()
+    return (cdir,
+            os.path.join(cdir, "server.crt"),
+            os.path.join(cdir, "server.key"),
+            os.path.join(cdir, CERT_META_NAME))
+
+
+def _leaf_meta_load():
+    try:
+        with open(_leaf_paths()[3], "r", encoding="utf-8") as fh:
+            return json.load(fh) or {}
+    except Exception:
+        return {}
+
+
+def _leaf_meta_save(meta):
+    try:
+        with open(_leaf_paths()[3], "w", encoding="utf-8") as fh:
+            json.dump(meta, fh, indent=2)
+        _protect_secret(_leaf_paths()[3])
+    except OSError as exc:
+        warn("could not write the certificate metadata: %s" % exc)
+
+
+def _leaf_fingerprints(crt):
+    """(sha256, sha1) of the certificate DER (used for store identification)."""
+    import hashlib
+    try:
+        rc, der = run_quiet(["openssl", "x509", "-in", crt, "-outform", "DER"])
+        if rc != 0 or not der:
+            return None, None
+        b = None
+        for line in der.splitlines():
+            ln = line.strip()
+            try:
+                b = bytes.fromhex(ln)
+            except ValueError:
+                continue
+            if b:
+                break
+        if b is None:
+            return None, None
+        return (hashlib.sha256(b).hexdigest().upper(),
+                hashlib.sha1(b).hexdigest().upper())
+    except Exception:
+        return None, None
+
+
+def _leaf_install_id():
+    meta = _leaf_meta_load()
+    iid = meta.get("install_id")
+    if not iid:
+        import uuid
+        iid = uuid.uuid4().hex[:10]
+    return iid
+
+
+def _generate_leaf_cert(cdir, crt, key, days, install_id):
+    """Generate a self-signed non-CA leaf: CN=localhost (+ OU=officekick-<id>
+    for identification), SAN DNS:localhost + IP:127.0.0.1 + IP:::1, critical
+    basicConstraints CA:FALSE, digitalSignature key usage, serverAuth EKU,
+    SHA-256, RSA 3072. Returns True on success.
+    macOS: the openssl binary (as for the CA mode). Windows: the cryptography
+    package (user-installable; no keychain/store tricks needed to write PEM)."""
+    if is_windows():
+        try:
+            import ipaddress
+            import traceback
+            import cryptography
+        except ImportError:
+            warn("self-signed leaf generation needs the 'cryptography' package on Windows")
+            print("        run once, then re-run the installer:")
+            print("            python -m pip install --user cryptography")
+            _log("leaf generation unavailable: 'cryptography' missing (Windows)")
+            return False
+        try:
+            from cryptography import x509
+            from cryptography.hazmat.primitives import hashes, serialization
+            from cryptography.hazmat.primitives.asymmetric import rsa
+            from cryptography.x509.oid import NameOID, ExtendedKeyUsageOID
+            import datetime
+            key_obj = rsa.generate_private_key(public_exponent=65537, key_size=3072)
+            name = x509.Name([
+                x509.NameAttribute(NameOID.COMMON_NAME, "localhost"),
+                x509.NameAttribute(NameOID.ORGANIZATION_NAME, "OfficeKick"),
+                x509.NameAttribute(NameOID.ORGANIZATIONAL_UNIT_NAME,
+                                   "officekick-%s" % install_id),
+            ])
+            now = datetime.datetime.now(datetime.timezone.utc)
+            builder = (x509.CertificateBuilder()
+                       .subject_name(name).issuer_name(name)
+                       .public_key(key_obj.public_key())
+                       .serial_number(x509.random_serial_number())
+                       .not_valid_before(now - datetime.timedelta(days=1))
+                       .not_valid_after(now + datetime.timedelta(days=int(days)))
+                       .add_extension(x509.BasicConstraints(ca=False, path_length=None),
+                                      critical=True)
+                       .add_extension(x509.KeyUsage(digital_signature=True,
+                                                    content_commitment=False,
+                                                    key_encipherment=False,
+                                                    data_encipherment=False,
+                                                    key_agreement=False,
+                                                    key_cert_sign=False,
+                                                    crl_sign=False,
+                                                    encipher_only=False,
+                                                    decipher_only=False),
+                                      critical=False)
+                       .add_extension(x509.ExtendedKeyUsage(
+                           [ExtendedKeyUsageOID.SERVER_AUTH]), critical=False)
+                       .add_extension(x509.SubjectAlternativeName([
+                           x509.DNSName("localhost"),
+                           x509.IPAddress(ipaddress.ip_address("127.0.0.1")),
+                           x509.IPAddress(ipaddress.ip_address("::1")),
+                       ]), critical=False)
+                       .add_extension(x509.SubjectKeyIdentifier.from_public_key(
+                           key_obj.public_key()), critical=False)
+                       .sign(key_obj, hashes.SHA256()))
+            with open(key, "wb") as fh:
+                fh.write(key_obj.private_bytes(serialization.Encoding.PEM,
+                                               serialization.PrivateFormat.PKCS8,
+                                               serialization.NoEncryption()))
+            with open(crt, "wb") as fh:
+                fh.write(builder.public_bytes(serialization.Encoding.PEM))
+            return True
+        except Exception as exc:
+            warn("leaf certificate generation failed: %s" % exc)
+            _log("leaf generation exception: %s" % traceback.format_exc())
+            return False
+    cmd = ["openssl", "req", "-x509", "-newkey", "rsa:3072", "-sha256",
+           "-nodes", "-keyout", key, "-out", crt,
+           "-days", str(int(days)),
+           "-subj", "/CN=localhost/O=OfficeKick/OU=officekick-%s" % install_id,
+           "-addext", "subjectAltName=DNS:localhost,IP:127.0.0.1,IP:::1",
+           "-addext", "basicConstraints=critical,CA:FALSE",
+           "-addext", "keyUsage=digitalSignature",
+           "-addext", "extendedKeyUsage=serverAuth"]
+    rc, o = run_quiet(cmd)
+    if rc != 0:
+        warn("leaf certificate generation failed (%s)" % (o or "openssl error")[:160])
+        _log("leaf generation failure detail: %s" % (o or ""))
+        return False
+    return True
+
+
+def _install_leaf_trust(crt):
+    """Platform trust for ONE self-signed leaf: macOS = user keychain
+    per-certificate SSL trust (no CA involved); Windows = the CURRENT USER
+    Trusted People store (never the Root store; no admin needed)."""
+    if is_mac():
+        keychain = os.path.expanduser("~/Library/Keychains/login.keychain-db")
+        rc, o = run_quiet(["security", "add-trusted-cert", "-r", "trustRoot",
+                           "-p", "ssl", "-k", keychain, crt])
+        if rc == 0:
+            ok("self-signed leaf trusted for TLS in your login keychain (user scope)")
+            return True
+        warn("could not trust the leaf certificate (%s)" % (o or "security error")[:160])
+        _log("leaf trust failure detail: %s" % (o or ""))
+        return False
+    rc, o = run_quiet(["certutil", "-user", "-addstore", "TrustedPeople", crt])
+    if rc == 0:
+        ok("self-signed leaf added to the CURRENT USER Trusted People store")
+        return True
+    warn("could not add the leaf certificate to Trusted People (%s)"
+         % (o or "certutil error")[:160])
+    _log("leaf trust failure detail (certutil): %s" % (o or ""))
+    return False
+
+
+def _remove_leaf_trust(crt):
+    """Remove OUR leaf trust (and only ours - identified by fingerprint hash),
+    during a replacement or uninstallation. Never touches other entries."""
+    try:
+        sha256, sha1 = _leaf_fingerprints(crt)
+    except Exception:
+        sha256, sha1 = None, None
+    meta = _leaf_meta_load()
+    if sha1 is None:
+        sha1 = meta.get("sha1")
+    if is_mac():
+        # remove-trusted-cert takes the cert FILE; delete the leaf from the
+        # keychain by its hash so other certificates are untouched
+        subprocess.run(["security", "remove-trusted-cert", "-k",
+                        os.path.expanduser("~/Library/Keychains/login.keychain-db"),
+                        crt], capture_output=True)
+        if sha1:
+            run_quiet(["security", "delete-certificate", "-Z", sha1,
+                       os.path.expanduser("~/Library/Keychains/login.keychain-db")])
+        _log("leaf trust/certificate removal attempted (sha1=%s)" % sha1)
+        return True
+    if sha1:
+        rc, o = run_quiet(["certutil", "-user", "-delstore", "TrustedPeople", sha1])
+        _log("leaf removal from TrustedPeople (sha1=%s): rc %d %s" % (sha1, rc, o or ""))
+        return rc == 0
+    return False
+
+
+def _leaf_consent(facts, crt):
+    """The exact consent block requested for leaf mode. Returns True only
+    after an explicit yes; declining never touches the trust store."""
+    sha256, _sha1 = _leaf_fingerprints(crt)
+    print("")
+    print("  " + _paint("Trust Local HTTPS Certificate", "bold"))
+    print("")
+    print("  This application uses a local HTTPS server to provide its Microsoft Office Add-in.")
+    print("  To establish a secure connection, the application has generated a unique,")
+    print("  self-signed server certificate for this computer.")
+    print("  This certificate is not a Certificate Authority and cannot be used to issue")
+    print("  trusted certificates for other websites.")
+    print("  To allow Microsoft Office to load the Add-in, you must explicitly trust this")
+    print("  certificate for local HTTPS connections.")
+    print("  The certificate and private key are generated and stored locally.")
+    print("  The private key will not be transmitted or shared.")
+    print("")
+    print("  " + _paint("certificate : %s" % (CERT_FACTS.get("leaf_path", crt)), "bold"))
+    print("  " + _paint("SHA-256 fingerprint: %s" % _colons(sha256 or "?"), "cyan"))
+    print("  " + _paint("expires: %s" % _fact_line(facts), "cyan"))
+    print("")
+    return ask_yes("Do you want to trust this certificate?", False)
+
+
+def _colons(s):
+    if not s or len(s) < 5:
+        return s
+    return ":".join(s[i:i + 2] for i in range(0, len(s), 2))
+
+
+def ensure_leaf_certs(days=825, consent_ask=True):
+    """Leaf certificate mode: detect existing generated leaf, reuse a valid
+    one (no regeneration on every launch), regenerate when expired/invalid -
+    with RENEWED CONSENT before re-trusting a replacement. Returns
+    (crt, key) or None; CERT_FACTS carries the details."""
+    global CERT_FACTS
+    CERT_FACTS = {}
+    cdir, crt, key, meta_path = _leaf_paths()
+    os.makedirs(cdir, exist_ok=True)
+    install_id = _leaf_install_id()
+
+    def _record(mode, consent_note=""):
+        f = _cert_facts(crt)
+        sha256, sha1 = _leaf_fingerprints(crt)
+        CERT_FACTS.update({"mode": mode, "leaf_path": crt,
+                           "leaf_line": _fact_line(f),
+                           "ca_path": cdir,
+                           "ca_line": "no CA in this mode - the leaf itself is the trusted end point",
+                           "key_line": "server.key + cert_meta.json in %s (private, protected)" % cdir})
+        meta = _leaf_meta_load()
+        meta.update({"app": "OfficeKick", "mode": "self_signed_leaf",
+                     "install_id": install_id, "cn": "localhost",
+                     "sha256": sha256, "sha1": sha1,
+                     "not_after": f.get("expires"), "days": f.get("days"),
+                     "created": meta.get("created") or time.strftime("%Y-%m-%d"),
+                     "platform": "windows" if is_windows() else "mac"})
+        if consent_note:
+            meta["note"] = consent_note
+        _leaf_meta_save(meta)
+
+    reason = None
+    if os.path.isfile(crt) and os.path.isfile(key):
+        reason = validate_existing_tls(crt)
+        if reason is None and not _pair_matches(crt, key):
+            reason = "the private key does not match the certificate"
+    meta = _leaf_meta_load()
+    if reason is None and isinstance(meta.get("days"), int) and meta["days"] < 30:
+        reason = "expires in %d days" % meta["days"]
+    if reason is None and meta.get("mode") == "self_signed_leaf":
+        _record("reused" + (" (%s)" % ("trusted" if meta.get("trusted") else "NOT trusted yet")))
+        _log("leaf mode: reusing the existing certificate (still valid; not"
+             " regenerated on every launch)")
+        return (crt, key)
+    if reason:
+        warn("the existing leaf certificate must be replaced: %s" % reason)
+
+    if DRY_RUN:
+        note("[dry-run] would generate a self-signed leaf (validity %d days)" % days)
+        return None
+    if not _generate_leaf_cert(cdir, crt, key, days, install_id):
+        return None
+    _protect_secret(key)
+    _record("generated (self-signed leaf, no CA)")
+
+    if not consent_ask:
+        note("leaf generated; trust consent will be asked before it is used")
+        return (crt, key)
+    f = _cert_facts(crt)
+    if _leaf_consent(f, crt):
+        if _install_leaf_trust(crt):
+            old = meta.get("sha1") if meta else None
+            m2 = _leaf_meta_load()
+            m2["trusted"] = True
+            if m2.get("note"):
+                m2.pop("note")
+            _leaf_meta_save(m2)
+            CERT_FACTS["mode"] = "trusted self-signed leaf (renewed consent given)" if old else                                  "trusted self-signed leaf"
+            return (crt, key)
+        warn("the certificate was generated but NOT trusted - https will not pass"
+             " validation until it is trusted (re-run install.py)")
+        return None
+    warn("you declined to trust the certificate - the trust store was NOT changed;"
+         " https will not work until it is trusted (re-run install.py)")
+    _leaf_meta_load() and _leaf_meta_save(dict(_leaf_meta_load(),
+                                               trusted=False))
+    CERT_FACTS["mode"] = "generated but NOT trusted (declined)"
+    return None
+
+
+def cert_diagnostics():
+    """Run the local certificate checks and print an explicit verdict -
+    including the line that store trust does not equal Office compatibility."""
+    cdir, crt, key, _meta = _leaf_paths()
+    print("")
+    print("  ----- certificate diagnostics -----")
+    checks = []
+    checks.append(("files exist", os.path.isfile(crt) and os.path.isfile(key),
+                   "%s + %s" % (crt, key)))
+    rc, o = run_quiet(["openssl", "x509", "-in", crt, "-noout", "-text"])
+    san_ok = ("localhost" in (o or "") and "127.0.0.1" in (o or ""))
+    checks.append(("SAN localhost + 127.0.0.1", rc == 0 and san_ok, ""))
+    bc_ok = "CA:FALSE" in (o or "") or "CA:FALSE" in (o or "").upper() or "x509v3 basic constraints" in (o or "").lower()
+    checks.append(("basicConstraints CA:FALSE", rc == 0 and bc_ok, "self-signed leafs must not be CAs"))
+    eku_ok = "TLS Web Server Authentication" in (o or "")
+    checks.append(("EKU serverAuth", rc == 0 and eku_ok, ""))
+    pair_ok = _pair_matches(crt, key) if os.path.isfile(crt) else False
+    checks.append(("private key matches certificate", bool(pair_ok), ""))
+    f = _cert_facts(crt)
+    v_ok = isinstance(f.get("days"), int) and f["days"] >= 0
+    checks.append(("validity window", v_ok, _fact_line(f)))
+    tls_on, tls_desc = _https_state()
+    checks.append(("localhost TLS handshake", tls_on, tls_desc))
+    trust_ok = False
+    if is_mac() and os.path.isfile(crt):
+        trust_ok = run_quiet(["security", "verify-cert", "-c", crt, "-p", "ssl"])[0] == 0
+    elif is_windows():
+        trust_ok = run_quiet(["certutil", "-user", "-verify", "-store", "TrustedPeople", crt])[0] == 0
+    checks.append(("platform trust accepts the certificate", bool(trust_ok),
+                   "store trust is NOT the same as Office compatibility"))
+    for (label, okk, extra) in checks:
+        print("    %s %-38s %s" % (_paint("v" if okk else "x", "green" if okk else "red"),
+                                   label, extra or ""))
+    print("")
+    print("  " + _paint("Store trust is NOT Office compatibility:", "bold"))
+    print("  to verify in Office: quit and reopen the app, open the task pane")
+    print("  (Insert > Add-ins > My Add-ins), confirm the pane loads without a")
+    print("  certificate warning, and check its About tab for the pane build.")
+    print("  - macOS: WKWebView uses the per-certificate SSL trust in the user")
+    print("    keychain (verify-cert v covers the same evaluation).")
+    print("  - Windows: WebView2 honors the Current User Trusted People store for")
+    print("    explicitly trusted certificates - VERIFY this in Office before")
+    print("    relying on it; if it refuses, report the failure and stay on the")
+    print("    CA mode instead of weakening the trust model.")
+    metaj = _leaf_meta_load()
+    if metaj:
+        print("  installed-by-OfficeKick identity: OU=officekick-%s | sha256=%s"
+              % (metaj.get("install_id"), _colons(metaj.get("sha256") or "?")))
+    return all(okk for (_l, okk, _e) in checks)
+
+
+def _get_cert_mode():
+    d = _config_settings()
+    return d.get("certMode") if d.get("certMode") in ("ca", "self_signed_leaf") else "ca"
+
+
+def _set_cert_mode(mode):
+    if mode not in ("ca", "self_signed_leaf"):
+        return False
+    if health(PORT):
+        try:
+            import urllib.request
+            req = urllib.request.Request(
+                "http://127.0.0.1:%d/api/settings" % PORT,
+                data=json.dumps({"certMode": mode}).encode("utf-8"),
+                headers={"Content-Type": "application/json"}, method="PUT")
+            opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+            with opener.open(req, timeout=3) as resp:
+                resp.read()
+            note("certMode set to %s (via the running server)" % mode)
+            return True
+        except Exception as exc:
+            warn("could not store certMode via the server (%s)" % exc)
+    try:
+        cfg = {}
+        try:
+            with open(config_file(), "r", encoding="utf-8") as fh:
+                cfg = json.load(fh) or {}
+        except Exception:
+            cfg = {}
+        cfg["certMode"] = mode
+        with open(config_file(), "w", encoding="utf-8") as fh:
+            json.dump(cfg, fh, indent=2)
+        _protect_secret(config_file())
+        return True
+    except Exception as exc:
+        warn("could not write certMode: %s" % exc)
+        return False
+
+
+def _ask_ensure_tls_certs(days=825):
+    """The certificate-mode decision + generation for https: leaf mode asks
+    the consent; CA mode keeps the CA flow. Called from the pre-ask block."""
+    mode = _get_cert_mode()
+    have_pair = os.path.isfile(os.path.join(tls_cert_dir(), "server.crt"))
+    if mode == "ca" and have_pair:
+        return None                      # existing CA setup untouched
+    print("")
+    print("  " + _paint("Certificate mode for the local https server", "bold"))
+    print("  1) self-signed leaf certificate, DIRECTLY trusted (no CA involved;")
+    print("     requests your consent again whenever it must be re-trusted)")
+    print("  2) local CA + CA-signed certificate  (the existing mode: one consent,"
+          " silent renewals)")
+    if ask_yes("Use the self-signed leaf certificate (recommended for the least"
+               " trust given away)", False):
+        _set_cert_mode("self_signed_leaf")
+        ok("certificate mode: self-signed leaf")
+        return ensure_leaf_certs(days=days)
+    _set_cert_mode("ca")
+    ok("certificate mode: local CA + CA-signed certificate")
+    _log("certMode ca selected; a fresh CA + certificate will be generated"
+         " when the current pair is missing or unusable")
+    return None
+
+
+
+
 # ------------------------------------------------------------------ deploy #
 def deploy_files():
     dst = install_dir()
@@ -1672,20 +2100,24 @@ def render_and_sideload():
         ADDINS.clear()
         ADDINS.update(renderable)
     if transport == "https":
-        if not tls_pair and is_mac():
+        leaf_windows = (not is_mac()) and _get_cert_mode() == "self_signed_leaf"
+        if not tls_pair and (is_mac() or leaf_windows):
             warn("transport mode https - the certificate check did not pass;"
-                 " creating/renewing the loopback pair now")
-            pair = ensure_tls_certs()
+                 " creating/renewing the certificate now")
+            pair = ensure_leaf_certs() if leaf_windows else ensure_tls_certs()
             reason2 = None
             if pair:
                 reason2 = validate_existing_tls(pair[0])
+                if reason2 is None and not _pair_matches(*pair):
+                    reason2 = "key does not match"
             if pair and reason2 is None:
                 tls_pair = pair
             else:
                 warn("https mode but no usable certificate - the manifests stay plain http"
                      " (the https listener will start once a pair validates)")
         elif not tls_pair and not is_mac():
-            warn("transport mode https is a macOS feature - Windows stays plain http")
+            warn("transport mode https on macOS requires a certificate mode; on Windows"
+                 " set the certificate mode to 'self_signed_leaf' first")
     step("rendering add-in manifests (%s, %s)" %
          (("https://localhost:%d via the loopback certificate" % (HTTPS_PORT if HTTPS_PORT else PORT + 1)) if tls_pair
           else ("http://localhost:%d" % PORT),
@@ -2160,6 +2592,15 @@ def do_uninstall(purge):
     out("")
     out("  Uninstalling OfficeKick")
     stop_server()
+    meta = _leaf_meta_load()
+    if meta.get("mode") == "self_signed_leaf" and os.path.isfile(_leaf_paths()[1]):
+        _log("uninstall: removing the OfficeKick leaf-certificate trust (sha1=%s)"
+             % (meta.get("sha1") or "?"))
+        _remove_leaf_trust(_leaf_paths()[1])
+        try:
+            os.remove(_leaf_paths()[3])
+        except OSError:
+            pass
     if is_mac():
         if DRY_RUN:
             out("  [..]  [dry-run] would unregister the login item and remove %s" % app_bundle())
@@ -2284,7 +2725,12 @@ def install(mode_name="Install", interactive=True):
     # (the certificate phase acts on the answer), the autostart ask sits
     # right before its own phase
     if "mailkick" in (ADDINS or set()) and is_mac() and MAILKICK_CHOICE is None:
-        MAILKICK_CHOICE = pick_mailkick_route()
+        if _get_cert_mode() == "self_signed_leaf":
+            MAILKICK_CHOICE = "auto"
+            ensure_leaf_certs()          # questions happen BEFORE the phase line
+            _print_cert_facts()
+        else:
+            MAILKICK_CHOICE = pick_mailkick_route()
     phase(3, total, "certificates", tls_phase)
     _print_cert_facts()
     phase(4, total, "registering with Office", registration_phase)
@@ -2359,6 +2805,11 @@ def tls_phase():
     crt = os.path.join(tls_cert_dir(), "server.crt")
     key = os.path.join(tls_cert_dir(), "server.key")
     have_pair = os.path.isfile(crt) and os.path.isfile(key)
+    if _get_cert_mode() == "self_signed_leaf":
+        pair = ensure_leaf_certs()
+        if pair:
+            return "self-signed leaf ready (%s)" % CERT_FACTS["mode"]
+        return "leaf certificate NOT trusted/ready - https will not validate (see install.log)"
     if "mailkick" in ADDINS:
         if MAILKICK_CHOICE not in ("auto", "custom", "skip"):
             MAILKICK_CHOICE = pick_mailkick_route()   # non-interactive fallback
@@ -2795,6 +3246,8 @@ def main():
     ap.add_argument("--dry-run", action="store_true", help="print the actions, run none")
     ap.add_argument("--transport", default=None, choices=["auto", "http", "https"], metavar="MODE",
                     help="persist the pane transport: auto (https when a valid certificate exists) | http (plain http, certificates ignored) | https (always https; creates the certificate) - updates keep the stored mode")
+    ap.add_argument("--cert-check", action="store_true",
+                    help="run the local certificate diagnostics (SAN, CA:FALSE, key match, validity, handshake, platform trust)")
     args = ap.parse_args()
     global SKIP_MAILKICK, MAILKICK_CERT, MAILKICK_KEY, MAILKICK_OPT
     SKIP_MAILKICK = args.skip_mailkick
@@ -2834,6 +3287,13 @@ def main():
         log_open("uninstall")
     elif args.dry_run:
         log_open("dry-run")
+
+    if args.cert_check:
+        banner("certificate diagnostics")
+        cert_diagnostics()
+        if health(PORT):
+            pause_after("cert-check")
+        return
 
     if args.transport and not (args.install or args.update or args.uninstall):
         banner("transport %s" % args.transport)

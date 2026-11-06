@@ -213,6 +213,20 @@ class TestSlideKickServer(unittest.TestCase):
             st, _ = self.S.req("/api/settings", "PUT", {k: v})
             self.assertEqual(st, 200)
 
+    def test_cert_mode_setting(self):
+        st, cfg = self.S.req("/api/config")
+        self.assertEqual(cfg["certMode"], "ca")
+        st, _ = self.S.req("/api/settings", "PUT", {"certMode": "self_signed_leaf"})
+        self.assertEqual(st, 200)
+        st, cfg = self.S.req("/api/config")
+        self.assertEqual(cfg["certMode"], "self_signed_leaf")
+        st, _data = self.S.req("/api/settings", "PUT", {"certMode": "bogus"}, True)
+        self.assertEqual(st, 400)
+        st, cfg = self.S.req("/api/config")
+        self.assertEqual(cfg["certMode"], "self_signed_leaf")
+        st, _ = self.S.req("/api/settings", "PUT", {"certMode": "ca"})
+        self.assertEqual(st, 200)
+
     def test_approvals_settings(self):
         st, _ = self.S.req("/api/settings", "PUT", {
             "approvals": {"delete_slide": "auto", "apply_layout": "deny"}})

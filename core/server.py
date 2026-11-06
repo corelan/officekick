@@ -34,7 +34,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 APP = "OfficeKick"
-VERSION = "0.9.240"
+VERSION = "0.9.241"
 
 # --------------------------------------------------------------------------- #
 # Self-restart: the server watches for <cfg dir>/restart.flag. Whatever writes
@@ -806,6 +806,9 @@ class Store:
         # 0.9.240 configurable listener ports (must differ; 1024-65535)
         self.data.setdefault("transportHttpPort", 8765)
         self.data.setdefault("transportHttpsPort", 8766)
+        # 0.9.241 certificate mode: "ca" (local CA + CA-signed leaf, classic)
+        # or "self_signed_leaf" (a directly-trusted leaf, no CA involved)
+        self.data.setdefault("certMode", "ca")
         self.data.setdefault("autoClean", True)        # delete old sessions on pane open
         self.data.setdefault("autoCleanDays", 120)     # session older than N days -> removed
         self.data.setdefault("logCleanDays", 30)        # debug/access logs older than N days -> removed
@@ -1148,6 +1151,7 @@ class Store:
             "trackedChanges": bool(d.get("trackedChanges", False)),
             "newSessionPerEmail": bool(d.get("newSessionPerEmail", False)),
             "transportMode": (d.get("transportMode") if d.get("transportMode") in ("auto", "http", "https") else "auto"),
+            "certMode": (d.get("certMode") if d.get("certMode") in ("ca", "self_signed_leaf") else "ca"),
             "transportHttpPort": (int(d.get("transportHttpPort")) if isinstance(d.get("transportHttpPort"), int) and 1024 <= int(d.get("transportHttpPort")) <= 65535 else 8765),
             "transportHttpsPort": (int(d.get("transportHttpsPort")) if isinstance(d.get("transportHttpsPort"), int) and 1024 <= int(d.get("transportHttpsPort")) <= 65535 else 8766),
             "autoClean": bool(d.get("autoClean", True)),
@@ -2983,6 +2987,11 @@ class SlideKickHandler(BaseHTTPRequestHandler):
                         return 1024 <= v <= 65535
                     return False
 
+                if "certMode" in body and body["certMode"] is not None:
+                    if str(body["certMode"]) not in ("ca", "self_signed_leaf"):
+                        raise ApiError(400, "certMode must be ca or self_signed_leaf")
+                    self.store.data["certMode"] = str(body["certMode"])
+                    changed = True
                 if "transportHttpPort" in body and body["transportHttpPort"] is not None:
                     if not _valid_port(body["transportHttpPort"]):
                         raise ApiError(400, "transportHttpPort must be a number in 1024-65535")
