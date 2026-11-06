@@ -34,7 +34,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 APP = "OfficeKick"
-VERSION = "0.9.279"
+VERSION = "0.9.280"
 
 # --------------------------------------------------------------------------- #
 # Self-restart: the server watches for <cfg dir>/restart.flag. Whatever writes
@@ -393,6 +393,13 @@ CONNECTION_TYPES = (
     "ollama",
     "llamacpp",
 )
+
+# connection types that cannot work without a stored key - the save endpoint
+# reports needsKey so the pane can warn instead of leaving the user with a
+# connection whose every call fails with HTTP 401 "Missing Authentication
+# header" (field: an openrouter connection saved with an empty key field)
+NEEDS_KEY_TYPES = ("openai", "anthropic", "openrouter", "generic-openai",
+                   "llamacpp")
 
 DEFAULT_BASES = {
     "openai": "https://api.openai.com/v1",
@@ -2834,8 +2841,13 @@ class SlideKickHandler(BaseHTTPRequestHandler):
             body = self._body_json()
             if path == "/api/connections":
                 name, ctype, base, key = validate_connection_body(body)
+                existing = self.store.find_connection(name)
                 self.store.upsert_connection(name, ctype, base, key)
-                self._send_json({"ok": True, "name": name})
+                self._send_json({
+                    "ok": True, "name": name,
+                    "needsKey": ctype in NEEDS_KEY_TYPES
+                                and not (key or (existing or {}).get("apiKey")),
+                })
             elif path == "/api/repo-update":
                 self._send_json(git_pull(self.store))
             elif path == "/api/server-restart":

@@ -6261,8 +6261,13 @@ OfficeDeck.prototype.setNotes = function (i, text) {
       if (v.apiKey) body.apiKey = v.apiKey;
       req = apiJson("/api/connections", "POST", body);
     }
-    req.then(function () {
-      setFormMsg($("conn-formmsg"), "Saved connection '" + v.name + "'. Ready for the next one.", true);
+    req.then(function (res) {
+      var needsKey = !!(res && res.needsKey);
+      setFormMsg($("conn-formmsg"),
+        needsKey
+          ? "Saved connection '" + v.name + "' WITHOUT an API key - every model or chat call will fail with HTTP 401 (Missing Authentication header) until you open the connection and set the key."
+          : "Saved connection '" + v.name + "'. Ready for the next one.",
+        !needsKey);
       // fields cleared right after saving - the form is fresh for the next connection
       SK.editingConn = null;
       SK.connBaseDirty = false;

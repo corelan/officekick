@@ -42,6 +42,20 @@
   exact layout Office honors, and docs gain the manual Trust Center +
   reg-add unblock for machines that installed older builds.
 
+## 0.9.280
+
+### Fixed
+- openrouter sessions failing with HTTP 401 "Missing Authentication header":
+  the connection had been saved WITHOUT an API key (the pane list even shows
+  "key: not set" under the row, easy to miss), so the request builder omitted
+  the Authorization header entirely - OpenRouter answers exactly that 401
+  string for a header-less POST. Two changes: the save endpoint now returns
+  needsKey=true for key-needing types (openai, anthropic, openrouter,
+  generic-openai, llamacpp) when the stored key is/would be empty, and all
+  three panes render a loud one-liner instead of the quiet "Ready for the
+  next one". Setting the key later clears the warning (verified: keyless,
+  with-key, ollama keyless, resave, key-after-the-fact).
+
 ## 0.9.279
 
 ### Changed
