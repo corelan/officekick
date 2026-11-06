@@ -173,11 +173,17 @@ the certificate mode resets to self-signed leaf. Details:
 - **PowerPoint (macOS)**: Home tab -> **Add-ins** (dropdown) ->
   **Developer Add-ins** -> **Corelan SlideKick**.
 - **Word (macOS)**: same route -> **Corelan DocKick**.
-- **PowerPoint / Word (Windows)**: Home -> **Add-ins** -> **Advanced** ->
-  the classic "Office Add-ins" dialog -> **SHARED FOLDER** (top) -> the
-  add-in -> **Add** (once per application). Note: the newer "Apps" dialog
-  (Add-ins -> Manage) only lists store and organization add-ins - it never
-  shows local folder catalogs.
+- **PowerPoint / Word (Windows)**: install once (with Office closed), then
+  **quit and reopen** the app - the launch-time sideload makes the panes
+  appear in **Home -> Add-ins** (dropdown). The classic dialog route
+  (Insertion/Mes complements -> **SHARED FOLDER/DOSSIERS PARTAGEES** -> the
+  add-in -> Add) needs the folder catalog enabled - on the newest Windows 11
+  Word builds the Trust Center catalog UI REJECTS local drive paths (sorry,
+  did you include "https://"?): enter the loopback **UNC** form instead:
+  \\localhost\c$\Users\<user>\AppData\Local\OfficeKick\manifest
+  (the admin share C$ is on by default), tick "Show in menu" / "Afficher
+  dans le menu", then restart the app. The newer "Apps" dialog (Add-ins ->
+  Manage) only lists store and organization add-ins on every build.
 - **Outlook (MailKick)**: the manifest lands in Outlook's own add-in folder
   (macOS); quit and reopen Outlook. If MailKick does not appear:
   Get Add-ins > My add-ins > Custom Add-ins > Add a custom add-in >

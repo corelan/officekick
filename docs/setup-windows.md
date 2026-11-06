@@ -149,6 +149,46 @@ The OfficeKick installer needs no PowerShell scripts at runtime - this
 setup script is the only `.ps1` in the workflow - so `Process`-scope
 Bypass for this one run is the smallest, cleanest choice.
 
+## If the add-in does not appear in Word (Windows)
+
+The installer registers two layers; check them in this order:
+
+1. **Quit and reopen the app.** The per-add-in launch-time sideload
+   (registry: `HKCU\...\Wef\Developer`) is read at every app LAUNCH - a
+   Word instance that was running during the install knows nothing of the
+   add-ins until it restarts. Verify the layer first:
+
+   ```bat
+   reg query "HKCU\Software\Microsoft\Office\16.0\Wef\Developer" /s
+   ```
+
+   Expected: `RefreshAddins` = 1 plus one entry per installed add-in, each
+   pointing at `%LOCALAPPDATA%\OfficeKick\manifest\<addin>.xml`.
+
+2. **The Trust Center catalog** (the classic dialog's Shared Folder /
+   *Dossiers partages* tab) - field testing on a very new Windows 11 Word
+   build found this quirk: the catalog UI **rejects local drive paths**
+   with *"Desole... L'emplacement que vous avez entre est incorrect.
+   Avez-vous inclus "https://"?"*. The working form is the loopback
+   **UNC** path (the admin share C$ is on by default on clean Windows 11
+   installs; no setup needed):
+
+   ```
+   \\localhost\c$\Users\<user>\AppData\Local\OfficeKick\manifest
+   ```
+
+   Word -> Fichier -> Options -> Centre de gestion de la confidentialite ->
+   Parametres... -> **Catalogues de complements approuves** -> paste the
+   UNC path -> **Ajouter un catalogue** -> tick **"Afficher dans le
+   menu"** -> OK -> restart Word. The installer pre-registers the same
+   catalog in the registry (`...\WEF\TrustedCatalogs` with `flag` = 1;
+   older installs wrote the value under a name Office ignores - delete the
+   `{C7B1F2A9-...}` subkey once or let the UI entry take over, both store
+   the same shape).
+
+3. The modern **Add-ins -> Manage "Apps"** dialog never lists local folder
+   catalogs on any build - it is a dead end for this use case.
+
 ## After the script - the folder and the clone, manually
 
 The script's clone step is a convenience; you never have to rely on it. The
