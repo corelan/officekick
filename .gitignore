@@ -4,5 +4,11 @@ __pycache__/
 install.log
 test*.py
 tests/
+# test scripts are NEVER shipped (user rule): any depth, any naming
+**/test_*.py
+**/test-*.py
+**/test*.spec.js
+**/tests/
+**/unittest_*.py
 .DS_Store
 **/.DS_Store
