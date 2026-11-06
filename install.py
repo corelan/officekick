@@ -768,27 +768,36 @@ def select_addins(interactive):
         """The https status block (list of lines, no painting side effects)."""
         out_lines = []
         if not is_mac() and _current_transport() != "https":
-            out_lines.append(_paint("  https prereqs for Outlook: ", "bold") + "not needed -")
-            out_lines.append("  Outlook rides the plain-http localhost listener on")
-            out_lines.append("  Windows; no certificate is created or trusted.")
+            out_lines.append(_paint("  https prerequisites for Outlook: ", "bold")
+                             + "not needed")
+            out_lines.append("")
+            out_lines.append("  Windows rides the plain-http listener.")
+            out_lines.append("  No certificate is created or trusted.")
             return out_lines
         # Windows + https transport: the same prerequisite rendering as mac
         if feas:
-            out_lines.append("  " + _paint("https prerequisites for Outlook: MET", "green"))
+            out_lines.append("  " + _paint("https prerequisites for Outlook: MET",
+                                           "green"))
+        else:
+            out_lines.append("  " + _paint("https prerequisites for Outlook: NOT MET",
+                                           "red") + _paint(" - Outlook is locked",
+                                                           "bold"))
+        out_lines.append("")
+        if feas:
             for t in feas_how:
                 if "security tool" in t or "'security'" in t:
                     continue   # mac-only technique
-                out_lines.append("    - " + t)
+                out_lines.append("    - " + t.replace(
+                    " (installer auto-installs it if missing)", ""))
         else:
-            out_lines.append("  " + _paint("https prerequisites for Outlook: NOT MET", "red")
-                             + _paint(" - Outlook is locked", "bold"))
             for rln in feas_why:
                 out_lines.append("    - " + rln)
-        out_lines.append(_paint("  Enabling Outlook sets up a local https certificate:"
-                                " the installer asks WHICH mode before its certificates"
-                                " step - self-signed leaf is the default (no CA created);", "dim"))
-        out_lines.append(_paint("  change it any time under Transport options (main menu 4).",
-                                "dim"))
+        out_lines.append("")
+        out_lines.append(_paint("  Enabling Outlook asks for the certificate mode"
+                                " before install.", "dim"))
+        out_lines.append(_paint("  Self-signed leaf is the default."
+                                " Change it in Transport options.", "dim"))
+        out_lines.append("")
         return out_lines
 
     msg = []   # picker feedback lines (repainted with the screen, never duplicated)
@@ -812,7 +821,7 @@ def select_addins(interactive):
             return r
         while True:
             pre = ["",
-                   "  Add-ins (Word + PowerPoint are enabled by default, Outlook is not):",
+                   "  Add-ins - Word + PowerPoint on by default, Outlook is not:",
                    ""] + _prereq_lines() + ([""] if msg else []) + msg
             r = toggle_pick(_rowdata(),
                             "(up/down = move, space/Enter or 1-3 = toggle, 4 = install, 0 = back)",
@@ -852,9 +861,9 @@ def select_addins(interactive):
                     state[folder] = False
                     msg = ["   - Outlook certificate setup declined - MailKick stays off."]
                     continue
-                msg = ["   - Outlook enabled - the certificate question comes right"
-                       " before step 3 of 6 (certificates); self-signed leaf is the"
-                       " default answer."]
+                msg = ["   - Outlook enabled.",
+                       "   - The certificate question comes before step 3 of 6.",
+                       "   - Self-signed leaf is the default answer."]
                 state[folder] = not state[folder]
                 continue
             state[folder] = not state[folder]
@@ -1240,31 +1249,88 @@ def pick_mailkick_route():
 
 def validate_existing_tls(crt, host=None):
     """Check the cert ALREADY on disk: unexpired, SAN (localhost, or a BYO
-    hostname), trusted. None = usable; a short reason string = regenerate."""
+    hostname), trusted. None = usable; a short reason string = regenerate.
+    Windows reads the file with cryptography (no openssl there) and checks
+    the CURRENT USER Trusted People store by thumbprint."""
     host = host or _current_cert_host()
     rc, _o = run_quiet(["openssl", "x509", "-in", crt, "-noout", "-checkend", "0"])
     if rc != 0:
-        return "expired or not yet valid"
-    rc, o = run_quiet(["openssl", "x509", "-in", crt, "-noout", "-text"])
-    if host != "localhost":
-        if ("DNS:%s" % host) not in o:
-            return "the certificate does not cover '%s' (no DNS SAN for it)" % host
-    elif "DNS:localhost" not in o and "IP Address:127.0.0.1" not in o:
-        return "no localhost subjectAltName"
-    rc, o = run_quiet(["security", "verify-cert", "-c", crt, "-p", "ssl"])
-    if rc != 0:
-        return "its chain is not trusted by this Mac (" + (o or "untrusted").strip()[:120] + ")"
+        cert = _load_cert_from_pem(crt)
+        if cert is None:
+            return "the certificate could not be read"
+        from datetime import datetime, timezone
+        end = getattr(cert, "not_valid_after_utc", None)
+        if end is None:
+            end = cert.not_valid_after.replace(tzinfo=timezone.utc)
+        if end <= datetime.now(timezone.utc):
+            return "expired or not yet valid"
+        try:
+            san = cert.extensions.get_extension_for_class(
+                __import__("cryptography").x509.SubjectAlternativeName).value
+            dns = san.get_values_for_type(__import__("cryptography").x509.DNSName)
+            ips = san.get_values_for_type(__import__("cryptography").x509.IPAddress)
+            if host != "localhost":
+                if host not in dns:
+                    return "the certificate does not cover '%s' (no DNS SAN for it)" % host
+            elif "localhost" not in dns and str(__import__("ipaddress").ip_address("127.0.0.1")) not in [str(i) for i in ips]:
+                return "no localhost subjectAltName"
+        except Exception:
+            pass
+    else:
+        rc, o = run_quiet(["openssl", "x509", "-in", crt, "-noout", "-text"])
+        if host != "localhost":
+            if ("DNS:%s" % host) not in o:
+                return "the certificate does not cover '%s' (no DNS SAN for it)" % host
+        elif "DNS:localhost" not in o and "IP Address:127.0.0.1" not in o:
+            return "no localhost subjectAltName"
+    if is_mac():
+        rc, o = run_quiet(["security", "verify-cert", "-c", crt, "-p", "ssl"])
+        if rc != 0:
+            return "its chain is not trusted by this Mac (" + (o or "untrusted").strip()[:120] + ")"
+        return None
+    _sha256, sha1 = _leaf_fingerprints(crt)
+    rc, o = run_quiet(["certutil", "-user", "-store", "TrustedPeople"])
+    if rc != 0 or not sha1 or sha1 not in (o or "").replace(" ", "").replace(":", "").upper():
+        return "the leaf is not trusted in the CURRENT USER Trusted People store"
     return None
 
 
 CERT_FACTS = {}            # loopback TLS info, printed after the certificates phase
 
 
+def _load_cert_from_pem(crt):
+    """Read a PEM certificate with the 'cryptography' package (the WINDOWS
+    leaf generator writes the file; openssl does not exist there)."""
+    try:
+        from cryptography import x509
+        with open(crt, "rb") as fh:
+            return x509.load_pem_x509_certificate(fh.read())
+    except Exception:
+        return None
+
+
 def _cert_facts(crt):
     """Name + expiry of one PEM certificate ({} = unreadable)."""
     rc, o = run_quiet(["openssl", "x509", "-in", crt, "-noout", "-subject", "-enddate"])
     if rc != 0:
-        return {}
+        # WINDOWS: openssl is absent - read the leaf with cryptography
+        try:
+            from datetime import datetime, timezone
+            cert = _load_cert_from_pem(crt)
+            if cert is None:
+                return {}
+            cn = "?"
+            for attr in cert.subject:
+                if attr.oid.dotted_string == "2.5.4.3":   # CN
+                    cn = attr.value
+            end = getattr(cert, "not_valid_after_utc", None)
+            if end is None:
+                end = cert.not_valid_after.replace(tzinfo=timezone.utc)
+            expires = end.strftime("%b %d %H:%M:%S %Y GMT")
+            days = (end - datetime.now(timezone.utc)).days
+            return {"cn": cn, "expires": expires, "days": days}
+        except Exception:
+            return {}
     cn = "?"
     m = re.search(r"CN ?= ?([^\n,]+)", o)
     if m:
@@ -1619,6 +1685,18 @@ def _leaf_fingerprints(crt):
                 sha1 = m.group(1).replace(":", "").upper()
     except Exception:
         pass
+    if sha1 is None or sha256 is None:
+        # WINDOWS: openssl is absent - the leaf generator wrote this file
+        try:
+            from cryptography.hazmat.primitives import hashes
+            cert = _load_cert_from_pem(crt)
+            if cert is not None:
+                if sha256 is None:
+                    sha256 = cert.fingerprint(hashes.SHA256()).hex().upper()
+                if sha1 is None:
+                    sha1 = cert.fingerprint(hashes.SHA1()).hex().upper()
+        except Exception:
+            pass
     return sha256, sha1
 
 
