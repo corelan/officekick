@@ -94,6 +94,7 @@ LOG_HANDLE = None         # install.log (repo root) - full detail trail
 QUIET = False             # when True: out/step print only into install.log
 PHASE_DIRTY = False       # a phase line is pending on the console
 ADDINS = set()            # set of add-in folder names for THIS run
+FIRST_RUN = set()         # add-ins freshly added THIS run (never installed before)
 INTERACTIVE = False       # set per run: the flow may ask questions
 AUTOSTART_WANT = False
 
@@ -536,9 +537,10 @@ def _prereq_block(feas, feas_why, feas_how):
 def select_addins(interactive):
     """Decide which add-ins this run deploys. Word + PowerPoint default ON;
     Outlook default OFF. Returns the set (also stored in ADDINS)."""
-    global ADDINS
+    global ADDINS, FIRST_RUN
     base = {"slidekick", "wordkick"}
     prev = detect_installed()
+    FIRST_RUN = set()
     if not interactive or DRY_RUN:
         addoutlook = ((MAILKICK_OPT or bool(MAILKICK_CERT or MAILKICK_KEY)
                        or "mailkick" in prev) and not SKIP_MAILKICK)
@@ -547,6 +549,7 @@ def select_addins(interactive):
             ", ".join(sorted(ADDINS)),
             " (outlook: previously installed)" if "mailkick" in prev and not (MAILKICK_OPT or MAILKICK_CERT or MAILKICK_KEY) else ""))
         ok("installing: " + (", ".join(app_label(a) for a in sorted(ADDINS))))
+        FIRST_RUN = set(ADDINS) - prev
         return set(ADDINS)
     rows = [("wordkick",  "Word (DocKick)",       "wordkick"  in prev),
             ("slidekick", "PowerPoint (SlideKick)", "slidekick" in prev),
@@ -659,6 +662,7 @@ def select_addins(interactive):
         raise MenuAbort("add-in selection empty")
     ok("installing: " + (", ".join(app_label(a) for a in sorted(ADDINS))))
     _log("add-ins selected: %s" % ", ".join(sorted(ADDINS)), ts=True)
+    FIRST_RUN = set(ADDINS) - prev
     return set(ADDINS)
 
 
@@ -1923,7 +1927,39 @@ def done_note(mode_name):
     out("  Quit and REOPEN your Office apps, then check About tab ->")
     out("  'Pane build: %s'. Details of this run: install.log" % read_version())
     out("  Simulator (no Office needed): %s/slidekick/static/simulator.html" % _sim_base())
+    _first_run_notes()
     check_pane_errors()
+
+
+def _first_run_notes():
+    """After installing an add-in for the FIRST time, show what to expect and
+    how to surface the pane (Outlook needs one manual step on some builds)."""
+    if DRY_RUN or not (FIRST_RUN and set(FIRST_RUN) & set(ADDINS or set())):
+        return
+    apps = office_apps_present()
+    names = [app_label(f) for f in sorted(FIRST_RUN) if f in (ADDINS or set())]
+    out("")
+    print("  " + _paint("First-run notes (%s):" % ", ".join(names), "bold"))
+    if is_mac():
+        print("  - macOS may ask ONCE to allow the 'OfficeKickServer' background item")
+        print("    and (when a model on your LAN is used) a Local Network prompt -")
+        print("    click Allow; both belong to this local server, nothing else is installed.")
+    else:
+        print("  - Windows may ask ONCE whether Python may listen (firewall) -")
+        print("    click Allow; the add-ins talk to 127.0.0.1 only, but Allow keeps")
+        print("    LAN models like Ollama working later.")
+    if "mailkick" in (FIRST_RUN and (ADDINS or set())) and apps.get("mailkick"):
+        mpath = os.path.join(manifest_dir(), "mailkick.xml")
+        if is_mac():
+            print("  - Outlook: the pane is staged in Outlook's WEF folder already;")
+            print("    if it does not appear after a restart, add it once via")
+            print("    Get Add-ins > My add-ins > Custom Add-ins > Add from File (Cmd+Shift+G):")
+        else:
+            print("  - Outlook: add the pane once via Get Add-ins > My add-ins >")
+            print("    Custom Add-ins > Add a custom add-in > Add from File:")
+        print("        %s" % mpath)
+        print("    (the plain-http/localhost listener works; the https one covers New Outlook)")
+    note("first-run notes shown for: %s" % ", ".join(sorted(FIRST_RUN)))
 
 
 def git_pull():
