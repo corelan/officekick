@@ -2389,23 +2389,51 @@ OfficeDeck.prototype.addImage = function (payload) {
     });
   }
   var raw0 = stripPrefix(payload.b64);
-  return attempt(raw0).catch(function (e1) {
-    var msg1 = String(e1.message || e1);
-    return reencode(raw0, 0.85).then(function (small) {
-      if (!small) {
-        throw new FriendlyError("image insert failed: " + msg1 +
-          " (payload " + kb(raw0) + " KB; re-encoding not available in this host)");
+  var self = this;
+  function shapeFallback() {
+    // attempt 3 (0.9.264): the direct image insert is failing on this host
+    // regardless of payload - use the PROVEN primitive instead: a rectangle
+    // at the requested geometry picture-filled via fill.setImage (the same
+    // code path as set_shape_image, shipped at PowerPointApi 1.10).
+    return self.run("addImageShapeFallback", function (ctx) {
+      if (!Office.context.requirements.isSetSupported("PowerPointApi", "1.10")) {
+        throw new FriendlyError("the picture-filled-shape fallback needs PowerPointApi 1.10 - update PowerPoint (16.105+ on Mac).");
       }
-      return attempt(small).then(function (r) {
-        r.note = "inserted as JPEG " + kb(small) + " KB (the host rejected the original " +
-          kb(raw0) + " KB payload)";
-        return r;
-      }, function (e2) {
-        throw new FriendlyError("image insert failed: " + msg1 +
-          " (payload " + kb(raw0) + " KB; also as JPEG " + kb(small) + " KB: " +
-          String((e2 && e2.message) || e2) + ")");
+      var geo = payload.geometry || {};
+      var g0 = { left: geo.left != null ? geo.left : 80, top: geo.top != null ? geo.top : 110,
+                 width: geo.width != null ? geo.width : 800, height: geo.height != null ? geo.height : 450 };
+      var shapes = ctx.presentation.slides.getItemAt(payload.slide != null ? payload.slide : 0).shapes;
+      var sh = shapes.addGeometricShape("rectangle", g0);
+      try { sh.name = "sk-shape-image"; } catch (eN) { /* naming optional */ }
+      sh.fill.setImage(raw0);
+      return ctx.sync().then(function () {
+        return { ok: true,
+          note: "inserted as a picture-filled rectangle (" + kb(raw0) + " KB) - the direct image insert failed on this host (" +
+            String(e0msg || "unknown").slice(0, 60) + ")" };
       });
     });
+  }
+  var e0msg = "";
+  var raw0b = raw0;
+  return attempt(raw0b).catch(function (e1) {
+    e0msg = String(e1.message || e1);
+    var msg1 = e0msg;
+    return reencode(raw0b, 0.85).then(function (small) {
+      if (!small) return shapeFallback();
+      return attempt(small).then(function (r) {
+        r.note = "inserted as JPEG " + kb(small) + " KB (the host rejected the original " +
+          kb(raw0b) + " KB payload)";
+        return r;
+      }, function (e2) {
+        dbg("office.addImage.jpegFail", { error: String(e2.message || e2).slice(0, 120) });
+        return shapeFallback().catch(function (e3) {
+          throw new FriendlyError("image insert failed: " + msg1 +
+            " (payload " + kb(raw0b) + " KB; also as JPEG " + kb(small) + " KB: " +
+            String((e2 && e2.message) || e2) + "; shape fallback: " +
+            String((e3 && e3.message) || e3).slice(0, 80) + ")");
+        });
+      });
+    }, function () { return shapeFallback(); });
   });
 };
 
@@ -2603,7 +2631,7 @@ OfficeDeck.prototype.createShape = function (slideIndex, op) {
         created = shapes.addLine("Straight", opts);
       } else if (vi === 1) {
         created = shapes.addGeometricShape(op.kind, opts);
-      } else {
+      } else if (vi === 2) {
         // v2 (0.9.261): the docs-sample form - the same repair that fixed
         // textboxes on 16.114: create BARE, then write the geometry as
         // shape properties. Some Mac builds reject ShapeAddOptions at sync
@@ -2614,6 +2642,13 @@ OfficeDeck.prototype.createShape = function (slideIndex, op) {
         ["left", "top", "width", "height"].forEach(function (gk) {
           if (opts[gk] != null) { try { created[gk] = opts[gk]; } catch (eG) { /* geometry optional */ } }
         });
+      } else {
+        // v3 (0.9.264): the build rejects the KIND in both forms
+        // (roundedRectangle: InvalidArgument in native + property form on
+        // 16.115 while rectangle/line/triangle with the SAME options all
+        // apply). Create a plain rectangle at the same geometry - the box
+        // keeps its intent (corner radius is lost) and the row reports it.
+        created = shapes.addGeometricShape("rectangle", opts);
       }
       try { created.name = "sk-shape-" + (op.kind || "shape"); } catch (eName) { /* naming optional */ }
       if (created && op.fill) {
@@ -2636,17 +2671,21 @@ OfficeDeck.prototype.createShape = function (slideIndex, op) {
       }
       return ctx.sync().then(function () {
         if (vi > 1) dbg("office.createShape.fallback", { variant: vi, kind: op.kind, slide: op.slide });
+        if (vi === 3 && op.kind !== "textbox" && op.kind !== "line") {
+          return { ok: true, variant: vi,
+            note: "this PowerPoint build rejected '" + op.kind + "' - used a plain rectangle" };
+        }
         return { ok: true, variant: vi };
       });
     }).catch(function (err) {
       var msg = String((err && err.message) || err);
       var tbLadder = op.kind === "textbox" && vi < 2 && !/needs PowerPointApi/.test(msg);
-      var geoLadder = vi === 1 && op.kind !== "textbox" && op.kind !== "line" &&
-        !/needs PowerPointApi/.test(msg) &&
+      var geoKind = op.kind !== "textbox" && op.kind !== "line";
+      var geoLadder = geoKind && !/needs PowerPointApi/.test(msg) &&
         /RichApi|InvalidArgument|GeneralException|argument|invalid|error/i.test(msg);
       if (tbLadder || geoLadder) {
         // this build rejected the creation path - try the next variant
-        // (textbox ladder 0.9.233; geometric ladder 0.9.261)
+        // (textbox ladder 0.9.233; geometric ladder 0.9.261/0.9.264)
         dbg("office.createShape.attempt", { variant: vi, kind: op.kind, error: msg.slice(0, 120) });
         return runVariant(vi + 1);
       }

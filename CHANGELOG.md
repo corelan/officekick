@@ -78,6 +78,23 @@
   Q&A pair lands in Previous requests and in the session history. Rules
   added to all three system prompts (MailKick's version says a clarify reply
   replaces - not supplements - the ops/reply round).
+## 0.9.264
+
+### Fixed
+- field evidence from 16.115: roundedRectangle fails BOTH creation forms
+  (native options + bare-create-with-properties) with InvalidArgument on
+  the same slide where rectangle/line/triangle/textboxes all apply - the
+  build rejects the KIND. create_shape now has a third variant for
+  geometric kinds: a plain rectangle at the same geometry, and the row
+  reports "this PowerPoint build rejected '<kind>' - used a plain
+  rectangle".
+- the image-insert failure was NOT size (both the raw 113 KB and the JPEG
+  153 KB payloads failed with the same host error). addImage attempt 3
+  inserts the picture as a picture-filled rectangle via fill.setImage
+  (the same primitive as set_shape_image, PowerPointApi 1.10) at the
+  requested geometry; the row reports "[inserted as a picture-filled
+  rectangle ... - the direct image insert failed on this host (...)]".
+
 ## 0.9.263
 
 ### Fixed
