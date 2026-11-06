@@ -611,6 +611,9 @@ def _persist_file(pairs):
         cfg = {}
     for k, v in pairs.items():
         cfg[k] = v
+    _cdir = os.path.dirname(config_file())
+    if _cdir and not os.path.isdir(_cdir):
+        os.makedirs(_cdir, exist_ok=True)   # a fresh machine: no ~/.officekick yet
     with open(config_file(), "w", encoding="utf-8") as fh:
         json.dump(cfg, fh, indent=2)
     try:
