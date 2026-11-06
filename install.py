@@ -2859,7 +2859,10 @@ def sideload_windows_catalog():
     try:
         with winreg.CreateKeyEx(winreg.HKEY_CURRENT_USER, key, 0, winreg.KEY_SET_VALUE) as k:
             winreg.SetValueEx(k, "Url", 0, winreg.REG_SZ, mdir)
-            winreg.SetValueEx(k, "flags", 0, winreg.REG_DWORD, 1)
+            # the value Office reads is `flag` (SINGULAR) - `flags` produced a
+            # registry entry Office ignored and a French Office telling the
+            # user to add/enable catalogs manually (field report 0.9.277)
+            winreg.SetValueEx(k, "flag", 0, winreg.REG_DWORD, 1)
         ok("trusted folder catalog registered (HKCU %s)" % key)
     except OSError as e:
         warn("could not register the trusted catalog: %s" % e)

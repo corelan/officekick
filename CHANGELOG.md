@@ -30,6 +30,18 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.277
+
+### Fixed
+- field report (french Office, fresh Windows box): the classic add-ins
+  dialog said "veuillez ajouter ou activer des catalogues depuis le Centre
+  de gestion de la confidentialite" - the installer's TrustedCatalogs entry
+  wrote the enable value as `flags`; office reads `flag` (SINGULAR). With
+  the wrong name the catalog existed but was never ENABLED. The value now
+  ships as flag=1 ( Url + singular flag), stub-winreg battery asserts the
+  exact layout Office honors, and docs gain the manual Trust Center +
+  reg-add unblock for machines that installed older builds.
+
 ## 0.9.276
 
 ### Fixed
