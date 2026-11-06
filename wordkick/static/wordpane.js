@@ -1758,7 +1758,13 @@ var nw = $("sess-new");
 
   WordDeck.prototype.run = function (name, fn) {
     var t0 = Date.now();
-    return Word.run(fn).then(
+    // Word.run does NOT bind the request-builder callback: `this` inside it
+    // is not the deck, so this._wrap/this._wholeParaRangeOf and every
+    // .bind(this) chain below threw (field: anchored insert_image
+    // "this._wholeParaRangeOf is not a function" even after 0.9.283 - the
+    // binds chained from the unbound root). Bind ONCE here; every op
+    // callback and its nested then-bindings now see the deck.
+    return Word.run(fn.bind(this)).then(
       function (result) {
         dbg("office", { method: name, ms: Date.now() - t0, ok: true });
         return result;
@@ -1845,7 +1851,7 @@ var nw = $("sess-new");
             return { ok: true, how: "anchor '" + place.slice(0, 60) + "' not found - end of document" };
           });
         }
-        return this._wholeParaRangeOf(ctx, match).then(function (pr) {
+        return _wholeParaRange(ctx, match).then(function (pr) {
           var paraRange = pr || match;
           items.forEach(function (it3) {
             var p3 = paraRange.insertParagraph(String(it3.text == null ? "" : it3.text), "After");
@@ -1994,7 +2000,7 @@ var nw = $("sess-new");
                     r.how = "anchor '" + place.slice(0, 60) + "' not found - " + r.how;
                     return r;
                   });
-                  return this._wholeParaRangeOf(ctx, match).then(function (pr) {
+                  return _wholeParaRange(ctx, match).then(function (pr) {
                     return inserter2(pr || match);
                   }.bind(this));
                 }.bind(this));
@@ -2054,7 +2060,7 @@ var nw = $("sess-new");
                 r.how = "anchor '" + place.slice(0, 60) + "' not found - " + r.how;
                 return r;
               });
-              return this._wholeParaRangeOf(ctx, match).then(function (pr) {
+              return _wholeParaRange(ctx, match).then(function (pr) {
                 return inserter(pr || match);
               }.bind(this));
             }.bind(this));
@@ -2124,7 +2130,7 @@ var nw = $("sess-new");
           return { how: "anchor '" + place.slice(0, 60) + "' not found - end of document" };
         });
       }
-      return this._wholeParaRangeOf(ctx, match).then(function (pr) {
+      return _wholeParaRange(ctx, match).then(function (pr) {
         return doInsert(pr || match).then(function () {
           return { how: "after the paragraph containing '" + place.slice(0, 60) + "'" };
         });
@@ -2401,7 +2407,8 @@ var nw = $("sess-new");
     });
   };
 
-  WordDeck.prototype._wholeParaRangeOf = function (ctxX, matchRange) {
+  function _wholeParaRange(ctxX, matchRange) {
+    // 0.9.285 - module-local twin of _wholeParaRangeOf (no `this` needed)
     // 0.9.227 - expands a text-match range to the WHOLE paragraph that
     // contains it (so inserts with "After" land after the paragraph, never
     // mid-sentence). Returns the paragraph range or null.
@@ -2419,7 +2426,9 @@ var nw = $("sess-new");
       }
       return matchRange;
     });
-  };
+  }
+
+  WordDeck.prototype._wholeParaRangeOf = _wholeParaRange;   // delegate
 
   WordDeck.prototype.addImage = function (payload) {
     // 0.9.209 - the MODEL (or the pane setting) decides where to insert:
@@ -2443,7 +2452,7 @@ var nw = $("sess-new");
       rs.load("items");
       return ctx.sync().then(function () {
         if (rs && rs.items && rs.items.length) {
-          return this._wholeParaRangeOf(ctx, rs.items[0]).then(function (pr) {
+          return _wholeParaRange(ctx, rs.items[0]).then(function (pr) {
             (pr || rs.items[0]).insertInlinePictureFromBase64(String(payload.b64), "After");
             return ctx.sync().then(function () { return { ok: true, how: "after the paragraph containing '" + place.slice(0, 60) + "'" }; });
           }.bind(this));

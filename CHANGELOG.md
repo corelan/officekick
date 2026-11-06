@@ -42,6 +42,20 @@
   exact layout Office honors, and docs gain the manual Trust Center +
   reg-add unblock for machines that installed older builds.
 
+## 0.9.285
+
+### Fixed
+- anchored inserts STILL threw "this._wholeParaRangeOf is not a function"
+  after 0.9.283 - the actual root is one level deeper: Word.run(fn) does NOT
+  bind the request-builder callback, so `this` inside every op callback was
+  never the deck; the 0.9.283 .bind(this) chains were bound to that unbound
+  base and the method lookup still missed. WordDeck.run now invokes
+  fn.bind(this) once at the root (this._wrap and every nested bound chain
+  resolve correctly), and all five anchor helpers go through a module-local
+  _wholeParaRange() that needs no `this` at all. Both layers verified by
+  node --check plus the anchor-site audit (no this.-based wholeParaRange
+  callers remain).
+
 ## 0.9.284
 
 ### Changed
