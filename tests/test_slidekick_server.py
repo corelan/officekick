@@ -189,6 +189,30 @@ class TestSlideKickServer(unittest.TestCase):
         st, cfg = self.S.req("/api/config")
         self.assertEqual(cfg["transportMode"], "auto")
 
+    def test_transport_ports_setting(self):
+        st, cfg = self.S.req("/api/config")
+        self.assertEqual(cfg["transportHttpPort"], 8765)
+        self.assertEqual(cfg["transportHttpsPort"], 8766)
+        st, _ = self.S.req("/api/settings", "PUT", {"transportHttpPort": 8799})
+        self.assertEqual(st, 200)
+        st, cfg = self.S.req("/api/config")
+        self.assertEqual(cfg["transportHttpPort"], 8799)
+        # https must differ from http -> refused while http is 8799
+        st, _ = self.S.req("/api/settings", "PUT", {"transportHttpsPort": 8799}, True)
+        self.assertEqual(st, 400)
+        st, _ = self.S.req("/api/settings", "PUT", {"transportHttpPort": 8798})
+        st, _ = self.S.req("/api/settings", "PUT", {"transportHttpsPort": 8799})
+        st, cfg = self.S.req("/api/config")
+        self.assertEqual(cfg["transportHttpPort"], 8798)
+        self.assertEqual(cfg["transportHttpsPort"], 8799)
+        for bad in ("80", "70000", "nonsense"):
+            st, _ = self.S.req("/api/settings", "PUT", {"transportHttpPort": bad}, True)
+            self.assertEqual(st, 400)
+        # restore
+        for k, v in (("transportHttpPort", 8765), ("transportHttpsPort", 8766)):
+            st, _ = self.S.req("/api/settings", "PUT", {k: v})
+            self.assertEqual(st, 200)
+
     def test_approvals_settings(self):
         st, _ = self.S.req("/api/settings", "PUT", {
             "approvals": {"delete_slide": "auto", "apply_layout": "deny"}})

@@ -97,6 +97,7 @@ ADDINS = set()            # set of add-in folder names for THIS run
 FIRST_RUN = set()         # add-ins freshly added THIS run (never installed before)
 INTERACTIVE = False       # set per run: the flow may ask questions
 AUTOSTART_WANT = False
+HTTPS_PORT = None         # resolved from the persisted settings (defaults to PORT + 1)
 
 
 def _log(msg, ts=False):
@@ -494,33 +495,101 @@ def https_feasible():
         try:
             import ssl  # noqa: F401
             techniques.append("python ssl - serves the https://localhost:%d"
-                              " pane listener for Outlook" % (PORT + 1))
+                              " pane listener for Outlook" % (HTTPS_PORT if HTTPS_PORT else PORT + 1))
         except Exception as exc:
             reasons.append("python ssl module unavailable: %s" % exc)
         return (len(reasons) == 0, reasons, techniques)
     return (True, [], [])   # Windows: no TLS component needed for Outlook
 
 
-def _current_transport():
-    """The persisted transport mode (auto/http/https): from the running
-    server first, then from the config file; auto when unknown."""
+def _config_settings():
+    """(transport dict) from the running server first, then the config file,
+    {} when neither is reachable."""
     try:
         import urllib.request
         opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
         with opener.open("http://127.0.0.1:%d/api/config" % PORT, timeout=1.5) as resp:
-            mode = (json.loads(resp.read().decode("utf-8", "replace")) or {}).get("transportMode")
-        if mode in ("auto", "http", "https"):
-            return mode
+            d = json.loads(resp.read().decode("utf-8", "replace")) or {}
+            return {k: d.get(k) for k in ("transportMode", "transportHttpPort", "transportHttpsPort")}
     except Exception:
         pass
     try:
         with open(config_file(), "r", encoding="utf-8") as fh:
-            mode = (json.load(fh) or {}).get("transportMode")
-        if mode in ("auto", "http", "https"):
-            return mode
+            d = json.load(fh) or {}
+        return {k: d.get(k) for k in ("transportMode", "transportHttpPort", "transportHttpsPort")}
     except Exception:
-        pass
-    return "auto"
+        return {}
+
+
+def _valid_port(v):
+    try:
+        return 1024 <= int(v) <= 65535
+    except (TypeError, ValueError):
+        return False
+
+
+def _current_transport():
+    """The persisted transport mode (auto/http/https); 'auto' when unknown."""
+    mode = _config_settings().get("transportMode")
+    return mode if mode in ("auto", "http", "https") else "auto"
+
+
+def _current_ports():
+    """(http_port, https_port) from the persisted settings; the classic
+    8765/8766 when unknown."""
+    d = _config_settings()
+    hp = d.get("transportHttpPort")
+    sp = d.get("transportHttpsPort")
+    hp = int(hp) if _valid_port(hp) else 8765
+    sp = int(sp) if _valid_port(sp) and int(sp) != hp else hp + 1
+    return hp, sp
+
+
+def _set_transport(mode, http_port=None, https_port=None):
+    """Persist the transport mode + optional listener ports: through the
+    running server (settings PUT) so both sides agree, or straight into the
+    config file when the server is down."""
+    if mode not in ("auto", "http", "https"):
+        return False
+    body = {"transportMode": mode}
+    if http_port is not None:
+        body["transportHttpPort"] = int(http_port)
+    if https_port is not None:
+        body["transportHttpsPort"] = int(https_port)
+    if health(PORT):
+        try:
+            import urllib.request
+            req = urllib.request.Request(
+                "http://127.0.0.1:%d/api/settings" % PORT,
+                data=json.dumps(body).encode("utf-8"),
+                headers={"Content-Type": "application/json"}, method="PUT")
+            opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+            with opener.open(req, timeout=3) as resp:
+                resp.read()
+            note("transport persisted via the server: %s" % json.dumps(body))
+            return True
+        except Exception as exc:
+            warn("could not store the transport via the server (%s) - writing the config file" % exc)
+    try:
+        cfg = {}
+        try:
+            with open(config_file(), "r", encoding="utf-8") as fh:
+                cfg = json.load(fh) or {}
+        except Exception:
+            cfg = {}
+        for k, v in body.items():
+            cfg[k] = v
+        with open(config_file(), "w", encoding="utf-8") as fh:
+            json.dump(cfg, fh, indent=2)
+        try:
+            os.chmod(config_file(), 0o600)
+        except OSError:
+            pass
+        note("transport persisted (config file written): %s" % json.dumps(body))
+        return True
+    except Exception as exc:
+        warn("could not write %s: %s" % (config_file(), exc))
+        return False
 
 
 def _set_transport(mode):
@@ -579,7 +648,7 @@ def clear_screen():
 def _https_state():
     """(active, description) for the https://localhost:<port+1> listener in
     the info header above menus. Never raises."""
-    port_tls = PORT + 1
+    port_tls = HTTPS_PORT if HTTPS_PORT else PORT + 1
     try:
         import ssl
         import urllib.request
@@ -1051,7 +1120,7 @@ def tls_active():
 
 
 def _sim_base():
-    return "https://localhost:%d" % (PORT + 1) if tls_active() else "http://127.0.0.1:%d" % PORT
+    return "https://localhost:%d" % (HTTPS_PORT if HTTPS_PORT else PORT + 1) if tls_active() else "http://127.0.0.1:%d" % PORT
 
 
 def pane_listener_line():
@@ -1059,7 +1128,9 @@ def pane_listener_line():
     if tls_active():
         return (
             "  https://localhost:%d  <- task panes + AI requests (TLS, user-trusted CA)\n"
-            "  http://127.0.0.1:%d   <- same statics, plain http" % (PORT + 1, PORT)
+            "  https://localhost:%d  <- same statics, TLS (Outlook)\"s requirement)"
+            % (HTTPS_PORT if HTTPS_PORT else PORT + 1),
+            "  http://127.0.0.1:%d   <- same statics, plain http" % (PORT,)
         )
     return "  http://127.0.0.1:%d   <- task panes + AI requests (no certificate)" % PORT
 
@@ -1595,7 +1666,7 @@ def render_and_sideload():
         elif not tls_pair and not is_mac():
             warn("transport mode https is a macOS feature - Windows stays plain http")
     step("rendering add-in manifests (%s, %s)" %
-         (("https://localhost:%d via the loopback certificate" % (PORT + 1)) if tls_pair
+         (("https://localhost:%d via the loopback certificate" % (HTTPS_PORT if HTTPS_PORT else PORT + 1)) if tls_pair
           else ("http://localhost:%d" % PORT),
           "ribbon commands" if RIBBON else "list-mode"))
     if is_mac() and not DRY_RUN:
@@ -1632,7 +1703,8 @@ def render_and_sideload():
         if folder == "mailkick" and is_mac() and tls_pair is None:
             warn("MailKick: no usable loopback certificate - skipped for Outlook")
             continue
-        xml = render_manifest(folder, PORT, https_port=(PORT + 1) if tls_pair else None)
+        xml = render_manifest(folder, PORT,
+                              https_port=(HTTPS_PORT if HTTPS_PORT else PORT + 1) if tls_pair else None)
         mver = (re.search(r"<Version>([^<]+)</Version>", xml) or [None, "?"])[1]
         mpath = os.path.join(manifest_dir(), mfname)
         if DRY_RUN:
@@ -1855,7 +1927,7 @@ def clear_office_caches():
     note("caches cleared; install flows re-stage the manifests to the WEF dirs"
          " immediately after (render_and_sideload), so no manual re-add step is"
          " needed; MailKick rides the https://localhost:%d loopback listener and"
-         " works in New Outlook too." % (PORT + 1))
+         " works in New Outlook too." % (HTTPS_PORT if HTTPS_PORT else PORT + 1))
 
 
 def office_app_running():
@@ -2152,7 +2224,7 @@ def preflight(mode):
          " localhost over http%s).%s" % (
              mode, PORT,
              "; plus the https://localhost:%d loopback TLS listener wherever a"
-             " working certificate exists" % (PORT + 1),
+             " working certificate exists" % (HTTPS_PORT if HTTPS_PORT else PORT + 1),
              " Outlook on macOS validates every manifest URL as https, so"
              " MailKick must ride the TLS component." if is_mac() else ""))
     if is_mac():
@@ -2471,30 +2543,35 @@ def _reapply_transport(mode, label):
 
 def transport_menu():
     cur = _current_transport()
-    rows = [
-        ("1", "auto    (https when a working certificate exists - the classic default)", None),
-        ("2", "plain http only (certificates ignored; Outlook not usable with this)", None),
-        ("3", "https always (creates/renews the loopback CA + certificate for ALL panes)", None),
-        (None, "@SEP", None),
-        ("0", "back (mode stays: %s)" % cur, "magenta"),
-    ]
+    hp, sp = _current_ports()
 
-    def body():
+    def rows():
+        return [
+            ("1", "auto    (https when a working certificate exists - the classic default)", None),
+            ("2", "plain http only (certificates ignored; Outlook not usable with this)", None),
+            ("3", "https always (creates/renews the loopback CA + certificate for ALL panes)", None),
+            (None, "@SEP", None),
+            ("4", "set the http port   (current: %d)" % hp, None),
+            ("5", "set the https port  (current: %d)" % sp, None),
+            (None, "@SEP", None),
+            ("0", "back (mode stays: %s, ports http %d / https %d)" % (cur, hp, sp), "magenta"),
+        ]
+
+    while True:
         clear_screen()
+        cur = _current_transport()
+        hp, sp = _current_ports()
         h = health(PORT)
         print("")
         print("  ----- transport -----")
         print("  current mode: %s" % cur)
-        if h:
-            print("  server: running v%s on port %d" % (h.get("version"), PORT))
-        return rows
-
-    while True:
-        r = body()
-        sel = menu_pick(rows, 0, "(up/down + Enter, 1-3 = set, 0 = back)")
+        print("  listener ports: http %d / https %d   (server: %s)" % (
+            hp, sp, ("running v%s" % h.get("version")) if h else "not running"))
+        r = rows()
+        sel = menu_pick(r, 0, "(up/down + Enter, 1-5 direct, 0 = back)")
         if sel is None:
             print("")
-            for (act, label, _st) in rows:
+            for (act, label, _st) in r:
                 if label == "@SEP":
                     print("")
                     continue
@@ -2504,24 +2581,67 @@ def transport_menu():
                 if not sys.stdin.isatty():
                     print("  (non-interactive: pass --transport auto|http|https)")
                     return
-                choice = input("  > choose [1/2/3, 0; default 0]: ").strip().lower()
+                choice = input("  > choose [1/2/3/4/5, 0; default 0]: ").strip().lower()
             except EOFError:
                 return
             if choice in ("", "0", "q", "back"):
                 return
-            order = {"1": "auto", "2": "http", "3": "https"}
-            if choice not in order:
-                print("  please choose 1, 2, 3 or 0")
+            sel = {"1": 0, "2": 1, "3": 2, "4": 3, "5": 4}.get(choice)
+            if sel is None:
+                print("  please choose 1, 2, 3, 4, 5 or 0")
                 continue
-            _reapply_transport(order[choice], choice)
-            cur = _current_transport()
-            continue
-        act = rows[sel][0]
+        act = r[sel][0]
         if act == "0" or not act:
             return
+        if act == "4" or act == "5":
+            what = "http" if act == "4" else "https"
+            ccur = hp if act == "4" else sp
+            other = sp if act == "4" else hp
+            print("")
+            while True:
+                ans = input("  " + _paint("? %s port (1024-65535, current %d): " % (what, ccur), "cyan")).strip()
+                if not ans:
+                    break
+                if not _valid_port(ans):
+                    print("  please enter a number in 1024-65535")
+                    continue
+                nport = int(ans)
+                if nport == other:
+                    warn("the https port must differ from the http port (%d)" % other)
+                    continue
+                nmode = _current_transport()
+                if _set_transport(nmode, http_port=(nport if act == "4" else hp),
+                                  https_port=(nport if act == "5" else sp)):
+                    global HTTPS_PORT
+                    _hp, _sp = _current_ports()
+                    HTTPS_PORT = _sp
+                    ok("%s port persisted: %d - re-rendering the manifests and restarting the server" % (what, nport))
+                    _reapply_transport(nmode, act)
+                    break
+                continue
+            continue
         mode = {"1": "auto", "2": "http", "3": "https"}[act]
         _reapply_transport(mode, act)
         cur = _current_transport()
+
+
+def _reapply_transport(mode, label=None):
+    """Store the mode (+ optional ports), re-render the manifests
+    accordingly, restart the server so the listeners match, and report."""
+    ok("transport mode -> %s" % mode)
+    _set_transport(mode)
+    if mode == "https" and is_mac():
+        tls_phase()          # create/renew the pair when it is missing
+        _print_cert_facts()
+    if office_app_running():
+        warn("Office apps are running - skipping the cache flush (the manifest"
+             " render still runs)")
+    else:
+        clear_office_caches()
+    render_and_sideload()
+    stop_server()
+    start_only()
+    ok("done - the panes now load over %s (manifests re-rendered)" % mode)
 
 
 def do_status():
@@ -2545,6 +2665,8 @@ def server_menu():
         ("2", "restart", None),
         ("3", "stop", None),
         ("4", "status", None),
+        (None, "@SEP", None),
+        ("5", "Uninstall (removes the add-ins + this server)", "red"),
         (None, "@SEP", None),
         ("0", "back", "magenta"),
     ]
@@ -2584,7 +2706,7 @@ def server_menu():
             _log("server menu input: %r" % choice, ts=True)
             if choice in ("", "0", "q", "x", "back"):
                 return
-            selrows = {"1": 0, "2": 1, "3": 2, "4": 3}
+            selrows = {"1": 0, "2": 1, "3": 2, "4": 3, "5": 4}
             sel = selrows.get(choice)
             if sel is None:
                 print("  please choose 1, 2, 3, 4 or 0")
@@ -2609,6 +2731,11 @@ def server_menu():
         elif act == "4":
             do_status()
             pause_after("status")
+        elif act == "5":
+            banner("uninstall")
+            do_uninstall(None)
+            cur = _current_transport()   # uninstall may wipe ~/.officekick
+            return                        # back to the main menu afterwards
         else:
             return
 
@@ -2655,6 +2782,15 @@ def main():
     MAILKICK_OPT = args.mailkick
     PORT = args.port if 1024 <= args.port <= 65535 else DEFAULT_PORT
     DRY_RUN = args.dry_run
+    if args.port == DEFAULT_PORT:
+        # the persisted listener ports (explicit --port still wins)
+        global HTTPS_PORT
+        _hp, _sp = _current_ports()
+        if _hp != PORT:
+            _hp = _hp if health(PORT) is None else PORT   # a running server keeps its port
+        if _valid_port(_hp):
+            PORT = _hp
+        HTTPS_PORT = _sp if _valid_port(_sp) and _sp != PORT else PORT + 1
     # ribbon commands: opt-in on both platforms. macOS: 16.114 renders
     # nothing from a commands manifest (0.9.29). Windows 16.0.19x (new Apps
     # dialog era): a commands manifest vanishes the add-in from BOTH the
@@ -2717,10 +2853,10 @@ def main():
     _rows = [
         ("1", "Install / repair    (Word + PowerPoint on; Outlook off by default)", None),
         ("2", "Update              (git pull + refresh; keeps your add-ins)", None),
-        ("3", "Server              (start / restart / stop / status)", None),
-        ("5", "Transport (%s)  (http / https / auto)" % _current_transport(), None),
+        ("3", "Server              (start / restart / stop / status / uninstall)", None),
         (None, "@SEP", None),
-        ("4", "Uninstall", "red"),
+        ("4", "Transport options   (mode: %s | ports: http %d / https %d)" % (
+            _current_transport(), _current_ports()[0], _current_ports()[1]), None),
         (None, "@SEP", None),
         ("0", "exit", "magenta"),
     ]
@@ -2768,11 +2904,8 @@ def main():
                 install("Update", interactive=False)
             elif act == "3":
                 server_menu()
-            elif act == "5":
-                transport_menu()
             elif act == "4":
-                banner("uninstall")
-                do_uninstall(None)
+                transport_menu()
             else:
                 return   # act == "0"
         except MenuAbort:

@@ -78,6 +78,21 @@
   Q&A pair lands in Previous requests and in the session history. Rules
   added to all three system prompts (MailKick's version says a clarify reply
   replaces - not supplements - the ops/reply round).
+## 0.9.240
+### Added (configurable listener ports + menu renumbering)
+- Settings `transportHttpPort` (default 8765) and `transportHttpsPort`
+  (default 8766): whitelisted, range-validated (1024-65535, must differ),
+  pub()'d; the server binds the http listener from the setting (an explicit
+  `--port` flag keeps precedence) and the TLS listener from the https port.
+- The Transport menu (main menu 4) now also offers "set the http/https
+  port": prompts, validates, persists, re-renders the manifests with the new
+  URLs and restarts the server. `--transport` keeps working for the mode.
+- The installer resolves the current ports at startup (explicit --port wins)
+  and uses them in the banner, status, server menu, and every https URL.
+- Main menu renumbering: 1 Install / 2 Update / 3 Server - blank - 4
+  Transport options - blank - 0 exit. Uninstall moved into the Server
+  submenu (option 5, own group) so the main menu stays options/action/back.
+
 ## 0.9.239
 ### Added (transport mode - http/https/auto, persisted)
 - New server setting `transportMode`: `auto` (the classic behaviour - serve

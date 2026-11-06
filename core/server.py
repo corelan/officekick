@@ -34,7 +34,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 APP = "OfficeKick"
-VERSION = "0.9.239"
+VERSION = "0.9.240"
 
 # --------------------------------------------------------------------------- #
 # Self-restart: the server watches for <cfg dir>/restart.flag. Whatever writes
@@ -803,6 +803,9 @@ class Store:
         # when certificates exist), https (require+serve the TLS listener;
         # the installer creates/renews the certificate before starting)
         self.data.setdefault("transportMode", "auto")
+        # 0.9.240 configurable listener ports (must differ; 1024-65535)
+        self.data.setdefault("transportHttpPort", 8765)
+        self.data.setdefault("transportHttpsPort", 8766)
         self.data.setdefault("autoClean", True)        # delete old sessions on pane open
         self.data.setdefault("autoCleanDays", 120)     # session older than N days -> removed
         self.data.setdefault("logCleanDays", 30)        # debug/access logs older than N days -> removed
@@ -1145,6 +1148,8 @@ class Store:
             "trackedChanges": bool(d.get("trackedChanges", False)),
             "newSessionPerEmail": bool(d.get("newSessionPerEmail", False)),
             "transportMode": (d.get("transportMode") if d.get("transportMode") in ("auto", "http", "https") else "auto"),
+            "transportHttpPort": (int(d.get("transportHttpPort")) if isinstance(d.get("transportHttpPort"), int) and 1024 <= int(d.get("transportHttpPort")) <= 65535 else 8765),
+            "transportHttpsPort": (int(d.get("transportHttpsPort")) if isinstance(d.get("transportHttpsPort"), int) and 1024 <= int(d.get("transportHttpsPort")) <= 65535 else 8766),
             "autoClean": bool(d.get("autoClean", True)),
             "autoCleanDays": int(d.get("autoCleanDays", 120)),
             "autoUpdateCheck": bool(d.get("autoUpdateCheck", True)),
@@ -2970,6 +2975,26 @@ class SlideKickHandler(BaseHTTPRequestHandler):
                 if "newSessionPerEmail" in body and body["newSessionPerEmail"] is not None:
                     self.store.data["newSessionPerEmail"] = bool(body["newSessionPerEmail"])
                     changed = True
+                def _valid_port(v):
+                    if isinstance(v, int) and 1024 <= v <= 65535:
+                        return True
+                    if isinstance(v, str) and v.isdigit():
+                        v = int(v)
+                        return 1024 <= v <= 65535
+                    return False
+
+                if "transportHttpPort" in body and body["transportHttpPort"] is not None:
+                    if not _valid_port(body["transportHttpPort"]):
+                        raise ApiError(400, "transportHttpPort must be a number in 1024-65535")
+                    self.store.data["transportHttpPort"] = int(body["transportHttpPort"])
+                    changed = True
+                if "transportHttpsPort" in body and body["transportHttpsPort"] is not None:
+                    if not _valid_port(body["transportHttpsPort"]):
+                        raise ApiError(400, "transportHttpsPort must be a number in 1024-65535")
+                    if int(body["transportHttpsPort"]) == int(self.store.data.get("transportHttpPort") or 8765):
+                        raise ApiError(400, "transportHttpsPort must differ from transportHttpPort")
+                    self.store.data["transportHttpsPort"] = int(body["transportHttpsPort"])
+                    changed = True
                 if "transportMode" in body and body["transportMode"] is not None:
                     _tm = str(body["transportMode"])
                     if _tm not in ("auto", "http", "https"):
@@ -3180,6 +3205,15 @@ def main(argv=None):
     # when it updated + relaunched, do not serve the stale code.
     if boot_self_update(store, args.port):
         return
+    # 0.9.240: the configured transport ports win over the DEFAULT port (an
+    # explicit --port flag still takes precedence over the setting)
+    if args.port == 8765:
+        _p = store.data.get("transportHttpPort")
+        if isinstance(_p, int) and 1024 <= _p <= 65535:
+            args.port = _p
+        _hp = store.data.get("transportHttpsPort")
+    else:
+        _hp = None
     tls = (args.cert, args.key) if (args.cert and args.key) else None
 
     if args.host:
@@ -3213,31 +3247,35 @@ def main(argv=None):
         tls_p2 = os.path.join(os.path.dirname(str(store.path)), "certs", "server.crt")
         tls_k2 = os.path.join(os.path.dirname(str(store.path)), "certs", "server.key")
         tls_pair_present = os.path.isfile(tls_p2) and os.path.isfile(tls_k2)
+        tls_port = (args.port + 1) if not isinstance(_hp, int) else _hp
+        if args.port == tls_port:
+            tls_port = args.port + 1
         if transport == "http":
             print("transport mode: http (https listener not started even with"
                   " certificates present)", flush=True)
         elif transport == "https" and not (tls or tls_pair_present):
             print("transport mode: https but no certificate pair in %s -"
-                  " start the TLS step with install.py (menu 5) or"
-                  " --transport https" % os.path.dirname(str(store.path)), flush=True)
+                  " start the TLS step with install.py (menu 4 Transport ->"
+                  " https) to re-issue it (listener port: %d)"
+                  % (os.path.dirname(str(store.path)), tls_port), flush=True)
         if not tls and transport in ("auto", "https") and tls_pair_present:
             try:
-                tls_servers = build_dual_servers(args.port + 1, store,
+                tls_servers = build_dual_servers(tls_port, store,
                                                  args.static_dir, args.verbose,
                                                  (tls_p2, tls_k2))
                 if tls_servers:
                     servers.extend(tls_servers)
                     print("TLS listener ready on https://localhost:%d "
-                          "(transport mode: %s)" % (args.port + 1, transport), flush=True)
+                          "(transport mode: %s)" % (tls_port, transport), flush=True)
             except OSError as exc:
                 if "KEY_VALUES_MISMATCH" in str(exc) or "PEM" in str(exc):
                     print("TLS listener on port %d NOT started: the certificate"
                           " pair is broken (%s) - run install.py (menu Install or"
-                          " menu 5 Transport https) to re-issue it" % (args.port + 1, exc),
+                          " menu 4 Transport -> https) to re-issue it" % (tls_port, exc),
                           file=sys.stderr, flush=True)
                 else:
                     print("TLS listener on port %d skipped: %s"
-                          % (args.port + 1, exc), file=sys.stderr)
+                          % (tls_port, exc), file=sys.stderr)
 
     port = servers[0].server_address[1]
     # self-restart bookkeeping: every boot clears a stale flag, stamps the
