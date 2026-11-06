@@ -78,6 +78,20 @@
   Q&A pair lands in Previous requests and in the session history. Rules
   added to all three system prompts (MailKick's version says a clarify reply
   replaces - not supplements - the ops/reply round).
+## 0.9.269
+
+### Fixed
+- field-run x2: an insert-after ask whose plan lost its create_slide ops
+  (cut-off reply, recovery merge) made the target guard re-ask with "re-emit
+  ... aimed at slide N" - which TAUGHT the model to drop the inserts and
+  paint the user's real slide (20 auto-applied actions on the named slide
+  in the worst case). The guard's re-ask nudge is now insert-aware: for
+  after/insert asks it demands create_slide ops after the named slide, aims
+  the new-slide ops at the slides the model creates, and restricts writes
+  beyond the named slide. The generic nudge stays for non-insert asks.
+  Verified with a captured /api/chat body: the nudge carries the insert
+  intent.
+
 ## 0.9.268
 
 ### Fixed

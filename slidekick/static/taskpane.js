@@ -4952,12 +4952,26 @@ OfficeDeck.prototype.setNotes = function (i, text) {
               tl.every(function (t3) { return t3 <= ctx.slides.length + createCount0; }) &&
               tl.every(function (t3) { return t3 >= namedTarget && t3 <= namedTarget + createCount0; });
             if (tl.length && tl.indexOf(namedTarget) < 0 && !hostsOk) {
-              dbg("target.mismatch", { named: namedTarget, ops: tl.join(",") });
+              dbg("target.mismatch", { named: namedTarget, ops: tl.join(","), afterW: afterW, creates: createCount0 });
+              // 0.9.269: an insert-after ask re-asked with "aim everything at
+              // slide N" taught the model to DROP its create_slide ops and
+              // paint the user's real slide (field-verified x2). The nudge
+              // must carry the insert intent instead.
+              var reBody;
+              if (afterW) {
+                reBody = "WRONG TARGET: the user asked to INSERT new slides after slide " + namedTarget +
+                  " - your plan writes to EXISTING slides and carries " + (createCount0 > 0 ? "create_slide ops that do not cover targets " : "NO create_slide ops. ") +
+                  "Re-emit the plan with create_slide ops added after slide " + namedTarget +
+                  " and aim every NEW-slide op at the slides YOU create (post-insert 1-based numbering); " +
+                  "only ops meant for slide " + namedTarget + "'s own content may write to it. Slide_ops JSON only, same rules.";
+              } else {
+                reBody = "WRONG TARGET: the user's request names slide " + namedTarget + " (1-based, same numbering as the outline), but your ops target slide " +
+                  tl.join(", ") + " (that is the currently open slide). Re-emit the SAME plan with every slide number aimed at slide " + namedTarget +
+                  ". Slide_ops JSON only, same rules.";
+              }
               var reMsg = messages.concat([
                 { role: "assistant", content: String((SK.lastModelText || {}).text || "") },
-                { role: "user", content: "WRONG TARGET: the user's request names slide " + namedTarget + " (1-based, same numbering as the outline), but your ops target slide " +
-                  tl.join(", ") + " (that is the currently open slide). Re-emit the SAME plan with every slide number aimed at slide " + namedTarget +
-                  ". Slide_ops JSON only, same rules." },
+                { role: "user", content: reBody },
               ]);
               setStatus("The ask names slide " + namedTarget + " but the plan aims at slide " + tl.join(", ") + " - re-asking\u2026", "busy");
               return askRetryable(function () { return apiJson("/api/chat", "POST", { connection: ref.connection, model: ref.model, messages: reMsg }); })
