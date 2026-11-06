@@ -1955,7 +1955,12 @@ def _leaf_consent(facts, crt):
     print("  " + _paint("SHA-256 fingerprint: %s" % _colons(sha256 or "?"), "cyan"))
     print("  " + _paint("expires: %s" % _fact_line(facts), "cyan"))
     print("")
-    return ask_yes("Do you want to trust this certificate?", False)
+    # https transport NEEDS this trust - the default follows the need (still
+    # an explicit, cancellable screen; declining leaves the store untouched
+    # and https stays off until the leaf is trusted)
+    need = _current_transport() == "https"
+    return ask_yes("Do you want to trust this certificate?"
+                   + (" (Enter = trust; https needs it)" if need else ""), need)
 
 
 def _colons(s):
@@ -2039,8 +2044,9 @@ def ensure_leaf_certs(days=825, consent_ask=True):
         warn("the certificate was generated but NOT trusted - https will not pass"
              " validation until it is trusted (re-run install.py)")
         return None
-    warn("you declined to trust the certificate - the trust store was NOT changed;"
-         " https will not work until it is trusted (re-run install.py)")
+    warn("you declined the trust - the certificate store was NOT touched and")
+    warn("https WILL NOT WORK with this leaf. Re-run: python install.py --install")
+    warn("(then answer y at the trust question; the uninstall removes it again)")
     _leaf_meta_load() and _leaf_meta_save(dict(_leaf_meta_load(),
                                                trusted=False))
     CERT_FACTS["mode"] = "generated but NOT trusted (declined)"

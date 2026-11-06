@@ -78,6 +78,15 @@
   Q&A pair lands in Previous requests and in the session history. Rules
   added to all three system prompts (MailKick's version says a clarify reply
   replaces - not supplements - the ops/reply round).
+## 0.9.256
+
+### Fixed
+- the leaf-trust consent default followed the transport NEED: with the https
+  transport stored, Enter means trust (the pane requires it); declining still
+  never touches the store and the warning now spells out the consequence and
+  the re-run command. A declined tree caused the "Trusted People is empty"
+  / blocked-add-in confusion on Windows.
+
 ## 0.9.255
 
 ### Added
