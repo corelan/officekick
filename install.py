@@ -1846,6 +1846,13 @@ def _install_leaf_trust(crt):
     rc, o = run_quiet(["certutil", "-user", "-addstore", "TrustedPeople", crt])
     if rc == 0:
         ok("self-signed leaf added to the CURRENT USER Trusted People store")
+        note("Windows does not prompt for this import - it is silent by design.")
+        print("")
+        print("  " + _paint("Where to see it:", "bold"))
+        print("    Win+R -> certmgr.msc > Trusted People > Certificates")
+        print("    (CN=localhost). The simplified control-panel applet can")
+        print("    hide this store; certmgr.msc always shows it. Or check:")
+        print("        certutil -user -store TrustedPeople")
         return True
     warn("could not add the leaf certificate to Trusted People (%s)"
          % (o or "certutil error")[:160])
