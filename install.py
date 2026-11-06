@@ -339,22 +339,24 @@ def menu_pick(rows, start=0, hint=""):
             draw(False)      # unknown key: ignore, keep the arrow menu
 
 
-def toggle_pick(rows, hint="", start=0):
+def toggle_pick(rows, hint="", start=0, pre_lines=None):
     """Arrow-driven toggle list for select_addins. rows = (act, checked,
     label, extra, style): a toggle row has checked True/False; a plain action
     row has checked None (act '4' = proceed/install, act '0' = back).
     Returns ('toggle', index) | ('done', None) | ('back', None); None = no
-    raw input available (typed fallback). The hint line is left-aligned with
-    the option rows. Enter on a COMPONENT row toggles it (never proceeds)."""
+    raw input available (typed fallback). Every draw REPAINTS the whole
+    region (cursor home + clear below + pre_lines + rows) - relative erases
+    would duplicate rows once something prints between interactions."""
     if not _uitty():
         return None
     if is_windows():
         os.system("")
     idx = min(start, len(rows) - 1)
 
-    def draw(first):
-        if not first:
-            sys.stdout.write("\x1b[%dA\r\x1b[J" % (len(rows) + 2))
+    def draw():
+        sys.stdout.write("\x1b[H\x1b[J")
+        for ln in (pre_lines or []):
+            print(ln)
         for i, (act, checked, label, extra, style) in enumerate(rows):
             if label == "@SEP":                    # visual separator
                 print("")
@@ -376,13 +378,14 @@ def toggle_pick(rows, hint="", start=0):
                 print(line)
         print("")
         print("   " + ((_paint(hint, "dim")) if hint else ""))
+        sys.stdout.flush()
 
     def act_row(kind):
         j = next((i for i, r in enumerate(rows)
                   if r[0] and r[1] is None and r[0].lower() == kind), None)
         return j
 
-    draw(True)
+    draw()
     while True:
         k = _read_key()
         if k is None or k == "":
@@ -394,7 +397,7 @@ def toggle_pick(rows, hint="", start=0):
                 if rows[j][2] != "@SEP":
                     break
             idx = j
-            draw(False)
+            draw()
         elif k == "down":
             j = idx
             while True:
@@ -402,11 +405,11 @@ def toggle_pick(rows, hint="", start=0):
                 if rows[j][2] != "@SEP":
                     break
             idx = j
-            draw(False)
+            draw()
         elif k in ("space", " ", "s"):
             if rows[idx][1] is not None:
                 return ("toggle", idx)
-            draw(False)
+            draw()
         elif isinstance(k, str) and k.strip() and \
                 any(r[0] and r[0].lower() == k for r in rows):
             j = act_row(k)
@@ -415,7 +418,7 @@ def toggle_pick(rows, hint="", start=0):
             j = next((i for i, r in enumerate(rows)
                       if r[0] == k and r[1] is not None), None)
             if j is None:
-                draw(False)
+                draw()
                 continue
             return ("toggle", j)
         elif k == "enter":
@@ -428,7 +431,7 @@ def toggle_pick(rows, hint="", start=0):
         elif k in ("q", "Q", "esc", "\x1b"):
             return ("back", None)
         else:
-            draw(False)
+            draw()
 
 
 def hp(*parts):
@@ -537,29 +540,6 @@ def banner(mode=None):
 
 
 # ------------------------------------------------------ add-in selection ----
-def _prereq_block(feas, feas_why, feas_how):
-    """Prints (below the options, not on them) whether the https prerequisites
-    for Outlook are met, with the techniques the setup will use."""
-    if not is_mac():
-        print(_paint("  https prereqs for Outlook: ", "bold") + "not needed -")
-        print("  Outlook rides the plain-http localhost listener on Windows; no")
-        print("  certificate is created or trusted.")
-        print("")
-        return
-    if feas:
-        print("  " + _paint("https prerequisites for Outlook: MET", "green"))
-        for t in feas_how:
-            print("    - " + t)
-    else:
-        print("  " + _paint("https prerequisites for Outlook: NOT MET", "red")
-              + _paint(" - Outlook is locked", "bold"))
-        for r in feas_why:
-            print("    - " + r)
-    print(_paint("  Enabling Outlook creates a self-signed loopback CA +"
-                 " localhost certificate (asked to confirm first).", "dim"))
-    print("")
-
-
 def select_addins(interactive):
     """Decide which add-ins this run deploys. Word + PowerPoint default ON;
     Outlook default OFF. Returns the set (also stored in ADDINS)."""
@@ -585,69 +565,99 @@ def select_addins(interactive):
         state[folder] = (True if folder != "mailkick" else False) if not was else True
     feas, feas_why, feas_how = https_feasible()
     clear_screen()
-    print("")
-    print("  Add-ins (Word + PowerPoint are enabled by default, Outlook is not):")
-    print("")
-    _prereq_block(feas, feas_why, feas_how)
+
+    def _prereq_lines():
+        """The https status block (list of lines, no painting side effects)."""
+        out_lines = []
+        if not is_mac():
+            out_lines.append(_paint("  https prereqs for Outlook: ", "bold") + "not needed -")
+            out_lines.append("  Outlook rides the plain-http localhost listener on")
+            out_lines.append("  Windows; no certificate is created or trusted.")
+            return out_lines
+        if feas:
+            out_lines.append("  " + _paint("https prerequisites for Outlook: MET", "green"))
+            for t in feas_how:
+                out_lines.append("    - " + t)
+        else:
+            out_lines.append("  " + _paint("https prerequisites for Outlook: NOT MET", "red")
+                             + _paint(" - Outlook is locked", "bold"))
+            for rln in feas_why:
+                out_lines.append("    - " + rln)
+        out_lines.append(_paint("  Enabling Outlook creates a self-signed loopback CA +"
+                                " localhost certificate (asked to confirm first).", "dim"))
+        return out_lines
+
+    msg = []   # picker feedback lines (repainted with the screen, never duplicated)
     arrow_done = False
+    drew_picker = False
     cur = 0
     if _uitty():
         order = [f for (f, _l, _w) in rows]   # picker index -> folder
 
         def _rowdata():
             r = []
-            # rows carry the digit keys the hints advertise (1/2/3 toggles,
-            # 0 back) - informational hints (https loopback, lock) live in
-            # the status block below the options, not on the rows
+            # OPTIONS (toggles) carry the digit keys the hints advertise
+            # (1/2/3); the ACTION lives in its own group; navigation back in
+            # its own group - information (https status) is a block, not a row
             for (n, (folder, label, _was)) in zip(("1", "2", "3"), rows):
                 r.append((n, state[folder], label, "", None))
+            r.append((None, None, "@SEP", "", None))
             r.append(("4", None, "Install the selected components", "", "cyan"))
             r.append((None, None, "@SEP", "", None))
             r.append(("0", None, "back (nothing is installed yet)", "", "magenta"))
             return r
         while True:
+            pre = ["",
+                   "  Add-ins (Word + PowerPoint are enabled by default, Outlook is not):",
+                   ""] + _prereq_lines() + ([""] if msg else []) + msg
             r = toggle_pick(_rowdata(),
                             "(up/down = move, space/Enter or 1-3 = toggle, 4 = install, 0 = back)",
-                            start=cur)
+                            start=cur, pre_lines=pre)
+            drew_picker = True
             if r is None:
                 break            # raw reads vanished - typed loop takes over
             kind, val = r
             cur = val if kind == "toggle" else cur
             _log("add-in picker: %s %s" % (kind, val), ts=True)
-            print("")
             if kind == "back":
-                print("  add-in selection cancelled - back to the menu.")
-                note("add-in selection cancelled by user")
                 raise MenuAbort("add-in selection cancelled")
             if kind == "done":
                 arrow_done = True
                 break
             folder = order[val]
             if folder == "mailkick" and not state[folder] and not feas:
-                warn("Outlook cannot be enabled on this machine:")
-                for rr in feas_why:
-                    print("      - " + rr)
+                msg = ["   !  Outlook cannot be enabled on this machine:"] + \
+                      ["        - " + rr for rr in feas_why]
                 note("outlook enable refused: %s" % "; ".join(feas_why))
                 continue
             if folder == "mailkick" and not state[folder] and is_mac():
-                print("  -------------------------------------------------------------")
-                print("   OUTLOOK (MailKick) - one-time certificate setup")
-                print("   Enabling this will CREATE a SELF-SIGNED certificate and a")
-                print("   local CA for localhost and import them into your keychains.")
-                print("   macOS will ask to trust the CA - accept to let the pane")
-                print("   load. Nothing else is installed; removed again by uninstall.")
-                print("  -------------------------------------------------------------")
-                print("")
-                go = ask_yes("Continue with the certificate setup for Outlook", False)
+                go = ask_yes("Outlook needs a SELF-SIGNED loopback CA + localhost"
+                             " certificate (created + imported into your keychains"
+                             " during install) - continue", False)
                 note("outlook CA warning answer: %s" % ("yes" if go else "no"))
                 if not go:
                     state[folder] = False
+                    msg = ["   - Outlook certificate setup declined - MailKick stays off."]
                     continue
+                msg = ["   - Outlook enabled - the self-signed loopback CA + certificate"
+                       " will be created during the certificate step."]
+                state[folder] = not state[folder]
+                continue
             state[folder] = not state[folder]
+            msg = []
     while arrow_done is False:
+        if not drew_picker:
+            print("")
+            print("  Add-ins (Word + PowerPoint are enabled by default, Outlook is not):")
+            print("")
+            for pl in _prereq_lines():
+                print(pl)
+            print("")
+            drew_picker = True
         for (folder, label, _was) in rows:
             box = "[x]" if state[folder] else "[ ]"
             print("    %d) %-24s %s" % (rows.index((folder, label, _was)) + 1, label, box))
+        print("")
         print("    4) Install the selected components")
         print("")
         print("    0) back (nothing is installed yet)")
