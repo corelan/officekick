@@ -133,3 +133,19 @@ UNINSTALL the mode resets to self-signed leaf.
 
 Transport (`transportMode` http/https) is unchanged: BYO/cert modes only
 apply when https is in use. Diagnostics: `install.py --cert-check`.
+
+### Where to see the imported certificate on Windows
+
+The leaf is added to the **Current User** Trusted People store. The simplified
+control-panel applet can hide that store - open the full manager instead:
+
+- `Win+R` -> `certmgr.msc` -> **Trusted People** -> **Certificates**
+  (CN=localhost, OfficeKick).
+- CLI check: `certutil -user -store TrustedPeople`.
+- If you also accepted the Root-store option: Current User ->
+  **Trusted Root Certification Authorities** -> CN=localhost.
+- The "Personal" store never lists it: only the certificate is imported;
+  the private key stays on disk in `%USERPROFILE%\.officekick\certs\server.key`
+  (the pane server loads it from there).
+- `certlm.msc` is the LOCAL COMPUTER store - ours goes to the CURRENT USER,
+  never the machine stores.
