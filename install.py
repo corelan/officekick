@@ -1166,6 +1166,15 @@ def _print_cert_facts():
     print("    keys  : %s" % CERT_FACTS["key_line"])
 
 
+def _pair_matches(crt, key):
+    """True when the private key belongs to the certificate (modulus match)."""
+    rc1, m1 = run_quiet(["openssl", "x509", "-in", crt, "-noout", "-modulus"])
+    rc2, m2 = run_quiet(["openssl", "rsa", "-in", key, "-noout", "-modulus"])
+    if rc1 != 0 or rc2 != 0:
+        return False
+    return m1.strip() == m2.strip().replace("+", "").replace("*", "")
+
+
 def _ca_healthy(ca_crt):
     """The loopback CA still exists, is not expired and is still trusted."""
     if not (os.path.isfile(ca_crt)):
@@ -1245,10 +1254,12 @@ def ensure_tls_certs():
     leaf_reason = None
     if os.path.isfile(crt) and os.path.isfile(key):
         leaf_reason = validate_existing_tls(crt)
+        if leaf_reason is None and not _pair_matches(crt, key):
+            leaf_reason = "the private key does not match the certificate"
         if leaf_reason is None:
             _record("reused")
             _log("reusing the existing loopback certificate - still valid and"
-                 " trusted; nothing was generated or re-imported")
+                 " trusted, key matches; nothing was generated or re-imported")
             return (crt, key)
         warn("the existing loopback certificate is not usable (%s)" % leaf_reason)
         note("check result for %s: %s" % (crt, leaf_reason))

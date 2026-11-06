@@ -3097,21 +3097,27 @@ def build_dual_servers(port, store, static_dir, verbose=False, tls=None):
             address_family = socket_mod.AF_INET6
 
         v6 = V6Server(("::1", port), handler)
+        # macOS forbids V6ONLY after bind (EINVAL) - the socket is already
+        # V6ONLY by default there, so a failing setsockopt is fine to ignore
         try:
             v6.socket.setsockopt(socket_mod.IPPROTO_IPV6, socket_mod.IPV6_V6ONLY, 1)
         except OSError:
             pass
-        _tls_wrap(v6, tls)
         servers.append(v6)
         port = v6.server_address[1]  # learn the bound (possibly ephemeral) port
     except OSError:
         pass
     try:
         v4 = ThreadingHTTPServer(("127.0.0.1", port), handler)
-        _tls_wrap(v4, tls)
         servers.append(v4)
     except OSError:
         pass
+    # 0.9.239: the TLS wrap runs AFTER the binds so a broken certificate pair
+    # surfaces as a loud ssl error to the caller instead of quietly returning
+    # an empty list (that silence once hid a cert/key mismatch entirely).
+    if tls:
+        for s in servers:
+            _tls_wrap(s, tls)
     return servers
 
 
@@ -3224,8 +3230,14 @@ def main(argv=None):
                     print("TLS listener ready on https://localhost:%d "
                           "(transport mode: %s)" % (args.port + 1, transport), flush=True)
             except OSError as exc:
-                print("TLS listener on port %d skipped: %s"
-                      % (args.port + 1, exc), file=sys.stderr)
+                if "KEY_VALUES_MISMATCH" in str(exc) or "PEM" in str(exc):
+                    print("TLS listener on port %d NOT started: the certificate"
+                          " pair is broken (%s) - run install.py (menu Install or"
+                          " menu 5 Transport https) to re-issue it" % (args.port + 1, exc),
+                          file=sys.stderr, flush=True)
+                else:
+                    print("TLS listener on port %d skipped: %s"
+                          % (args.port + 1, exc), file=sys.stderr)
 
     port = servers[0].server_address[1]
     # self-restart bookkeeping: every boot clears a stale flag, stamps the
