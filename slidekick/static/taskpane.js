@@ -2541,8 +2541,19 @@ OfficeDeck.prototype.createShape = function (slideIndex, op) {
         }
       } else if (op.kind === "line") {
         created = shapes.addLine("Straight", opts);
-      } else {
+      } else if (vi === 1) {
         created = shapes.addGeometricShape(op.kind, opts);
+      } else {
+        // v2 (0.9.261): the docs-sample form - the same repair that fixed
+        // textboxes on 16.114: create BARE, then write the geometry as
+        // shape properties. Some Mac builds reject ShapeAddOptions at sync
+        // for specific geometric kinds (roundedRectangle threw InvalidArgument
+        // on 16.115 while addTextBox/addGeometricShape("rectangle") with the
+        // identical options object succeeded).
+        created = shapes.addGeometricShape(op.kind);
+        ["left", "top", "width", "height"].forEach(function (gk) {
+          if (opts[gk] != null) { try { created[gk] = opts[gk]; } catch (eG) { /* geometry optional */ } }
+        });
       }
       try { created.name = "sk-shape-" + (op.kind || "shape"); } catch (eName) { /* naming optional */ }
       if (created && op.fill) {
@@ -2569,8 +2580,13 @@ OfficeDeck.prototype.createShape = function (slideIndex, op) {
       });
     }).catch(function (err) {
       var msg = String((err && err.message) || err);
-      if (op.kind === "textbox" && vi < 2 && !/needs PowerPointApi/.test(msg)) {
-        // this build rejected the textbox creation path - try the next one
+      var tbLadder = op.kind === "textbox" && vi < 2 && !/needs PowerPointApi/.test(msg);
+      var geoLadder = vi === 1 && op.kind !== "textbox" && op.kind !== "line" &&
+        !/needs PowerPointApi/.test(msg) &&
+        /RichApi|InvalidArgument|GeneralException|argument|invalid|error/i.test(msg);
+      if (tbLadder || geoLadder) {
+        // this build rejected the creation path - try the next variant
+        // (textbox ladder 0.9.233; geometric ladder 0.9.261)
         dbg("office.createShape.attempt", { variant: vi, kind: op.kind, error: msg.slice(0, 120) });
         return runVariant(vi + 1);
       }
@@ -2676,12 +2692,20 @@ OfficeDeck.prototype.formatSelection = function (font) {
 
 OfficeDeck.prototype.formatTextSubstring = function (slideIndex, shapeIndex, findText, font) {
     return this.run("formatTextSubstring", function (ctx) {
-      var shape = ctx.presentation.slides.getItemAt(slideIndex).shapes.getItemAt(shapeIndex);
-      shape.load("type");
-      var range = shape.textFrame.textRange;
-      range.load("text");
+      var shapesS = ctx.presentation.slides.getItemAt(slideIndex).shapes;
+      shapesS.load("items/type");
       return ctx.sync().then(function () {
-        var ty = String(shape.type || "");
+        if (shapeIndex >= shapesS.items.length) {
+          throw new FriendlyError("shape " + (shapeIndex + 1) + " does not exist on slide " + (slideIndex + 1) +
+            " (the slide has " + shapesS.items.length + " shape(s)) - the action probably targets a shape" +
+            " that was not created or was removed; create the shape first, then format it.");
+        }
+        var shape = shapesS.getItemAt(shapeIndex);
+        shape.load("type");
+        var range = shape.textFrame.textRange;
+        range.load("text");
+        return ctx.sync().then(function () {
+          var ty = String(shape.type || "");
         if (/^(table|chart|picture|media|ole|graphic|unsupported)/i.test(ty)) {
           throw new FriendlyError("shape " + (shapeIndex + 1) + " on slide " + (slideIndex + 1) +
             " has no text to format (it is a " + ty.toLowerCase() + " shape) - format_text needs a text shape (textbox or placeholder); a table\'s text lives in its cells.");
@@ -2697,6 +2721,7 @@ OfficeDeck.prototype.formatTextSubstring = function (slideIndex, shapeIndex, fin
         if (font.name) sub.font.name = font.name;
         if (font.size) sub.font.size = font.size;
         return ctx.sync().then(function () { return { ok: true }; });
+        });
       });
     });
   };
@@ -2827,16 +2852,30 @@ OfficeDeck.prototype.getSelectionInfo = function () {
 
 OfficeDeck.prototype.formatText = function (slideIndex, shapeIndex, font) {
     return this.run("formatText", function (ctx) {
-      var shape = ctx.presentation.slides.getItemAt(slideIndex).shapes.getItemAt(shapeIndex);
-      shape.load("type");
+      var shapesX = ctx.presentation.slides.getItemAt(slideIndex).shapes;
+      shapesX.load("items/type");
       return ctx.sync().then(function () {
-        var ty = String(shape.type || "");
-        if (/^(table|chart|picture|media|ole|graphic|unsupported)/i.test(ty)) {
+        if (shapeIndex >= shapesX.items.length) {
+          throw new FriendlyError("shape " + (shapeIndex + 1) + " does not exist on slide " + (slideIndex + 1) +
+            " (the slide has " + shapesX.items.length + " shape(s)) - the action probably targets a shape" +
+            " that was not created or was removed; create the shape first, then format it.");
+        }
+        var shape = shapesX.getItemAt(shapeIndex);
+        shape.load("type");
+        return ctx.sync().then(function () {
+          var ty = String(shape.type || "");
+          return _formatTextContinue(ctx, shape, shapeIndex, slideIndex, font);
+        });
+      });
+    });
+  };
+  function _formatTextContinue(ctx, shape, shapeIndex, slideIndex, font) {
+        if (/^(table|chart|picture|media|ole|graphic|unsupported)/i.test(tyTemp(shape))) {
           throw new FriendlyError("shape " + (shapeIndex + 1) + " on slide " + (slideIndex + 1) +
-            " has no text to format (it is a " + ty.toLowerCase() + " shape) - format_text needs a text shape (textbox or placeholder); a table\'s text lives in its cells.");
+            " has no text to format (it is a " + tyTemp(shape).toLowerCase() + " shape) - format_text needs a text shape (textbox or placeholder); a table\'s text lives in its cells.");
         }
         var range = shape.textFrame.textRange;
-      if (font.bold != null) range.font.bold = font.bold;
+        if (font.bold != null) range.font.bold = font.bold;
         if (font.italic != null) range.font.italic = font.italic;
         if (font.allCaps != null) range.font.allCaps = font.allCaps;
         if (font.name) range.font.name = font.name;
@@ -2846,9 +2885,8 @@ OfficeDeck.prototype.formatText = function (slideIndex, shapeIndex, font) {
         if (font.align) range.paragraphFormat.horizontalAlignment = font.align.charAt(0).toUpperCase() + font.align.slice(1);
         if (font.bullet != null) range.paragraphFormat.bulletFormat.visible = font.bullet;
         return ctx.sync().then(function () { return { ok: true }; });
-      });
-    });
-  };
+  }
+  function tyTemp(shape) { return String(shape.type || ""); }
 
 OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceholderText(i, "title", text); };
   OfficeDeck.prototype.setSlideBody = function (i, lines) { return this._setPlaceholderText(i, "body", lines); };

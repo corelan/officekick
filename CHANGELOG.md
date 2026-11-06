@@ -78,6 +78,21 @@
   Q&A pair lands in Previous requests and in the session history. Rules
   added to all three system prompts (MailKick's version says a clarify reply
   replaces - not supplements - the ops/reply round).
+## 0.9.261
+
+### Fixed
+- SlideKick on macOS: create_shape with a geometric kind could die with a
+  bare "InvalidArgument" at sync (roundedRectangle threw on 16.115 while
+  addTextBox/addGeometricShape("rectangle") with the IDENTICAL options
+  object succeeded). Non-textbox kinds now ladder like the 0.9.233 textbox
+  repair: v1 native addGeometricShape(kind, options); v2 the docs-sample
+  form - create bare, then write left/top/width/height as shape properties.
+  The retry pass announcement stays one pass.
+- format_text (and find-based variants) targeting a shape that does not
+  exist on the slide (typically planned for a create_shape that failed in
+  the same batch) now fail with a self-diagnosing reason and the slide's
+  real shape count instead of PowerPoint's bare GeneralException.
+
 ## 0.9.260
 
 ### Changed
