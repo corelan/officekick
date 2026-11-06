@@ -4913,7 +4913,7 @@ function applyOps(deck, ops, ctx) {
   function renderAbout() {
     var kv = [
       ["Pane build (JS)", window.__SK_BUILD || "?"],
-      ["Add-in identity (this manifest)", (SK.cfg && SK.cfg.manifests && SK.cfg.manifests["wordkick"]) ? "v" + SK.cfg.manifests["wordkick"] : "?"],
+      ["Add-in identity (this manifest)", (SK.cfg && SK.cfg.manifests && SK.cfg.manifests["dockick"]) ? "v" + SK.cfg.manifests["dockick"] : "?"],
       ["All manifest identities", (SK.cfg && SK.cfg.manifests) ? Object.keys(SK.cfg.manifests).map(function (k5) { return k5 + " v" + SK.cfg.manifests[k5]; }).join(" / ") : "?"],
       ["Office host", (function () { try { return Office.context.diagnostics.host + " " + Office.context.diagnostics.version; } catch (e5) { return "n/a"; } })()],
       ["DocKick add-in", SK.cfg ? "v" + (SK.cfg.version || "0.1.3") : "0.1.3"],

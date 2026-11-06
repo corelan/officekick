@@ -78,6 +78,14 @@
   Q&A pair lands in Previous requests and in the session history. Rules
   added to all three system prompts (MailKick's version says a clarify reply
   replaces - not supplements - the ops/reply round).
+## 0.9.259
+
+### Fixed
+- the About tab's "Add-in identity (this manifest)" showed "?" on Word: the
+  pane looked up the manifest version under the key "wordkick" while the
+  server publishes the identities as dockick/mailkick/slidekick. DocKick now
+  reads its own key.
+
 ## 0.9.258
 
 ### Changed
