@@ -307,8 +307,8 @@ def menu_pick(rows, start=0, hint=""):
     draw(True)
     while True:
         k = _read_key()
-        if k is None:
-            return None          # raw reads vanished - fall back to typed input
+        if k is None or k == "":
+            return None          # raw reads gone / EOF (Ctrl-D)
         if k == "up":
             j = idx
             while True:
@@ -339,17 +339,18 @@ def menu_pick(rows, start=0, hint=""):
             draw(False)      # unknown key: ignore, keep the arrow menu
 
 
-def toggle_pick(rows, hint=""):
+def toggle_pick(rows, hint="", start=0):
     """Arrow-driven toggle list for select_addins. rows = (act, checked,
-    label, extra, style): a toggle row has checked True/False; the BACK row
-    has checked None (act '0'). Returns ('toggle', index) | ('done', None) |
-    ('back', None) | ('abort', None); None = no raw input available (typed
-    fallback). The hint line is left-aligned with the option rows."""
+    label, extra, style): a toggle row has checked True/False; a plain action
+    row has checked None (act '4' = proceed/install, act '0' = back).
+    Returns ('toggle', index) | ('done', None) | ('back', None); None = no
+    raw input available (typed fallback). The hint line is left-aligned with
+    the option rows. Enter on a COMPONENT row toggles it (never proceeds)."""
     if not _uitty():
         return None
     if is_windows():
         os.system("")
-    idx = 0
+    idx = min(start, len(rows) - 1)
 
     def draw(first):
         if not first:
@@ -358,7 +359,7 @@ def toggle_pick(rows, hint=""):
             if label == "@SEP":                    # visual separator
                 print("")
                 continue
-            if checked is None:                    # plain action row (back)
+            if checked is None:                    # plain action row
                 body = "%s) %s" % (act, label)
                 if i == idx:
                     print(_paint(" > " + body, "rev"))
@@ -376,11 +377,16 @@ def toggle_pick(rows, hint=""):
         print("")
         print("   " + ((_paint(hint, "dim")) if hint else ""))
 
+    def act_row(kind):
+        j = next((i for i, r in enumerate(rows)
+                  if r[0] and r[1] is None and r[0].lower() == kind), None)
+        return j
+
     draw(True)
     while True:
         k = _read_key()
-        if k is None:
-            return None
+        if k is None or k == "":
+            return None                  # raw reads gone / EOF (Ctrl-D)
         if k == "up":
             j = idx
             while True:
@@ -401,18 +407,24 @@ def toggle_pick(rows, hint=""):
             if rows[idx][1] is not None:
                 return ("toggle", idx)
             draw(False)
-        elif isinstance(k, str) and k in ("1", "2", "3"):
-            j = next((i for i, r in enumerate(rows) if r[0] == k and r[1] is not None), None)
+        elif isinstance(k, str) and k.strip() and \
+                any(r[0] and r[0].lower() == k for r in rows):
+            j = act_row(k)
+            if j is not None:                      # action row: 4 = proceed, 0 = back
+                return ("done", None) if rows[j][0] == "4" else ("back", None)
+            j = next((i for i, r in enumerate(rows)
+                      if r[0] == k and r[1] is not None), None)
             if j is None:
                 draw(False)
                 continue
             return ("toggle", j)
-        elif k == "0":
-            return ("back", None)
         elif k == "enter":
-            if rows[idx][1] is None:
+            act, checked = rows[idx][0], rows[idx][1]
+            if checked is None:
+                if act == "4":
+                    return ("done", None)
                 return ("back", None)
-            return ("done", None)
+            return ("toggle", idx)
         elif k in ("q", "Q", "esc", "\x1b"):
             return ("back", None)
         else:
@@ -578,6 +590,7 @@ def select_addins(interactive):
     print("")
     _prereq_block(feas, feas_why, feas_how)
     arrow_done = False
+    cur = 0
     if _uitty():
         order = [f for (f, _l, _w) in rows]   # picker index -> folder
 
@@ -588,15 +601,18 @@ def select_addins(interactive):
             # the status block below the options, not on the rows
             for (n, (folder, label, _was)) in zip(("1", "2", "3"), rows):
                 r.append((n, state[folder], label, "", None))
+            r.append(("4", None, "Install the selected components", "", "cyan"))
             r.append((None, None, "@SEP", "", None))
             r.append(("0", None, "back (nothing is installed yet)", "", "magenta"))
             return r
         while True:
             r = toggle_pick(_rowdata(),
-                            "(up/down = move, space or 1-3 = toggle, Enter = install, 0 = back)")
+                            "(up/down = move, space/Enter or 1-3 = toggle, 4 = install, 0 = back)",
+                            start=cur)
             if r is None:
                 break            # raw reads vanished - typed loop takes over
             kind, val = r
+            cur = val if kind == "toggle" else cur
             _log("add-in picker: %s %s" % (kind, val), ts=True)
             print("")
             if kind == "back":
@@ -632,16 +648,17 @@ def select_addins(interactive):
         for (folder, label, _was) in rows:
             box = "[x]" if state[folder] else "[ ]"
             print("    %d) %-24s %s" % (rows.index((folder, label, _was)) + 1, label, box))
+        print("    4) Install the selected components")
         print("")
         print("    0) back (nothing is installed yet)")
         print("")
-        choice = input("  > toggle 1/2/3 + Enter to toggle, EMPTY = continue, 0 = back: ").strip().lower()
+        choice = input("  > toggle 1/2/3, 4 = install the selected, 0 = back: ").strip().lower()
         _log("add-in selection input: %r" % choice, ts=True)
         if choice in ("q", "quit", "abort", "0", "back"):
             print("  add-in selection cancelled - back to the menu.")
             note("add-in selection cancelled by user")
             raise MenuAbort("add-in selection cancelled (typed)")
-        if choice == "":
+        if choice == "" or choice in ("4", "install"):
             break
         if choice in ("1", "2", "3"):
             folder = rows[int(choice) - 1][0]
