@@ -536,6 +536,50 @@ def https_feasible():
 _CFG_CACHE = {"t": 0.0, "d": None}
 
 
+_RUNTIME_DEPS_DONE = False
+
+
+def ensure_runtime_deps():
+    """Install python dependencies AT STARTUP - the user rule: the installer
+    never defers a dependency it can fetch itself (the add-in picker must
+    not lock Outlook over a package the installer can install in seconds).
+    Idempotent; a no-op when the imports already work. (0.9.275)"""
+    global _RUNTIME_DEPS_DONE
+    if _RUNTIME_DEPS_DONE or DRY_RUN or not is_windows():
+        return True
+    _RUNTIME_DEPS_DONE = True
+    try:
+        import cryptography  # noqa: F401
+        return True
+    except ImportError:
+        pass
+    step("installing the python 'cryptography' package (needed for the"
+         " local https certificates; pip --user, no admin)...")
+    import importlib
+    ok_done = False
+    for pip_args in (["--user"], []):
+        rc, o = run_quiet([sys.executable, "-m", "pip", "install"] +
+                          pip_args + ["cryptography"], timeout=600)
+        _log("startup pip install %scryptography: rc %d out=%s"
+             % ((" ".join(pip_args) + " ") if pip_args else "", rc,
+                (o or "")[-200:]), ts=True)
+        if rc == 0:
+            importlib.invalidate_caches()
+            try:
+                import cryptography  # noqa: F401
+                ok_done = True
+                break
+            except ImportError:
+                continue
+    if ok_done:
+        ok("the 'cryptography' package is installed")
+    else:
+        warn("could not install 'cryptography' at startup - Outlook stays"
+             " locked; run: python -m pip install --user cryptography")
+        _log("startup dependency install failed (cryptography, Windows)")
+    return ok_done
+
+
 def _config_settings(max_age=2.0):
     """Settings from the running server first; keys the server does not
     know (older builds) fall back to the config file; {} when neither is
@@ -3986,6 +4030,8 @@ def main():
 
     if not (is_mac() or is_windows()):
         die("this installer supports macOS and Windows only (detected: %s)." % sys.platform)
+
+    ensure_runtime_deps()   # dependencies at STARTUP, never mid-flow (0.9.275)
 
     if args.install:
         log_open("install (non-interactive)")

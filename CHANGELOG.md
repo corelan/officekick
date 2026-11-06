@@ -30,6 +30,20 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.275
+
+### Fixed
+- field report: Outlook was LOCKED in the add-in picker because the
+  'cryptography' package was missing, with the install deferred to the
+  certificate step - the user rule is dependencies STARTUP, never mid-flow.
+  install.py now ensures the runtime dependencies at startup (Windows:
+  cryptography via pip --user, idempotent, no admin; skipped for dry-runs
+  and macOS where openssl covers it), so the picker unlocks itself. The
+  picker's lock survives only when the startup install genuinely failed,
+  with the run-it-yourself command named. Battery: present=no-op, missing=
+  one --user pip attempt + verification, per-process idempotence, dry-run
+  and macOS skips, pip-failure keeps the lock.
+
 ## 0.9.274
 
 ### Changed
