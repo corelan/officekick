@@ -1500,14 +1500,10 @@ def clear_office_caches():
         if os.path.isdir(wef_store):
             shutil.rmtree(wef_store, ignore_errors=True)
     ok("cleared Office add-in caches + WEF registration stores (rebuilt at launch)")
-    if is_mac():
-        warn("note: Outlook holds MailKick as a MANUALLY added add-in - after this"
-             " clear, re-add it once via Get Add-ins > My add-ins > Custom Add-ins"
-             " > Add a custom add-in > Add from File (Cmd+Shift+G), file:")
-        warn("ALSO check Outlook is NOT in 'New Outlook' mode (the toggle sits at"
-             " the top of Outlook's toolbar; when the toggle is on, desktop"
-             " task-pane add-ins such as MailKick cannot run or install at all)")
-        out("           ~/Library/Containers/com.microsoft.Outlook/Data/Documents/wef/mailkick.xml")
+    note("caches cleared; install flows re-stage the manifests to the WEF dirs"
+         " immediately after (render_and_sideload), so no manual re-add step is"
+         " needed; MailKick rides the https://localhost:%d loopback listener and"
+         " works in New Outlook too." % (PORT + 1))
 
 
 def office_app_running():
