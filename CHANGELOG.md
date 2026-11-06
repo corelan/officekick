@@ -78,6 +78,27 @@
   Q&A pair lands in Previous requests and in the session history. Rules
   added to all three system prompts (MailKick's version says a clarify reply
   replaces - not supplements - the ops/reply round).
+## 0.9.247
+
+### Changed
+- the DEFAULT certificate mode is now self-signed leaf (no CA): fresh
+  installs, any config without a stored mode, and the server-side default all
+  resolve to leaf. A deliberately stored ca/byo keeps winning while it is
+  still stored.
+- an uninstall RESETS the certificate mode to self-signed leaf when the
+  config is kept - regardless of what was used before.
+- the CA-byo PUT whitelist bug: a stray first certMode block still had the
+  pre-BYO whitelist and would have rejected certMode=byo with 400 (removed).
+
+### Fixed
+- certificate-store deletion is now robust even when the certificate FILES
+  are already gone (manual cleanup, earlier partial uninstall): the cert
+  metadata (fingerprints) moved into the config dir so the uninstall can
+  identify and remove a lingering LEAF trust entry via the stored sha1, and
+  the loopback CA is swept by its (ours-only) common name when ca.crt is
+  missing. Verified with a real install -> uninstall cycle plus keychain and
+  trust-settings audits.
+
 ## 0.9.246
 
 ### Fixed

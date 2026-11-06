@@ -114,10 +114,12 @@ honored; report which host/port was refused.
 
 ## Certificate modes (0.9.242+)
 
-The installer asks ONE certificate question when no usable pair exists:
-self-signed leaf (no CA; trust consent per re-trust), local CA + signed
-certificate (mac), or bring-your-own PEM. Once a `certMode` is stored it
-never re-asks; updates keep it.
+The default certificate mode is the SELF-SIGNED LEAF (no CA created, no CA
+trust entry - the leaf itself gets trusted). The installer asks ONE
+certificate question when no usable pair exists: self-signed leaf (default),
+local CA + signed certificate (mac), or bring-your-own PEM. A stored
+`certMode` is pre-selected; updates keep a working pair silently. After an
+UNINSTALL the mode resets to self-signed leaf.
 
 - `ca` - the classic loopback CA (existing behaviour).
 - `self_signed_leaf` - a directly trusted `CN=localhost` leaf; no CA files.

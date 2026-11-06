@@ -1517,19 +1517,40 @@ def _leaf_paths():
             os.path.join(cdir, CERT_META_NAME))
 
 
+def _leaf_meta_path():
+    """The certificate metadata (fingerprints, mode) lives in the CONFIG dir -
+    it must survive the certificates folder so an uninstall can still find
+    the sha1 of a previously trusted leaf even after its files are gone."""
+    return os.path.join(config_dir(), CERT_META_NAME)
+
+
 def _leaf_meta_load():
+    p = _leaf_meta_path()
     try:
-        with open(_leaf_paths()[3], "r", encoding="utf-8") as fh:
+        with open(p, "r", encoding="utf-8") as fh:
             return json.load(fh) or {}
+    except Exception:
+        pass
+    try:   # pre-0.9.247 location (next to the certificates)
+        with open(_leaf_paths()[3], "r", encoding="utf-8") as fh:
+            meta = json.load(fh) or {}
+        if meta:
+            try:
+                with open(p, "w", encoding="utf-8") as fh:
+                    json.dump(meta, fh, indent=2)
+                _protect_secret(p)
+            except OSError:
+                pass
+        return meta
     except Exception:
         return {}
 
 
 def _leaf_meta_save(meta):
     try:
-        with open(_leaf_paths()[3], "w", encoding="utf-8") as fh:
+        with open(_leaf_meta_path(), "w", encoding="utf-8") as fh:
             json.dump(meta, fh, indent=2)
-        _protect_secret(_leaf_paths()[3])
+        _protect_secret(_leaf_meta_path())
     except OSError as exc:
         warn("could not write the certificate metadata: %s" % exc)
 
@@ -2064,8 +2085,10 @@ def cert_diagnostics():
 
 
 def _get_cert_mode():
+    """The certificate mode; the DEFAULT is the self-signed leaf (no CA)."""
     d = _config_settings()
-    return d.get("certMode") if d.get("certMode") in ("ca", "self_signed_leaf", "byo") else "ca"
+    return d.get("certMode") if d.get("certMode") in ("ca", "self_signed_leaf", "byo") \
+        else "self_signed_leaf"
 
 
 def _set_cert_mode(mode):
@@ -2904,12 +2927,30 @@ def do_uninstall(purge, rm_certs=None):
                  " touch trust entries we did not create (remove it yourself if you"
                  " no longer want it)")
         else:
+            meta_sha = str(meta.get("sha1") or "")
+            meta_mode = str(meta.get("mode") or "")
+            leaf_trusted_before = os.path.isfile(_leaf_meta_path()) or \
+                (meta_sha and meta_mode == "self_signed_leaf")
             if ca_present:
                 _remove_ca_trust(ca_p)
                 ok("loopback CA removed from the user trust store")
+            elif os.path.isdir(cdir) or leaf_trusted_before:
+                # CA file already gone (manual cleanup) - sweep our CA by its
+                # common name; unrelated CAs are never touched
+                _remove_ca_trust(None)
             if leaf_present:
                 _remove_leaf_trust(crt_p)
                 ok("leaf certificate removed from the user trust store")
+            elif meta_mode == "self_signed_leaf" and meta_sha:
+                # leaf files already gone but its trust entry may linger -
+                # _remove_leaf_trust falls back to the stored sha1
+                _remove_leaf_trust(crt_p)
+                ok("leaf trust entry removed via the stored fingerprint")
+            try:
+                if os.path.isfile(_leaf_meta_path()) and os.path.isfile(crt_p) is False:
+                    os.remove(_leaf_meta_path())   # nothing left to identify
+            except OSError:
+                pass
         if DRY_RUN:
             out("  [..]  [dry-run] would delete " + cdir)
         else:
@@ -2931,6 +2972,11 @@ def do_uninstall(purge, rm_certs=None):
     else:
         out("  [ok] config kept at %s (config.json, keys, profiles and sessions intact)"
             % config_dir())
+        if _set_cert_mode("self_signed_leaf"):
+            out("  [ok] certificate mode reset to self-signed leaf (the default)")
+        else:
+            warn("could not reset the certificate mode to self-signed leaf"
+                 " - check the config file")
     out("")
     warn("quit and reopen PowerPoint / Word / Outlook to finish removing the add-ins")
     pause_after("uninstall")
