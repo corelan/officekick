@@ -301,7 +301,7 @@ def menu_pick(rows, start=0, hint=""):
             else:
                 print("   " + ((_paint(body, style)) if style else body))
         print("")
-        print(_paint((hint or ""), "dim"))
+        print("   " + ((_paint(hint, "dim")) if hint else ""))
 
     draw(True)
     while True:
@@ -340,8 +340,10 @@ def menu_pick(rows, start=0, hint=""):
 
 def toggle_pick(rows, hint=""):
     """Arrow-driven toggle list for select_addins. rows = (act, checked,
-    label, extra, style). Returns ('toggle', index) | ('done', None) |
-    ('abort', None); None = no raw input available (typed fallback)."""
+    label, extra, style): a toggle row has checked True/False; the BACK row
+    has checked None (act '0'). Returns ('toggle', index) | ('done', None) |
+    ('back', None) | ('abort', None); None = no raw input available (typed
+    fallback). The hint line is left-aligned with the option rows."""
     if not _uitty():
         return None
     if is_windows():
@@ -351,7 +353,14 @@ def toggle_pick(rows, hint=""):
     def draw(first):
         if not first:
             sys.stdout.write("\x1b[%dA\r\x1b[J" % (len(rows) + 2))
-        for i, (_act, checked, label, extra, style) in enumerate(rows):
+        for i, (act, checked, label, extra, style) in enumerate(rows):
+            if checked is None:                    # plain action row (back)
+                body = "%s) %s" % (act, label)
+                if i == idx:
+                    print(_paint(" > " + body, "rev"))
+                else:
+                    print("   " + ((_paint(body, style)) if style else body))
+                continue
             box = "[x]" if checked else "[ ]"
             if i == idx:
                 print(_paint(" > %s %s%s" % (box, label, (extra or "")), "rev"))
@@ -361,7 +370,7 @@ def toggle_pick(rows, hint=""):
                     line += " " + ((_paint(extra, style or "dim")) if sys.stdout.isatty() else extra)
                 print(line)
         print("")
-        print(_paint((hint or ""), "dim"))
+        print("   " + ((_paint(hint, "dim")) if hint else ""))
 
     draw(True)
     while True:
@@ -374,15 +383,24 @@ def toggle_pick(rows, hint=""):
         elif k == "down":
             idx = (idx + 1) % len(rows)
             draw(False)
-        elif k in ("space", " ", "s") or (isinstance(k, str) and k in ("1", "2", "3")
-                                          and int(k) - 1 == idx):
-            return ("toggle", idx)
+        elif k in ("space", " ", "s"):
+            if rows[idx][1] is not None:
+                return ("toggle", idx)
+            draw(False)
         elif isinstance(k, str) and k in ("1", "2", "3"):
-            return ("toggle", int(k) - 1)
+            j = next((i for i, r in enumerate(rows) if r[0] == k and r[1] is not None), None)
+            if j is None:
+                draw(False)
+                continue
+            return ("toggle", j)
+        elif k == "0":
+            return ("back", None)
         elif k == "enter":
+            if rows[idx][1] is None:
+                return ("back", None)
             return ("done", None)
         elif k in ("q", "Q", "esc", "\x1b"):
-            return ("abort", None)
+            return ("back", None)
         else:
             draw(False)
 
@@ -423,20 +441,35 @@ def detect_installed():
 
 def https_feasible():
     """Would setup of the https (loopback TLS) component succeed on this box?
-    Returns (True, []) or (False, [reasons]). Outlook on macOS needs it;
-    on Windows Outlook rides plain http, so no TLS is required."""
+    Returns (feasible, [missing-reasons], [techniques-used]). Outlook on
+    macOS needs it; on Windows Outlook rides plain http, so no TLS is
+    required there."""
     if is_mac():
         reasons = []
-        if shutil.which("openssl") is None:
-            reasons.append("openssl not found (needed to generate the loopback CA + certificate)")
+        techniques = []
+        ov = shutil.which("openssl")
+        if ov is None:
+            reasons.append("openssl not found - it generates the loopback CA +"
+                           " localhost certificate")
+        else:
+            _rc, over = run_quiet(["openssl", "version"])
+            techniques.append("%s (%s) - generates the self-signed loopback CA"
+                              " + localhost certificate" % (
+                                  os.path.basename(ov), (over or "").strip() or "openssl"))
         if shutil.which("security") is None:
-            reasons.append("the macOS 'security' tool is missing (needed to trust the CA)")
+            reasons.append("the macOS 'security' tool is missing - it imports "
+                           "+ trusts the CA in your keychains")
+        else:
+            techniques.append("the macOS 'security' tool - imports the CA into"
+                              " your login keychain and marks it trusted")
         try:
             import ssl  # noqa: F401
+            techniques.append("python ssl - serves the https://localhost:%d"
+                              " pane listener for Outlook" % (PORT + 1))
         except Exception as exc:
             reasons.append("python ssl module unavailable: %s" % exc)
-        return (len(reasons) == 0, reasons)
-    return (True, [])   # Windows: no TLS component needed for Outlook
+        return (len(reasons) == 0, reasons, techniques)
+    return (True, [], [])   # Windows: no TLS component needed for Outlook
 
 
 def banner(mode=None):
@@ -464,6 +497,29 @@ def banner(mode=None):
 
 
 # ------------------------------------------------------ add-in selection ----
+def _prereq_block(feas, feas_why, feas_how):
+    """Prints (below the options, not on them) whether the https prerequisites
+    for Outlook are met, with the techniques the setup will use."""
+    if not is_mac():
+        print(_paint("  https prereqs for Outlook: ", "bold") + "not needed -")
+        print("  Outlook rides the plain-http localhost listener on Windows; no")
+        print("  certificate is created or trusted.")
+        print("")
+        return
+    if feas:
+        print("  " + _paint("https prerequisites for Outlook: MET", "green"))
+        for t in feas_how:
+            print("    - " + t)
+    else:
+        print("  " + _paint("https prerequisites for Outlook: NOT MET", "red")
+              + _paint(" - Outlook is locked", "bold"))
+        for r in feas_why:
+            print("    - " + r)
+    print(_paint("  Enabling Outlook creates a self-signed loopback CA +"
+                 " localhost certificate (asked to confirm first).", "dim"))
+    print("")
+
+
 def select_addins(interactive):
     """Decide which add-ins this run deploys. Word + PowerPoint default ON;
     Outlook default OFF. Returns the set (also stored in ADDINS)."""
@@ -485,37 +541,33 @@ def select_addins(interactive):
     state = {}
     for (folder, _label, was) in rows:
         state[folder] = (True if folder != "mailkick" else False) if not was else True
-    feas, feas_why = https_feasible()
+    feas, feas_why, feas_how = https_feasible()
     print("")
     print("  Add-ins (Word + PowerPoint are enabled by default, Outlook is not):")
     print("")
+    _prereq_block(feas, feas_why, feas_how)
     arrow_done = False
     if _uitty():
         def _rowdata():
             r = []
             for (folder, label, _was) in rows:
-                extra, style = "", None
-                if folder == "mailkick":
-                    if not feas:
-                        extra, style = "  (unavailable: " + feas_why[0] + ")", "red"
-                    elif is_mac():
-                        extra = "  (needs an https loopback: creates a self-signed CA + certificate)"
-                    else:
-                        extra = "  (rides the plain-http localhost listener - no certificate)"
-                r.append((folder, state[folder], label, extra, style))
+                # informational hints (https loopback, lock) live in the
+                # status block below the options - not on the rows
+                r.append((folder, state[folder], label, "", None))
+            r.append(("0", None, "back (nothing is installed yet)", "", "magenta"))
             return r
         while True:
             r = toggle_pick(_rowdata(),
-                            "(up/down move, space or 1-3 toggles, Enter continues, q aborts)")
+                            "(up/down = move, space or 1-3 = toggle, Enter = install, 0 = back)")
             if r is None:
                 break            # raw reads vanished - typed loop takes over
             kind, val = r
             _log("add-in picker: %s %s" % (kind, val), ts=True)
             print("")
-            if kind == "abort":
-                print("  add-in selection aborted - back to the menu.")
-                note("add-in selection aborted by user")
-                raise MenuAbort("add-in selection aborted")
+            if kind == "back":
+                print("  add-in selection cancelled - back to the menu.")
+                note("add-in selection cancelled by user")
+                raise MenuAbort("add-in selection cancelled")
             if kind == "done":
                 arrow_done = True
                 break
@@ -544,22 +596,15 @@ def select_addins(interactive):
     while arrow_done is False:
         for (folder, label, _was) in rows:
             box = "[x]" if state[folder] else "[ ]"
-            extra = ""
-            if folder == "mailkick":
-                if not feas:
-                    extra = "  (unavailable: " + feas_why[0] + ")"
-                elif is_mac():
-                    extra = "  (needs an https loopback: creates a self-signed CA + certificate)"
-                else:
-                    extra = "  (rides the plain-http localhost listener - no certificate)"
-            print("    %d) %-24s %s%s" % (rows.index((folder, label, _was)) + 1, label, box, extra))
+            print("    %d) %-24s %s" % (rows.index((folder, label, _was)) + 1, label, box))
+        print("    0) back (nothing is installed yet)")
         print("")
-        choice = input("  > toggle 1/2/3 + Enter to toggle, EMPTY = continue, q = abort: ").strip().lower()
+        choice = input("  > toggle 1/2/3 + Enter to toggle, EMPTY = continue, 0 = back: ").strip().lower()
         _log("add-in selection input: %r" % choice, ts=True)
-        if choice in ("q", "quit", "abort", "0"):
-            print("  add-in selection aborted - back to the menu.")
-            note("add-in selection aborted by user")
-            raise MenuAbort("add-in selection aborted (typed)")
+        if choice in ("q", "quit", "abort", "0", "back"):
+            print("  add-in selection cancelled - back to the menu.")
+            note("add-in selection cancelled by user")
+            raise MenuAbort("add-in selection cancelled (typed)")
         if choice == "":
             break
         if choice in ("1", "2", "3"):
