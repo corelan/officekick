@@ -86,6 +86,21 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "[Net.ServicePointManager
 powershell -NoProfile -ExecutionPolicy Bypass -Command "& ([scriptblock]::Create((irm https://raw.githubusercontent.com/corelan/officekick/main/tools/setup-windows.ps1))) -Yes -NoClone"
 ```
 
+- **If `irm` "did not work": check which prompt you are in first.**
+  `irm` and `iex` are PowerShell commands - in a CMD window they fail with
+  "'irm' is not recognized". Either start PowerShell first, or use the
+  `curl.exe` pipe form above (which is cmd-native). To make a failing
+  one-liner SELF-DIAGNOSING, run this in PowerShell instead of piping on:
+
+```powershell
+try { irm https://raw.githubusercontent.com/corelan/officekick/main/tools/setup-windows.ps1 | iex } catch { "IRM FAILED: $($_.Exception.Message)" }
+```
+
+  - "The underlying connection was closed / an unexpected error occurred on
+    a send" = old TLS defaults -> use the hardened `Tls12` form above.
+  - Name resolution / proxy errors = the machine blocks
+    `raw.githubusercontent.com` -> use the downloaded-file route (option B).
+
 - If you are already inside a PowerShell window, the session-scoped
   equivalent of the `-ExecutionPolicy Bypass` flag is:
 
