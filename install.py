@@ -199,6 +199,187 @@ def note(msg):
     _log(msg, ts=True)
 
 
+# ----------------------------------------------------------- ui toolkit --- #
+ANSI = {
+    "bold": "\x1b[1m", "dim": "\x1b[2m", "rev": "\x1b[7m",
+    "red": "\x1b[31m", "green": "\x1b[32m", "yellow": "\x1b[33m",
+    "cyan": "\x1b[36m", "magenta": "\x1b[35m",
+    "reset": "\x1b[0m",
+}
+
+
+def _paint(txt, *styles):
+    """ANSI-painted text on a real terminal; plain text when piped. Standard
+    colors (cyan/red/green/yellow/magenta) + bold/dim/reverse all read fine
+    on dark AND light terminal palettes (reverse inverts the user's own
+    foreground/background, so the cursor row works on every theme)."""
+    if styles and ("rev" in styles):
+        # reverse covers both themes on its own - no extra color on top
+        styles = ("rev",)
+    if sys.stdout.isatty() and styles:
+        return "".join(ANSI[s] for s in styles) + txt + ANSI["reset"]
+    return txt
+
+
+def _uitty():
+    try:
+        return sys.stdin.isatty() and sys.stdout.isatty() and not DRY_RUN
+    except Exception:
+        return False
+
+
+def _read_key():
+    """One keypress: 'up' | 'down' | 'enter' | 'space' | a character.
+    None = the terminal does not support raw reads (caller falls back to the
+    typed numeric prompt)."""
+    try:
+        if is_windows():
+            import msvcrt
+            ch = msvcrt.getwch()
+            if ch in ("\x00", "\xe0"):
+                ch2 = msvcrt.getwch()
+                return {"H": "up", "P": "down"}.get(ch2, ch2)
+            if ch in ("\r", "\n"):
+                return "enter"
+            if ch == "\x03":
+                raise KeyboardInterrupt
+            return ch
+        import termios, tty
+        fd = sys.stdin.fileno()
+        old = termios.tcgetattr(fd)
+        try:
+            tty.setcbreak(fd)
+            ch = sys.stdin.read(1)
+            if ch == "\x1b":
+                nxt = sys.stdin.read(1)
+                if nxt == "[":
+                    return {"A": "up", "B": "down"}.get(sys.stdin.read(1), None)
+                return "esc"
+            if ch in ("\r", "\n"):
+                return "enter"
+            if ch == "\x03":
+                raise KeyboardInterrupt
+            return ch
+        finally:
+            termios.tcsetattr(fd, termios.TCSADRAIN, old)
+    except KeyboardInterrupt:
+        raise
+    except Exception:
+        return None
+
+
+def menu_pick(rows, start=0, hint=""):
+    """Arrow-driven menu (tty only; returns None otherwise, and the caller
+    prints the options + reads a line). rows = (action, label, style) where
+    a None action + '@SEP' label is a visual separator. Arrow up/down move
+    (skipping separators), Enter selects the cursor row, a typed key selects
+    the row with that action, 'q'/Esc select the '0' row when present."""
+    if not _uitty():
+        return None
+    if is_windows():
+        os.system("")   # enables ANSI/VT processing on modern consoles
+    sels = [i for i, r in enumerate(rows) if r[1] != "@SEP"]
+    if not sels:
+        return None
+    idx = sels[min(start, len(sels) - 1)]
+
+    def draw(first):
+        if not first:
+            sys.stdout.write("\x1b[%dA\r\x1b[J" % (len(rows) + 1))
+        for i, (act, label, style) in enumerate(rows):
+            if label == "@SEP":
+                print("")
+                continue
+            body = ("%s) %s" % (act, label)) if act else ("    " + label)
+            if i == idx:
+                print(_paint(" > " + body, "rev"))
+            else:
+                print("   " + ((_paint(body, style)) if style else body))
+        print(_paint((hint or ""), "dim"))
+
+    draw(True)
+    while True:
+        k = _read_key()
+        if k is None:
+            return None          # raw reads vanished - fall back to typed input
+        if k == "up":
+            j = idx
+            while True:
+                j = (j - 1) % len(rows)
+                if rows[j][1] != "@SEP":
+                    idx = j
+                    break
+            draw(False)
+        elif k == "down":
+            j = idx
+            while True:
+                j = (j + 1) % len(rows)
+                if rows[j][1] != "@SEP":
+                    idx = j
+                    break
+            draw(False)
+        elif k == "enter":
+            return idx
+        elif k in ("esc", "q", "Q"):
+            for i, (act, _lbl, _st) in enumerate(rows):
+                if act == "0":
+                    return i
+            return None
+        elif isinstance(k, str) and k.strip():
+            for i, (act, _lbl, _st) in enumerate(rows):
+                if act and act == k:
+                    return i
+            draw(False)      # unknown key: ignore, keep the arrow menu
+
+
+def toggle_pick(rows, hint=""):
+    """Arrow-driven toggle list for select_addins. rows = (act, checked,
+    label, extra, style). Returns ('toggle', index) | ('done', None) |
+    ('abort', None); None = no raw input available (typed fallback)."""
+    if not _uitty():
+        return None
+    if is_windows():
+        os.system("")
+    idx = 0
+
+    def draw(first):
+        if not first:
+            sys.stdout.write("\x1b[%dA\r\x1b[J" % (len(rows) + 1))
+        for i, (_act, checked, label, extra, style) in enumerate(rows):
+            box = "[x]" if checked else "[ ]"
+            if i == idx:
+                print(_paint(" > %s %s%s" % (box, label, (extra or "")), "rev"))
+            else:
+                line = "   " + _paint(box, "green" if checked else "dim") + " " + label
+                if extra:
+                    line += " " + ((_paint(extra, style or "dim")) if sys.stdout.isatty() else extra)
+                print(line)
+        print(_paint((hint or ""), "dim"))
+
+    draw(True)
+    while True:
+        k = _read_key()
+        if k is None:
+            return None
+        if k == "up":
+            idx = (idx - 1) % len(rows)
+            draw(False)
+        elif k == "down":
+            idx = (idx + 1) % len(rows)
+            draw(False)
+        elif k in ("space", " ", "s") or (isinstance(k, str) and k in ("1", "2", "3")
+                                          and int(k) - 1 == idx):
+            return ("toggle", idx)
+        elif isinstance(k, str) and k in ("1", "2", "3"):
+            return ("toggle", int(k) - 1)
+        elif k == "enter":
+            return ("done", None)
+        elif k in ("q", "Q", "esc", "\x1b"):
+            return ("abort", None)
+        else:
+            draw(False)
+
+
 def hp(*parts):
     return os.path.join(os.path.expanduser("~"), *(p for p in parts if p))
 
@@ -254,11 +435,11 @@ def https_feasible():
 def banner(mode=None):
     head = "%s v%s  -  installer" % (APP_NAME, VERSION)
     print("")
-    print("-" * 74)
-    print("  " + head)
-    print("  Created by Corelan Consulting bv")
-    print("  " + REPO_URL)
-    print("-" * 74)
+    print(_paint("-" * 74, "cyan"))
+    print("  " + _paint(head, "bold"))
+    print("  " + _paint("Created by Corelan Consulting bv", "cyan"))
+    print("  " + _paint(REPO_URL, "dim"))
+    print(_paint("-" * 74, "cyan"))
     h = health(PORT)
     inst = detect_installed()
     if h:
@@ -301,7 +482,59 @@ def select_addins(interactive):
     print("")
     print("  Add-ins (Word + PowerPoint are enabled by default, Outlook is not):")
     print("")
-    while True:
+    arrow_done = False
+    if _uitty():
+        def _rowdata():
+            r = []
+            for (folder, label, _was) in rows:
+                extra, style = "", None
+                if folder == "mailkick":
+                    if not feas:
+                        extra, style = "  (unavailable: " + feas_why[0] + ")", "red"
+                    elif is_mac():
+                        extra = "  (needs an https loopback: creates a self-signed CA + certificate)"
+                    else:
+                        extra = "  (rides the plain-http localhost listener - no certificate)"
+                r.append((folder, state[folder], label, extra, style))
+            return r
+        while True:
+            r = toggle_pick(_rowdata(),
+                            "(up/down move, space or 1-3 toggles, Enter continues, q aborts)")
+            if r is None:
+                break            # raw reads vanished - typed loop takes over
+            kind, val = r
+            _log("add-in picker: %s %s" % (kind, val), ts=True)
+            print("")
+            if kind == "abort":
+                print("  aborted - nothing was changed.")
+                note("add-in selection aborted by user")
+                sys.exit(130)
+            if kind == "done":
+                arrow_done = True
+                break
+            folder = rows[val][0]
+            if folder == "mailkick" and not state[folder] and not feas:
+                warn("Outlook cannot be enabled on this machine:")
+                for rr in feas_why:
+                    print("      - " + rr)
+                note("outlook enable refused: %s" % "; ".join(feas_why))
+                continue
+            if folder == "mailkick" and not state[folder] and is_mac():
+                print("  -------------------------------------------------------------")
+                print("   OUTLOOK (MailKick) - one-time certificate setup")
+                print("   Enabling this will CREATE a SELF-SIGNED certificate and a")
+                print("   local CA for localhost and import them into your keychains.")
+                print("   macOS will ask to trust the CA - accept to let the pane")
+                print("   load. Nothing else is installed; removed again by uninstall.")
+                print("  -------------------------------------------------------------")
+                print("")
+                go = ask_yes("Continue with the certificate setup for Outlook", False)
+                note("outlook CA warning answer: %s" % ("yes" if go else "no"))
+                if not go:
+                    state[folder] = False
+                    continue
+            state[folder] = not state[folder]
+    while arrow_done is False:
         for (folder, label, _was) in rows:
             box = "[x]" if state[folder] else "[ ]"
             extra = ""
@@ -1690,46 +1923,68 @@ def do_status():
 
 
 def server_menu():
-    while True:
+    rows = [
+        ("1", "start", None),
+        ("2", "restart", None),
+        ("3", "stop", None),
+        ("4", "status", None),
+        (None, "@SEP", None),
+        ("0", "back", "magenta"),
+    ]
+
+    def body():
         h = health(PORT)
         print("")
-        if h:
-            print("  ----- server -----")
-            print("  running v%s on port %d" % (h.get("version"), PORT))
-        else:
-            print("  ----- server (not running) -----")
-        print("")
-        print("    1) start")
-        print("    2) restart")
-        print("    3) stop")
-        print("    4) status")
-        print("    0) back")
-        print("")
-        try:
-            if not sys.stdin.isatty():
-                print("  (non-interactive: pass --start/--stop/--restart/--status)")
+        print("  ----- server -----")
+        print("  " + ("running v%s on port %d" % (h.get("version"), PORT) if h
+                         else "not running"))
+        return rows
+
+    while True:
+        r = body()
+        sel = menu_pick(r, 0, "(up/down + Enter, 1-4 = direct, q = back)")
+        if sel is None:
+            # typed fallback
+            print("")
+            for (act, label, _st) in r:
+                if label == "@SEP":
+                    print("")
+                    continue
+                print("    %s) %s" % (act, label))
+            print("")
+            try:
+                if not sys.stdin.isatty():
+                    print("  (non-interactive: pass --start/--stop/--restart/--status)")
+                    return
+                choice = input("  > choose [1/2/3/4, 0; default 0]: ").strip().lower()
+            except EOFError:
                 return
-            choice = input("  > choose [1/2/3/4, 0; default 0]: ").strip().lower()
-        except EOFError:
-            return
-        _log("server menu input: %r" % choice, ts=True)
-        if choice in ("", "0", "q"):
-            return
-        if choice == "1":
+            _log("server menu input: %r" % choice, ts=True)
+            if choice in ("", "0", "q", "x", "back"):
+                return
+            selrows = {"1": 0, "2": 1, "3": 2, "4": 3}
+            sel = selrows.get(choice)
+            if sel is None:
+                print("  please choose 1, 2, 3, 4 or 0")
+                continue
+        act = r[sel][0]
+        _log("server menu selection: %s" % act, ts=True)
+        print("")
+        if act == "1":
             banner("start")
             start_only()
-        elif choice == "2":
+        elif act == "2":
             banner("restart")
             stop_server()
             start_only()
-        elif choice == "3":
+        elif act == "3":
             banner("stop")
             stop_server()
             ok("server stopped (port %d)" % PORT)
-        elif choice == "4":
+        elif act == "4":
             do_status()
         else:
-            print("  please choose 1, 2, 3, 4 or 0")
+            return
 
 
 def main():
@@ -1819,44 +2074,67 @@ def main():
     # ---------------- interactive menu ---------------- #
     log_open("menu")
     banner("menu")
+    _rows = [
+        ("1", "Install / repair    (Word + PowerPoint on; Outlook off by default)", None),
+        ("2", "Update              (git pull + refresh; keeps your add-ins)", None),
+        ("3", "Server              (start / restart / stop / status)", None),
+        (None, "@SEP", None),
+        ("4", "Uninstall", "red"),
+        (None, "@SEP", None),
+        ("0", "exit", "magenta"),
+    ]
+
+    def _ask_menu_typed():
+        while True:
+            print("")
+            for (act, label, style) in _rows:
+                if label == "@SEP":
+                    print("")
+                    continue
+                print("  %s) %s" % (act, label))
+            print("")
+            try:
+                if not sys.stdin.isatty():
+                    print("  (non-interactive: no choice given - pass --install / --update / --uninstall)")
+                    _log("menu: non-interactive, nothing chosen")
+                    return None
+                choice = input("  > choose [1/2/3/4, 0; default 1]: ").strip().lower()
+            except EOFError:
+                return None
+            _log("menu input: %r" % choice, ts=True)
+            if choice == "":
+                return 0
+            sel = next((i for i, (act, _l, _s) in enumerate(_rows) if act == choice), None)
+            if sel is not None:
+                return sel
+            print("  please choose 1, 2, 3, 4 or 0")
+
     while True:
         print("")
-        print("  1) Install / repair    (Word + PowerPoint on; Outlook off by default)")
-        print("  2) Update              (git pull + refresh; keeps your add-ins)")
-        print("  3) Server              (start / restart / stop / status)")
-        print("")
-        print("  4) Uninstall")
-        print("")
-        print("  0) exit")
-        print("")
-        try:
-            if not sys.stdin.isatty():
-                print("  (non-interactive: no choice given - pass --install / --update / --uninstall)")
-                _log("menu: non-interactive, nothing chosen")
+        sel = menu_pick(_rows, 0, "(up/down + Enter = select, 1-4 = direct, q = exit)")
+        if sel is None:
+            sel = _ask_menu_typed()
+            if sel is None:
                 return
-            choice = input("  > choose [1/2/3/4, 0; default 1]: ").strip().lower()
-        except EOFError:
-            return
-        _log("menu input: %r" % choice, ts=True)
+        act = _rows[sel][0]
         print("")
-        if choice in ("", "1"):
+        _log("menu selection: %s" % act, ts=True)
+        if act == "1":
             install("Install", interactive=True)
             return
-        if choice == "2":
+        if act == "2":
             git_pull()
             install("Update", interactive=False)
             return
-        if choice == "3":
+        if act == "3":
             server_menu()
             banner("menu")
             continue
-        if choice in ("x", "4", "uninstall"):
+        if act == "4":
             banner("uninstall")
             do_uninstall(None)
             return
-        if choice in ("0", "q", "quit", "exit"):
-            return
-        print("  please choose 1, 2, 3, 4 or 0")
+        return   # act == "0"
 
 
 if __name__ == "__main__":
