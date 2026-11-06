@@ -80,6 +80,18 @@
   replaces - not supplements - the ops/reply round).
 ## 0.9.271
 
+### Added (repository tooling)
+- tools/setup-windows.ps1: a PowerShell dependency installer for Windows -
+  installs the latest available Python 3 (winget first, python.org silent
+  fallback) and Git for Windows (winget, git-for-windows release fallback),
+  then offers an interactive git clone of the repository into
+  %USERPROFILE%\Tools\officekick (an existing clone updates with
+  git pull --ff-only). Per-user, no admin, unattended flags (-Yes,
+  -NoClone, -SkipPython, -SkipGit, -ToolsDir, -CloneUrl). Docs:
+  docs/setup-windows.md (running the script + the execution policy
+  explanation - Process-scope Bypass one-off, CurrentUser RemoteSigned as
+  the standing setting, Unblock-File for the downloaded-file mark).
+
 ### Added
 - TARGET CONFIRMATION LADDER (user rule: when it is not clear WHERE to
   insert/write/change/delete/move, confirm - AI first, then the user):

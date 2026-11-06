@@ -62,7 +62,10 @@ The essentials:
   [docs/certificates.md](docs/certificates.md)). On Windows the flow verifies
   the trust out of band and offers the Root fallback Office requires
   (WebView2 leaf-trust is field-verified as rejected).
-- On Windows, run the installer with `py -3` instead of `python`.
+- On Windows, run the installer with `py -3` instead of `python`. A
+  PowerShell bootstrap installs Python 3 + Git and can clone the repo for
+  you: `tools/setup-windows.ps1`
+  ([docs/setup-windows.md](docs/setup-windows.md)).
 - No admin rights are needed. The full run log lands in `install.log`.
 
 ## Update
@@ -243,6 +246,10 @@ the certificate mode resets to self-signed leaf. Details:
 - [docs/mailkick.md](docs/mailkick.md) - the Outlook add-in: summarize,
   translate, draft replies + forwards (you send), categories, templates,
   simulator, troubleshooting.
+- [docs/setup-windows.md](docs/setup-windows.md) - the Windows dependency
+  installer (tools/setup-windows.ps1: latest Python 3 + Git via winget, the
+  repo clone into %USERPROFILE%\Tools) + the PowerShell execution policy
+  how-to; then docs/installer.md continues inside the repository.
 - [docs/installer.md](docs/installer.md) - the installer menus, transport
   options, certificate modes, uninstall (asks + defaults, flags).
 - [docs/certificates.md](docs/certificates.md) - how the local https
