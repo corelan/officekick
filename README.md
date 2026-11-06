@@ -62,11 +62,34 @@ The essentials:
   [docs/certificates.md](docs/certificates.md)). On Windows the flow verifies
   the trust out of band and offers the Root fallback Office requires
   (WebView2 leaf-trust is field-verified as rejected).
-- On Windows, run the installer with `py -3` instead of `python`. A
-  PowerShell one-liner installs the prerequisites + the repo for you:
-  `irm https://raw.githubusercontent.com/corelan/officekick/main/tools/setup-windows.ps1 | iex`
-  ([docs/setup-windows.md](docs/setup-windows.md)).
 - No admin rights are needed. The full run log lands in `install.log`.
+
+### Windows prerequisites
+
+- **Python 3 must be installed** (the installer runs as `py -3`; plain
+  `python` on Windows is often just the Store alias).
+- **Git** (the command-line utility) is needed only if you want a clone of
+  the repository.
+- Both come with one command - a PowerShell script that installs the
+  latest Python 3 (via python.org's official install manager) and Git,
+  then offers to clone the repo into `%USERPROFILE%\Tools`.
+
+Run it **directly from the internet** in a PowerShell window (Windows 10+
+ships a real `curl.exe` in System32, so a curl pipe works too):
+
+```powershell
+irm https://raw.githubusercontent.com/corelan/officekick/main/tools/setup-windows.ps1 | iex
+```
+
+or, if you have **downloaded** `tools/setup-windows.ps1`:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\setup-windows.ps1
+```
+
+(The `-ExecutionPolicy Bypass` applies to that one process only - the
+policy explanation, flag list, and an admin-free guarantee:
+[docs/setup-windows.md](docs/setup-windows.md).)
 
 ## Update
 

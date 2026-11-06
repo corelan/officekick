@@ -6,7 +6,47 @@ Windows, then offers to clone the OfficeKick repository into
 no administrator rights are needed - and touches nothing besides the
 package managers' install locations, the PATH, and the tools folder.
 
-What it installs:
+## Prerequisites in plain words
+
+- Running the OfficeKick installer (`install.py`) needs **Python 3** on the
+  machine - on Windows that means the `py -3` command works. Do NOT rely on
+  `python`: on a clean Windows box it is often a Store alias that opens the
+  shop instead of an interpreter.
+- **Git** (the command-line utility) is required only if you want the
+  repository cloned (`git clone ...` into `%USERPROFILE%\Tools`) - which is
+  the recommended durable setup (updates become a `git pull`).
+- Both are installed by the one script below: it fetches the **Python
+  install manager** from python.org and runs `py install latest` (winget is
+  deliberately not used for Python), and installs Git for Windows (winget,
+  with a github release fallback).
+
+## Installing the dependencies with the script
+
+**Option A - straight from the internet, no download** (one command in a
+PowerShell window; the Linux `curl | bash` habit works here too - `irm`
+downloads, `iex` runs):
+
+```powershell
+irm https://raw.githubusercontent.com/corelan/officekick/main/tools/setup-windows.ps1 | iex
+```
+
+The literal-curl variant (Windows 10+ ships a genuine `curl.exe` in
+System32; type `curl.exe`, not the `curl` PowerShell alias, which is a
+different thing in Windows PowerShell 5.1):
+
+```powershell
+curl.exe -fsSL https://raw.githubusercontent.com/corelan/officekick/main/tools/setup-windows.ps1 | powershell -NoProfile -ExecutionPolicy Bypass -Command -
+```
+
+**Option B - you have downloaded the script** (e.g. saved
+`tools/setup-windows.ps1` from the repository or a zip):
+
+```powershell
+cd <where you saved it>
+powershell -NoProfile -ExecutionPolicy Bypass -File .\setup-windows.ps1
+```
+
+What the script does, in detail:
 
 - **The Python install manager** - python.org's official tool, downloaded
   from python.org itself (never via winget) with PowerShell's
@@ -20,66 +60,39 @@ What it installs:
   Skipped when `git` exists.
 - **The repo clone** - offered interactively (answer the `y/N` prompt);
   an existing clone is updated with `git pull --ff-only`.
+- Flags: `-Yes` (unattended), `-NoClone`, `-SkipPython`, `-SkipGit`,
+  `-ToolsDir <dir>` (default `%USERPROFILE%\Tools`), `-CloneUrl <url>`.
 
-Flags: `-Yes` (unattended), `-NoClone`, `-SkipPython`, `-SkipGit`,
-`-ToolsDir <dir>` (default `%USERPROFILE%\Tools`), `-CloneUrl <url>`.
+Things worth knowing:
 
----
-
-## Running the script from the internet - the one-liner
-
-The Linux habit of piping a script from the web straight into the shell
-works on Windows too (`irm <url> | iex` is the `curl | bash` equivalent):
-
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/corelan/officekick/main/tools/setup-windows.ps1 | iex"
-```
-
-- **No administrator prompt is needed** (everything installs per user) -
-  an admin terminal works too, it just adds nothing.
-- The URL is the raw GitHub file; `irm` (Invoke-RestMethod) downloads it,
-  `iex` (Invoke-Expression) runs it in place. Older Windows PowerShell
-  builds default to ancient TLS - the same line with the TLS fix:
+- No administrator prompt is needed anywhere in this flow (everything
+  installs per user); an elevated terminal works too and adds nothing.
+- The `irm | iex` form (and the curl pipe) runs the code without saving it
+  to disk first - use it with URLs you trust (these point at the OfficeKick
+  repository's main branch). To inspect before running, save the file:
+  `irm <url> -OutFile setup-windows.ps1`, read it, then run the saved file
+  as in option B.
+- Older Windows PowerShell builds negotiate ancient TLS by default; if the
+  one-liner fails to download, use the hardened form:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -Command "[Net.ServicePointManager]::SecurityProtocol='Tls12'; irm https://raw.githubusercontent.com/corelan/officekick/main/tools/setup-windows.ps1 | iex"
 ```
 
-- Passing flags through the pipe: `iex` cannot take the script's
-  parameters, so run it as an explicit script block instead:
+- Passing flags through a pipe does not work directly (`iex` cannot take
+  the script's parameters) - use the script-block form...:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -Command "& ([scriptblock]::Create((irm https://raw.githubusercontent.com/corelan/officekick/main/tools/setup-windows.ps1))) -Yes -NoClone"
 ```
 
-- The security trade-off of `| iex` is that the code runs without being
-  saved to disk first - only use it with URLs you trust (this one is the
-  OfficeKick repository's main branch). To inspect before running, save
-  it: `irm <url> -OutFile setup-windows.ps1`, read it, then run the saved
-  file as in the next section.
-
-## Running the script from a saved file
-
-Open PowerShell (`Win+X` -> "Terminal" or "Windows PowerShell"), then:
-
-```powershell
-cd <where you saved the script>
-powershell -NoProfile -ExecutionPolicy Bypass -File .\setup-windows.ps1
-```
-
-That form is the RECOMMENDED way for the saved file: **Bypass applies to
-that process only** and expires when the shell closes - nothing about your
-system's security posture changes.
-
-If you are already in a PowerShell window, the equivalent session-scoped
-change is:
+- If you are already inside a PowerShell window, the session-scoped
+  equivalent of the `-ExecutionPolicy Bypass` flag is:
 
 ```powershell
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 .\setup-windows.ps1
 ```
-
-Both forms need no administrator.
 
 ## The execution policy, properly explained
 
