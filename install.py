@@ -503,17 +503,28 @@ def https_feasible():
 
 
 def _config_settings():
-    """(transport dict) from the running server first, then the config file,
-    {} when neither is reachable."""
+    """Settings from the running server first; keys the server does not
+    know (older builds) fall back to the config file; {} when neither is
+    reachable."""
+    srv = None
     try:
         import urllib.request
         opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
         with opener.open("http://127.0.0.1:%d/api/config" % PORT, timeout=1.5) as resp:
             d = json.loads(resp.read().decode("utf-8", "replace")) or {}
-            return {k: d.get(k) for k in ("transportMode", "transportHttpPort",
-                                          "transportHttpsPort", "certMode", "certHost")}
+            srv = {k: d.get(k) for k in ("transportMode", "transportHttpPort",
+                                         "transportHttpsPort", "certMode", "certHost")}
     except Exception:
         pass
+    if srv is not None:
+        try:
+            with open(config_file(), "r", encoding="utf-8") as fh:
+                d2 = json.load(fh) or {}
+        except Exception:
+            d2 = {}
+        return {k: (srv.get(k) if srv.get(k) is not None else d2.get(k))
+                for k in ("transportMode", "transportHttpPort",
+                          "transportHttpsPort", "certMode", "certHost")}
     try:
         with open(config_file(), "r", encoding="utf-8") as fh:
             d = json.load(fh) or {}

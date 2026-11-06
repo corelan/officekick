@@ -1155,7 +1155,6 @@ class Store:
             "transportMode": (d.get("transportMode") if d.get("transportMode") in ("auto", "http", "https") else "auto"),
             "certMode": (d.get("certMode") if d.get("certMode") in ("ca", "self_signed_leaf", "byo") else "ca"),
             "certHost": (str(d.get("certHost")).lower() if isinstance(d.get("certHost"), str) and re.fullmatch(r"(?i)[a-z0-9._-]{1,253}", str(d.get("certHost"))) else "localhost"),
-            "certMode": (d.get("certMode") if d.get("certMode") in ("ca", "self_signed_leaf") else "ca"),
             "transportHttpPort": (int(d.get("transportHttpPort")) if isinstance(d.get("transportHttpPort"), int) and 1024 <= int(d.get("transportHttpPort")) <= 65535 else 8765),
             "transportHttpsPort": (int(d.get("transportHttpsPort")) if isinstance(d.get("transportHttpsPort"), int) and 1024 <= int(d.get("transportHttpsPort")) <= 65535 else 8766),
             "autoClean": bool(d.get("autoClean", True)),
