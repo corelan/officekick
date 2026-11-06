@@ -4,14 +4,27 @@
 OfficeKick unified installer - SlideKick (PowerPoint) + DocKick (Word) +
 MailKick (Outlook). Works on macOS and Windows; auto-detects the platform.
 
-    python3 install.py                interactive menu: Install / Update / Uninstall
-    python3 install.py --install      non-interactive install (default answers)
+    python3 install.py                menu: Install / Update / Server / Uninstall
+    python3 install.py --install      non-interactive install (Word + PowerPoint;
+                                      Outlook only with --mailkick / --mailkick-cert-key
+                                      or when Outlook was previously installed)
     python3 install.py --update       git pull (if this is a checkout) + update
     python3 install.py --uninstall [--purge-config]
+    python3 install.py --start | --stop | --restart | --status
     python3 install.py --dry-run      with any mode: print the actions, run none
     python3 install.py --port N       server port (default 8765)
     python3 install.py --ribbon       opt-in: render the AI ribbon commands
                                       (experimental on this Office build)
+    python3 install.py --mailkick     non-interactive opt-in: install Outlook and
+                                      create the self-signed loopback CA + certificate
+
+Installer output is structured: short step lines on the console, the full
+detail trail (file lists, tool output, decisions) in install.log next to
+install.py. Word + PowerPoint are enabled by default; Outlook is off by
+default - enabling Outlook needs the https prerequisites and will create a
+self-signed loopback CA + localhost certificate (clearly warned about in the
+menu). On Windows no certificate is needed (Outlook rides the plain-http
+localhost listener there).
 
 On Windows use: py -3 install.py (the py launcher; plain `python` is often
 the Microsoft Store alias that does not run scripts).
@@ -19,12 +32,13 @@ the Microsoft Store alias that does not run scripts).
 Design notes:
 - the add-in transport is http://localhost:<port> (https://localhost:<port+1>
   wherever a working loopback certificate exists): Office allows localhost
-  over http, so there is NO certificate, NO trusted CA, NO keychain step;
+  over http, so there is NO certificate, NO trusted CA, NO keychain step -
+  except Outlook on macOS, which validates every manifest URL as https and
+  therefore REQUIRES the loopback TLS component;
 - no admin rights are needed on either platform (everything is per-user);
 - autostart: macOS = login item (the "OfficeKickServer" app bundle, registered
   with an in-bundle SMAppService helper; System Events fallback), Windows =
   a per-user scheduled task at logon (HKCU Run-key fallback);
-- expected popups are listed BEFORE anything happens;
 - uninstall keeps ~/.officekick (config, profiles, sessions) unless --purge-config.
 """
 import argparse
@@ -76,25 +90,113 @@ def is_mac():
     return sys.platform == "darwin"
 
 
+LOG_HANDLE = None         # install.log (repo root) - full detail trail
+QUIET = False             # when True: out/step print only into install.log
+PHASE_DIRTY = False       # a phase line is pending on the console
+ADDINS = set()            # set of add-in folder names for THIS run
+INTERACTIVE = False       # set per run: the flow may ask questions
+AUTOSTART_WANT = False
+
+
+def _log(msg, ts=False):
+    """install.log-only line (never on the console)."""
+    try:
+        if LOG_HANDLE is None:
+            return
+        line = msg.rstrip("\n")
+        if ts:
+            line = time.strftime("%H:%M:%S ") + line
+        LOG_HANDLE.write(line + "\n")
+        LOG_HANDLE.flush()
+    except Exception:
+        pass
+
+
+def log_open(mode):
+    global LOG_HANDLE
+    try:
+        LOG_HANDLE = open(repo_path("install.log"), "a", encoding="utf-8")
+    except OSError:
+        LOG_HANDLE = None
+        return
+    _log("")
+    _log("=" * 76)
+    _log("%s  |  %s  |  python %s  |  %s %s" % (
+        time.strftime("%Y-%m-%d %H:%M:%S"), mode,
+        platform.python_version(), platform.system(), platform.release()), ts=False)
+    try:
+        _log("argv: %s" % (" ".join(sys.argv),))
+    except Exception:
+        pass
+    _log("=" * 76)
+
+
 def out(msg):
-    print(msg)
+    if not QUIET:
+        print(msg)
+    _log(msg, ts=True)
 
 
 def ok(msg):
-    out(("  [ok]   " if is_windows() else "   \x1b[32mv\x1b[0m ") + msg)
+    _con = ("  [ok]   " if is_windows() else "   \x1b[32mv\x1b[0m ") + msg
+    if not QUIET:
+        print(_con)
+    _log(msg, ts=True)
 
 
 def warn(msg):
-    out(("  [warn] " if is_windows() else "   \x1b[33m!\x1b[0m  ") + msg)
+    # warnings always reach the console, even in a quiet phase; when a phase
+    # line is pending (dots without the status yet), close it first
+    global PHASE_DIRTY
+    if PHASE_DIRTY:
+        print("")
+        PHASE_DIRTY = False
+    print(("  [warn] " if is_windows() else "   \x1b[33m!\x1b[0m  ") + msg)
+    _log(msg, ts=True)
 
 
 def step(msg):
-    out(("  [..]   " if is_windows() else "   \x1b[36m~\x1b[0m  ") + msg)
+    _con = ("  [..]   " if is_windows() else "   \x1b[36m~\x1b[0m  ") + msg
+    if not QUIET:
+        print(_con)
+    _log(msg, ts=True)
 
 
 def die(msg, code=1):
-    out(("  [FAIL] " if is_windows() else "   \x1b[31mx\x1b[0m ") + msg)
+    print(("  [FAIL] " if is_windows() else "   \x1b[31mx\x1b[0m ") + msg)
+    _log(msg, ts=True)
+    try:
+        if LOG_HANDLE:
+            LOG_HANDLE.close()
+    except Exception:
+        pass
     sys.exit(code)
+
+
+def phase(idx, total, label, body):
+    """One console line per phase: '  [3/6] label ..... status'. The body runs
+    with QUIET=True (tool chatter goes to install.log); warn() still shows.
+    body() returns the short status string."""
+    sys.stdout.write("  [%d/%d] %s " % (idx, total, label))
+    pad = 46 - len(label)
+    if pad > 3:
+        sys.stdout.write("." * pad + " ")
+        sys.stdout.flush()
+    global QUIET, PHASE_DIRTY
+    QUIET = True
+    PHASE_DIRTY = True
+    try:
+        status = body()
+    finally:
+        QUIET = False
+        PHASE_DIRTY = False
+    print(status or "done")
+    _log("phase %d/%d %s -> %s" % (idx, total, label, status), ts=True)
+    return status
+
+
+def note(msg):
+    _log(msg, ts=True)
 
 
 def hp(*parts):
@@ -114,6 +216,144 @@ def read_version():
 
 
 VERSION = read_version()
+
+MAILKICK_OPT = False      # --mailkick: non-interactive opt-in for Outlook + the CA path
+REPO_URL = "https://github.com/corelan/officekick"
+
+
+def detect_installed():
+    """Add-ins already present from a previous install (deployed folder or
+    rendered manifest). Update flows keep whatever is installed."""
+    inst = install_dir()
+    found = set()
+    for (folder, _name, mf) in OURS:
+        if os.path.isdir(os.path.join(inst, folder)) or \
+                os.path.isfile(os.path.join(manifest_dir(), mf)):
+            found.add(folder)
+    return found
+
+
+def https_feasible():
+    """Would setup of the https (loopback TLS) component succeed on this box?
+    Returns (True, []) or (False, [reasons]). Outlook on macOS needs it;
+    on Windows Outlook rides plain http, so no TLS is required."""
+    if is_mac():
+        reasons = []
+        if shutil.which("openssl") is None:
+            reasons.append("openssl not found (needed to generate the loopback CA + certificate)")
+        if shutil.which("security") is None:
+            reasons.append("the macOS 'security' tool is missing (needed to trust the CA)")
+        try:
+            import ssl  # noqa: F401
+        except Exception as exc:
+            reasons.append("python ssl module unavailable: %s" % exc)
+        return (len(reasons) == 0, reasons)
+    return (True, [])   # Windows: no TLS component needed for Outlook
+
+
+def banner(mode=None):
+    head = "%s v%s  -  installer" % (APP_NAME, VERSION)
+    print("")
+    print("-" * 74)
+    print("  " + head)
+    print("  Created by Corelan Consulting bv")
+    print("  " + REPO_URL)
+    print("-" * 74)
+    h = health(PORT)
+    inst = detect_installed()
+    if h:
+        srv = "running on 127.0.0.1:%d (version %s)" % (PORT, h.get("version"))
+    else:
+        srv = "not running (start it here or: install.py --start)"
+    print("  detected : %s %s | python %s" % (
+        platform.system(), platform.release(), platform.python_version()))
+    print("  install  : %s" % install_dir())
+    print("  server   : %s" % srv)
+    print("  add-ins  : %s" % (", ".join(name for (folder, name, _mf) in OURS
+                                        if folder in inst) or "not installed yet"))
+    if mode:
+        note("banner shown (mode=%s, server=%s, add-ins=%s)" % (mode, h is not None, ",".join(sorted(inst)) or "-"))
+
+
+# ------------------------------------------------------ add-in selection ----
+def select_addins(interactive):
+    """Decide which add-ins this run deploys. Word + PowerPoint default ON;
+    Outlook default OFF. Returns the set (also stored in ADDINS)."""
+    global ADDINS
+    base = {"slidekick", "wordkick"}
+    prev = detect_installed()
+    if not interactive or DRY_RUN:
+        addoutlook = ((MAILKICK_OPT or bool(MAILKICK_CERT or MAILKICK_KEY)
+                       or "mailkick" in prev) and not SKIP_MAILKICK)
+        ADDINS = base | ({"mailkick"} if addoutlook else set())
+        note("add-ins selected (non-interactive): %s%s" % (
+            ", ".join(sorted(ADDINS)),
+            " (outlook: previously installed)" if "mailkick" in prev and not (MAILKICK_OPT or MAILKICK_CERT or MAILKICK_KEY) else ""))
+        ok("installing: " + (", ".join(app_label(a) for a in sorted(ADDINS))))
+        return set(ADDINS)
+    rows = [("wordkick",  "Word (DocKick)",       "wordkick"  in prev),
+            ("slidekick", "PowerPoint (SlideKick)", "slidekick" in prev),
+            ("mailkick",  "Outlook (MailKick)",     "mailkick"  in prev)]
+    state = {}
+    for (folder, _label, was) in rows:
+        state[folder] = (True if folder != "mailkick" else False) if not was else True
+    feas, feas_why = https_feasible()
+    print("")
+    print("  Add-ins (Word + PowerPoint are enabled by default, Outlook is not):")
+    while True:
+        for (folder, label, _was) in rows:
+            box = "[x]" if state[folder] else "[ ]"
+            extra = ""
+            if folder == "mailkick":
+                if not feas:
+                    extra = "  (unavailable: " + feas_why[0] + ")"
+                elif is_mac():
+                    extra = "  (needs an https loopback: creates a self-signed CA + certificate)"
+                else:
+                    extra = "  (rides the plain-http localhost listener - no certificate)"
+            print("    %d) %-24s %s%s" % (rows.index((folder, label, _was)) + 1, label, box, extra))
+        choice = input("  > toggle 1/2/3 + Enter to toggle, EMPTY = continue, q = abort: ").strip().lower()
+        _log("add-in selection input: %r" % choice, ts=True)
+        if choice in ("q", "quit", "abort", "0"):
+            print("  aborted - nothing was changed.")
+            note("add-in selection aborted by user")
+            sys.exit(130)
+        if choice == "":
+            break
+        if choice in ("1", "2", "3"):
+            folder = rows[int(choice) - 1][0]
+            if folder == "mailkick" and not state[folder] and not feas:
+                warn("Outlook cannot be enabled on this machine:" if is_mac() else
+                     "Outlook cannot be enabled here:")
+                for r in feas_why:
+                    print("      - " + r)
+                note("outlook enable refused: %s" % "; ".join(feas_why))
+                continue
+            if folder == "mailkick" and not state[folder] and is_mac():
+                print("")
+                print("  -------------------------------------------------------------")
+                print("   OUTLOOK (MailKick) - one-time certificate setup")
+                print("   Enabling this will CREATE a SELF-SIGNED certificate and a")
+                print("   local CA for localhost and import them into your keychains.")
+                print("   macOS will ask to trust the CA - accept to let the pane")
+                print("   load. Nothing else is installed; removed again by uninstall.")
+                print("  -------------------------------------------------------------")
+                go = ask_yes("Continue with the certificate setup for Outlook", False)
+                note("outlook CA warning answer: %s" % ("yes" if go else "no"))
+                if not go:
+                    state[folder] = False
+                    continue
+            state[folder] = not state[folder]
+        else:
+            print("  choose 1, 2, 3, empty to continue or q to abort")
+    ADDINS = {f for (f, _l, _w) in rows if state[f]}
+    if not ADDINS:
+        print("  nothing selected - nothing was changed.")
+        note("add-in selection: nothing selected")
+        sys.exit(0)
+    ok("installing: " + (", ".join(app_label(a) for a in sorted(ADDINS))))
+    _log("add-ins selected: %s" % ", ".join(sorted(ADDINS)), ts=True)
+    return set(ADDINS)
 
 
 def install_dir():
@@ -401,55 +641,38 @@ def validate_user_cert(crt, key):
     return len(problems) == 0, problems
 
 
-def choose_mailkick_tls():
-    """Interactive decision (macOS): install MailKick for Outlook at all, and
-    which TLS route. Returns 'auto' | 'custom' | 'skip'. Non-interactive and
-    --skip-mailkick/-cert/-key flags bypass the prompts."""
+def pick_mailkick_route():
+    """Which TLS route for Outlook (macOS only; called only when MailKick is
+    selected). 'auto' = generate a self-signed loopback CA + localhost
+    certificate (the user was already warned about this in the add-in menu),
+    'custom' = the user's own already-trusted PEM pair, 'skip' = none."""
     global MAILKICK_CERT, MAILKICK_KEY
-    if SKIP_MAILKICK:
-        return "skip"
-    custom = False
     if MAILKICK_CERT or MAILKICK_KEY:
-        custom = True
-        ok, problems = validate_user_cert(MAILKICK_CERT, MAILKICK_KEY)
-        if not ok:
-            for pr in problems:
-                warn("provided MailKick certificate: " + pr)
-            return "skip"
-        return "custom"
-    if (not sys.stdin.isatty()) or DRY_RUN:
-        return None            # caller falls back to the auto/self-signed path
-    out("")
-    step("MailKick for Outlook (macOS) - choose the install mode")
-    out("   MailKick needs an https:// loopback pane (Outlook validates every")
-    out("   manifest URL as https). The pane can then be added from NEW and")
-    out("   classic Outlook alike - what matters is the trusted https cert.")
-    out("   1) auto: generate a self-signed loopback CA + localhost certificate")
-    out("      and trust it in your login keychain (default; no admin rights)")
-    out("   2) provide my OWN already-trusted certificate + key (PEM files)")
-    out("   3) skip MailKick for Outlook (SlideKick/DocKick install normally)")
-    try:
-        if not sys.stdin.isatty():
-            return None
-        choice = input("  > choose [1/2/3, default 1]: ").strip().lower()
-    except EOFError:
-        return None
-    if choice == "2":
-        for attempt in range(3):
-            crt = input("  path to your TLS certificate (PEM): ").strip()
-            key = input("  path to the matching private key (PEM, unencrypted): ").strip()
-            ok, problems = validate_user_cert(crt, key)
-            if ok:
-                MAILKICK_CERT, MAILKICK_KEY = crt, key
-                return "custom"
-            for pr in problems:
-                warn(pr)
-            out("       (attempt %d/3)" % (attempt + 1))
-        out("  giving up - MailKick will be skipped for Outlook.")
+        good, problems = validate_user_cert(MAILKICK_CERT, MAILKICK_KEY)
+        if good:
+            return "custom"
+        for pr in problems:
+            warn("provided MailKick certificate: " + pr)
         return "skip"
-    if choice == "3":
-        return "skip"
-    return "auto"
+    if DRY_RUN or (not sys.stdin.isatty()):
+        return "auto"    # automation opt-in (--mailkick): reuse-first applies
+    print("")
+    print("  Outlook pane transport: the self-signed loopback CA + certificate")
+    print("  from the earlier warning (default), or your own trusted pair.")
+    if ask_yes("Use the self-signed loopback CA (recommended)", True):
+        return "auto"
+    for attempt in range(3):
+        crt = input("  path to your TLS certificate (PEM): ").strip()
+        key = input("  path to the matching private key (PEM, unencrypted): ").strip()
+        good, problems = validate_user_cert(crt, key)
+        if good:
+            MAILKICK_CERT, MAILKICK_KEY = crt, key
+            return "custom"
+        for pr in problems:
+            warn(pr)
+        print("       (attempt %d/3)" % (attempt + 1))
+    print("  giving up - Outlook will not be registered.")
+    return "skip"
 
 
 # ------------------------------------------------------------ loopback TLS #
@@ -574,13 +797,10 @@ distinguished_name = req_dn
 # ------------------------------------------------------------------ deploy #
 def deploy_files():
     dst = install_dir()
-    out("")
-    out("  Deploying files")
-    out("    destination: " + dst)
+    addins = ADDINS or set()
     if DRY_RUN:
-        n = len([a for a in OURS if os.path.isdir(repo_path(a[0]))])
-        out("  [..]  [dry-run] would copy core/server.py + %d add-in folder(s)" % n)
-        return
+        n = len([a for a in OURS if a[0] in addins and os.path.isdir(repo_path(a[0]))])
+        return "[dry-run] server + %d add-in folder(s) -> %s" % (n, dst)
     shutil.rmtree(dst, ignore_errors=True)
     os.makedirs(manifest_dir(), exist_ok=True)
     os.makedirs(config_dir(), exist_ok=True)
@@ -588,10 +808,15 @@ def deploy_files():
     ignore = shutil.ignore_patterns("__pycache__", "*.pyc", ".DS_Store")
     deployed = []
     for (folder, name, _mf) in OURS:
-        if os.path.isdir(repo_path(folder)):
-            shutil.copytree(repo_path(folder), os.path.join(dst, folder),
-                            ignore=ignore, dirs_exist_ok=True)
-            deployed.append(name)
+        if folder not in addins:
+            note("not deploying %s (not selected this run)" % name)
+            continue
+        if not os.path.isdir(repo_path(folder)):
+            warn("%s not found in this checkout - skipped" % name)
+            continue
+        shutil.copytree(repo_path(folder), os.path.join(dst, folder),
+                        ignore=ignore, dirs_exist_ok=True)
+        deployed.append(name)
     cfgjson = os.path.join(config_dir(), "config.json")
     if os.path.exists(cfgjson):
         try:
@@ -599,7 +824,8 @@ def deploy_files():
         except OSError:
             pass
     record_repo_info()
-    ok((" + ".join(deployed) if deployed else "server") + " deployed")
+    _log("deployed to %s: %s" % (dst, ", ".join(deployed) or "server only"), ts=True)
+    return (" + ".join(deployed) if deployed else "server") + " -> " + dst
 
 
 def record_repo_info():
@@ -705,10 +931,9 @@ def render_and_sideload():
         if reason is None:
             tls_pair = (_crt, _key)
         else:
-            warn("loopback certificate present but not usable (%s) - the" % reason)
-            out("       add-ins will use http; re-run install.py --install to")
-            out("       regenerate and re-trust it.")
-    out("")
+            warn("loopback certificate present but not usable (%s) - re-run" % reason)
+            print("        install.py --install to regenerate and re-trust it.")
+            _log("tls pair present but unusable: %s" % reason)
     step("rendering add-in manifests (%s, %s)" %
          (("https://localhost:%d via the loopback certificate" % (PORT + 1)) if tls_pair
           else ("http://localhost:%d" % PORT),
@@ -718,30 +943,31 @@ def render_and_sideload():
             die("quit Office completely (Cmd+Q), then re-run install.py --update/--install")
     apps = office_apps_present()
     rendered = []
-    # 0.9.196: macOS Outlook requires the loopback TLS prerequisites
-    # (https-only validation in Add-from-File + the WEF pickup). If openssl
-    # is missing or the CA trust was declined, SKIP MailKick for Outlook
-    # instead of staging a manifest that cannot run. The other add-ins
-    # install normally; see docs/mailkick.md "Requirements for Outlook".
-    skip_mailkick = is_mac() and MAILKICK_CHOICE == "skip"
-    if skip_mailkick:
-        warn("MailKick skipped for Outlook: the loopback TLS prerequisites")
-        warn("are not met (openssl missing, or the CA trust was declined).")
-        out("       See docs/mailkick.md > Requirements for Outlook -")
-        out("       SlideKick and DocKick are not affected. Retry any time with")
-        out("       quit-Office + install.py --install once the prerequisites pass.")
+    addins = ADDINS or set()
     for (folder, name, mfname) in OURS:
+        want = folder in addins and not (folder == "mailkick" and MAILKICK_CHOICE == "skip")
+        if not want:
+            # selected OUT this run (or the MailKick route failed): drop a
+            # previous Outlook registration so the pane disappears
+            if folder == "mailkick" and is_mac() and not DRY_RUN:
+                wef = wef_dir()
+                if wef and os.path.isfile(os.path.join(wef, mfname)):
+                    try:
+                        os.remove(os.path.join(wef, mfname))
+                        _log("removed previous Outlook registration: %s" % mfname)
+                    except OSError:
+                        pass
+            if folder == "mailkick" and not is_mac():
+                mpath = os.path.join(manifest_dir(), mfname)
+                if os.path.isfile(mpath):
+                    try:
+                        os.remove(mpath)
+                        _log("removed previous Windows manifest: %s" % mpath)
+                    except OSError:
+                        pass
+            continue
         if not os.path.isfile(repo_path(folder, "manifest.template.xml")):
             warn("%s not built in this checkout - skipped" % name)
-            continue
-        if skip_mailkick and folder == "mailkick":
-            wef = wef_dir()
-            if wef and os.path.isfile(os.path.join(wef, mfname)):
-                try:
-                    os.remove(os.path.join(wef, mfname))
-                    out("  [..] MailKick: previous Outlook registration removed (%s)" % mfname)
-                except OSError:
-                    pass
             continue
         if folder == "mailkick" and is_mac() and tls_pair is None:
             warn("MailKick: no usable loopback certificate - skipped for Outlook")
@@ -750,22 +976,36 @@ def render_and_sideload():
         mver = (re.search(r"<Version>([^<]+)</Version>", xml) or [None, "?"])[1]
         mpath = os.path.join(manifest_dir(), mfname)
         if DRY_RUN:
-            out("  [..]   [dry-run] would render %s -> %s" % (name, mpath))
+            _log("[dry-run] would render %s -> %s" % (name, mpath))
         else:
             with open(mpath, "w", encoding="utf-8") as fh:
                 fh.write(xml)
-            if not is_mac():
-                out("  [ok]   %s manifest written: %s (identity version %s, pane build %s)" % (name, mpath, mver, VERSION))
+            _log("rendered %s -> %s (identity version %s)" % (name, mpath, mver))
         rendered.append(name + " (id v" + mver + ")")
-        if is_mac():
+        if is_mac() and not DRY_RUN:
             sideload_mac(folder, mfname, apps.get(folder))
     if rendered:
-        ok("manifests rendered: " + ", ".join(rendered))
         if is_mac():
-            out("  mac tip: if a saved deck throws the 'Add-in Error' toast on open,");
-            out("           the deck's pane reference carries the unresolvable store stamp.");
-            out("           Heal: python3 tools/repair_paneref.py <file.pptx | .docx | folder>")
-            out("           (backs the originals up to orig/ next to the deck(s), then patches in place)")
+            _log("mac tip: a saved deck throwing the 'Add-in Error' toast on open"
+                 " carries an unresolvable store stamp - heal it with"
+                 " python3 tools/repair_paneref.py <file.pptx|.docx|folder>")
+        return "registered: " + ", ".join(rendered)
+    return "nothing registered (details: install.log)"
+
+
+def wef_dir(folder="mailkick"):
+    """The macOS WEF sideload folder for one of our add-ins (first existing
+    container variant); None when none exists."""
+    cands = {"slidekick": ["com.microsoft.Powerpoint", "com.microsoft.powerpoint"],
+             "wordkick": ["com.microsoft.word"],
+             "mailkick": ["com.microsoft.Outlook", "com.microsoft.outlook"]}[folder]
+    for cid in cands:
+        d = os.path.join(hp("Library", "Containers"), cid, "Data", "Documents", "wef")
+        if os.path.isdir(d):
+            return d
+    return None
+
+
 def relax_windows_config_acl():
     """ssh-created config dirs can carry restrictive, non-inherited ACLs;
     hand the current user full control over the whole tree (per-user data)."""
@@ -1248,102 +1488,123 @@ def do_uninstall(purge):
 
 # ---------------------------------------------------------------- install #
 def preflight(mode):
-    out("")
-    out("OfficeKick %s - %s (SlideKick + DocKick + MailKick)" % (VERSION, mode))
-    out("  platform  : %s (%s) | python %s" % (
-        platform.system(), platform.release(), platform.python_version()))
-    if tls_active():
-        out("  transport : https://localhost:<port+1> - ALL panes (loopback TLS,")
-        out("              per-user CA generated + trusted; Outlook validates every")
-        out("              manifest URL as https).")
-        out("              http://localhost:<port> also serves the same statics.")
-    else:
-        out("  transport : panes -> http://localhost:<port> (Office allows localhost")
-        out("              over http; no certificate in use).")
-        out("              macOS Outlook needs https://localhost:<port+1> (loopback") 
-        out("              TLS, per-user CA generated + trusted) - Outlook validates")
-        out("              every manifest URL as https, so MailKick must go over TLS.")
-    out("  admin     : not required - every step here is per-user.")
+    """Console: nothing (the banner carries status). The transport explanation
+    and the popup essays live in install.log only."""
+    note("preflight (%s); transport: panes -> http://localhost:%d (Office allows"
+         " localhost over http%s).%s" % (
+             mode, PORT,
+             "; plus the https://localhost:%d loopback TLS listener wherever a"
+             " working certificate exists" % (PORT + 1),
+             " Outlook on macOS validates every manifest URL as https, so"
+             " MailKick must ride the TLS component." if is_mac() else ""))
     if is_mac():
-        out("  popups    : macOS may show -")
-        out("    * a one-time 'OfficeKickServer can run in the background' note when the")
-        out("      autostart login item is first registered - that IS this add-in's own")
-        out("      local server app (correctly named), nothing external is installed;")
-        out("    * a Local Network prompt the first time a model on your LAN is used -")
-        out("      click Allow so the panes can reach e.g. Ollama on another machine.")
+        note("popups you may see: (1) one-time background-item note when the"
+             " autostart login item is first registered - that IS the local"
+             " server app; (2) a Local Network prompt the first time a model"
+             " on your LAN is used - click Allow so panes can reach e.g."
+             " Ollama on another machine; (3) the CA-trust confirm when the"
+             " loopback CA is imported.")
     else:
-        out("  popups    : Windows may show -")
-        out("    * Windows Defender Firewall may ask once whether Python may listen -")
-        out("      click Allow (the add-ins talk to 127.0.0.1 only, but Allow keeps")
-        out("      LAN models like Ollama working later);")
-        out("    * no SmartScreen: this installer is a plain python script, nothing is")
-        out("      downloaded; the add-ins come from the local trusted catalog.")
+        note("popups you may see: a one-time Windows Defender Firewall ask"
+             " about Python listening - Allow keeps LAN models (Ollama)"
+             " reachable; no SmartScreen: nothing is downloaded; the add-ins"
+             " come from the local trusted catalog.")
 
 
 def ask_autostart():
-    out("")
-    out("  About autostart: the add-ins talk to a small LOCAL server (python) that")
-    out("  %s" % pane_listener_line())
-    out("  Without autostart the panes only work while that server is running.")
     if is_mac():
-        return ask_yes("Add autostart to the login items (a hidden 'OfficeKickServer' app"
-                       " starts it at every login - no window, idle when unused)?", True)
-    return ask_yes("Add an autostart scheduled task (a windowless pythonw starts the server"
-                   " at every logon)?", True)
+        return ask_yes("Add autostart to the login items (hidden 'OfficeKickServer'"
+                       " app, starts the server at every login)?", True)
+    return ask_yes("Add an autostart scheduled task (windowless pythonw at logon)?", True)
 
 
 def install(mode_name="Install", interactive=True):
+    global INTERACTIVE
+    INTERACTIVE = interactive
+    banner(mode_name)
     preflight(mode_name)
-    stop_server()          # first: free our canonical port (a previous, possibly
+    # add-in selection FIRST (console: one ok-line; details in the log)
+    select_addins(interactive)
+    total = 6
+    phase(1, total, "preparing", prepare_phase)
+    phase(2, total, "deploying", deploy_files)
+    phase(3, total, "certificates", tls_phase)
+    phase(4, total, "registering with Office", registration_phase)
+    phase(5, total, "autostart", autostart_phase)
+    phase(6, total, "starting the server", server_phase)
+    done_note(mode_name)
+
+
+def prepare_phase():
+    stop_server()          # first: free our canonical port (a previous,
     resolve_port()         # https-only install answers no http health check)
-    if interactive and not DRY_RUN:
-        want = ask_autostart()
-    else:
-        present = mac_login_item_present() if is_mac() else windows_autostart_present()
-        if present:
-            ok("existing autostart found - it will be kept/re-registered")
-            want = True
-        else:
-            out("  [..]  no autostart found - it will be added (default)")
-            want = True
-    stop_server()
-    deploy_files()
+    return "port %d free, previous server stopped" % PORT
+
+
+def tls_phase():
+    """Certificate work: decide the MailKick route (only when Outlook is
+    selected; Windows needs none), then ensure a working loopback pair."""
     global MAILKICK_CHOICE
-    MAILKICK_CHOICE = choose_mailkick_tls() if is_mac() else None
+    if "mailkick" not in ADDINS:
+        return "none needed (" + ", ".join(app_label(a) for a in sorted(ADDINS)) + ")"
+    if not is_mac():
+        MAILKICK_CHOICE = "auto"      # Windows Outlook rides plain http
+        return "not needed on Windows (plain-http localhost)"
+    MAILKICK_CHOICE = pick_mailkick_route()
     if MAILKICK_CHOICE == "custom":
-        import shutil as _sh
         cdir = tls_cert_dir()
         os.makedirs(cdir, exist_ok=True)
-        _sh.copyfile(MAILKICK_CERT, os.path.join(cdir, "server.crt"))
-        _sh.copyfile(MAILKICK_KEY, os.path.join(cdir, "server.key"))
+        shutil.copyfile(MAILKICK_CERT, os.path.join(cdir, "server.crt"))
+        shutil.copyfile(MAILKICK_KEY, os.path.join(cdir, "server.key"))
         os.chmod(os.path.join(cdir, "server.key"), 0o600)
-        ok("using YOUR certificate for MailKick's https listener (copied to %s)" % cdir)
-    elif MAILKICK_CHOICE == "auto":
-        ensure_tls_certs()
-    elif MAILKICK_CHOICE == "skip":
-        out("  [..] MailKick for Outlook: skipped by your choice. SlideKick/DocKick install normally.")
-    else:  # non-interactive default: keep historic behaviour (generate + trust)
-        ensure_tls_certs()
+        note("custom certificate copied to %s" % cdir)
+        return "your own certificate (copied, validated)"
+    if MAILKICK_CHOICE == "skip":
+        return "skipped (Outlook will not be registered)"
+    pair = ensure_tls_certs()
+    if pair:
+        return "loopback CA + localhost certificate ready (reused or generated)"
+    return "NOT ready - Outlook registration will be skipped (see install.log)"
+
+
+def registration_phase():
+    """Windows ACL fix + cache flush + manifest render + sideload."""
     if is_windows():
         relax_windows_config_acl()
     if office_app_running():
         warn("Office apps are running - skipping the add-in cache clear"
-             " (quit Office, re-run this install, reopen the apps to fully flush"
-             " an old registration)")
+             " (quit Office, re-run this install, reopen the apps to fully"
+             " flush an old registration)")
     else:
         clear_office_caches()
-    render_and_sideload()
-    if want:
-        if is_mac():
-            autostart_mac()
-        else:
-            autostart_windows()
-    else:
-        out("  [ok] no autostart - start the server manually when needed:")
-        out("       %s %s --config %s --static-dir %s --port %d" %
-            (sys.executable, server_py(), config_file(), install_dir(), PORT))
+    return render_and_sideload()
+
+
+def autostart_phase():
+    """Register the autostart, or print the manual start command."""
+    global AUTOSTART_WANT
+    if DRY_RUN:
+        AUTOSTART_WANT = True
+        return "[dry-run] would register"
+    want = ask_autostart() if (INTERACTIVE and not DRY_RUN) else True
+    if not want:
+        print("        manual start: %s %s --config %s --static-dir %s --port %d"
+              % (sys.executable, server_py(), config_file(), install_dir(), PORT))
+        return "not added (manual start command printed above)"
+    if is_mac():
+        autostart_mac()
+        return "login item registered"
+    autostart_windows()
+    return "scheduled task registered"
+
+
+def server_phase():
+    """Start the server (quiet) and report the resulting health."""
     start_server()
-    done_note(mode_name)
+    h = health(PORT)
+    if h:
+        return "running on http://127.0.0.1:%d (version %s)" % (PORT, h.get("version"))
+    return "(not answering yet - check install.log)"
 
 
 def done_note(mode_name):
@@ -1351,13 +1612,12 @@ def done_note(mode_name):
     verb = "updated for" if mode_name == "Update" else "installed for"
     out("")
     for (folder, name, _mf) in OURS:
-        if os.path.isdir(repo_path(folder)) and apps.get(folder):
+        if folder in (ADDINS or set()) and apps.get(folder):
             ok("%s %s %s" % (name, verb, app_label(folder)))
     out("")
-    out("  Quit and REOPEN your Office apps so the task panes load the new build")
-    out("  (About tab -> 'Pane build' should say %s)." % read_version())
+    out("  Quit and REOPEN your Office apps, then check About tab ->")
+    out("  'Pane build: %s'. Details of this run: install.log" % read_version())
     out("  Simulator (no Office needed): %s/slidekick/static/simulator.html" % _sim_base())
-    out("  Config: %s - API keys stay local (chmod 600)." % config_dir())
     check_pane_errors()
 
 
@@ -1410,20 +1670,76 @@ def check_pane_errors():
 
 
 # ------------------------------------------------------------------- flows #
+def do_status():
+    h = health(PORT)
+    if h:
+        print("  running  : http://127.0.0.1:%d (version %s)" % (PORT, h.get("version")))
+        inst = detect_installed()
+        print("  add-ins  : %s" % (", ".join(name for (folder, name, _mf) in OURS if folder in inst)
+                                or "not installed"))
+        check_pane_errors()
+        return 0
+    print("  not running on port %d (try: install.py --start)" % PORT)
+    return 1
+
+
+def server_menu():
+    while True:
+        h = health(PORT)
+        print("")
+        print("  ----- server (%s) -----" %
+              ("running v%s on port %d" % (h.get("version"), PORT)) if h else
+              "  ----- server (not running) -----")
+        print("    1) start")
+        print("    2) restart")
+        print("    3) stop")
+        print("    4) status")
+        print("    0) back")
+        try:
+            if not sys.stdin.isatty():
+                print("  (non-interactive: pass --start/--stop/--restart/--status)")
+                return
+            choice = input("  > choose [1/2/3/4, 0; default 0]: ").strip().lower()
+        except EOFError:
+            return
+        _log("server menu input: %r" % choice, ts=True)
+        if choice in ("", "0", "q"):
+            return
+        if choice == "1":
+            banner("start")
+            start_only()
+        elif choice == "2":
+            banner("restart")
+            stop_server()
+            start_only()
+        elif choice == "3":
+            banner("stop")
+            stop_server()
+            ok("server stopped (port %d)" % PORT)
+        elif choice == "4":
+            do_status()
+        else:
+            print("  please choose 1, 2, 3, 4 or 0")
+
+
 def main():
     global PORT, DRY_RUN, RIBBON
     ap = argparse.ArgumentParser(
         description="OfficeKick cross-platform installer (macOS + Windows)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="Examples:  python3 install.py  (Windows: py -3 install.py)  |  "
-               "python3 install.py --update  |  python3 install.py --uninstall --purge-config")
-    ap.add_argument("--install", action="store_true", help="interactive install now")
+               "python3 install.py --update  |  python3 install.py --uninstall --purge-config  |  "
+               "python3 install.py --install --mailkick")
+    ap.add_argument("--install", action="store_true",
+                    help="non-interactive install: Word + PowerPoint (Outlook only with --mailkick / --mailkick-cert+--mailkick-key, or when Outlook was previously installed)")
+    ap.add_argument("--mailkick", action="store_true",
+                    help="with --install: also install Outlook (creates the self-signed loopback CA + localhost certificate)")
     ap.add_argument("--update", action="store_true", help="git pull + update (non-interactive)")
     ap.add_argument("--uninstall", action="store_true", help="remove the add-ins + server")
     ap.add_argument("--start", action="store_true", help="start the local server only (no install changes)")
     ap.add_argument("--restart", action="store_true", help="stop the local server, then start it again")
     ap.add_argument("--skip-mailkick", action="store_true",
-                    help="do not install MailKick in Outlook (macOS); Word/PowerPoint install normally")
+                    help="do not install MailKick in Outlook this run (Word/PowerPoint install normally)")
     ap.add_argument("--mailkick-cert", default="", metavar="PEM",
                     help="use YOUR OWN already-trusted TLS certificate for MailKick's https listener (PEM, SAN must cover localhost)")
     ap.add_argument("--mailkick-key", default="", metavar="PEM",
@@ -1439,10 +1755,11 @@ def main():
                     help="Windows: leave the commands out (list-mode only)")
     ap.add_argument("--dry-run", action="store_true", help="print the actions, run none")
     args = ap.parse_args()
-    global SKIP_MAILKICK, MAILKICK_CERT, MAILKICK_KEY
+    global SKIP_MAILKICK, MAILKICK_CERT, MAILKICK_KEY, MAILKICK_OPT
     SKIP_MAILKICK = args.skip_mailkick
     MAILKICK_CERT = args.mailkick_cert
     MAILKICK_KEY = args.mailkick_key
+    MAILKICK_OPT = args.mailkick
     PORT = args.port if 1024 <= args.port <= 65535 else DEFAULT_PORT
     DRY_RUN = args.dry_run
     # ribbon commands: opt-in on both platforms. macOS: 16.114 renders
@@ -1454,6 +1771,15 @@ def main():
 
     if not (is_mac() or is_windows()):
         die("this installer supports macOS and Windows only (detected: %s)." % sys.platform)
+
+    if args.install:
+        log_open("install (non-interactive)")
+    elif args.update:
+        log_open("update")
+    elif args.uninstall:
+        log_open("uninstall")
+    elif args.dry_run:
+        log_open("dry-run")
 
     if args.start:
         start_only()
@@ -1467,14 +1793,9 @@ def main():
         ok("server stopped (port %d)" % PORT)
         return
     if args.status:
-        h = health(PORT)
-        if h:
-            ok("running: http://127.0.0.1:%d (version %s)" % (PORT, h.get("version")))
-            check_pane_errors()
-            raise SystemExit(0)
-        out("  not running on port %d (try: install.py --start)" % PORT)
-        raise SystemExit(1)
+        raise SystemExit(do_status())
     if args.uninstall:
+        banner("uninstall")
         do_uninstall(True if args.purge_config else None)
         return
     if args.update:
@@ -1484,21 +1805,27 @@ def main():
     if args.install:
         install("Install", interactive=False)
         return
+
+    # ---------------- interactive menu ---------------- #
+    log_open("menu")
+    banner("menu")
     while True:
-        out("")
-        out("OfficeKick %s - installer (auto-detected: %s)" % (VERSION, platform.system()))
-        out("  1) Install (or repair the current install)")
-        out("  2) Update the current install (also pulls the repo with git)")
-        out("  3) Start (or restart) the local server only")
-        out("  x) Uninstall")
-        out("  0) exit")
+        print("")
+        print("  1) Install / repair    (Word + PowerPoint on; Outlook off by default)")
+        print("  2) Update              (git pull + refresh; keeps your add-ins)")
+        print("  3) Server              (start / restart / stop / status)")
+        print("  4) Uninstall")
+        print("  0) exit")
         try:
             if not sys.stdin.isatty():
-                out("  (non-interactive: no choice given - pass --install / --update / --uninstall)")
+                print("  (non-interactive: no choice given - pass --install / --update / --uninstall)")
+                _log("menu: non-interactive, nothing chosen")
                 return
-            choice = input("  > choose [1/2/3, x, 0; default 1]: ").strip().lower()
+            choice = input("  > choose [1/2/3/4, 0; default 1]: ").strip().lower()
         except EOFError:
             return
+        _log("menu input: %r" % choice, ts=True)
+        print("")
         if choice in ("", "1"):
             install("Install", interactive=True)
             return
@@ -1507,15 +1834,16 @@ def main():
             install("Update", interactive=False)
             return
         if choice == "3":
-            stop_server()
-            start_only()
-            return
-        if choice in ("x", "uninstall"):
+            server_menu()
+            banner("menu")
+            continue
+        if choice in ("x", "4", "uninstall"):
+            banner("uninstall")
             do_uninstall(None)
             return
         if choice in ("0", "q", "quit", "exit"):
             return
-        out("  please choose 1, 2, 3, x or 0")
+        print("  please choose 1, 2, 3, 4 or 0")
 
 
 if __name__ == "__main__":

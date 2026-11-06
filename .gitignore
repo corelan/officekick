@@ -1,3 +1,4 @@
 *.balsum*
 __pycache__/
 *.pyc
+install.log

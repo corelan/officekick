@@ -78,6 +78,28 @@
   Q&A pair lands in Previous requests and in the session history. Rules
   added to all three system prompts (MailKick's version says a clarify reply
   replaces - not supplements - the ops/reply round).
+### Changed (installer UX - install.py redesigned)
+- Menu-driven installer: banner (version, Created by Corelan Consulting bv,
+  repo link, detected platform/install dir/server + add-in status), main
+  menu (Install / Update / Server submenu / Uninstall), and an add-in
+  selection step: Word + PowerPoint ON by default, Outlook OFF by default.
+- Outlook cannot be enabled unless the https prerequisites check passes
+  (openssl, the macOS security tool, python ssl); enabling shows a clear
+  warning that a self-signed loopback CA + localhost certificate will be
+  created and imported into the keychains, then asks to confirm.
+- Non-interactive `--install` now installs Word + PowerPoint; Outlook only
+  with the new `--mailkick` flag, with --mailkick-cert/--mailkick-key, or
+  when Outlook was already installed (updates preserve it). --skip-mailkick
+  still forces it out.
+- Structured output: one step line per phase (preparing / deploying /
+  certificates / registering with Office / autostart / starting the
+  server); the full detail trail (file lists, tool output, decisions,
+  popup essays) goes to install.log next to install.py (gitignored).
+- Automation flags unchanged: --update/--start/--stop/--restart/--status/
+  --port/--ribbon/--dry-run all keep their behavior; --status gained the
+  add-in summary line. Fixed: a latent NameError in the old mailkick skip
+  path (wef_dir was not a function).
+
 ### Docs
 - README/architecture/add-in docs now describe BOTH transports everywhere
   (http://localhost:8765 always on; one trusted https://localhost:8766

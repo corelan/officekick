@@ -82,10 +82,12 @@ Without a usable certificate everything except the Outlook skip-gate
 falls back to `http://localhost:8765`.
 
 **If the prerequisites are not met, the installer skips MailKick for
-Outlook** and says so clearly - it never stages a manifest that cannot run.
-To retry later: quit Office, run `install.py --install` again (the
-prerequisites are re-checked, and the mode prompt re-appears), quit and
-reopen Outlook; the last step is the Get Add-ins re-add from the
+Outlook** and says so clearly - it never stages a manifest that cannot run
+(and, on macOS, Outlook cannot be enabled in the add-in menu until they
+are met). To retry later: quit Office, run `python3 install.py`, enable
+Outlook in the add-in menu, and continue (non-interactive equivalent:
+`python3 install.py --install --mailkick`), quit and reopen Outlook; the
+last step is the Get Add-ins re-add from the
 Troubleshooting section below.
 
 ## What it does

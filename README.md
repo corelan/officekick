@@ -79,6 +79,13 @@ Good to know:
   (`--mailkick-cert/--mailkick-key`, nothing is generated or imported); or
   (3) skip MailKick for Outlook entirely (`--skip-mailkick`) - SlideKick and
   DocKick then stay plain http and MailKick is not staged for Outlook.
+- The interactive menu defaults: Word + PowerPoint installed, Outlook NOT -
+  enable Outlook in the add-in menu (it creates a self-signed loopback CA +
+  localhost certificate; the menu warns about it and checks the https
+  prerequisites first). Automation: `--install --mailkick` opts in;
+  `--install` alone (re)installs Word + PowerPoint and keeps Outlook only
+  when it was already installed. Full tool chatter of every run lands in
+  install.log next to install.py; the console shows the step lines only.
   A working certificate activates for **all three** add-ins, not just
   MailKick (see the scheme table below). Details + the
   exactly-what-your-certificate-must-contain checklist:
