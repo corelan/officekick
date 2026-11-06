@@ -34,7 +34,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 APP = "OfficeKick"
-VERSION = "0.9.285"
+VERSION = "0.9.286"
 
 # --------------------------------------------------------------------------- #
 # Self-restart: the server watches for <cfg dir>/restart.flag. Whatever writes
@@ -2142,6 +2142,62 @@ def git_pull(store):
     return out
 
 
+def update_flag_path(store):
+    return os.path.join(os.path.dirname(str(store.path)), "update.lock")
+
+
+def spawn_installer_update(store):
+    """POST /api/update-run: run install.py --update from the recorded clone
+    as a DETACHED process - pull + redeploy + restart in one click (field:
+    the pane's pull-only button left users on the old build; the deploy +
+    restart always needed a second command). The installer STOPS this server
+    mid-run (that is how it frees the port and starts the new build) - the
+    pane polls /api/health until the generation changes. Refuses while
+    another update is fresh (10 min window)."""
+    if store is None:
+        raise ApiError(500, "no config store")
+    repo = store.data.get("repoPath")
+    if not repo or not os.path.isdir(repo):
+        raise ApiError(400, "no repo folder recorded at install time - run install.py from the clone")
+    if not os.path.isfile(os.path.join(repo, "install.py")):
+        raise ApiError(400, "no install.py in %s - update the clone" % repo)
+    cfg_dir = os.path.dirname(str(store.path))
+    lock = update_flag_path(store)
+    now = time.time()
+    try:
+        with open(lock, "r", encoding="utf-8") as f:
+            prev = float((f.read() or "").strip() or "0")
+        if 0 < now - prev < 600:
+            raise ApiError(409, "an update is already running (started %d s ago)"
+                           " - wait for the server to come back" % int(now - prev))
+    except ApiError:
+        raise
+    except Exception:
+        pass
+    try:
+        with open(lock, "w", encoding="utf-8") as f:
+            f.write("%.2f" % now)
+    except OSError:
+        pass
+    os.makedirs(os.path.join(cfg_dir, "logs"), exist_ok=True)
+    run_log = os.path.join(cfg_dir, "logs", "update_run.log")
+    flags, kwargs = 0, {}
+    if os.name == "nt":
+        flags = 0x00000008 | 0x00000200 | 0x08000000   # detached, no window
+    else:
+        kwargs["start_new_session"] = True
+    cmd = [sys.executable, os.path.join(repo, "install.py"), "--update"]
+    with open(run_log, "ab") as logf:
+        p = subprocess.Popen(cmd, cwd=repo, stdin=subprocess.DEVNULL,
+                             stdout=logf, stderr=logf,
+                             creationflags=flags, **kwargs)
+    dbg_line(store, "update", "installer.spawned", {"pid": p.pid, "cmd": cmd})
+    return {"ok": True, "started": True, "pid": p.pid, "repoPath": repo,
+            "what": "git pull + redeploy + restart - the server drops mid-run"
+                    " and comes back on the new build",
+            "logPath": run_log}
+
+
 def update_check(force_latest=None, store=None):
     """Compare the running VERSION with the latest in the GitHub repo.
 
@@ -2187,8 +2243,9 @@ def update_check(force_latest=None, store=None):
     data = {"ok": True, "current": VERSION, "latest": latest,
             "upToDate": up_to_date,
             "repo": "https://github.com/corelan/officekick",
-            "howToUpdate": ("Click \'Pull update from git now\' below, or run "
-                            "install.py --update in %s and reload the pane."
+            "howToUpdate": ("Click \'Update now (pull + redeploy + restart)\'"
+                            " below, or run install.py --update in %s and"
+                            " reload the pane."
                             % (repo_info or {}).get("repoPath", "your clone")
                             if pull_available else
                             "Run install.py --update in %s, then reload the pane."
@@ -2850,6 +2907,8 @@ class SlideKickHandler(BaseHTTPRequestHandler):
                 })
             elif path == "/api/repo-update":
                 self._send_json(git_pull(self.store))
+            elif path == "/api/update-run":
+                self._send_json(spawn_installer_update(self.store))
             elif path == "/api/server-restart":
                 cause = str((body or {}).get("cause") or "restart requested")
                 if arm_restart(self.store, cause):

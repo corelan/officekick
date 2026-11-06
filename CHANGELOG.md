@@ -42,6 +42,20 @@
   exact layout Office honors, and docs gain the manual Trust Center +
   reg-add unblock for machines that installed older builds.
 
+## 0.9.286
+
+### Added
+- one-click updates: the panes' check-for-updates button is now
+  "Update now (pull + redeploy + restart)". It calls the new
+  POST /api/update-run, which spawns install.py --update from the recorded
+  clone as a detached process (git pull + full deploy + server restart -
+  the exact flow that previously needed a command line), then polls
+  /api/health: the server drops mid-run (the installer frees the port) and
+  the button reports when the new build answers, including the version and
+  the pane-reload nudge. The update.log trail: install.log in the clone +
+  update_run.log in the config folder. Refuses a second run while one is
+  fresh (10 min window); the pull-only flow remains available via the CLI.
+
 ## 0.9.285
 
 ### Fixed

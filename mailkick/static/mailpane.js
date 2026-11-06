@@ -748,16 +748,54 @@
         if (data.pullAvailable) {
           var pullBtn = document.createElement("button");
           pullBtn.className = "btn";
-          pullBtn.textContent = "Pull update from git now";
+          pullBtn.textContent = "Update now (pull + redeploy + restart)";
           pullBtn.addEventListener("click", function () {
             pullBtn.disabled = true;
-            info.textContent = "Pulling...";
-            apiJson("/api/repo-update", "POST", {}).then(function (pr) {
+            info.textContent = "Starting the full update (pull + redeploy + restart)\u2026";
+            apiJson("/api/update-run", "POST", {}).then(function (ur) {
+              if (!(ur && ur.ok)) {
+                pullBtn.disabled = false;
+                info.className = "opnote updavail";
+                info.textContent = "Update could not start: " + ((ur && ur.error) || "unknown error");
+                return;
+              }
               info.className = "opnote";
-              info.textContent = pr && pr.ok
-                ? "Pulled. Reload the pane (About tab -> Reload pane); run install.py --update for manifests/server."
-                : "Pull failed: " + (pr && pr.error ? pr.error : "unknown");
-            }).catch(function (e2) { pullBtn.disabled = false; info.textContent = "Pull failed: " + (e2 && e2.message ? e2.message : e2); });
+              info.textContent = "Update running (pull + redeploy + restart) - the server drops mid-run and comes back on the new build\u2026";
+              var oldGen = "";
+              apiJson("/api/health", "GET").then(function (h0) {
+                oldGen = (h0 && h0.gen) || "";
+              }).catch(function () { }).then(function () {
+                var tries = 0;
+                var poll = function () {
+                  apiJson("/api/health", "GET").then(function (h1) {
+                    if (h1 && h1.gen && h1.gen !== oldGen) {
+                      info.className = "opnote";
+                      info.textContent = "Update done - the server is on " + (h1.version || "the new build") +
+                        ". Reload this pane (About tab -> Reload pane, or quit and reopen the app) to load the new pane files.";
+                    } else if (h1 && h1.gen && h1.gen === oldGen && tries > 12) {
+                      info.className = "opnote updavail";
+                      info.textContent = "The update stopped early - the installer refuses re-registration while Office apps are open (quit Word/PowerPoint/Outlook completely, then click Update again). The server is still on " + (h1.version || "the old build") + ".";
+                    } else if (++tries > 150) {
+                      info.className = "opnote updavail";
+                      info.textContent = "Update is taking unusually long or the server did not come back - check install.log in " +
+                        (ur.repoPath || "the clone") + " plus update_run.log in the config folder.";
+                    } else { setTimeout(poll, 1000); }
+                  }).catch(function () {
+                    // the old server drops mid-run; keep waiting for the new one
+                    if (++tries > 150) {
+                      info.className = "opnote updavail";
+                      info.textContent = "Update is taking unusually long or the server did not come back - check install.log in " +
+                        (ur.repoPath || "the clone") + " plus update_run.log in the config folder.";
+                    } else { setTimeout(poll, 1000); }
+                  });
+                };
+                setTimeout(poll, 2000);
+              });
+            }).catch(function (e2) {
+              pullBtn.disabled = false;
+              info.className = "opnote updavail";
+              info.textContent = "Update could not start: " + ((e2 && e2.message) || e2);
+            });
           });
           info.appendChild(document.createElement("br"));
           info.appendChild(pullBtn);

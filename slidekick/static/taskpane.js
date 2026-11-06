@@ -764,52 +764,53 @@
         if (data.pullAvailable) {
           var pullBtn = document.createElement("button");
           pullBtn.className = "btn";
-          pullBtn.textContent = "Pull update from git now (this pane can run git pull)";
-          pullBtn.style.display = "block";
-          pullBtn.style.marginTop = "6px";
+          pullBtn.textContent = "Update now (pull + redeploy + restart)";
           pullBtn.addEventListener("click", function () {
             pullBtn.disabled = true;
-            info.textContent = "Pulling…";
-            apiJson("/api/repo-update", "POST", {}).then(function (pr) {
-              if (pr && pr.ok) {
-                info.className = "opnote";
-                info.textContent = "Pulled into " + (pr.repoPath || "the clone") + ". " +
-                  ((pr.stdout || "").split("\n").filter(function (l) { return l; })[0] || "") +
-                  " - then: (1) reload this pane (About tab -> Reload pane, or close and reopen the add-in) to load the new pane files, and (2) run the installer (python3 install.py --update) to redeploy the manifests and restart the server.";
-                var rsBtn = document.createElement("button");
-                rsBtn.className = "btn subtle";
-                rsBtn.type = "button";
-                rsBtn.textContent = "Restart server now";
-                rsBtn.title = "Stops the local server, starts it again with this setup's own start mechanism (mac app / scheduled task / same command line).";
-                rsBtn.addEventListener("click", function () {
-                  rsBtn.disabled = true;
-                  apiJson("/api/health", "GET").then(function (h0) {
-                    var oldGen = (h0 && h0.gen) || "";
-                    return apiJson("/api/server-restart", "POST", { cause: "restart after pull" }).then(function () {
-                      info.textContent = "Restarting the server\u2026";
-                      var tries = 0;
-                      var poll = function () {
-                        apiJson("/api/health", "GET").then(function (h1) {
-                          tries++;
-                          if ((h1 && h1.gen && h1.gen !== oldGen) || tries > 60) {
-                            info.textContent = tries > 60 ? "Restart problem - check the server (logs/restart.log)." : "Server restarted on the pulled build - reload the pane to get the new UI.";
-                            setStatus(info.textContent, tries > 60 ? "error" : "ok");
-                          } else { setTimeout(poll, 700); }
-                        }).catch(function () { if (++tries < 61) setTimeout(poll, 700); else { info.textContent = "Restart problem - check the server (logs/restart.log)."; setStatus(info.textContent, "error"); } });
-                      };
-                      setTimeout(poll, 1200);
-                    });
-                  }).catch(function (e3) { rsBtn.disabled = false; info.textContent = "Could not restart: " + (e3 && e3.message ? e3.message : e3); });
-                });
-                info.appendChild(document.createElement("br"));
-                info.appendChild(rsBtn);
-              } else {
+            info.textContent = "Starting the full update (pull + redeploy + restart)\u2026";
+            apiJson("/api/update-run", "POST", {}).then(function (ur) {
+              if (!(ur && ur.ok)) {
+                pullBtn.disabled = false;
                 info.className = "opnote updavail";
-                info.textContent = "Pull failed: " + ((pr && (pr.stderr || pr.stdout || pr.error)) || "git error");
+                info.textContent = "Update could not start: " + ((ur && ur.error) || "unknown error");
+                return;
               }
+              info.className = "opnote";
+              info.textContent = "Update running (pull + redeploy + restart) - the server drops mid-run and comes back on the new build\u2026";
+              var oldGen = "";
+              apiJson("/api/health", "GET").then(function (h0) {
+                oldGen = (h0 && h0.gen) || "";
+              }).catch(function () { }).then(function () {
+                var tries = 0;
+                var poll = function () {
+                  apiJson("/api/health", "GET").then(function (h1) {
+                    if (h1 && h1.gen && h1.gen !== oldGen) {
+                      info.className = "opnote";
+                      info.textContent = "Update done - the server is on " + (h1.version || "the new build") +
+                        ". Reload this pane (About tab -> Reload pane, or quit and reopen the app) to load the new pane files.";
+                    } else if (h1 && h1.gen && h1.gen === oldGen && tries > 12) {
+                      info.className = "opnote updavail";
+                      info.textContent = "The update stopped early - the installer refuses re-registration while Office apps are open (quit Word/PowerPoint/Outlook completely, then click Update again). The server is still on " + (h1.version || "the old build") + ".";
+                    } else if (++tries > 150) {
+                      info.className = "opnote updavail";
+                      info.textContent = "Update is taking unusually long or the server did not come back - check install.log in " +
+                        (ur.repoPath || "the clone") + " plus update_run.log in the config folder.";
+                    } else { setTimeout(poll, 1000); }
+                  }).catch(function () {
+                    // the old server drops mid-run; keep waiting for the new one
+                    if (++tries > 150) {
+                      info.className = "opnote updavail";
+                      info.textContent = "Update is taking unusually long or the server did not come back - check install.log in " +
+                        (ur.repoPath || "the clone") + " plus update_run.log in the config folder.";
+                    } else { setTimeout(poll, 1000); }
+                  });
+                };
+                setTimeout(poll, 2000);
+              });
             }).catch(function (e2) {
+              pullBtn.disabled = false;
               info.className = "opnote updavail";
-              info.textContent = "Pull failed: " + ((e2 && e2.message) || e2);
+              info.textContent = "Update could not start: " + ((e2 && e2.message) || e2);
             });
           });
           info.appendChild(pullBtn);
