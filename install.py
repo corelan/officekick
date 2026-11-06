@@ -3545,7 +3545,19 @@ def registration_phase():
              " flush an old registration)")
     else:
         clear_office_caches()
-    return render_and_sideload()
+    ret = render_and_sideload()
+    if is_windows() and not DRY_RUN:
+        # 0.9.278: the Windows registrations had become DEAD CODE during the
+        # installer restructuring - both functions were defined but never
+        # called (field: a fresh box deployed the manifests yet had NO
+        # Wef\Developer key and NO TrustedCatalogs entry, so the Word
+        # add-in list stayed empty no matter what). Run both, every
+        # Windows registration, unconditionally: the dev-sideload entries
+        # load the panes at launch; the Trust Center catalog enables the
+        # classic dialog's Shared Folder tab.
+        sideload_windows_developer()
+        sideload_windows_catalog()
+    return ret
 
 
 def autostart_phase():

@@ -42,6 +42,23 @@
   exact layout Office honors, and docs gain the manual Trust Center +
   reg-add unblock for machines that installed older builds.
 
+## 0.9.278
+
+### Fixed
+- the BIG one from the fresh-Word box: the Windows add-in registrations
+  were DEAD CODE. sideload_windows_developer (the HKCU Wef\Developer
+  launch-time sideload) and sideload_windows_catalog (the Trust Center
+  folder catalog) were defined but never called anywhere - every Windows
+  install since the restructuring deployed the manifests and then
+  registered NOTHING, so Word's add-in list stayed empty no matter what
+  (the field box: manifests present, both registry layers absent). The
+  registering phase now runs both on every Windows install (dev entries
+  for each rendered manifest + RefreshAddins; the TrustedCatalogs entry
+  with Url + the singular flag=1), dry-run still writes nothing. Batteries:
+  wiring (both layers fire; catalog layout; dry-run clean) and the dev
+  layer with real rendered manifests (RefreshAddins + one default-value
+  entry per add-in).
+
 ## 0.9.276
 
 ### Fixed
