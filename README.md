@@ -249,13 +249,14 @@ privacy decisions for every app.
 
 ```bash
 python3 install.py --uninstall            # keeps your config
-python3 install.py --uninstall --purge-config   # also wipes config
+python3 install.py --uninstall --remove-certs --purge-config   # full cleanup incl. certificates + config
 # Windows: py -3 install.py --uninstall [--purge-config]
 ```
 
 Or pick **Uninstall** in the installer menu. Then quit and reopen your Office
 apps. The installer keeps `~/.officekick` (API keys, profiles, sessions) unless
-you pass `--purge-config` or answer yes on the config question.
+nothing but the add-ins + server goes unless you pass `--remove-certs` / `--purge-config`
+(or answer yes to the same questions interactively). Both questions default to KEEP.
 
 ## More
 
