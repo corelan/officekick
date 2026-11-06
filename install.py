@@ -1814,7 +1814,9 @@ def main():
         print("  1) Install / repair    (Word + PowerPoint on; Outlook off by default)")
         print("  2) Update              (git pull + refresh; keeps your add-ins)")
         print("  3) Server              (start / restart / stop / status)")
+        print("")
         print("  4) Uninstall")
+        print("")
         print("  0) exit")
         try:
             if not sys.stdin.isatty():
