@@ -1608,6 +1608,8 @@ distinguished_name = req_dn
         pass
     _protect_secret(key)
     keychain = os.path.expanduser("~/Library/Keychains/login.keychain-db")
+    step("macOS opens its own dialog now - ACCEPT the loopback CA"
+         " (click Trust) to make https work")
     rc, o = run_quiet(["security", "add-trusted-cert", "-r", "trustRoot",
                        "-k", keychain, ca_crt])
     if rc == 0:
@@ -1873,6 +1875,8 @@ def _install_leaf_trust(crt):
     consented Root store fallback; no admin needed)."""
     if is_mac():
         keychain = os.path.expanduser("~/Library/Keychains/login.keychain-db")
+        step("macOS opens its own dialog now - ACCEPT the leaf certificate"
+             " (click Trust) to make https work")
         rc, o = run_quiet(["security", "add-trusted-cert", "-r", "trustRoot",
                            "-p", "ssl", "-k", keychain, crt])
         if rc == 0:
@@ -1904,6 +1908,8 @@ def _install_leaf_trust(crt):
                      " (recommended if the add-in reports a certificate error;"
                      " Windows will show its own dialog)", False)
         if go:
+            step("Windows opens its own certificate dialog now - ACCEPT it"
+                 " (click Yes) to add the leaf certificate to the Root store")
             rcr, orr = run_quiet(["certutil", "-user", "-addstore", "Root", crt])
             if rcr == 0:
                 ok("leaf also registered in the CurrentUser ROOT store")
@@ -2014,6 +2020,10 @@ def _leaf_consent(facts, crt):
     print("  certificate for local HTTPS connections.")
     print("  The certificate and private key are generated and stored locally.")
     print("  The private key will not be transmitted or shared.")
+    print("  After you answer yes below, YOUR SYSTEM opens one more dialog asking")
+    print("  you to ACCEPT adding the leaf certificate - accept it. macOS shows a")
+    print("  keychain dialog (click Trust); Windows shows its certificate dialog")
+    print("  (click Yes) when the Root-store option is used.")
     print("")
     print("  " + _paint("certificate : %s" % (CERT_FACTS.get("leaf_path", crt)), "bold"))
     print("  " + _paint("SHA-256 fingerprint: %s" % _colons(sha256 or "?"), "cyan"))

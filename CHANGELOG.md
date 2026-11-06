@@ -78,6 +78,16 @@
   Q&A pair lands in Previous requests and in the session history. Rules
   added to all three system prompts (MailKick's version says a clarify reply
   replaces - not supplements - the ops/reply round).
+## 0.9.260
+
+### Changed
+- the user must ACCEPT the local HTTPS certificate in one more OS-level
+  dialog: the installer now says so up front on the consent screen and
+  prints a heads-up right before the dialog appears (macOS: the keychain
+  confirmation for the leaf/CA trust import - click Trust; Windows: the
+  Root-store certificate dialog - click Yes). docs/certificates.md and
+  docs/installer.md document the dialog step.
+
 ## 0.9.259
 
 ### Fixed

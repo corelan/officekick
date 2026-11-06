@@ -52,7 +52,10 @@ How the mode is chosen:
 
 `security add-trusted-cert -r trustRoot -p ssl -k login.keychain` - the leaf
 itself is trusted for TLS server auth in the **user login keychain**. No CA,
-no admin rights, one trust entry per leaf.
+no admin rights, one trust entry per leaf. **macOS opens its own confirmation
+dialog** for this - the user must ACCEPT the leaf (click Trust); the
+installer prints a heads-up right before the dialog appears and says so in
+advance on the consent screen.
 
 ### Windows trust path
 
@@ -68,10 +71,10 @@ no admin rights, one trust entry per leaf.
    from Trusted People (the pane shows the "content is blocked" add-in
    error). The working path is the explicitly consented **CurrentUser\Root**
    import: the leaf is `CA:FALSE`, so a Root entry trusts exactly that one
-   certificate - nothing else. Windows shows its own confirmation dialog
-   (that is the prompt most users expect). The installer offers the Root
-   option when SChannel rejects, records the thumbprint, and the **uninstall
-   removes the Root entry again**.
+   certificate - nothing else. **Windows shows its own certificate dialog**
+   for this import - the user must ACCEPT it (click Yes); the installer
+   prints a heads-up right before the dialog appears, records the
+   thumbprint, and the **uninstall removes the Root entry again**.
 
 ### Where to see the imported certificate on Windows
 
@@ -90,8 +93,9 @@ no admin rights, one trust entry per leaf.
 - A per-user loopback CA (`CN=OfficeKick Loopback CA`) + a localhost
   certificate, generated under `~/.officekick/certs/`.
 - The CA is imported + trusted in the user login keychain (macOS; user
-  scope, no admin). Renewals are silent - the CA re-issues the leaf without
-  new prompts.
+  scope, no admin) - macOS opens its own dialog for the import (accept to
+  trust); the installer prints a heads-up right before it appears.
+  Renewals are silent - the CA re-issues the leaf without new prompts.
 - Trade-off: one trust decision covers an entire CA - convenient, a bigger
   footprint if the CA key ever leaks.
 

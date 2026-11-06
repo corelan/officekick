@@ -53,7 +53,12 @@ Phases (questions are asked *before* the phase line that acts on them):
    Support/OfficeKick`; Windows: `%LOCALAPPDATA%\OfficeKick`) and registers
    the add-ins (WEF sideload / trusted folder catalog).
 3. **certificates** - acts on the answer from the certificate question
-   (see [certificates.md](certificates.md)).
+   (see [certificates.md](certificates.md)). The consent screen explains
+   up front that after you answer yes, YOUR SYSTEM opens one more dialog
+   asking you to ACCEPT the leaf certificate; the installer prints a
+   heads-up again right before that dialog appears (macOS: keychain
+   dialog, click Trust; Windows: the Root-store certificate dialog,
+   click Yes).
 4. **registering with Office** - re-renders the manifests, refuses politely
    while Office apps are running (quit Office, re-run).
 5. **autostart** - asks before doing anything (macOS login item /
