@@ -78,6 +78,19 @@
   Q&A pair lands in Previous requests and in the session history. Rules
   added to all three system prompts (MailKick's version says a clarify reply
   replaces - not supplements - the ops/reply round).
+## 0.9.252
+
+### Fixed
+- the START menu's transport row could show one mode while the Transport menu
+  showed another ("https" in the menu, "auto" inside): the label was built
+  once (stale after in-menu switches) and the two views read DIFFERENT
+  sources of truth (the running server's store vs the config file). Now:
+  the config FILE is the single source of truth for installer-owned settings
+  (transport mode/ports, certMode, certHost) - the setters always write the
+  file first and mirror to a running server best-effort, and on any
+  divergence the file wins with the mismatch logged (the server re-reads at
+  its next restart). The main-menu row re-computes its value every loop.
+
 ## 0.9.251
 
 ### Fixed

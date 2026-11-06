@@ -543,9 +543,19 @@ def _config_settings():
                 d2 = json.load(fh) or {}
         except Exception:
             d2 = {}
-        return {k: (srv.get(k) if srv.get(k) is not None else d2.get(k))
-                for k in ("transportMode", "transportHttpPort",
-                          "transportHttpsPort", "certMode", "certHost")}
+        # The config FILE is the source of truth for installer-owned settings;
+        # a running server mirrors it. When they disagree, the file wins and
+        # the divergence is logged (the server re-reads at its next restart).
+        out = {}
+        for k in ("transportMode", "transportHttpPort",
+                  "transportHttpsPort", "certMode", "certHost"):
+            file_v = d2.get(k)
+            out[k] = file_v if file_v is not None else srv.get(k)
+            if srv.get(k) not in (None, out[k]) and file_v is not None:
+                _log("settings divergence on %s: server=%r file=%r - the file"
+                     " wins (the server re-reads at its next restart)" % (k, srv.get(k), out[k]),
+                     ts=True)
+        return out
     try:
         with open(config_file(), "r", encoding="utf-8") as fh:
             d = json.load(fh) or {}
@@ -577,6 +587,27 @@ def _current_ports():
     hp = int(hp) if _valid_port(hp) else 8765
     sp = int(sp) if _valid_port(sp) and int(sp) != hp else hp + 1
     return hp, sp
+
+
+def _persist_file(pairs):
+    """Merge key/value pairs into the config FILE - the single source of
+    truth for installer-owned settings. The running server mirrors them via
+    _api_set; if the two ever disagree, the file wins (read side)."""
+    cfg = {}
+    try:
+        with open(config_file(), "r", encoding="utf-8") as fh:
+            cfg = json.load(fh) or {}
+    except Exception:
+        cfg = {}
+    for k, v in pairs.items():
+        cfg[k] = v
+    with open(config_file(), "w", encoding="utf-8") as fh:
+        json.dump(cfg, fh, indent=2)
+    try:
+        _protect_secret(config_file())
+    except OSError:
+        pass
+    return True
 
 
 def _api_set(body):
@@ -617,30 +648,10 @@ def _set_transport(mode, http_port=None, https_port=None):
         body["transportHttpPort"] = int(http_port)
     if https_port is not None:
         body["transportHttpsPort"] = int(https_port)
-    if _api_set(body):
-        return True
-    try:
-        cfg = {}
-        try:
-            with open(config_file(), "r", encoding="utf-8") as fh:
-                cfg = json.load(fh) or {}
-        except Exception:
-            cfg = {}
-        for k, v in body.items():
-            cfg[k] = v
-        with open(config_file(), "w", encoding="utf-8") as fh:
-            json.dump(cfg, fh, indent=2)
-        try:
-            _protect_secret(config_file())
-        except OSError:
-            pass
-        note("transport persisted (config file written): %s" % json.dumps(body))
-        return True
-    except Exception as exc:
-        warn("could not write %s: %s" % (config_file(), exc))
-        return False
-
-
+    _persist_file(body)
+    _api_set(body)          # mirror to a RUNNING server (best effort)
+    note("transport persisted (config file): %s" % json.dumps(body))
+    return True
 def _protect_secret(path, writable=True):
     """chmod 0600 on macOS/POSIX. On Windows os.chmod is a stub (only the
     read-only bit), so the real protection is NTFS ACLs via icacls: strip
@@ -1946,25 +1957,9 @@ def _current_cert_host():
 def _set_cert_host(host):
     if not re.fullmatch(r"(?i)[a-z0-9._-]{1,253}", host or ""):
         return False
-    if _api_set({"certHost": host}):
-        return True
-    try:
-        cfg = {}
-        try:
-            with open(config_file(), "r", encoding="utf-8") as fh:
-                cfg = json.load(fh) or {}
-        except Exception:
-            cfg = {}
-        cfg["certHost"] = host
-        with open(config_file(), "w", encoding="utf-8") as fh:
-            json.dump(cfg, fh, indent=2)
-        _protect_secret(config_file())
-        return True
-    except Exception as exc:
-        warn("could not write certHost: %s" % exc)
-        return False
-
-
+    _persist_file({"certHost": host})
+    _api_set({"certHost": host})    # mirror to a running server
+    return True
 def _validate_byo(crt, key, host):
     """(ok, [problems], facts) for a bring-your-own pair + hostname."""
     problems = []
@@ -2193,27 +2188,9 @@ def _get_cert_mode():
 def _set_cert_mode(mode):
     if mode not in ("ca", "self_signed_leaf", "byo"):
         return False
-    if _api_set({"certMode": mode}):
-        return True
-    try:
-        cfg = {}
-        try:
-            with open(config_file(), "r", encoding="utf-8") as fh:
-                cfg = json.load(fh) or {}
-        except Exception:
-            cfg = {}
-        cfg["certMode"] = mode
-        with open(config_file(), "w", encoding="utf-8") as fh:
-            json.dump(cfg, fh, indent=2)
-        _protect_secret(config_file())
-        return True
-    except Exception as exc:
-        warn("could not write certMode: %s" % exc)
-        return False
-
-
-
-
+    _persist_file({"certMode": mode})
+    _api_set({"certMode": mode})    # mirror to a running server
+    return True
 def deploy_files(addins=None):
     dst = install_dir()
     if addins is None:
@@ -2845,15 +2822,6 @@ def windows_autostart_present():
     rc, _ = run_quiet(["schtasks", "/query", "/tn", TASK_NAME])
     if rc == 0:
         return True
-    try:
-        import winreg
-        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, RUN_KEY, 0, winreg.KEY_QUERY_VALUE) as k:
-            winreg.QueryValueEx(k, TASK_NAME)
-        return True
-    except OSError:
-        return False
-
-
 # -------------------------------------------------------------- uninstall #
 def _mac_keychain_shas(cn):
     """SHA1 hashes of every login-keychain item under a common name.
@@ -3901,6 +3869,14 @@ def main():
             sel = _ask_menu_typed()
             if sel is None:
                 return
+        # the transport/cert row must show the CURRENT stored values, not the
+        # ones from when the menu was built (a switch inside the menu otherwise
+        # leaves the stale wording behind)
+        _ti = next(i for i, r in enumerate(_rows) if r[0] == "4")
+        _rows[_ti] = (
+            "4", "Transport options   (transport: %s | ports: http %d / https %d | certs: %s)" % (
+                _current_transport(), _current_ports()[0], _current_ports()[1], _get_cert_mode()),
+            None)
         act = _rows[sel][0]
         print("")
         _log("menu selection: %s" % act, ts=True)
