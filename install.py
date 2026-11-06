@@ -1847,6 +1847,7 @@ def do_uninstall(purge):
         out("  [ok] config kept at %s (keys, profiles and sessions intact)" % cfg)
     out("")
     warn("quit and reopen PowerPoint / Word / Outlook to finish removing the add-ins")
+    pause_after("uninstall")
 
 
 # ---------------------------------------------------------------- install #
@@ -1904,6 +1905,28 @@ def install(mode_name="Install", interactive=True):
     phase(5, total, "autostart", autostart_phase)
     phase(6, total, "starting the server", server_phase)
     done_note(mode_name)
+    pause_after(mode_name)
+
+
+def pause_after(label):
+    """Hold the screen after a flow so the result can be read on a real
+    terminal (piped/automation runs and scheduled tasks just continue)."""
+    _log("flow ended: %s" % label)
+    try:
+        if not (sys.stdin.isatty() and sys.stdout.isatty()):
+            return
+        try:
+            input("  " + _paint("? Press Enter to continue (results above; details"
+                                " in install.log - Ctrl-C quits)", "dim"))
+            _log("pause released (Enter)")
+        except EOFError:
+            _log("pause released (EOF)")
+        except KeyboardInterrupt:
+            _log("pause released (Ctrl-C -> quit)")
+            print("")
+            raise SystemExit(130)
+    except Exception:
+        pass
 
 
 def prepare_phase():
@@ -2145,16 +2168,20 @@ def server_menu():
         if act == "1":
             banner("start")
             start_only()
+            pause_after("start")
         elif act == "2":
             banner("restart")
             stop_server()
             start_only()
+            pause_after("restart")
         elif act == "3":
             banner("stop")
             stop_server()
             ok("server stopped (port %d)" % PORT)
+            pause_after("stop")
         elif act == "4":
             do_status()
+            pause_after("status")
         else:
             return
 
