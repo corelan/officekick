@@ -196,7 +196,9 @@ body.dark .sk-header, body.dark .sk-footer { background: var(--panel); }
 
 /* server-reachability footer text: green when up, red + pulsing when down */
 #statusbar { color: #1a7f37; }
+#statusbar.http { color: #0078d4; }
 body.dark #statusbar { color: #7ee787; }
+body.dark #statusbar.http { color: #22d3ee; }
 #statusbar.bad { color: #b02a2a; animation: sbpulse 1.6s ease-in-out infinite; }
 body.dark #statusbar.bad { color: #ff6b6b; }
 @keyframes sbpulse { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }

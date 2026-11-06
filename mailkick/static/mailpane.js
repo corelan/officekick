@@ -4316,7 +4316,7 @@ function applyOps(deck, ops, ctx) {
       $("statusbar").textContent = "MailKick v" + (cfg.version || "0.1.0") +
         (window.location && String(window.location.protocol) === "https:" ? " - 🔒 " : " - ") +
         "server 127.0.0.1:" + cfg.port + (cfg.debug ? " - debug ON" : "");
-      if ($("statusbar")) $("statusbar").className = "";   // reachable = green
+      if ($("statusbar")) $("statusbar").className = (window.location && window.location.protocol === "https:") ? "" : "http";   // https = green + lock, http = blue/cyan
       return cfg;
     });
   }
@@ -4608,7 +4608,7 @@ function applyOps(deck, ops, ctx) {
     var el = $("statusbar");
     if (!el) return;
     if (good) {
-      el.className = "";
+      el.className = (window.location && window.location.protocol === "https:") ? "" : "http";
       el.title = "Local server reachable (v" + (ver || "?") + ") - checked " + (stamp || "");
     if (ver && SK.cfg && SK.cfg.version && SK.cfg.version !== ver) {
       // the server updated (or restarted) under the pane: refresh the

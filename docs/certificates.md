@@ -1,4 +1,10 @@
-# Certificates and the local HTTPS listener
+- Windows: VERIFIED IN THE FIELD - Office's WebView2 REJECTS a leaf-only
+  trust even from the Current User Trusted People store (the pane shows the
+  "content is blocked" add-in error). The WORKING path is the explicitly
+  consented CurrentUser\Root import (the leaf is CA:FALSE, so the Root entry
+  trusts exactly that certificate); the installer offers it after the
+  TrustedPeople import, Windows shows its own dialog, and the uninstall
+  removes the Root entry again.# Certificates and the local HTTPS listener
 
 OfficeKick serves its add-ins over `http://127.0.0.1:<port>` and — when a
 usable certificate pair exists — the same content over

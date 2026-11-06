@@ -78,6 +78,18 @@
   Q&A pair lands in Previous requests and in the session history. Rules
   added to all three system prompts (MailKick's version says a clarify reply
   replaces - not supplements - the ops/reply round).
+## 0.9.258
+
+### Changed
+- the pane footer status line now distinguishes the transports: https keeps
+  the lock + green; plain HTTP loses the lock and renders the line BLUE in
+  the light theme (#0078d4) / CYAN in dark (#22d3ee). Class-driven
+  (`#statusbar.http`) and applied in all three panes (boot line, heartbeat
+  repaint, and the version-mismatch refresh).
+- user-verified on Windows: Office's WebView2 rejects a leaf-only trust even
+  from Trusted People (the add-in error), and the Root-store import is the
+  working path - docs/certificates.md now says so directly.
+
 ## 0.9.256
 
 ### Fixed
