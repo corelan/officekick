@@ -2180,23 +2180,45 @@ def install(mode_name="Install", interactive=True):
     pause_after(mode_name)
 
 
+def _drain_stdin():
+    """Discard pending terminal input (stale line-buffered leftovers like a
+    just-typed answer's newline) so a key-press pause waits for a genuine
+    press instead of releasing instantly on old bytes."""
+    try:
+        if is_windows():
+            import msvcrt
+            while msvcrt.kbhit():
+                msvcrt.getwch()
+        else:
+            import termios
+            termios.tcflush(sys.stdin.fileno(), termios.TCIFLUSH)
+    except Exception:
+        pass
+
+
 def pause_after(label):
-    """Hold the screen after a flow so the result can be read on a real
-    terminal (piped/automation runs and scheduled tasks just continue)."""
+    """Hold the screen after a flow until a key press (any key) - a real
+    terminal wait, no timer and no auto-advance. Pending buffered input is
+    flushed first, so a stale newline cannot release it. Piped/automation
+    runs and scheduled tasks just continue."""
     _log("flow ended: %s" % label)
     try:
         if not (sys.stdin.isatty() and sys.stdout.isatty()):
             return
+        _drain_stdin()
+        sys.stdout.write("  " + _paint("(press any key to continue - results above;"
+                                       " details in install.log - Ctrl-C quits)", "dim"))
+        sys.stdout.flush()
         try:
-            input("  " + _paint("? Press Enter to continue (results above; details"
-                                " in install.log - Ctrl-C quits)", "dim"))
-            _log("pause released (Enter)")
+            k = _read_key()
+            _log("pause released (key %r)" % (k,))
         except EOFError:
             _log("pause released (EOF)")
         except KeyboardInterrupt:
             _log("pause released (Ctrl-C -> quit)")
             print("")
             raise SystemExit(130)
+        print("")
     except Exception:
         pass
 
