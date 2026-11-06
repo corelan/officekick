@@ -34,7 +34,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 APP = "OfficeKick"
-VERSION = "0.9.242"
+VERSION = "0.9.243"
 
 # --------------------------------------------------------------------------- #
 # Self-restart: the server watches for <cfg dir>/restart.flag. Whatever writes
@@ -499,6 +499,16 @@ SESSION_ID_RE = re.compile(r"^[a-f0-9-]{8,64}$")
 
 
 class SessionStore:
+    """Session files organized per add-in: sessions/<slidekick|wordkick|
+    mailkick>/<sid>.json since 0.9.243 - one folder per app keeps manual
+    cleanup/backup trivial. Legacy flat files (sessions/<sid>.json) are
+    migrated on boot by their stored "app" field; files without a known app
+    stay at the root as legacy/shared and remain visible everywhere, and
+    reads always fall back to the root so old builds and old docs still
+    resolve."""
+
+    APPS = ("slidekick", "wordkick", "mailkick")
+
     def __init__(self, base_dir):
         self.dir = Path(base_dir) / "sessions"
         try:
@@ -509,18 +519,84 @@ class SessionStore:
             os.chmod(self.dir, 0o700)
         except OSError:
             pass
-        for f in self.dir.glob("*.json"):
+        for app in self.APPS:
+            d = self.dir / app
+            if d.is_dir():
+                try:
+                    if os.name != "nt":
+                        os.chmod(d, 0o700)
+                except OSError:
+                    pass
+        self._migrate_legacy()
+        for f in self._all_files():
             try:
                 os.chmod(f, 0o600)
             except OSError:
                 pass
+
+    def _appdir(self, app):
+        """Per-app folder when the app is known, else the legacy root."""
+        if app in self.APPS:
+            return self.dir / app
+        return self.dir
+
+    def _all_files(self):
+        out = list(self.dir.glob("*.json"))
+        for app in self.APPS:
+            d = self.dir / app
+            if d.is_dir():
+                out.extend(d.glob("*.json"))
+        return out
+
+    def _find(self, sid):
+        """Path of an existing session doc: its per-app folder first (known
+        via the doc), then the legacy root location."""
+        cands = list(self.dir.glob(sid + ".json"))
+        for app in self.APPS:
+            p = self.dir / app / (sid + ".json")
+            if p.is_file():
+                cands.append(p)
+        return cands[0] if cands else None
+
+    def _migrate_legacy(self):
+        """Move legacy flat session files into their app subfolder (idempotent;
+        never breaks boot)."""
+        try:
+            for f in self.dir.glob("*.json"):
+                try:
+                    data = json.loads(f.read_text(encoding="utf-8"))
+                except Exception:
+                    continue
+                app = data.get("app")
+                if app not in self.APPS:
+                    continue          # legacy/shared docs stay visible everywhere
+                dst = self.dir / app
+                try:
+                    if os.name == "nt":
+                        dst.mkdir(parents=True, exist_ok=True)
+                    else:
+                        dst.mkdir(mode=0o700, parents=True, exist_ok=True)
+                        os.chmod(dst, 0o700)
+                except OSError:
+                    continue
+                try:
+                    f.rename(dst / f.name)
+                    if os.name != "nt":
+                        try:
+                            os.chmod(dst / f.name, 0o600)
+                        except OSError:
+                            pass
+                except OSError:
+                    continue
+        except Exception:
+            pass
 
     def _valid(self, sid):
         return bool(SESSION_ID_RE.match(sid or ""))
 
     def list(self, app=None):
         items = []
-        for f in self.dir.glob("*.json"):
+        for f in self._all_files():
             try:
                 data = json.loads(f.read_text(encoding="utf-8"))
                 doc_app = data.get("app")
@@ -544,8 +620,8 @@ class SessionStore:
     def get(self, sid):
         if not self._valid(sid):
             raise ApiError(400, "Invalid session id")
-        f = self.dir / (sid + ".json")
-        if not f.is_file():
+        f = self._find(sid)
+        if f is None:
             raise ApiError(404, "Unknown session: %s" % sid)
         try:
             return json.loads(f.read_text(encoding="utf-8"))
@@ -562,9 +638,9 @@ class SessionStore:
         # the stored file is the source of truth: if the caller does not
         # pass the current exchanges (or passes a shorter history), keep
         # the longer stored list instead of shrinking the session
-        f = self.dir / (sid + ".json")
+        f = self._find(sid)
         base = existing
-        if base is None and f.is_file():
+        if base is None and f is not None:
             try:
                 base = json.loads(f.read_text(encoding="utf-8"))
             except Exception:
@@ -584,10 +660,36 @@ class SessionStore:
             # is stored; absent = AI-generated and auto-updates stay allowed)
             "manualName": True if manual else bool((base or {}).get("manualName")),
         }
-        f = self.dir / (sid + ".json")
+        # organize per app (0.9.243): sessions/<slidekick|wordkick|mailkick>/
+        doc_app = doc.get("app")
+        d = self._appdir(doc_app)
+        if d is not self.dir:
+            try:
+                if os.name == "nt":
+                    d.mkdir(parents=True, exist_ok=True)
+                else:
+                    d.mkdir(mode=0o700, parents=True, exist_ok=True)
+                    os.chmod(d, 0o700)
+            except OSError:
+                d = self.dir
+        f = d / (sid + ".json")
+        legacy = self.dir / (sid + ".json")
+        if d is not self.dir and legacy.is_file():
+            try:
+                legacy.unlink()
+            except OSError:
+                pass
         f.write_text(json.dumps(doc, indent=1), encoding="utf-8")
         if os.name != "nt":
             os.chmod(f, 0o600)   # Windows: chmod maps to ACL quirks and can fail under task tokens
+        # an app folder switch (e.g. re-registered doc) must not leave twins
+        for other in self.APPS:
+            of = self.dir / other / (sid + ".json")
+            if other != doc_app and of.is_file():
+                try:
+                    of.unlink()
+                except OSError:
+                    pass
         return {"id": sid, "name": doc["name"], "updated": doc["updated"], "messages": len(ex)}
 
     def rename(self, sid, name, manual=None):
@@ -614,8 +716,8 @@ class SessionStore:
         share one stamp from the panes). Unlike upsert this SHRINKS the stored
         list on purpose - an intentional deletion."""
         self._valid(sid)
-        f = self.dir / (sid + ".json")
-        if not f.is_file():
+        f = self._find(sid)
+        if f is None:
             raise ApiError(404, "Session not found: %s" % sid)
         doc = json.loads(f.read_text(encoding="utf-8"))
         ex = doc.get("exchanges") or []
@@ -640,7 +742,7 @@ class SessionStore:
         now = now if now is not None else time.time()
         cutoff = now - max(1, int(days)) * 86400.0
         removed = []
-        for f in self.dir.glob("*.json"):
+        for f in self._all_files():
             try:
                 data = json.loads(f.read_text(encoding="utf-8"))
             except Exception:
@@ -667,8 +769,8 @@ class SessionStore:
     def delete(self, sid):
         if not self._valid(sid):
             raise ApiError(400, "Invalid session id")
-        f = self.dir / (sid + ".json")
-        if not f.is_file():
+        f = self._find(sid)
+        if f is None:
             raise ApiError(404, "Unknown session: %s" % sid)
         f.unlink()
         return {"ok": True}

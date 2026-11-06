@@ -47,7 +47,9 @@ add-ins share ONE config:
 
 - **Auto-clean up history after N days** (default: on, 120 days): when any
   add-in opens, sessions whose newest message is older than N days are
-  deleted from `~/.officekick/sessions/`. The sweep runs at most once per
+  deleted from `~/.officekick/sessions/` (since 0.9.243 organized per add-in:
+  `sessions/<slidekick|wordkick|mailkick>/<sid>.json`; app-less legacy docs
+  stay at the root and are visible everywhere). The sweep runs at most once per
   hour.
 - Disable it or change the days, then use **Save session cleanup**. The
   change applies at the next add-in open.
@@ -255,7 +257,7 @@ what happened).
 | What | Where |
 |---|---|
 | Config (+ all API keys, chmod 600) | `~/.officekick/config.json` |
-| Sessions | `~/.officekick/sessions/` |
+| Sessions | `~/.officekick/sessions/<addin>/<sid>.json` |
 | Debug + access logs (when enabled) | `~/.officekick/logs/` |
 | Pane error log (always on) | `~/.officekick/logs/pane-errors-YYYY-MM-DD.log` |
 | Installed server | `~/Library/Application Support/OfficeKick/` (macOS) / `%LOCALAPPDATA%\OfficeKick` (Windows) |

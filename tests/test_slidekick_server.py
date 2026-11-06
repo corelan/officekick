@@ -613,7 +613,7 @@ class TestSlideKickServer(unittest.TestCase):
         self.assertEqual(entry["messages"], 2)
         self.assertEqual(entry["name"], "session one")
         # full get + update + rename round-trip
-        f = self.S.store.sessions.dir / (sid + ".json")
+        f = next(p for p in self.S.store.sessions._all_files() if p.stem == sid)
         st, doc = self.S.req("/api/sessions/" + sid, "GET")
         self.assertEqual(st, 200)
         self.assertEqual(len(doc["exchanges"]), 2)
@@ -636,6 +636,43 @@ class TestSlideKickServer(unittest.TestCase):
         self.assertEqual(st, 200)
         st, _ = self.S.req("/api/sessions/" + sid, "GET", None, True)
         self.assertEqual(st, 404)
+
+    def test_sessions_per_app_folders(self):
+        # 0.9.243: session docs live in sessions/<slidekick|wordkick|mailkick>/
+        # subfolders; legacy flat files migrate on boot and stay readable
+        st = self.S.store.sessions
+        st2, r = self.S.req("/api/sessions", "POST", {"name": "s folder",
+                            "app": "slidekick",
+                            "exchanges": [{"role": "user", "content": "x"}]})
+        self.assertEqual(st2, 200)
+        sid = r["session"]["id"]
+        sub = st.dir / "slidekick" / (sid + ".json")
+        self.assertTrue(sub.is_file(), "doc not in the slidekick subfolder")
+        self.assertFalse((st.dir / (sid + ".json")).exists())
+        # legacy flat doc with a known app migrates on the next boot
+        old_sid = ("a" * 32)
+        legacy = st.dir / ("legacy_flat.json")  # placeholder, replaced below
+        legacy.unlink() if legacy.exists() else None
+        flat = st.dir / (sid + "flat.json")
+        flat_sid = sid + "flat"[:32 - len(sid)] if False else "b" * 32
+        flat = st.dir / (flat_sid + ".json")
+        flat.write_text(json.dumps({"id": flat_sid, "name": "legacy", "app": "wordkick",
+                                    "exchanges": [], "updated": 0}), encoding="utf-8")
+        st._migrate_legacy()
+        self.assertTrue((st.dir / "wordkick" / (flat_sid + ".json")).is_file())
+        self.assertFalse(flat.exists())
+        # the migrated doc still resolves via the API
+        st2, doc = self.S.req("/api/sessions/" + flat_sid, "GET")
+        self.assertEqual(st2, 200)
+        self.assertEqual(doc["app"], "wordkick")
+        # app-less docs stay at the root (legacy/shared)
+        st2, r2 = self.S.req("/api/sessions", "POST", {"name": "shared",
+                             "exchanges": []})
+        self.assertEqual(st2, 200)
+        self.assertTrue((st.dir / (r2["session"]["id"] + ".json")).is_file())
+        # cleanup
+        for s2 in (sid, flat_sid, r2["session"]["id"]):
+            self.S.req("/api/sessions/" + s2, "DELETE", None, True)
 
     def test_sessions_app_scoping(self):
         # sessions are scoped per application; app-less rows stay visible everywhere

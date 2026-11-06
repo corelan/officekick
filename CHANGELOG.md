@@ -78,6 +78,16 @@
   Q&A pair lands in Previous requests and in the session history. Rules
   added to all three system prompts (MailKick's version says a clarify reply
   replaces - not supplements - the ops/reply round).
+## 0.9.243
+
+### Changed
+- Session files are organized per add-in: `~/.officekick/sessions/<slidekick|
+  wordkick|mailkick>/<sid>.json`. Legacy flat files migrate on boot by their
+  stored `app` field; app-less (legacy/shared) docs stay at the session root
+  and remain visible in every pane. Reads fall back to the root location, so
+  sessions written by older builds still resolve. Per-app deletion/backup is
+  now just the folder.
+
 ## 0.9.242
 
 ### Added
