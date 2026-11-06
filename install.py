@@ -354,6 +354,9 @@ def toggle_pick(rows, hint=""):
         if not first:
             sys.stdout.write("\x1b[%dA\r\x1b[J" % (len(rows) + 2))
         for i, (act, checked, label, extra, style) in enumerate(rows):
+            if label == "@SEP":                    # visual separator
+                print("")
+                continue
             if checked is None:                    # plain action row (back)
                 body = "%s) %s" % (act, label)
                 if i == idx:
@@ -378,10 +381,20 @@ def toggle_pick(rows, hint=""):
         if k is None:
             return None
         if k == "up":
-            idx = (idx - 1) % len(rows)
+            j = idx
+            while True:
+                j = (j - 1) % len(rows)
+                if rows[j][2] != "@SEP":
+                    break
+            idx = j
             draw(False)
         elif k == "down":
-            idx = (idx + 1) % len(rows)
+            j = idx
+            while True:
+                j = (j + 1) % len(rows)
+                if rows[j][2] != "@SEP":
+                    break
+            idx = j
             draw(False)
         elif k in ("space", " ", "s"):
             if rows[idx][1] is not None:
@@ -557,6 +570,7 @@ def select_addins(interactive):
             # the status block below the options, not on the rows
             for (n, (folder, label, _was)) in zip(("1", "2", "3"), rows):
                 r.append((n, state[folder], label, "", None))
+            r.append((None, None, "@SEP", "", None))
             r.append(("0", None, "back (nothing is installed yet)", "", "magenta"))
             return r
         while True:
@@ -600,6 +614,7 @@ def select_addins(interactive):
         for (folder, label, _was) in rows:
             box = "[x]" if state[folder] else "[ ]"
             print("    %d) %-24s %s" % (rows.index((folder, label, _was)) + 1, label, box))
+        print("")
         print("    0) back (nothing is installed yet)")
         print("")
         choice = input("  > toggle 1/2/3 + Enter to toggle, EMPTY = continue, 0 = back: ").strip().lower()
