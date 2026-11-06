@@ -556,20 +556,8 @@ def _set_transport(mode, http_port=None, https_port=None):
         body["transportHttpPort"] = int(http_port)
     if https_port is not None:
         body["transportHttpsPort"] = int(https_port)
-    if health(PORT):
-        try:
-            import urllib.request
-            req = urllib.request.Request(
-                "http://127.0.0.1:%d/api/settings" % PORT,
-                data=json.dumps(body).encode("utf-8"),
-                headers={"Content-Type": "application/json"}, method="PUT")
-            opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
-            with opener.open(req, timeout=3) as resp:
-                resp.read()
-            note("transport persisted via the server: %s" % json.dumps(body))
-            return True
-        except Exception as exc:
-            warn("could not store the transport via the server (%s) - writing the config file" % exc)
+    if _api_set(body):
+        return True
     try:
         cfg = {}
         try:
