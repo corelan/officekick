@@ -42,6 +42,16 @@
   exact layout Office honors, and docs gain the manual Trust Center +
   reg-add unblock for machines that installed older builds.
 
+## 0.9.284
+
+### Changed
+- flag-driven installer runs no longer pause for a keypress at the end
+  (field: a scripted `install.py --update` sat waiting on "press any key").
+  --update / --install / --uninstall / --stop / --start / --restart /
+  --status / --transport / --cert-check / --dry-run all exit on completion;
+  the interactive menu keeps the hold-the-screen behavior. Verified with a
+  pseudo-tty run of --cert-check exiting 0 unattended.
+
 ## 0.9.283
 
 ### Fixed

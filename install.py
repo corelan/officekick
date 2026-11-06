@@ -3447,12 +3447,21 @@ def _drain_stdin():
         pass
 
 
+FLAGRUN = False
+
+
 def pause_after(label):
     """Hold the screen after a flow until a key press (any key) - a real
     terminal wait, no timer and no auto-advance. Pending buffered input is
     flushed first, so a stale newline cannot release it. Piped/automation
-    runs and scheduled tasks just continue."""
+    runs and scheduled tasks just continue. A FLAG-driven run (--update,
+    --stop, --start, --restart, --install, --uninstall, --transport,
+    --cert-check, --dry-run) NEVER pauses (field report 0.9.284: a scripted
+    --update sat waiting on a keypress); only the interactive menu keeps
+    the hold-the-screen behavior."""
     _log("flow ended: %s" % label)
+    if FLAGRUN:
+        return
     try:
         if not (sys.stdin.isatty() and sys.stdout.isatty()):
             return
@@ -4062,6 +4071,11 @@ def main():
     ap.add_argument("--cert-check", action="store_true",
                     help="run the local certificate diagnostics (SAN, CA:FALSE, key match, validity, handshake, platform trust)")
     args = ap.parse_args()
+    global FLAGRUN
+    FLAGRUN = bool(args.update or args.install or args.uninstall
+                   or args.start or args.stop or args.restart or args.status
+                   or args.cert_check or args.dry_run
+                   or getattr(args, "transport", None))
     global SKIP_MAILKICK, MAILKICK_CERT, MAILKICK_KEY, MAILKICK_OPT
     SKIP_MAILKICK = args.skip_mailkick
     MAILKICK_CERT = args.mailkick_cert
