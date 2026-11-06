@@ -7,37 +7,92 @@ and Windows and share one technology stack.
 - **Corelan DocKick** - the Word add-in ([docs/dockick.md](docs/dockick.md))
 - **Corelan MailKick** - the Outlook add-in: summarize, translate, draft replies (you send), categories ([docs/mailkick.md](docs/mailkick.md); macOS Outlook = one-time loopback-TLS setup (needs a trusted https pane; works in New and classic Outlook) - [requirements](docs/mailkick.md#requirements-for-outlook-macos---read-before-installing); skipped automatically when they are not met)
 
-## How it works
+## Contents
 
-1. You type what you want, in plain language.
-   Examples: `reword the current slide`, `make slides about threat hunting`,
-   `add a table of the key findings`, `leave a review comment on this paragraph`.
-2. The add-in reads your file.
-3. The request goes to an AI model that **you** configured.
-4. The add-in shows the proposed changes.
-5. Your approval policy decides what gets applied.
+1. [Dependencies](#dependencies)
+2. [How to install](#how-to-install) -
+   [Windows](#windows) / [macOS](#macos) / [Linux](#linux)
+3. [How to install - the installer itself](#the-installer-itself) - the menu, first run, update, uninstall
+4. [Using it](#using-it) - where the panes appear, ports, the server,
+   permissions
+5. [How it works](#how-it-works) - the flow, security and privacy
+6. [References](#references) - the full documentation index
 
-Everything runs on your machine:
+## Dependencies
 
-- One small local server serves the add-ins and the AI requests.
-- You configure providers once; every Office app shares them.
-- Supported providers: OpenAI, Anthropic, OpenRouter, any OpenAI-compatible
-  server, Ollama, llama.cpp. Nothing goes through a third-party service.
-- Every exchange is auto-saved in a resumable local session. The
-  **Previous requests** box shows each run with its timestamp.
-- MailKick adds one-click **reply+ / reply-** buttons for a drafted polite reply.
+| Platform | What is required | Where it comes from |
+|---|---|---|
+| **Windows** | **Python 3** (the installer runs as `py -3`; plain `python` is often just the Store alias) + **Git**, but only if you want a clone of the repo | installed for you by the PowerShell script `tools/setup-windows.ps1` - see [Windows](#windows) below |
+| **macOS** | **Python 3** (`python3` - Apple's command-line tools provide one; python.org's installer works too). **Git** only for a repo clone | usually already present; `python3 --version` checks. `git` ships with the command-line tools and with GitHub Desktop |
+| **Linux** | see the honest note under [Linux](#linux) - the add-ins need desktop Office | - |
 
-## Install
+Everything installs **per user** - no administrator rights anywhere. The
+Windows PowerShell script installs the latest Python 3 through python.org's
+official **Python install manager** (never winget for Python) and Git for
+Windows, then offers to clone the repository.
 
-One installer for macOS and Windows. It detects the platform by itself.
+**Windows - one command from the internet** (Windows 10+ ships a real
+`curl.exe` in System32, so the Linux pipe habit works; `irm | iex` is the
+native form):
+
+```powershell
+irm https://raw.githubusercontent.com/corelan/officekick/main/tools/setup-windows.ps1 | iex
+```
+
+**Windows - from a downloaded copy** of `tools/setup-windows.ps1`:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\setup-windows.ps1
+```
+
+(The `-ExecutionPolicy Bypass` applies to that one process only - the policy
+explanation, the flag list, `curl.exe`-pipe variants, and step-by-step
+details: [docs/setup-windows.md](docs/setup-windows.md).)
+
+## How to install
+
+### Windows
+
+1. Install the dependencies with the PowerShell script above (or accept the
+   defaults: Python 3 + Git land on your PATH).
+2. Clone the repository (the script offers to do this into
+   `%USERPROFILE%\Tools`), or download a zip and unpack it somewhere stable.
+3. Run the installer:
+
+```powershell
+cd $env:USERPROFILE\Tools\officekick
+py -3 install.py
+```
+
+The Windows Office route for pane registration lives in [Using it](#using-it).
+
+### macOS
+
+1. Confirm `python3 --version` works (command-line tools provide it).
+2. Clone the repository and run the installer:
 
 ```bash
 git clone https://github.com/corelan/officekick.git
 cd officekick
-python3 install.py        # Windows: py -3 install.py
+python3 install.py
 ```
 
-The installer opens a menu:
+3. macOS specifics: locally hosted models (Ollama on your LAN) need one
+   consent - see [macOS permissions](#macos-permissions-locally-hosted-models).
+
+### Linux
+
+The task panes host inside **desktop Microsoft Office**, which exists on
+Windows and macOS only; `install.py` has no Linux branch and a Linux box
+cannot register or serve the panes. There is no supported Linux install -
+running the Office web client against the local server is untested and not
+part of this project.
+
+## The installer itself
+
+One installer for macOS and Windows. It detects the platform by itself.
+
+The interactive menu:
 
 1. **Install / repair** - the add-in picker (Word + PowerPoint on by default,
    Outlook off until you enable it)
@@ -62,36 +117,8 @@ The essentials:
   [docs/certificates.md](docs/certificates.md)). On Windows the flow verifies
   the trust out of band and offers the Root fallback Office requires
   (WebView2 leaf-trust is field-verified as rejected).
-- No admin rights are needed. The full run log lands in `install.log`.
 
-### Windows prerequisites
-
-- **Python 3 must be installed** (the installer runs as `py -3`; plain
-  `python` on Windows is often just the Store alias).
-- **Git** (the command-line utility) is needed only if you want a clone of
-  the repository.
-- Both come with one command - a PowerShell script that installs the
-  latest Python 3 (via python.org's official install manager) and Git,
-  then offers to clone the repo into `%USERPROFILE%\Tools`.
-
-Run it **directly from the internet** in a PowerShell window (Windows 10+
-ships a real `curl.exe` in System32, so a curl pipe works too):
-
-```powershell
-irm https://raw.githubusercontent.com/corelan/officekick/main/tools/setup-windows.ps1 | iex
-```
-
-or, if you have **downloaded** `tools/setup-windows.ps1`:
-
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\setup-windows.ps1
-```
-
-(The `-ExecutionPolicy Bypass` applies to that one process only - the
-policy explanation, flag list, and an admin-free guarantee:
-[docs/setup-windows.md](docs/setup-windows.md).)
-
-## Update
+### Update
 
 ```bash
 python3 install.py --update    # Windows: py -3 install.py --update
@@ -107,76 +134,23 @@ If a deck or document ever greets you with an
 once with the repair tool - see the troubleshooting section in
 [docs/slidekick.md](docs/slidekick.md).
 
-### Ports and how to tell which scheme an add-in uses
-
-| Add-in | url |
-|---|---|
-| every pane | `http://localhost:<http port>` and, once a working certificate exists, `https://localhost:<https port>` |
-
-One listener per scheme serves all three add-ins. With the transport mode on
-`https`, the https listener is required (and Outlook always needs https
-manifest URLs, so MailKick is staged only when https works).
-
-The moment a usable certificate exists, **all three** add-ins ride it. The
-bottom status line in a task pane tells the truth per pane: a lock plus the
-https port = TLS; the plain port in blue (light theme) / cyan (dark) = http.
-
-How to tell what a pane is actually using: the **bottom status line** in the
-task pane shows it - a 🔒 plus port **8766** means the pane is served over
-the loopback TLS listener; no lock with port **8765** means plain http.
-On disk, check the manifest your Office container holds, e.g.
-`grep -o 'http[^"]*taskpane.html' "~/Library/Containers/com.microsoft.Outlook/Data/Documents/wef/mailkick.xml"`
-(https = the Outlook route).
-
-## The local server: starting it manually and automatically
-
-Everything the add-ins show comes from a small local server
-(`http://127.0.0.1:8765`). If it is not running, the pane's footer text
-(the line next to the heartbeat dot) turns red with an OS-specific hint.
-
-Start it manually - from your OfficeKick checkout:
+### Uninstall
 
 ```bash
-python3 install.py --start      # macOS
-py -3 install.py --start        # Windows
+python3 install.py --uninstall            # keeps your config
+python3 install.py --uninstall --remove-certs --purge-config   # full cleanup incl. certificates + config
+# Windows: py -3 install.py --uninstall [--purge-config]
 ```
 
-`--start` brings the server up and health-checks it; it changes nothing
-else. Related flags: `--status` (shows the running version or exits
-non-zero), `--stop`. In the interactive installer the same action is
-menu item **(3) Start (or restart) the local server only** (or run `install.py --restart`).
+Or pick **Uninstall** in the installer menu. It asks two questions - the
+certificate store entries and the config folder - and both default to KEEP:
+an uninstall never destroys your setup unless you say so. After an uninstall
+the certificate mode resets to self-signed leaf. Details:
+[docs/installer.md > Uninstall](docs/installer.md).
 
-How it starts automatically:
+## Using it
 
-- **macOS - login item.** The installer registers the `OfficeKickServer`
-  login item (the app bundle in `~/Applications`). It runs at login with
-  no visible window. Re-register: `python3 install.py --install`
-  (or repair via the interactive menu, option 1).
-- **Windows - scheduled task.** The installer creates the per-user task
-  `OfficeKickServer` (runs at logon, hidden, and hardened at every
-  install: no stop-on-idle, no stop-on-batteries, no execution time
-  limit, so it cannot end itself silently). Inspect it with
-  `schtasks /query /tn OfficeKickServer /v`. The pane's footer hint shows
-  `schtasks /run /tn OfficeKickServer` as the quickest restart because
-  the registered task is the most faithful way to start it exactly like
-  the logon does.
-
-Check whether it is up: open `http://127.0.0.1:8765/api/health` in a
-browser, or `python3 install.py --status` from the checkout.
-
-The pane also checks for updates itself (Settings > General: **Check now**,
-or the "Check for updates automatically at startup" option). The server can
-also update itself: at start, when a newer release is out, a git install is
-pulled and any other install downloads the GitHub zip, and the server
-restarts on the new code before it answers requests
-(settings.md > General). Your config, profiles and sessions survive every
-update.
-
-Config lives in `~/.officekick/config.json` (`%USERPROFILE%\.officekick` on
-Windows, chmod 600). API keys never leave your machine except to the provider
-you configured.
-
-## Use it
+### Where the panes appear
 
 - **PowerPoint (macOS)**: Home tab -> **Add-ins** (dropdown) ->
   **Developer Add-ins** -> **Corelan SlideKick**.
@@ -185,16 +159,13 @@ you configured.
   the classic "Office Add-ins" dialog -> **SHARED FOLDER** (top) -> the
   add-in -> **Add** (once per application). Note: the newer "Apps" dialog
   (Add-ins -> Manage) only lists store and organization add-ins - it never
-  shows local folder catalogs, and on current Windows builds (16.0.19x) a
-  ribbon-commands manifest makes the add-in vanish from BOTH dialogs
-  (ribbon-commands manifests make the add-in disappear on the tested
-  builds - do not install with --ribbon).
+  shows local folder catalogs.
 - **Outlook (MailKick)**: the manifest lands in Outlook's own add-in folder
   (macOS); quit and reopen Outlook. If MailKick does not appear:
   Get Add-ins > My add-ins > Custom Add-ins > Add a custom add-in >
   Add from File (Cmd+Shift+G). See [docs/mailkick.md](docs/mailkick.md).
 
-First run:
+### First run
 
 1. **Connections** tab: add a provider (Type + Base URL + optional API key).
    "Test connection" lists its models.
@@ -213,7 +184,54 @@ First run:
    in Settings > Approval policy
    ([settings.md > Approval policy](docs/settings.md#settings--approval-policy)).
 
-## macOS permissions (locally hosted models)
+### Ports and how to tell which scheme a pane uses
+
+Every pane answers on `http://localhost:8765` and, once a working
+certificate exists, on `https://localhost:8766` (both configurable - one
+listener per scheme serves all three add-ins; with the transport mode on
+`https` the https listener is required, and Outlook always needs https
+manifest URLs so MailKick stages only when https works).
+
+The **bottom status line** in a task pane tells the truth per pane: a 🔒
+plus the https port means TLS; the plain port in blue (light theme) / cyan
+(dark) means http. On disk, check the manifest your Office container holds,
+e.g. `grep -o 'http[^"]*taskpane.html' "~/Library/Containers/com.microsoft.Outlook/Data/Documents/wef/mailkick.xml"`.
+
+### The local server: starting it manually and automatically
+
+If the pane's footer text (next to the heartbeat dot) turns red with an
+OS-specific hint, start the server from your OfficeKick checkout:
+
+```bash
+python3 install.py --start      # macOS
+py -3 install.py --start        # Windows
+```
+
+`--start` brings the server up and health-checks it; it changes nothing
+else. Related flags: `--status`, `--stop`. In the interactive menu the same
+action is **Server**.
+
+How it starts automatically:
+
+- **macOS - login item.** The installer registers the `OfficeKickServer`
+  login item (the app bundle in `~/Applications`). It runs at login with
+  no visible window.
+- **Windows - scheduled task.** The per-user task `OfficeKickServer` (runs
+  at logon, hidden, hardened at every install: no stop-on-idle, no
+  stop-on-batteries, no execution time limit). Inspect with
+  `schtasks /query /tn OfficeKickServer /v`; the pane's footer hint shows
+  `schtasks /run /tn OfficeKickServer` as the quickest restart.
+
+Check whether it is up: open `http://127.0.0.1:8765/api/health`, or
+`python3 install.py --status`. The server also keeps itself updated on a
+git install (a pull + restart on newer releases; other installs update via
+the GitHub zip) - your config, profiles and sessions survive every update.
+
+Config lives in `~/.officekick/config.json` (`%USERPROFILE%\.officekick` on
+Windows, chmod 600). API keys never leave your machine except to the provider
+you configured.
+
+### macOS permissions (locally hosted models)
 
 Providers on your LAN need one macOS consent:
 **System Settings -> Privacy & Security -> Local Network**.
@@ -234,7 +252,28 @@ Do not use `tccutil reset` to re-trigger this: on current macOS builds it
 cannot reset the LocalNetwork service, and `tccutil reset All` wipes ALL saved
 privacy decisions for every app.
 
-## Security & privacy
+## How it works
+
+1. You type what you want, in plain language.
+   Examples: `reword the current slide`, `make slides about threat hunting`,
+   `add a table of the key findings`, `leave a review comment on this paragraph`.
+2. The add-in reads your document.
+3. The request goes to an AI model that **you** configured.
+4. The add-in shows the proposed changes.
+5. Your approval policy decides what gets applied.
+
+Everything runs on your machine:
+
+- One small local server (Python standard library only) serves the add-ins
+  and the AI requests. Loopback only: `127.0.0.1` + `::1`.
+- You configure providers once; every Office app shares them.
+- Supported providers: OpenAI, Anthropic, OpenRouter, any OpenAI-compatible
+  server, Ollama, llama.cpp. Nothing goes through a third-party service.
+- Every exchange is auto-saved in a resumable local session. The
+  **Previous requests** box shows each run with its timestamp.
+- MailKick adds one-click **reply+ / reply-** buttons for a drafted polite reply.
+
+### Security & privacy
 
 - The local server binds to loopback only (`127.0.0.1` + `::1`).
 - No telemetry, no phone-home. The server never touches your documents.
@@ -244,22 +283,16 @@ privacy decisions for every app.
 - Debug logging is opt-in. It writes prompts and document text to a local
   daily log; keep it off for sensitive work.
 
-## Uninstall
+## References
 
-```bash
-python3 install.py --uninstall            # keeps your config
-python3 install.py --uninstall --remove-certs --purge-config   # full cleanup incl. certificates + config
-# Windows: py -3 install.py --uninstall [--purge-config]
-```
-
-Or pick **Uninstall** in the installer menu. It asks two questions - the
-certificate store entries and the config folder - and both default to KEEP:
-an uninstall never destroys your setup unless you say so. After an uninstall
-the certificate mode resets to self-signed leaf. Details:
-[docs/installer.md > Uninstall](docs/installer.md).
-
-## More
-
+- [docs/setup-windows.md](docs/setup-windows.md) - the Windows dependency
+  installer (`tools/setup-windows.ps1`: the Python install manager + Git,
+  the repo clone into `%USERPROFILE%\Tools`) + the PowerShell execution
+  policy how-to.
+- [docs/installer.md](docs/installer.md) - the installer menus, transport
+  options, certificate modes, uninstall (asks + defaults, flags).
+- [docs/certificates.md](docs/certificates.md) - how the local https
+  certificates are generated, trusted, renewed, and removed, per platform.
 - [docs/settings.md](docs/settings.md) - every setting explained: what it
   means, how to configure it (config, profiles, approvals, search steps).
 - [docs/slidekick.md](docs/slidekick.md) - the PowerPoint add-in: actions,
@@ -269,14 +302,6 @@ the certificate mode resets to self-signed leaf. Details:
 - [docs/mailkick.md](docs/mailkick.md) - the Outlook add-in: summarize,
   translate, draft replies + forwards (you send), categories, templates,
   simulator, troubleshooting.
-- [docs/setup-windows.md](docs/setup-windows.md) - the Windows dependency
-  installer (tools/setup-windows.ps1: latest Python 3 + Git via winget, the
-  repo clone into %USERPROFILE%\Tools) + the PowerShell execution policy
-  how-to; then docs/installer.md continues inside the repository.
-- [docs/installer.md](docs/installer.md) - the installer menus, transport
-  options, certificate modes, uninstall (asks + defaults, flags).
-- [docs/certificates.md](docs/certificates.md) - how the local https
-  certificates are generated, trusted, renewed, and removed, per platform.
 - [docs/architecture.md](docs/architecture.md) - how the stack works.
 - [CHANGELOG.md](CHANGELOG.md) | [LICENSE](LICENSE)
 
