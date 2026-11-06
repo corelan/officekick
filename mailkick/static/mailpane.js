@@ -1184,9 +1184,11 @@
       }
       SK.history = (doc.exchanges || []).slice(-HISTORY_MAX_EXCHANGES * 2);
       SK.sessionApprovals = {};   // a remembered approval never travels between sessions
+      try { localStorage.removeItem("sk-approvals-mailkick"); } catch (eRC) {}
       SK.sessionId = doc.id;
       try { localStorage.setItem("sk-resume-session-mailkick", doc.id); } catch (eS) {}
       SK.sessionName = doc.name || "";
+      restoreSessionApprovals();   // approvals ride the resumed session (0.9.267)
       SK.sessionManual = !!doc.manualName;   // absent = AI-titled (updates allowed)
       var inp1 = $("chat-input");
       if (inp1) { inp1.disabled = false; inp1.value = ""; }
@@ -1637,6 +1639,7 @@
     SK.sessionName = "";
     SK.sessionManual = false;
     SK.sessionApprovals = {};   // a new session asks again (session-scoped approvals)
+    try { localStorage.removeItem("sk-approvals-mailkick"); } catch (eRC) {}
     try { localStorage.removeItem("sk-res...kick"); } catch (eR) {}
     var inp0 = $("chat-input");
     if (inp0) { inp0.disabled = false; inp0.value = ""; }
@@ -1803,6 +1806,7 @@ var nw = $("sess-new");
   function resetHistory() {
     SK.history = [];
     SK.sessionApprovals = {};   // approvals are session-scoped - a new session asks again
+    try { localStorage.removeItem("sk-approvals-mailkick"); } catch (eRC) {}
     SK.sessionId = null;
     try { localStorage.removeItem("sk-resume-session-mailkick"); } catch (eS) {}      // the next exchange saves as a NEW session
     SK.sessionName = "";
@@ -2240,6 +2244,18 @@ var nw = $("sess-new");
   // ------------------------------------------------------------------ //
   function approvalMode(opType) {
     return SK.sessionApprovals[opType] || (SK.cfg && SK.cfg.approvals && SK.cfg.approvals[opType]) || "confirm";
+  }
+  function restoreSessionApprovals() {
+    // approvals ride the session: on a pane reload the session resumes and
+    // the remembered approvals come back with it (same session id only)
+    try {
+      var saved = JSON.parse(localStorage.getItem("sk-approvals-mailkick") || "null");
+      if (saved && saved.map && (saved.sid || "") === (SK.sessionId || "")) {
+        SK.sessionApprovals = saved.map;
+        return true;
+      }
+    } catch (eR2) { /* corrupt entry - start clean */ }
+    return false;
   }
 
   function localDateStr(d) {
@@ -3694,7 +3710,15 @@ function applyOps(deck, ops, ctx) {
             "' actions run without asking";
           result.appendChild(rNote);
         }
-      });      // unapproved confirm rows would silently vanish - ask before skipping
+      });
+      // the Office webview can reload the pane page between runs (heavy deck
+      // edits) - in-page memory dies with it. Persist the approvals per
+      // session id and restore them on the next boot (0.9.267).
+      try {
+        var sid2 = SK.sessionId;
+        if (!sid2) { try { sid2 = localStorage.getItem("mk-resume-mailkick"); } catch (eE1) {} }
+        localStorage.setItem("sk-approvals-mailkick", JSON.stringify({ sid: sid2 || "", map: SK.sessionApprovals }));
+      } catch (eAp) { /* storage may be unavailable */ }      // unapproved confirm rows would silently vanish - ask before skipping
       var skips = rows.filter(function (row) {
         return !row.removed && !row.done && row.mode === "confirm" && row._cb && !row._cb.checked;
       });
@@ -4538,6 +4562,7 @@ function applyOps(deck, ops, ctx) {
     var bootResume = null;
     try { bootResume = localStorage.getItem("sk-resume-session-mailkick"); } catch (eS) {}
     if (bootResume) resumeSession(bootResume);
+    else restoreSessionApprovals();   // a plain reload restores the same-session approvals
     // a pane reload lands on Settings -> General (the caller tags the URL)
     try {
       var qnav = new URLSearchParams(location.search);

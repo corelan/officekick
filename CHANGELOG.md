@@ -78,6 +78,22 @@
   Q&A pair lands in Previous requests and in the session history. Rules
   added to all three system prompts (MailKick's version says a clarify reply
   replaces - not supplements - the ops/reply round).
+## 0.9.267
+
+### Fixed
+- field report: "it keeps asking for the approval, even when I click the
+  checkbox" - the session-scoped approval memory was IN-PAGE ONLY, and the
+  Office webview reloads the pane page between runs (heavy deck edits:
+  slides created, backgrounds applied), so every reload silently wiped the
+  remembered approvals and the resumed session asked again. The approvals
+  are now persisted per session id (localStorage, app-qualified key) and
+  restored on the next boot - via the auto-resume path (the commit stamps
+  the resume marker's session id when the run has not saved yet) or, on a
+  plain reload, the boot-time restore. New/resumed/different sessions and
+  session resets still wipe the stored entry (session-scoped stays true).
+  Verified in the sim incl. a REAL page reload between runs: run 2 renders
+  the remembered types as auto rows with no remember boxes.
+
 ## 0.9.266
 
 ### Changed
