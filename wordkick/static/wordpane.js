@@ -1818,8 +1818,7 @@ var nw = $("sess-new");
       if (place === "end") {
         items.forEach(function (it) {
           var p = body.insertParagraph(String(it.text == null ? "" : it.text), "End");
-          var st = styleNameOf(it.style);
-          if (st) p.style = st;
+          setWordStyle(p, styleNameOf(it.style));
         });
         return ctx.sync().then(function () { return { ok: true, how: "end of document" }; });
       }
@@ -1828,8 +1827,7 @@ var nw = $("sess-new");
         return ctx.sync().then(function () {
           items.forEach(function (it) {
             var p = sel.insertParagraph(String(it.text == null ? "" : it.text), "After");
-            var st = styleNameOf(it.style);
-            if (st) p.style = st;
+            setWordStyle(p, styleNameOf(it.style));
           });
           return { ok: true, how: "at caret/selection" };
         });
@@ -1841,8 +1839,7 @@ var nw = $("sess-new");
         if (!match) {
           items.forEach(function (it2) {
             var p2 = body.insertParagraph(String(it2.text == null ? "" : it2.text), "End");
-            var st2 = styleNameOf(it2.style);
-            if (st2) p2.style = st2;
+            setWordStyle(p2, styleNameOf(it2.style));
           });
           return ctx.sync().then(function () {
             return { ok: true, how: "anchor '" + place.slice(0, 60) + "' not found - end of document" };
@@ -1852,8 +1849,7 @@ var nw = $("sess-new");
           var paraRange = pr || match;
           items.forEach(function (it3) {
             var p3 = paraRange.insertParagraph(String(it3.text == null ? "" : it3.text), "After");
-            var st3 = styleNameOf(it3.style);
-            if (st3) p3.style = st3;
+            setWordStyle(p3, styleNameOf(it3.style));
           });
           return ctx.sync().then(function () {
             return { ok: true, how: "after the paragraph containing '" + place.slice(0, 60) + "'" };
@@ -2214,7 +2210,7 @@ var nw = $("sess-new");
         throw new FriendlyError("content controls need WordApi 1.5 - update Word (16.70+ on Mac).");
       }
       var body = ctx.document.body;
-      body.insertParagraph(title, "End").styleBuiltIn = "Heading2";
+      body.insertParagraph(title, "End").styleBuiltIn = "heading2";
       var notes = [];
       fields.forEach(function (f) {
         var para = body.insertParagraph(f.label + ": ", "End");
@@ -2467,8 +2463,7 @@ var nw = $("sess-new");
       var last = null;
       (op.items || []).forEach(function (it) {
         last = body.insertParagraph(String(it.text == null ? "" : it.text), last ? "After" : "End");
-        var st = styleNameOf(it.style);
-        if (st && last) last.style = st;
+        setWordStyle(last, styleNameOf(it.style));
       });
       return ctx.sync().then(function () { return { ok: true }; });
     });
@@ -2494,16 +2489,35 @@ var nw = $("sess-new");
     });
   };
 
+  // 0.9.281: insert_paragraphs/rewriteDoc assigned paragraph.style with
+  // ENGLISH display names ("Title", "Heading 1") - .style is the LOCALIZED
+  // style name, so French Word (Titre/Titre 1) threw InvalidArgument for
+  // every styled paragraph (field: fresh Windows 11 fr-FR box - the whole
+  // insert failed even though the paragraphs themselves inserted fine on
+  // en-US builds). Assign styleBuiltIn with the Word.BuiltInStyleName
+  // token instead: identical tokens on every UI language
+  // (field report 0.9.281). The .style fallback keeps en-only builds whole;
+  // if that also fails the paragraph keeps the default style and the op
+  // still succeeds.
   function styleNameOf(kind) {
     if (!kind || String(kind).toLowerCase() === "normal") return null; // doc default
     var k = String(kind).toLowerCase();
-    if (k === "title") return "Title";
-    if (k === "heading1") return "Heading 1";
-    if (k === "heading2") return "Heading 2";
-    if (k === "heading3") return "Heading 3";
-    if (k === "quote") return "Quote";
-    if (k === "listparagraph") return "List Paragraph";
+    if (k === "title") return "title";
+    if (k === "heading1") return "heading1";
+    if (k === "heading2") return "heading2";
+    if (k === "heading3") return "heading3";
+    if (k === "quote") return "quote";
+    if (k === "listparagraph") return "listParagraph";
     return null;
+  }
+
+  function setWordStyle(paragraph, token) {
+    if (!token || !paragraph) return;
+    try {
+      paragraph.styleBuiltIn = token;   // WordApi 1.3 - localization-free
+    } catch (e) {
+      try { paragraph.style = token; } catch (e2) { /* keep default style */ }
+    }
   }
 
     // ------------------------------------------------------------------ //

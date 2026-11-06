@@ -42,6 +42,23 @@
   exact layout Office honors, and docs gain the manual Trust Center +
   reg-add unblock for machines that installed older builds.
 
+## 0.9.281
+
+### Fixed
+- DocKick on non-English Word: insert_paragraphs (and rewriteDoc) assigned
+  paragraph.style with ENGLISH display style names ("Title", "Heading 1").
+  .style is the LOCALIZED style name property, so French Word ("Titre",
+  "Titre 1") threw InvalidArgument for every styled paragraph and the op
+  failed wholesale - even though the same op had always worked on en-US
+  builds (field: fresh Windows 11 fr-FR box, "Insert 15 paragraph(s) ->
+  end of document (title, normal) - InvalidArgument"). All five style
+  assignments now go through setWordStyle(): styleBuiltIn with the
+  Word.BuiltInStyleName token (identical tokens in every UI language,
+  WordApi 1.3), falling back to the legacy .style assignment for very
+  old builds, else the paragraph keeps its default style and the insert
+  still succeeds. createTemplateBlock's "Heading2" token fixed to the
+  enum spelling ("heading2"); the simulator maps the listParagraph token.
+
 ## 0.9.280
 
 ### Fixed

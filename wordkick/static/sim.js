@@ -45,7 +45,7 @@
     if (k === "heading2" || k === "heading 2") return "Heading 2";
     if (k === "heading3" || k === "heading 3") return "Heading 3";
     if (k.indexOf("quote") === 0) return "Quote";
-    if (k === "list" || k.indexOf("bullet") === 0) return "List Paragraph";
+    if (k === "list" || k === "listparagraph" || k.indexOf("bullet") === 0) return "List Paragraph";
     return "Normal";
   }
 
