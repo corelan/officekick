@@ -1139,6 +1139,9 @@
     "DOES name a slide (e.g. 'turn slide 124 into...'), deliver on that slide and never silently move the result " +
     "to the open/selected slide. Never use clarify for style/tone/size details you can decide yourself, and never " +
     "twice in one chain.";
+  var DELETE_RULE =
+    "- THIS BUILD CANNOT DELETE SLIDES (the add-in API has no slide removal here): NEVER emit delete_slide. If your plan included one, drop it and rebuild around the existing slides - create_slide appends at the end, duplicate_slide_to replaces a target's contents, move_slide repositions. Deliver the complete result WITHOUT the delete; failing a whole story over a missing delete is unacceptable (field: a story plan that deleted the slide it had misplaced).";
+
   var NOTES_OFF_RULE =
     "- Speaker-notes AUTO-generation is OFF in the user's Settings. For ordinary slide work:" +
     " omit notes fields and never invent set_notes ops. When the user explicitly asks for" +
@@ -2042,6 +2045,11 @@
         var slides = pres.slides;
         slides.load("items/id");
         return ctx.sync().then(function () {
+          // 0.9.287: slides.removeAt exists only on builds with slide
+          // deletion - surface it so the ask and the outline can forbid
+          // delete_slide ops instead of letting them fail at apply time
+          try { ctx.canDelete = (typeof slides.removeAt === "function"); }
+          catch (eDel) { ctx.canDelete = undefined; }
           var count = slides.items.length;
           var n = Math.min(count, limit);
           for (var i = 0; i < n; i++) {
@@ -3052,11 +3060,37 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
               }
             });
             if (!pick) {
-              throw new FriendlyError(
-                role === "title"
-                  ? "No title placeholder found on slide " + i
-                  : "No body/content placeholder found on slide " + i
-              );
+              if (role === "title") {
+                throw new FriendlyError("No title placeholder found on slide " + i);
+              }
+              // 0.9.287: title-only/blank layouts have no body placeholder -
+              // write the content into a NEW TEXT BOX instead of failing the
+              // op (field: story slides on a fresh build were all title
+              // slides; five body writes failed wholesale and the retry
+              // repeated them). Geometry: the standard body band per the
+              // make-over grid (960x540). Two creation forms - some builds
+              // reject ShapeAddOptions at sync, then accept the bare form
+              // with geometry as properties (the 0.9.233/0.9.261 repair).
+              var std = { left: 48, top: 190, width: 864, height: 300 };
+              var fallbackNote = "no body placeholder (slide " + (i + 1) + ") - content set in a new text box";
+              try {
+                var tb = slide.shapes.addTextBox(joined, std);
+                try { tb.name = "sk-body-fallback-" + (i + 1); } catch (eN2) { /* optional */ }
+                return ctx.sync().then(function () { return { ok: true, how: fallbackNote }; });
+              } catch (eTb1) {
+                try {
+                  var tb2 = slide.shapes.addTextBox(joined);
+                  ["left", "top", "width", "height"].forEach(function (gk) {
+                    try { tb2[gk] = std[gk]; } catch (eG4) { /* optional */ }
+                  });
+                  try { tb2.name = "sk-body-fallback-" + (i + 1); } catch (eN3) { /* optional */ }
+                  return ctx.sync().then(function () { return { ok: true, how: fallbackNote }; });
+                } catch (eTb2) {
+                  throw new FriendlyError("No body/content placeholder found on slide " +
+                    i + ", and the text-box fallback failed (" +
+                    String((eTb1 && eTb1.message) || eTb1).slice(0, 80) + ")");
+                }
+              }
             }
             if (!pick.tf.hasText && joined === "") return null;
             pick.tf.textRange.load("text");
@@ -4221,6 +4255,9 @@ OfficeDeck.prototype.setNotes = function (i, text) {
       ctx.selected.map(function (x) { return x + 1; }).join(",") + ")" : "";
     lines.push("DECK OUTLINE: " + ctx.slideCount + " slides" + sel + (ctx.truncated ? " (only the first slides are listed)" : "") + ", host: " + ctx.host +
       "\n(Per-shape text may be shortened in this outline. To check/refer to full slide text, first emit a read_slide op for that slide - its reply shows every shape in full; never claim you cannot see content without using read_slide.)");
+    if (ctx.canDelete === false) {
+      lines.push("SLIDE DELETION: NOT available on this build (the add-in API cannot remove slides) - never emit delete_slide; restructure with create_slide/duplicate_slide_to/move_slide instead.");
+    }
     if (ctx.selection && (ctx.selection.shapes.length || ctx.selection.textPreview || ctx.selection.slides.length)) {
       var selBits = [];
       if (ctx.selection.slides.length) selBits.push("slides " + ctx.selection.slides.map(function (x) { return x + 1; }).join(","));
@@ -4371,6 +4408,7 @@ OfficeDeck.prototype.setNotes = function (i, text) {
         sys += "\n\nUSER CUSTOM INSTRUCTIONS (from Settings - obey these):\n" + _cp;
       }
       if (!(SK.cfg && SK.cfg.generateNotes)) sys += "\n" + NOTES_OFF_RULE;
+      if (ctx && ctx.canDelete === false) sys += "\n" + DELETE_RULE;
       sys += "\n" + CLARIFY_RULE;
       if (MAKEOVER_RE.test(instruction)) sys += "\n" + MAKEOVER_BRIEF;
       var user = (ctx ? formatContext(ctx) : "(no deck context requested)") + "\n\nUSER REQUEST:\n" + instruction;

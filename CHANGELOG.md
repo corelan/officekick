@@ -42,6 +42,23 @@
   exact layout Office honors, and docs gain the manual Trust Center +
   reg-add unblock for machines that installed older builds.
 
+## 0.9.287
+
+### Fixed
+- "write text onto the slides" landed as five failures on a fresh build:
+  every story slide came from a TITLE-ONLY layout (no body placeholder) and
+  the body write threw "No body/content placeholder found on slide N" for
+  each one, retry included - while a delete_slide op in the same plan hit
+  "this build cannot delete slides". Two changes: edit_slide's body write
+  now FALLS BACK to a new text box at the standard body band (48,190,864x300
+  per the make-over grid) when the slide has no body placeholder - two
+  creation forms mirroring the 0.9.233/0.9.261 textbox ladder, the friendly
+  error only when both fail, and the row reports "content set in a new text
+  box". And the deck context now carries canDeleteSlides (probed from
+  slides.removeAt): the outline gains a SLIDE DELETION row and the ask gains
+  a rule that forbids delete_slide ops on builds without it, telling the
+  model to restructure by adding slides instead.
+
 ## 0.9.286
 
 ### Added
