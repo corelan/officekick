@@ -30,6 +30,21 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.276
+
+### Fixed
+- the startup dependency install could fail OPAQUELY on a fresh box: the
+  managed Python 3.15 runtime may lack a cryptography wheel (a source build
+  needs Rust) or even pip itself. The startup ensure now (1) bootstraps pip
+  with ensurepip when `pip --version` fails, (2) tries
+  `--only-binary=:all:` FIRST so a missing wheel fails in seconds instead
+  of a long broken source build, then the normal --user/bare attempts, and
+  (3) prints the pip failure reason ON THE CONSOLE (it only went to
+  install.log before - field report: the picker locked with no reason
+  visible). The picker's lock text no longer claims the package installs
+  "during the certificate step" - it names the failed startup install,
+  install.log, and exactly what to run.
+
 ## 0.9.275
 
 ### Fixed

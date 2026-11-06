@@ -522,8 +522,9 @@ def https_feasible():
                           " leaf (installer auto-installs it if missing)" %
                           ((" " + _ver) if _ver else ""))
     except ImportError:
-        reasons.append("the 'cryptography' package is missing - the installer"
-                       " auto-installs it (pip --user) during the certificate step")
+        reasons.append("the 'cryptography' package is missing - the startup"
+                       " install failed (see install.log); re-run install.py or run:"
+                       " python -m pip install --user cryptography")
     try:
         import ssl  # noqa: F401
         techniques.append("python ssl - serves the https://localhost:%d pane"
@@ -556,13 +557,33 @@ def ensure_runtime_deps():
     step("installing the python 'cryptography' package (needed for the"
          " local https certificates; pip --user, no admin)...")
     import importlib
+    # pip itself may be absent from a managed runtime - bootstrap via ensurepip
+    rc, o = run_quiet([sys.executable, "-m", "pip", "--version"], timeout=30)
+    if rc != 0:
+        step("pip is missing from this Python - bootstrapping it (ensurepip)...")
+        rc, o = run_quiet([sys.executable, "-m", "ensurepip", "--upgrade",
+                           "--default-pip"], timeout=120)
+        _log("ensurepip: rc %d out=%s" % (rc, (o or "")[-200:]), ts=True)
+        if rc != 0:
+            warn("pip could not be bootstrapped (see install.log) - run:"
+                 " python -m ensurepip --upgrade")
+    # wheel-only FIRST: a source build needs a Rust toolchain and fails late
+    # (Python 3.15-era runtimes may not have cryptography wheels yet)
     ok_done = False
-    for pip_args in (["--user"], []):
+    last_out = ""
+    for pip_args in (["--user", "--only-binary=:all:"], ["--only-binary=:all:"],
+                     ["--user"], []):
         rc, o = run_quiet([sys.executable, "-m", "pip", "install"] +
                           pip_args + ["cryptography"], timeout=600)
+        last_out = (o or "")
         _log("startup pip install %scryptography: rc %d out=%s"
              % ((" ".join(pip_args) + " ") if pip_args else "", rc,
-                (o or "")[-200:]), ts=True)
+                last_out[-220:]), ts=True)
+        if rc != 0:
+            # surface WHY on the console: no wheel / no pip / TLS / proxy
+            tail = " ".join(last_out.split())[-180:]
+            if tail:
+                warn("pip: %s" % tail)
         if rc == 0:
             importlib.invalidate_caches()
             try:
@@ -575,7 +596,8 @@ def ensure_runtime_deps():
         ok("the 'cryptography' package is installed")
     else:
         warn("could not install 'cryptography' at startup - Outlook stays"
-             " locked; run: python -m pip install --user cryptography")
+             " locked; run: python -m pip install --user cryptography"
+             " (the reason is in install.log)")
         _log("startup dependency install failed (cryptography, Windows)")
     return ok_done
 
