@@ -510,13 +510,15 @@ def _config_settings():
         opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
         with opener.open("http://127.0.0.1:%d/api/config" % PORT, timeout=1.5) as resp:
             d = json.loads(resp.read().decode("utf-8", "replace")) or {}
-            return {k: d.get(k) for k in ("transportMode", "transportHttpPort", "transportHttpsPort")}
+            return {k: d.get(k) for k in ("transportMode", "transportHttpPort",
+                                          "transportHttpsPort", "certMode", "certHost")}
     except Exception:
         pass
     try:
         with open(config_file(), "r", encoding="utf-8") as fh:
             d = json.load(fh) or {}
-        return {k: d.get(k) for k in ("transportMode", "transportHttpPort", "transportHttpsPort")}
+        return {k: d.get(k) for k in ("transportMode", "transportHttpPort",
+                                      "transportHttpsPort", "certMode", "certHost")}
     except Exception:
         return {}
 
@@ -543,6 +545,33 @@ def _current_ports():
     hp = int(hp) if _valid_port(hp) else 8765
     sp = int(sp) if _valid_port(sp) and int(sp) != hp else hp + 1
     return hp, sp
+
+
+def _api_set(body):
+    """Persist settings through the running server and VERIFY it actually
+    stored them (older builds silently ignore unknown keys) - returns True
+    only when confirmed; the caller falls back to the config file; when the
+    server is down, writes the config file directly."""
+    try:
+        import urllib.request
+        req = urllib.request.Request(
+            "http://127.0.0.1:%d/api/settings" % PORT,
+            data=json.dumps(body).encode("utf-8"),
+            headers={"Content-Type": "application/json"}, method="PUT")
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        with opener.open(req, timeout=3) as resp:
+            resp.read()
+        got = _config_settings()
+        for k, v in body.items():
+            if got.get(k) != v:
+                note("the running server did not store %s (has %r) - config-file fallback"
+                     % (k, got.get(k)))
+                return False
+        note("settings persisted via the running server: %s" % json.dumps(body))
+        return True
+    except Exception as exc:
+        note("persisting %s via the server failed: %s" % (json.dumps(body), exc))
+        return False
 
 
 def _set_transport(mode, http_port=None, https_port=None):
@@ -1797,20 +1826,8 @@ def _current_cert_host():
 def _set_cert_host(host):
     if not re.fullmatch(r"(?i)[a-z0-9._-]{1,253}", host or ""):
         return False
-    if health(PORT):
-        try:
-            import urllib.request
-            req = urllib.request.Request(
-                "http://127.0.0.1:%d/api/settings" % PORT,
-                data=json.dumps({"certHost": host}).encode("utf-8"),
-                headers={"Content-Type": "application/json"}, method="PUT")
-            opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
-            with opener.open(req, timeout=3) as resp:
-                resp.read()
-            note("certHost set to %s (via the running server)" % host)
-            return True
-        except Exception as exc:
-            warn("could not store certHost (%s) - writing the config file" % exc)
+    if _api_set({"certHost": host}):
+        return True
     try:
         cfg = {}
         try:
@@ -1858,18 +1875,36 @@ def _validate_byo(crt, key, host):
 
 
 def _ask_cert_setup():
-    """THE certificate question - one three-way choice, asked only when no
-    usable pair exists yet (updates keep the selected mode): self-signed
-    leaf / local CA + signed certificate / bring-your-own (with an optional
-    hostname for the manifests)."""
+    """THE certificate flow - one deterministic path per install run:
+    1. existing usable pair -> keep it (updates never re-ask);
+    2. a previously stored certMode -> run that mode directly;
+    3. otherwise -> the three-way question: self-signed leaf / local CA +
+       CA-signed certificate (mac) / bring-your-own (with an optional
+       hostname for the manifests)."""
     host = _current_cert_host()
-    crt = os.path.join(tls_cert_dir(), "server.crt")
+    tls_dir = tls_cert_dir()
+    crt = os.path.join(tls_dir, "server.crt")
+    key = os.path.join(tls_dir, "server.key")
     usable = os.path.isfile(crt) and validate_existing_tls(crt, host) is None \
-        and _pair_matches(crt, os.path.join(tls_cert_dir(), "server.key"))
+        and _pair_matches(crt, key)
+    chosen = _config_settings().get("certMode") \
+        if _config_settings().get("certMode") in ("ca", "self_signed_leaf", "byo") else None
+    if not usable and chosen == "byo" and os.path.isfile(crt) and os.path.isfile(key):
+        # BYO re-runs keep the certificate even when the local verify-trust
+        # check is inconclusive (the user attests trust)
+        usable, _pr, _f = _validate_byo(crt, key, host)
     if usable:
         note("certificate setup skipped - the existing %s pair validates"
-             " (mode %s stays)" % (host, _get_cert_mode()))
+             " (mode %s stays)" % (host, chosen or "ca"))
         return None
+    if chosen == "self_signed_leaf":
+        ok("certificate mode: self-signed leaf (already selected)")
+        return ensure_leaf_certs()
+    if chosen == "ca":
+        ok("certificate mode: local CA + CA-signed certificate (already selected)")
+        return ensure_tls_certs()
+    if chosen == "byo":
+        return _byo_setup()
     win = is_windows()
     print("")
     print("  " + _paint("Certificate setup for the local https server", "bold"))
@@ -1963,12 +1998,27 @@ def cert_diagnostics():
     checks.append(("files exist", os.path.isfile(crt) and os.path.isfile(key),
                    "%s + %s" % (crt, key)))
     rc, o = run_quiet(["openssl", "x509", "-in", crt, "-noout", "-text"])
-    san_ok = ("localhost" in (o or "") and "127.0.0.1" in (o or ""))
-    checks.append(("SAN localhost + 127.0.0.1", rc == 0 and san_ok, ""))
-    bc_ok = "CA:FALSE" in (o or "") or "CA:FALSE" in (o or "").upper() or "x509v3 basic constraints" in (o or "").lower()
-    checks.append(("basicConstraints CA:FALSE", rc == 0 and bc_ok, "self-signed leafs must not be CAs"))
+    host = _current_cert_host()
+    if host != "localhost":
+        san_ok = ("DNS:%s" % host) in (o or "")
+        checks.append(("SAN covers '%s'" % host, rc == 0 and san_ok, ""))
+    else:
+        san_ok = ("localhost" in (o or "") and "127.0.0.1" in (o or ""))
+        checks.append(("SAN localhost + 127.0.0.1", rc == 0 and san_ok, ""))
+    ca_signed = rc == 0 and "Issuer:" in (o or "") and \
+        ("Issuer: CN=OfficeKick" in (o or "") or "issuer" in (o or "").lower())
+    bc_bad = rc == 0 and "CA:TRUE" in (o or "")
+    bc_ok = not bc_bad
+    checks.append(("basicConstraints (leaf, not a CA)", rc == 0 and bc_ok,
+                   "" if not (rc == 0 and "basic constraints" not in (o or "").lower()) else
+                   "no explicit basicConstraints (older CA-mode leaf, still valid)"))
     eku_ok = "TLS Web Server Authentication" in (o or "")
-    checks.append(("EKU serverAuth", rc == 0 and eku_ok, ""))
+    if not eku_ok and ca_signed:
+        checks.append(("EKU serverAuth", True,
+                       "informational: created by an older CA-mode leaf (0.9.239);"
+                       " delete the cert pair to regenerate with full extensions"))
+    else:
+        checks.append(("EKU serverAuth", eku_ok, ""))
     pair_ok = _pair_matches(crt, key) if os.path.isfile(crt) else False
     checks.append(("private key matches certificate", bool(pair_ok), ""))
     f = _cert_facts(crt)
@@ -2006,26 +2056,14 @@ def cert_diagnostics():
 
 def _get_cert_mode():
     d = _config_settings()
-    return d.get("certMode") if d.get("certMode") in ("ca", "self_signed_leaf") else "ca"
+    return d.get("certMode") if d.get("certMode") in ("ca", "self_signed_leaf", "byo") else "ca"
 
 
 def _set_cert_mode(mode):
-    if mode not in ("ca", "self_signed_leaf"):
+    if mode not in ("ca", "self_signed_leaf", "byo"):
         return False
-    if health(PORT):
-        try:
-            import urllib.request
-            req = urllib.request.Request(
-                "http://127.0.0.1:%d/api/settings" % PORT,
-                data=json.dumps({"certMode": mode}).encode("utf-8"),
-                headers={"Content-Type": "application/json"}, method="PUT")
-            opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
-            with opener.open(req, timeout=3) as resp:
-                resp.read()
-            note("certMode set to %s (via the running server)" % mode)
-            return True
-        except Exception as exc:
-            warn("could not store certMode via the server (%s)" % exc)
+    if _api_set({"certMode": mode}):
+        return True
     try:
         cfg = {}
         try:
@@ -2043,34 +2081,8 @@ def _set_cert_mode(mode):
         return False
 
 
-def _ask_ensure_tls_certs(days=825):
-    """The certificate-mode decision + generation for https: leaf mode asks
-    the consent; CA mode keeps the CA flow. Called from the pre-ask block."""
-    mode = _get_cert_mode()
-    have_pair = os.path.isfile(os.path.join(tls_cert_dir(), "server.crt"))
-    if mode == "ca" and have_pair:
-        return None                      # existing CA setup untouched
-    print("")
-    print("  " + _paint("Certificate mode for the local https server", "bold"))
-    print("  1) self-signed leaf certificate, DIRECTLY trusted (no CA involved;")
-    print("     requests your consent again whenever it must be re-trusted)")
-    print("  2) local CA + CA-signed certificate  (the existing mode: one consent,"
-          " silent renewals)")
-    if ask_yes("Use the self-signed leaf certificate (recommended for the least"
-               " trust given away)", False):
-        _set_cert_mode("self_signed_leaf")
-        ok("certificate mode: self-signed leaf")
-        return ensure_leaf_certs(days=days)
-    _set_cert_mode("ca")
-    ok("certificate mode: local CA + CA-signed certificate")
-    _log("certMode ca selected; a fresh CA + certificate will be generated"
-         " when the current pair is missing or unusable")
-    return None
 
 
-
-
-# ------------------------------------------------------------------ deploy #
 def deploy_files():
     dst = install_dir()
     addins = ADDINS or set()

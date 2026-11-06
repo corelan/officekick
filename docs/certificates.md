@@ -111,3 +111,23 @@ honored; report which host/port was refused.
 - macOS: a leaf trusted via `add-trusted-cert` is a trust anchor that cannot
   issue other certificates (basicConstraints CA:FALSE critical), so trusting
   it does not hand the app CA authority.
+
+## Certificate modes (0.9.242+)
+
+The installer asks ONE certificate question when no usable pair exists:
+self-signed leaf (no CA; trust consent per re-trust), local CA + signed
+certificate (mac), or bring-your-own PEM. Once a `certMode` is stored it
+never re-asks; updates keep it.
+
+- `ca` - the classic loopback CA (existing behaviour).
+- `self_signed_leaf` - a directly trusted `CN=localhost` leaf; no CA files.
+- `byo` - your own trusted PEM pair. Setup prompts for a hostname (default
+  `localhost`, stored as `certHost`); ALL https URLs in the manifests use it.
+  The server stays loopback-only: make your name resolve to 127.0.0.1
+  (e.g. an /etc/hosts entry). Trust is NOT changed by this mode - the pair
+  must already be trusted; if Office refuses it, leaf mode is the fallback.
+  Expiry/SAN/pair-match are hard checks; the local keychain verify result
+  is a note only.
+
+Transport (`transportMode` http/https) is unchanged: BYO/cert modes only
+apply when https is in use. Diagnostics: `install.py --cert-check`.

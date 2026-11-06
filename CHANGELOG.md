@@ -78,6 +78,36 @@
   Q&A pair lands in Previous requests and in the session history. Rules
   added to all three system prompts (MailKick's version says a clarify reply
   replaces - not supplements - the ops/reply round).
+## 0.9.242
+
+### Added
+- ONE certificate question in the installer (replaces the CA-vs-BYO ask):
+  self-signed leaf (directly trusted, renewed consent per re-trust) / local CA +
+  CA-signed certificate (mac; one consent, silent renewals) / bring-your-own
+  PEM pair. Asked only when no usable pair exists; updates keep the selected
+  mode. A stored certMode never re-prompts (leaf/CA/BYO each run directly).
+- BYO hostname: optional prompt during BYO setup, stored as the new `certHost`
+  server setting (validated DNS name). ALL https URLs in every manifest ride
+  that hostname; the server stays loopback-only, so a custom name must resolve
+  to 127.0.0.1 (e.g. an /etc/hosts entry). The reminder is printed at setup.
+- `certMode` accepts `byo`; `certHost` setting (PUT /api/settings, validated).
+- `_api_set`: settings persist through the running server only when it
+  CONFIRMS the stored value (older builds silently ignored unknown keys),
+  with a verified config-file fallback.
+- install.py `--cert-check`: mode-aware diagnostics (older CA-mode leaves get
+  informational notes instead of leaf-mode failures; BYO hosts check SAN).
+
+### Fixed
+- install.py duplicated function definitions (splice waves) cleaned; every
+  top-level function is defined exactly once (`deploy_files` restored).
+- BYO copies guard against source == target (SameFileError).
+
+### Changed
+- installer `tls_phase` BYO branch validates the pair (SAN, pair match,
+  expiry; keychain-trust result is a note - the user attests trust).
+- `render_manifest(addin_dir, port, https_port, host)` and
+  `validate_existing_tls(crt, host)` are hostname-aware.
+
 ## 0.9.241
 ### Added (self-signed leaf certificate mode, no CA)
 - New server setting `certMode` (`ca` - the existing classic mode - or
