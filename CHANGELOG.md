@@ -78,6 +78,36 @@
   Q&A pair lands in Previous requests and in the session history. Rules
   added to all three system prompts (MailKick's version says a clarify reply
   replaces - not supplements - the ops/reply round).
+## 0.9.248 (store-deletion hardening, found by the real install->uninstall audit)
+
+### Fixed
+- certificate fingerprints were computed from binary DER output through the
+  text-capturing runner and produced the sha1 of an EMPTY string - trust
+  removal then deleted NOTHING (the removal announced success while the
+  keychain item stayed). Fingerprints come from openssl -fingerprint now.
+- `security remove-trusted-cert -k` does not exist (the trust removal silently
+  failed every time) - removed; when the cert file is gone the USER-domain
+  trust record is dropped by rebuilding the exported trust plist without our
+  sha1 hash key.
+- `security find-certificate ... ~/Library/Keychains/login.keychain-db` (full
+  path) silently returns NOTHING - the keychain NAME is required. All keychain
+  identification/removal uses the name (with a no-arg fallback) now.
+- the render/sideload renewal routed by PLATFORM, not by the stored certMode:
+  on mac a leaf-mode install whose pair was missing fell back to CA mode and
+  generated + IMPORTED a loopback CA behind a leaf-mode choice. Routing and
+  the leaf-reuse guard (meta can no longer "reuse" a nonexistent file) are
+  fixed; found by the live audit.
+- cert metadata (fingerprints) now lives in the CONFIG dir so an uninstall can
+  identify + remove a leaf trust entry even after the certificate files are
+  gone; a stray duplicate certMode PUT whitelist that would 400 "byo" is
+  removed.
+
+### Verified
+- real install (leaf: generated, consent, trusted, sha-verified in the
+  keychain) -> uninstall (leaf item + trust record + files + meta gone,
+  config kept, certMode reset to leaf, sessions intact) -> reinstall for a
+  working leaf-only setup. Zero CA artifacts left after any of it.
+
 ## 0.9.247
 
 ### Changed

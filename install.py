@@ -1556,27 +1556,31 @@ def _leaf_meta_save(meta):
 
 
 def _leaf_fingerprints(crt):
-    """(sha256, sha1) of the certificate DER (used for store identification)."""
-    import hashlib
-    try:
-        rc, der = run_quiet(["openssl", "x509", "-in", crt, "-outform", "DER"])
-        if rc != 0 or not der:
-            return None, None
-        b = None
-        for line in der.splitlines():
-            ln = line.strip()
-            try:
-                b = bytes.fromhex(ln)
-            except ValueError:
-                continue
-            if b:
-                break
-        if b is None:
-            return None, None
-        return (hashlib.sha256(b).hexdigest().upper(),
-                hashlib.sha1(b).hexdigest().upper())
-    except Exception:
+    """(sha256, sha1) of the certificate, used for trust-store identification.
+    Uses openssl's own fingerprint output - the previous DER-bytes route broke
+    on every binary/encoding roundtrip and produced the sha1 of an empty
+    string, which made trust removal delete NOTHING (found by a real
+    install -> uninstall audit)."""
+    import re as _re
+    if crt is None or not (crt and os.path.isfile(crt)):
         return None, None
+    sha256 = sha1 = None
+    try:
+        rc, o = run_quiet(["openssl", "x509", "-in", crt, "-noout",
+                           "-fingerprint", "-sha256"])
+        if rc == 0:
+            m = _re.search(r"=([0-9A-Fa-f:]+)", o or "")
+            if m:
+                sha256 = m.group(1).replace(":", "").upper()
+        rc, o = run_quiet(["openssl", "x509", "-in", crt, "-noout",
+                           "-fingerprint", "-sha1"])
+        if rc == 0:
+            m = _re.search(r"=([0-9A-Fa-f:]+)", o or "")
+            if m:
+                sha1 = m.group(1).replace(":", "").upper()
+    except Exception:
+        pass
+    return sha256, sha1
 
 
 def _leaf_install_id():
@@ -1699,6 +1703,36 @@ def _install_leaf_trust(crt):
     return False
 
 
+def _trust_settings_forget_sha1(sha1):
+    """Remove a USER-domain trust-settings record identified by its sha1 hash
+    (the cert FILE may no longer exist): export the plist, drop the hash key,
+    re-import. Used for our own entries only - hashes we stored ourselves."""
+    import plistlib
+    try:
+        p = os.path.join(config_dir(), "trust_export_user.plist")
+        rc, _o = run_quiet(["security", "trust-settings-export", p])
+        if rc != 0 or not os.path.isfile(p):
+            return False
+        pl = plistlib.load(open(p, "rb"))
+        tl = pl.get("trustList", {})
+        key40 = [k for k in tl if k.upper() == str(sha1).upper()]
+        if not key40:
+            return True    # nothing to forget
+        for k in key40:
+            tl.pop(k)
+        plistlib.dump(pl, open(p, "wb"), fmt=plistlib.FMT_XML)
+        rc, _o = run_quiet(["security", "trust-settings-import", p])
+        try:
+            os.remove(p)
+        except OSError:
+            pass
+        _log("trust-settings hash entry %s removed (re-import)" % key40[0], ts=True)
+        return rc == 0
+    except Exception as exc:
+        warn("could not rebuild the user trust settings: %s" % exc)
+        return False
+
+
 def _remove_leaf_trust(crt):
     """Remove OUR leaf trust (and only ours - identified by fingerprint hash),
     during a replacement or uninstallation. Never touches other entries."""
@@ -1710,15 +1744,25 @@ def _remove_leaf_trust(crt):
     if sha1 is None:
         sha1 = meta.get("sha1")
     if is_mac():
-        # remove-trusted-cert takes the cert FILE; delete the leaf from the
-        # keychain by its hash so other certificates are untouched
-        subprocess.run(["security", "remove-trusted-cert", "-k",
-                        os.path.expanduser("~/Library/Keychains/login.keychain-db"),
-                        crt], capture_output=True)
-        if sha1:
-            run_quiet(["security", "delete-certificate", "-Z", sha1,
-                       os.path.expanduser("~/Library/Keychains/login.keychain-db")])
-        _log("leaf trust/certificate removal attempted (sha1=%s)" % sha1)
+        # remove-trusted-cert takes the cert FILE when present (NO -k flag:
+        # that flag does not exist - the old call failed every time and left
+        # the trust entry in place); the keychain item goes by sha1.
+        kc = "login.keychain"
+        if crt and os.path.isfile(crt):
+            rc, _o = run_quiet(["security", "remove-trusted-cert", crt])
+            _log("trust settings removed via the cert file (rc %d)" % rc, ts=True)
+        elif sha1:
+            _trust_settings_forget_sha1(sha1)
+        oki = False
+        if sha1 and str(sha1) not in ("",) and sha1.upper() != "DA39A3EE5E6B4B0D3255BFEF95601890AFD80709":
+            rc, o = run_quiet(["security", "delete-certificate", "-Z", sha1, kc])
+            oki = (rc == 0)
+            _log("keychain item delete (sha1=%s): rc %d %s" % (sha1, rc, o or ""),
+                 ts=True)
+        else:
+            warn("no usable fingerprint for the leaf trust entry - check the"
+                 " keychain manually (the stored metadata was empty)")
+        _log("leaf trust/certificate removal attempted (sha1=%s)" % sha1, ts=True)
         return True
     if sha1:
         rc, o = run_quiet(["certutil", "-user", "-delstore", "TrustedPeople", sha1])
@@ -1795,7 +1839,11 @@ def ensure_leaf_certs(days=825, consent_ask=True):
     meta = _leaf_meta_load()
     if reason is None and isinstance(meta.get("days"), int) and meta["days"] < 30:
         reason = "expires in %d days" % meta["days"]
-    if reason is None and meta.get("mode") == "self_signed_leaf":
+    if reason is None and os.path.isfile(crt) and os.path.isfile(key) \
+            and meta.get("mode") == "self_signed_leaf":
+        # REUSE REQUIRES THE FILES: trusting the metadata alone produced a
+        # "reused" pair of nonexistent files and pushed the install into the
+        # CA-mode fallback (found in a live audit)
         _record("reused" + (" (%s)" % ("trusted" if meta.get("trusted") else "NOT trusted yet")))
         _log("leaf mode: reusing the existing certificate (still valid; not"
              " regenerated on every launch)")
@@ -2271,11 +2319,18 @@ def render_and_sideload():
         ADDINS.clear()
         ADDINS.update(renderable)
     if transport == "https":
-        leaf_windows = (not is_mac()) and _get_cert_mode() == "self_signed_leaf"
-        if not tls_pair and (is_mac() or leaf_windows):
+        cm = _get_cert_mode()
+        if not tls_pair and (is_mac() or cm == "self_signed_leaf"):
             warn("transport mode https - the certificate check did not pass;"
                  " creating/renewing the certificate now")
-            pair = ensure_leaf_certs() if leaf_windows else ensure_tls_certs()
+            # route by the STORED MODE - the old platform route generated a CA
+            # even in leaf mode (found in a live audit)
+            if cm == "self_signed_leaf":
+                pair = ensure_leaf_certs()
+            elif cm == "ca":
+                pair = ensure_tls_certs()
+            else:
+                pair = None    # bring-your-own cannot be generated automatically
             reason2 = None
             if pair:
                 reason2 = validate_existing_tls(pair[0])
@@ -2748,18 +2803,25 @@ def windows_autostart_present():
 
 
 # -------------------------------------------------------------- uninstall #
-def _mac_keychain_shas(cn, keychain="login.keychain-db"):
-    """SHA1 hashes of every login-keychain item under a common name."""
-    _rc, pems = run_quiet(["security", "find-certificate", "-a", "-p",
-                           "-c", cn, os.path.expanduser("~/Library/Keychains/" + keychain)])
+def _mac_keychain_shas(cn):
+    """SHA1 hashes of every login-keychain item under a common name.
+    security accepts the keychain NAME, not a path: the full path form
+    silently returns NOTHING (found when a CA item survived a removal)."""
     shas = []
-    for blob in re.findall(r"-----BEGIN CERTIFICATE-----.*?-----END CERTIFICATE-----",
-                           pems or "", re.S):
-        b64 = "".join(l for l in blob.splitlines() if "-----" not in l)
-        try:
-            shas.append(hashlib.sha1(base64.b64decode(b64)).hexdigest())
-        except Exception:
-            pass
+    for kc in ("login.keychain", None):
+        cmd = ["security", "find-certificate", "-a", "-p", "-c", cn]
+        if kc:
+            cmd.append(kc)
+        _rc, pems = run_quiet(cmd)
+        for blob in re.findall(r"-----BEGIN CERTIFICATE-----.*?-----END CERTIFICATE-----",
+                               pems or "", re.S):
+            b64 = "".join(l for l in blob.splitlines() if "-----" not in l)
+            try:
+                h = hashlib.sha1(base64.b64decode(b64)).hexdigest()
+                if h not in shas:
+                    shas.append(h)
+            except Exception:
+                pass
     return shas
 
 
@@ -2781,8 +2843,8 @@ def _remove_ca_trust(ca_crt=None):
     gone = 0
     for h in _mac_keychain_shas("OfficeKick Loopback CA"):
         if known is None or h in known:
-            run_quiet(["security", "delete-certificate", "-Z", h,
-                       os.path.expanduser("~/Library/Keychains/login.keychain-db")])
+            rc, o = run_quiet(["security", "delete-certificate", "-Z", h, "login.keychain"])
+            _log("CA keychain item delete (%s): rc %d %s" % (h[:12], rc, o or ""), ts=True)
             gone += 1
     _log("loopback CA keychain items removed: %d" % gone, ts=True)
     return True
@@ -2947,8 +3009,8 @@ def do_uninstall(purge, rm_certs=None):
                 _remove_leaf_trust(crt_p)
                 ok("leaf trust entry removed via the stored fingerprint")
             try:
-                if os.path.isfile(_leaf_meta_path()) and os.path.isfile(crt_p) is False:
-                    os.remove(_leaf_meta_path())   # nothing left to identify
+                if os.path.isfile(_leaf_meta_path()):
+                    os.remove(_leaf_meta_path())   # the identified entry is gone
             except OSError:
                 pass
         if DRY_RUN:
