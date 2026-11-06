@@ -200,6 +200,11 @@ def note(msg):
 
 
 # ----------------------------------------------------------- ui toolkit --- #
+class MenuAbort(Exception):
+    """The user aborted a sub-flow (add-in selection 'q') - the interactive
+    main menu catches it and re-shows the menu instead of exiting."""
+
+
 ANSI = {
     "bold": "\x1b[1m", "dim": "\x1b[2m", "rev": "\x1b[7m",
     "red": "\x1b[31m", "green": "\x1b[32m", "yellow": "\x1b[33m",
@@ -285,7 +290,7 @@ def menu_pick(rows, start=0, hint=""):
 
     def draw(first):
         if not first:
-            sys.stdout.write("\x1b[%dA\r\x1b[J" % (len(rows) + 1))
+            sys.stdout.write("\x1b[%dA\r\x1b[J" % (len(rows) + 2))
         for i, (act, label, style) in enumerate(rows):
             if label == "@SEP":
                 print("")
@@ -295,6 +300,7 @@ def menu_pick(rows, start=0, hint=""):
                 print(_paint(" > " + body, "rev"))
             else:
                 print("   " + ((_paint(body, style)) if style else body))
+        print("")
         print(_paint((hint or ""), "dim"))
 
     draw(True)
@@ -344,7 +350,7 @@ def toggle_pick(rows, hint=""):
 
     def draw(first):
         if not first:
-            sys.stdout.write("\x1b[%dA\r\x1b[J" % (len(rows) + 1))
+            sys.stdout.write("\x1b[%dA\r\x1b[J" % (len(rows) + 2))
         for i, (_act, checked, label, extra, style) in enumerate(rows):
             box = "[x]" if checked else "[ ]"
             if i == idx:
@@ -354,6 +360,7 @@ def toggle_pick(rows, hint=""):
                 if extra:
                     line += " " + ((_paint(extra, style or "dim")) if sys.stdout.isatty() else extra)
                 print(line)
+        print("")
         print(_paint((hint or ""), "dim"))
 
     draw(True)
@@ -506,9 +513,9 @@ def select_addins(interactive):
             _log("add-in picker: %s %s" % (kind, val), ts=True)
             print("")
             if kind == "abort":
-                print("  aborted - nothing was changed.")
+                print("  add-in selection aborted - back to the menu.")
                 note("add-in selection aborted by user")
-                sys.exit(130)
+                raise MenuAbort("add-in selection aborted")
             if kind == "done":
                 arrow_done = True
                 break
@@ -550,9 +557,9 @@ def select_addins(interactive):
         choice = input("  > toggle 1/2/3 + Enter to toggle, EMPTY = continue, q = abort: ").strip().lower()
         _log("add-in selection input: %r" % choice, ts=True)
         if choice in ("q", "quit", "abort", "0"):
-            print("  aborted - nothing was changed.")
+            print("  add-in selection aborted - back to the menu.")
             note("add-in selection aborted by user")
-            sys.exit(130)
+            raise MenuAbort("add-in selection aborted (typed)")
         if choice == "":
             break
         if choice in ("1", "2", "3"):
@@ -584,9 +591,9 @@ def select_addins(interactive):
             print("  choose 1, 2, 3, empty to continue or q to abort")
     ADDINS = {f for (f, _l, _w) in rows if state[f]}
     if not ADDINS:
-        print("  nothing selected - nothing was changed.")
+        print("  nothing selected - back to the menu.")
         note("add-in selection: nothing selected")
-        sys.exit(0)
+        raise MenuAbort("add-in selection empty")
     ok("installing: " + (", ".join(app_label(a) for a in sorted(ADDINS))))
     _log("add-ins selected: %s" % ", ".join(sorted(ADDINS)), ts=True)
     return set(ADDINS)
@@ -2119,23 +2126,29 @@ def main():
         act = _rows[sel][0]
         print("")
         _log("menu selection: %s" % act, ts=True)
-        if act == "1":
-            install("Install", interactive=True)
-            return
-        if act == "2":
-            git_pull()
-            install("Update", interactive=False)
-            return
-        if act == "3":
-            server_menu()
-            banner("menu")
-            continue
-        if act == "4":
-            banner("uninstall")
-            do_uninstall(None)
-            return
-        return   # act == "0"
+        try:
+            if act == "1":
+                install("Install", interactive=True)
+            elif act == "2":
+                git_pull()
+                install("Update", interactive=False)
+            elif act == "3":
+                server_menu()
+            elif act == "4":
+                banner("uninstall")
+                do_uninstall(None)
+            else:
+                return   # act == "0"
+        except MenuAbort:
+            pass          # sub-flow aborted - show the menu again
+        banner("menu")    # flows loop back to the menu instead of quitting
+        continue
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("")
+        print("  aborted (Ctrl-C)")
+        raise SystemExit(130)
