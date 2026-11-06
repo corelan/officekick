@@ -16,15 +16,15 @@ MailKick (Outlook). Works on macOS and Windows; auto-detects the platform.
     python3 install.py --ribbon       opt-in: render the AI ribbon commands
                                       (experimental on this Office build)
     python3 install.py --mailkick     non-interactive opt-in: install Outlook and
-                                      create the self-signed loopback CA + certificate
+                                      create the local self-signed certificate (leaf mode)
 
 Installer output is structured: short step lines on the console, the full
 detail trail (file lists, tool output, decisions) in install.log next to
 install.py. Word + PowerPoint are enabled by default; Outlook is off by
-default - enabling Outlook needs the https prerequisites and will create a
-self-signed loopback CA + localhost certificate (clearly warned about in the
-menu). On Windows no certificate is needed (Outlook rides the plain-http
-localhost listener there).
+default - enabling Outlook needs the https prerequisites and then asks for
+a certificate mode: a self-signed leaf (default, no CA), a loopback CA +
+signed certificate, or your own trusted pair. On Windows no certificate is
+needed (Outlook rides the plain-http localhost listener there).
 
 On Windows use: py -3 install.py (the py launcher; plain `python` is often
 the Microsoft Store alias that does not run scripts).
@@ -479,16 +479,16 @@ def https_feasible():
         techniques = []
         ov = shutil.which("openssl")
         if ov is None:
-            reasons.append("openssl not found - it generates the loopback CA +"
-                           " localhost certificate")
+            reasons.append("openssl not found - it generates the local"
+                           " certificate (leaf, or the CA-signed pair)")
         else:
             _rc, over = run_quiet(["openssl", "version"])
-            techniques.append("%s (%s) - generates the self-signed loopback CA"
-                              " + localhost certificate" % (
+            techniques.append("%s (%s) - generates the self-signed certificate"
+                              " (leaf, or CA + signed leaf)" % (
                                   os.path.basename(ov), (over or "").strip() or "openssl"))
         if shutil.which("security") is None:
             reasons.append("the macOS 'security' tool is missing - it imports "
-                           "+ trusts the CA in your keychains")
+                           "+ trusts the certificate in your keychains")
         else:
             techniques.append("the macOS 'security' tool - imports the CA into"
                               " your login keychain and marks it trusted")
@@ -738,8 +738,8 @@ def select_addins(interactive):
                              + _paint(" - Outlook is locked", "bold"))
             for rln in feas_why:
                 out_lines.append("    - " + rln)
-        out_lines.append(_paint("  Enabling Outlook creates a self-signed loopback CA +"
-                                " localhost certificate (asked to confirm first).", "dim"))
+        out_lines.append(_paint("  Enabling Outlook sets up a local https certificate"
+                                " (self-signed leaf by default; CA or your own as options).", "dim"))
         return out_lines
 
     msg = []   # picker feedback lines (repainted with the screen, never duplicated)
@@ -786,16 +786,16 @@ def select_addins(interactive):
                 note("outlook enable refused: %s" % "; ".join(feas_why))
                 continue
             if folder == "mailkick" and not state[folder] and is_mac():
-                go = ask_yes("Outlook needs a SELF-SIGNED loopback CA + localhost"
-                             " certificate (created + imported into your keychains"
-                             " during install) - continue", False)
+                go = ask_yes("Outlook needs a local https certificate (self-signed"
+                             " leaf by default - no CA; CA mode or your own pair are"
+                             " options; trust goes into your keychain) - continue", False)
                 note("outlook CA warning answer: %s" % ("yes" if go else "no"))
                 if not go:
                     state[folder] = False
                     msg = ["   - Outlook certificate setup declined - MailKick stays off."]
                     continue
-                msg = ["   - Outlook enabled - the self-signed loopback CA + certificate"
-                       " will be created during the certificate step."]
+                msg = ["   - Outlook enabled - the certificate setup (self-signed leaf"
+                       " / CA / your own) runs during the certificate step."]
                 state[folder] = not state[folder]
                 continue
             state[folder] = not state[folder]
@@ -1159,15 +1159,10 @@ def validate_user_cert(crt, key):
 
 
 def pick_mailkick_route():
-    """Which TLS route for Outlook (macOS only; called only when MailKick is
-    selected). 'auto' = generate a self-signed loopback CA + localhost
-    certificate (the user was already warned about this in the add-in menu),
-    'custom' = the user's own already-trusted PEM pair, 'skip' = none.
-    Called BEFORE the certificates phase line so the questions precede the
-    action."""
-    good, _how, techniques = https_feasible()
-    del good
-    global MAILKICK_CERT, MAILKICK_KEY
+    """Non-interactive TLS route fallback for MailKick (automation): a
+    user-supplied certificate (--mailkick-cert/key) validates -> 'custom';
+    anything else -> 'auto' (reuse-first applies). The interactive
+    leaf/CA/BYO question lives in _ask_cert_setup()."""
     if MAILKICK_CERT or MAILKICK_KEY:
         good2, problems = validate_user_cert(MAILKICK_CERT, MAILKICK_KEY)
         if good2:
@@ -1175,30 +1170,9 @@ def pick_mailkick_route():
         for pr in problems:
             warn("provided MailKick certificate: " + pr)
         return "skip"
-    if DRY_RUN or (not sys.stdin.isatty()):
-        return "auto"    # automation opt-in (--mailkick): reuse-first applies
-    print("")
-    print("  " + _paint("Outlook pane transport", "bold") + " - the self-signed")
-    print("  loopback CA + certificate (%s) or your own trusted pair." %
-          (techniques[0].split(" - ")[0] if techniques else "openssl"))
-    MAILKICK_CHOICE_TMP = ask_yes("Use the self-signed loopback CA (recommended)", True)
-    if MAILKICK_CHOICE_TMP:
-        return "auto"
-    for attempt in range(3):
-        crt = input("  " + _paint("? path to your TLS certificate (PEM): ", "cyan")).strip()
-        key = input("  " + _paint("? path to the matching private key (PEM, unencrypted): ", "cyan")).strip()
-        good2, problems = validate_user_cert(crt, key)
-        if good2:
-            MAILKICK_CERT, MAILKICK_KEY = crt, key
-            return "custom"
-        for pr in problems:
-            warn(pr)
-        print("       (attempt %d/3)" % (attempt + 1))
-    print("  giving up - Outlook will not be registered.")
-    return "skip"
+    return "auto"
 
 
-# ------------------------------------------------------------ loopback TLS #
 def validate_existing_tls(crt, host=None):
     """Check the cert ALREADY on disk: unexpired, SAN (localhost, or a BYO
     hostname), trusted. None = usable; a short reason string = regenerate."""
@@ -1916,8 +1890,8 @@ def _ask_cert_setup():
     ca_no = 2 if not win else None
     print("    %d) bring your OWN already-trusted certificate + key (PEM files)" % byo_no)
     while True:
-        ans = input("  %s" % _paint("? choice [default %s]: " % (ca_no or 1), "cyan")).strip() \
-            or (str(ca_no) if ca_no else "1")
+        ans = input("  %s" % _paint("? choice [default 1 (self-signed leaf)]: ", "cyan")).strip() \
+            or "1"
         _log("certificate setup choice: %r" % ans, ts=True)
         if ans == "1":
             _set_cert_mode("self_signed_leaf")
@@ -2819,8 +2793,8 @@ def preflight(mode):
              " autostart login item is first registered - that IS the local"
              " server app; (2) a Local Network prompt the first time a model"
              " on your LAN is used - click Allow so panes can reach e.g."
-             " Ollama on another machine; (3) the CA-trust confirm when the"
-             " loopback CA is imported.")
+             " Ollama on another machine; (3) a certificate-trust confirm when"
+             " the local certificate is imported into the keychain.")
     else:
         note("popups you may see: a one-time Windows Defender Firewall ask"
              " about Python listening - Allow keeps LAN models (Ollama)"
@@ -2850,12 +2824,18 @@ def install(mode_name="Install", interactive=True):
     # (the certificate phase acts on the answer), the autostart ask sits
     # right before its own phase
     if "mailkick" in (ADDINS or set()) and is_mac() and MAILKICK_CHOICE is None:
-        if _get_cert_mode() == "self_signed_leaf":
-            MAILKICK_CHOICE = "auto"
-            ensure_leaf_certs()          # questions happen BEFORE the phase line
-            _print_cert_facts()
+        if DRY_RUN or (not sys.stdin.isatty()):
+            MAILKICK_CHOICE = pick_mailkick_route()   # automation: reuse-first
         else:
-            MAILKICK_CHOICE = pick_mailkick_route()
+            r = _ask_cert_setup()        # three-way: leaf / CA / BYO (asked BEFORE the phase)
+            _crt = os.path.join(tls_cert_dir(), "server.crt")
+            _key = os.path.join(tls_cert_dir(), "server.key")
+            if r or (os.path.isfile(_crt) and os.path.isfile(_key)
+                     and _pair_matches(_crt, _key)):
+                MAILKICK_CHOICE = "auto"  # pair ready; the certificates phase validates it
+            else:
+                MAILKICK_CHOICE = "skip"  # BYO given up -> Outlook not registered
+            _print_cert_facts()
     phase(3, total, "certificates", tls_phase)
     _print_cert_facts()
     phase(4, total, "registering with Office", registration_phase)
@@ -3143,7 +3123,8 @@ def transport_menu():
         return [
             ("1", "auto    (https when a working certificate exists - the classic default)", None),
             ("2", "plain http only (certificates ignored; Outlook not usable with this)", None),
-            ("3", "https always (creates/renews the loopback CA + certificate for ALL panes)", None),
+            ("3", "https always (https for ALL panes; a local self-signed certificate"
+                  " is created/renewed - leaf, CA or your own)", None),
             (None, "@SEP", None),
             ("4", "set the http port   (current: %d)" % hp, None),
             ("5", "set the https port  (current: %d)" % sp, None),
@@ -3350,7 +3331,7 @@ def main():
     ap.add_argument("--install", action="store_true",
                     help="non-interactive install: Word + PowerPoint (Outlook only with --mailkick / --mailkick-cert+--mailkick-key, or when Outlook was previously installed)")
     ap.add_argument("--mailkick", action="store_true",
-                    help="with --install: also install Outlook (creates the self-signed loopback CA + localhost certificate)")
+                    help="with --install: also install Outlook (creates the local self-signed certificate in leaf mode when none exists)")
     ap.add_argument("--update", action="store_true", help="git pull + update (non-interactive)")
     ap.add_argument("--uninstall", action="store_true", help="remove the add-ins + server")
     ap.add_argument("--start", action="store_true", help="start the local server only (no install changes)")
