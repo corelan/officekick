@@ -592,46 +592,6 @@ def _set_transport(mode, http_port=None, https_port=None):
         return False
 
 
-def _set_transport(mode):
-    """Persist the transport mode: through the running server (settings PUT)
-    so both sides agree, or straight into the config file when it is down."""
-    if mode not in ("auto", "http", "https"):
-        return False
-    if health(PORT):
-        try:
-            import urllib.request
-            req = urllib.request.Request(
-                "http://127.0.0.1:%d/api/settings" % PORT,
-                data=json.dumps({"transportMode": mode}).encode("utf-8"),
-                headers={"Content-Type": "application/json"}, method="PUT")
-            opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
-            with opener.open(req, timeout=3) as resp:
-                resp.read()
-            note("transportMode set to %s (via the running server)" % mode)
-            return True
-        except Exception as exc:
-            warn("could not store transportMode via the server (%s) - writing the config file" % exc)
-    try:
-        cfg = {}
-        try:
-            with open(config_file(), "r", encoding="utf-8") as fh:
-                cfg = json.load(fh) or {}
-        except Exception:
-            cfg = {}
-        cfg["transportMode"] = mode
-        with open(config_file(), "w", encoding="utf-8") as fh:
-            json.dump(cfg, fh, indent=2)
-        try:
-            _protect_secret(config_file())
-        except OSError:
-            pass
-        note("transportMode set to %s (config file written)" % mode)
-        return True
-    except Exception as exc:
-        warn("could not write %s: %s" % (config_file(), exc))
-        return False
-
-
 def _protect_secret(path, writable=True):
     """chmod 0600 on macOS/POSIX. On Windows os.chmod is a stub (only the
     read-only bit), so the real protection is NTFS ACLs via icacls: strip
@@ -1222,14 +1182,18 @@ def pick_mailkick_route():
 
 
 # ------------------------------------------------------------ loopback TLS #
-def validate_existing_tls(crt):
-    """Check the cert ALREADY on disk: unexpired, localhost SAN, trusted.
-    None = usable; a short reason string = regenerate."""
+def validate_existing_tls(crt, host=None):
+    """Check the cert ALREADY on disk: unexpired, SAN (localhost, or a BYO
+    hostname), trusted. None = usable; a short reason string = regenerate."""
+    host = host or _current_cert_host()
     rc, _o = run_quiet(["openssl", "x509", "-in", crt, "-noout", "-checkend", "0"])
     if rc != 0:
         return "expired or not yet valid"
     rc, o = run_quiet(["openssl", "x509", "-in", crt, "-noout", "-text"])
-    if "DNS:localhost" not in o and "IP Address:127.0.0.1" not in o:
+    if host != "localhost":
+        if ("DNS:%s" % host) not in o:
+            return "the certificate does not cover '%s' (no DNS SAN for it)" % host
+    elif "DNS:localhost" not in o and "IP Address:127.0.0.1" not in o:
         return "no localhost subjectAltName"
     rc, o = run_quiet(["security", "verify-cert", "-c", crt, "-p", "ssl"])
     if rc != 0:
@@ -1834,6 +1798,173 @@ def ensure_leaf_certs(days=825, consent_ask=True):
     return None
 
 
+def _current_cert_host():
+    """The hostname the https manifests use (the certHost setting)."""
+    d = _config_settings()
+    h = str(d.get("certHost") or "localhost")
+    import re as _re
+    return h.lower() if _re.fullmatch(r"(?i)[a-z0-9._-]{1,253}", h) else "localhost"
+
+
+def _set_cert_host(host):
+    if not re.fullmatch(r"(?i)[a-z0-9._-]{1,253}", host or ""):
+        return False
+    if health(PORT):
+        try:
+            import urllib.request
+            req = urllib.request.Request(
+                "http://127.0.0.1:%d/api/settings" % PORT,
+                data=json.dumps({"certHost": host}).encode("utf-8"),
+                headers={"Content-Type": "application/json"}, method="PUT")
+            opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+            with opener.open(req, timeout=3) as resp:
+                resp.read()
+            note("certHost set to %s (via the running server)" % host)
+            return True
+        except Exception as exc:
+            warn("could not store certHost (%s) - writing the config file" % exc)
+    try:
+        cfg = {}
+        try:
+            with open(config_file(), "r", encoding="utf-8") as fh:
+                cfg = json.load(fh) or {}
+        except Exception:
+            cfg = {}
+        cfg["certHost"] = host
+        with open(config_file(), "w", encoding="utf-8") as fh:
+            json.dump(cfg, fh, indent=2)
+        _protect_secret(config_file())
+        return True
+    except Exception as exc:
+        warn("could not write certHost: %s" % exc)
+        return False
+
+
+def _validate_byo(crt, key, host):
+    """(ok, [problems], facts) for a bring-your-own pair + hostname."""
+    problems = []
+    if not (os.path.isfile(crt) and os.path.isfile(key)):
+        return False, ["certificate or key file not found"], {}
+    f = _cert_facts(crt)
+    if not f:
+        problems.append("the certificate could not be parsed (openssl)")
+    rc, o = run_quiet(["openssl", "x509", "-in", crt, "-noout", "-text"])
+    if rc == 0 and ("DNS:%s" % host) not in o and ("IP Address:%s" % host) not in o             and host != "localhost":
+        problems.append("the certificate SAN does not cover '%s'" % host)
+    if rc == 0 and "CA:TRUE" in o:
+        problems.append("this is a CA certificate, not a server certificate")
+    if not _pair_matches(crt, key):
+        problems.append("the private key does not match the certificate")
+    reason = validate_existing_tls(crt, host)
+    if reason:
+        if "not trusted" in reason or "chain is not trusted" in reason:
+            # BYO: the user attests the certificate is already trusted; the
+            # local verify result is reported, not a hard rejection
+            note("verify-cert could not confirm trust locally (%s) - in BYO"
+                 " mode you guarantee the trust; if Office refuses the pane,"
+                 " the certificate is not trusted after all (leaf mode is the"
+                 " alternative)" % reason)
+        else:
+            problems.append("not usable: %s" % reason)
+    return (not problems), problems, f
+
+
+def _ask_cert_setup():
+    """THE certificate question - one three-way choice, asked only when no
+    usable pair exists yet (updates keep the selected mode): self-signed
+    leaf / local CA + signed certificate / bring-your-own (with an optional
+    hostname for the manifests)."""
+    host = _current_cert_host()
+    crt = os.path.join(tls_cert_dir(), "server.crt")
+    usable = os.path.isfile(crt) and validate_existing_tls(crt, host) is None \
+        and _pair_matches(crt, os.path.join(tls_cert_dir(), "server.key"))
+    if usable:
+        note("certificate setup skipped - the existing %s pair validates"
+             " (mode %s stays)" % (host, _get_cert_mode()))
+        return None
+    win = is_windows()
+    print("")
+    print("  " + _paint("Certificate setup for the local https server", "bold"))
+    print("    1) self-signed leaf certificate, DIRECTLY trusted (no CA involved;")
+    print("       your consent is asked again whenever it must be re-trusted)")
+    if not win:
+        print("    2) local CA + CA-signed certificate (one consent; silent renewals)")
+    byo_no = 3 if not win else 2
+    ca_no = 2 if not win else None
+    print("    %d) bring your OWN already-trusted certificate + key (PEM files)" % byo_no)
+    while True:
+        ans = input("  %s" % _paint("? choice [default %s]: " % (ca_no or 1), "cyan")).strip() \
+            or (str(ca_no) if ca_no else "1")
+        _log("certificate setup choice: %r" % ans, ts=True)
+        if ans == "1":
+            _set_cert_mode("self_signed_leaf")
+            ok("certificate mode: self-signed leaf (no CA)")
+            return ensure_leaf_certs()
+        if not win and ans == "2":
+            _set_cert_mode("ca")
+            ok("certificate mode: local CA + CA-signed certificate")
+            return ensure_tls_certs()
+        if ans == str(byo_no):
+            _set_cert_mode("byo")
+            return _byo_setup()
+        print("  please answer 1, %s" % ((", 2 or 3" if not win else "or 2")))
+
+
+def _byo_setup():
+    """Bring-your-own: hostname prompt (the manifests + validation use it) +
+    the PEM pair; the certificate must already be trusted by the user (we do
+    not touch any trust store in this mode)."""
+    default_host = _current_cert_host()
+    print("")
+    print("  " + _paint("Bring your own certificate", "bold"))
+    host = input("  " + _paint("? hostname to use in the manifests"
+                               " (Enter = %s): " % default_host, "cyan")).strip().lower()
+    if not host:
+        host = default_host
+    if not re.fullmatch(r"(?i)[a-z0-9._-]{1,253}", host):
+        warn("'%s' is not a usable DNS name - staying on %s" % (host, default_host))
+        host = default_host
+    _set_cert_host(host)
+    ok("manifest hostname: %s%s" % (host,
+       "  (make sure it resolves to 127.0.0.1, e.g. an /etc/hosts entry -"
+       " the server stays loopback-only)" if host != "localhost" else ""))
+    for attempt in range(3):
+        try:
+            crt_path = input("  " + _paint("? path to your TLS certificate (PEM): ",
+                                           "cyan")).strip()
+            key_path = input("  " + _paint("? path to the matching private key (PEM, unencrypted): ",
+                                           "cyan")).strip()
+        except EOFError:
+            return None
+        good, problems, facts = _validate_byo(crt_path, key_path, host)
+        if good:
+            cdir, crt, key, _m = _leaf_paths()
+            if not os.path.samefile(crt_path, crt):
+                shutil.copyfile(crt_path, crt)
+            if not os.path.samefile(key_path, key):
+                shutil.copyfile(key_path, key)
+            _protect_secret(key)
+            global CERT_FACTS
+            CERT_FACTS.update({"mode": "your own certificate (BYO, host %s)" % host,
+                               "leaf_path": crt, "leaf_line": _fact_line(facts),
+                               "ca_path": cdir, "ca_line": "n/a in BYO mode",
+                               "key_line": "server.key in %s (private, protected)" % cdir})
+            meta = _leaf_meta_load()
+            sha256, sha1 = _leaf_fingerprints(crt)
+            meta.update({"app": "OfficeKick", "mode": "byo", "certHost": host,
+                         "sha256": sha256, "sha1": sha1,
+                         "not_after": facts.get("expires")})
+            _leaf_meta_save(meta)
+            ok("BYO certificate installed for %s (we do not touch the trust"
+               " store - the certificate is already trusted by you)" % host)
+            return (crt, key)
+        for pr in problems:
+            warn(pr)
+        print("       (attempt %d/3)" % (attempt + 1))
+    warn("giving up - keep the current setup or re-run install.py")
+    return None
+
+
 def cert_diagnostics():
     """Run the local certificate checks and print an explicit verdict -
     including the line that store trust does not equal Office compatibility."""
@@ -2047,10 +2178,12 @@ def app_label(key):
     return {"slidekick": "PowerPoint", "wordkick": "Word", "mailkick": "Outlook"}[key]
 
 
-def render_manifest(addin_dir, port, https_port=None):
+def render_manifest(addin_dir, port, https_port=None, host=None):
     """https_port: when a working loopback certificate exists, ALL add-in
-    panes are served over https://localhost:<port+1> (same TLS listener as
-    MailKick) and their manifests point there; None = plain http."""
+    panes are served over https://<host>:<https port> (the shared TLS
+    listener) and their manifests point there; None = plain http.
+    host = the hostname the https manifests use (the certHost setting; by
+    default localhost, or the BYO certificate's own DNS name)."""
     with open(repo_path(addin_dir, "manifest.template.xml"), "r", encoding="utf-8") as fh:
         t = fh.read()
     if RIBBON:
@@ -2062,6 +2195,12 @@ def render_manifest(addin_dir, port, https_port=None):
     # and EVERY pane rides the shared TLS listener on port+1 (0.9.204:
     # Word/PowerPoint included; MailKick requires that listener).
     scheme, pane_port = ("https", https_port) if https_port else ("http", port)
+    host = (host or "localhost")
+    if scheme == "https" and host != "localhost":
+        # BYO certificate covering a custom name: EVERY https URL in the
+        # manifest rides that hostname (before the scheme/port fill)
+        t = t.replace("__SCHEME__://localhost", "https://%s" % host)
+        t = t.replace("__SCHEME__://127.0.0.1", "https://%s" % host)
     t = t.replace("__SCHEME__", scheme).replace("__PORT__", str(pane_port))
     if scheme == "https":
         t = t.replace("http://localhost:%d" % port, "https://localhost:%d" % pane_port)
@@ -2157,7 +2296,8 @@ def render_and_sideload():
             warn("MailKick: no usable loopback certificate - skipped for Outlook")
             continue
         xml = render_manifest(folder, PORT,
-                              https_port=(HTTPS_PORT if HTTPS_PORT else PORT + 1) if tls_pair else None)
+                              https_port=(HTTPS_PORT if HTTPS_PORT else PORT + 1) if tls_pair else None,
+                              host=_current_cert_host())
         mver = (re.search(r"<Version>([^<]+)</Version>", xml) or [None, "?"])[1]
         mpath = os.path.join(manifest_dir(), mfname)
         if DRY_RUN:
@@ -2201,21 +2341,6 @@ def relax_windows_config_acl():
     user = "%s\\%s" % (os.environ.get("COMPUTERNAME", ""), os.environ.get("USERNAME", ""))
     rc, o = run_quiet(["icacls", d, "/grant", user + ":(OI)(CI)F", "/T", "/C"])
     ok("config ACL relaxed: %s (%s)" % (d, "icacls rc %d" % rc))
-
-
-def sideload_windows_developer():
-    if not is_mac():
-        sideload_windows_catalog()
-        sideload_windows_developer()
-        out("  note: Outlook on Windows does not use folder catalogs - load MailKick once:")
-        out("        Outlook -> Get Add-ins (or the ellipsis overflow) -> My add-ins ->")
-        out("        Custom Add-ins -> Add a custom add-in -> Add from File ->")
-        out("        " + os.path.join(manifest_dir(), "mailkick.xml"))
-    else:
-        out("  mac tip: if a saved deck throws the 'Add-in Error' toast on open,")
-        out("           the deck's pane reference carries the unresolvable store stamp.")
-        out("           Heal: python3 tools/repair_paneref.py <file.pptx | .docx | folder>")
-        out("           (backs the originals up to orig/ next to the deck(s), then patches in place)")
 
 
 def sideload_windows_developer():
@@ -2798,6 +2923,22 @@ def tls_phase():
     regenerates as needed."""
     global CERT_FACTS, MAILKICK_CHOICE
     CERT_FACTS = {}
+    if _get_cert_mode() == "byo":
+        host = _current_cert_host()
+        crt = os.path.join(tls_cert_dir(), "server.crt")
+        key = os.path.join(tls_cert_dir(), "server.key")
+        if os.path.isfile(crt) and os.path.isfile(key):
+            good, problems, f = _validate_byo(crt, key, host)
+            if good:
+                CERT_FACTS.update({"mode": "your own certificate (BYO, host %s)" % host,
+                                   "leaf_path": crt, "leaf_line": _fact_line(f),
+                                   "ca_path": tls_cert_dir(), "ca_line": "n/a in BYO mode",
+                                   "key_line": "server.key (private, protected)"})
+                return "your own certificate for %s (validated)" % host
+            for pr in problems:
+                warn(pr)
+            return "BYO certificate unusable - re-run install.py (BYO setup); see install.log"
+        return "BYO certificate missing on disk - re-run the BYO setup"
     if not is_mac():
         if "mailkick" in ADDINS:
             return "not needed on Windows (plain-http localhost)"
@@ -2994,25 +3135,6 @@ def check_pane_errors():
 
 
 # ------------------------------------------------------------------- flows #
-def _reapply_transport(mode, label):
-    """Store the mode, re-render the manifests accordingly, restart the
-    server so the listeners match, and report."""
-    ok("transport mode -> %s" % mode)
-    _set_transport(mode)
-    if mode == "https" and is_mac():
-        tls_phase()          # create/renew the pair when it is missing
-        _print_cert_facts()
-    if office_app_running():
-        warn("Office apps are running - skipping the cache flush (the manifest"
-             " render still runs)")
-    else:
-        clear_office_caches()
-    render_and_sideload()
-    stop_server()
-    start_only()
-    ok("done - the panes now load over %s (manifests re-rendered)" % mode)
-
-
 def transport_menu():
     cur = _current_transport()
     hp, sp = _current_ports()
@@ -3103,7 +3225,12 @@ def _reapply_transport(mode, label=None):
     ok("transport mode -> %s" % mode)
     _set_transport(mode)
     if mode == "https" and is_mac():
-        tls_phase()          # create/renew the pair when it is missing
+        crt0 = os.path.join(tls_cert_dir(), "server.crt")
+        if INTERACTIVE and not (os.path.isfile(crt0) and validate_existing_tls(crt0) is None
+                                and _pair_matches(crt0, os.path.join(tls_cert_dir(), "server.key"))):
+            _ask_cert_setup()    # the three-way question (leaf / CA / BYO)
+        else:
+            tls_phase()          # create/renew the pair when it is missing
         _print_cert_facts()
     if office_app_running():
         warn("Office apps are running - skipping the cache flush (the manifest"

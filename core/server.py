@@ -34,7 +34,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 APP = "OfficeKick"
-VERSION = "0.9.241"
+VERSION = "0.9.242"
 
 # --------------------------------------------------------------------------- #
 # Self-restart: the server watches for <cfg dir>/restart.flag. Whatever writes
@@ -803,6 +803,8 @@ class Store:
         # when certificates exist), https (require+serve the TLS listener;
         # the installer creates/renews the certificate before starting)
         self.data.setdefault("transportMode", "auto")
+        # 0.9.242 certificate mode "byo" + the cert hostname for manifests
+        self.data.setdefault("certHost", "localhost")
         # 0.9.240 configurable listener ports (must differ; 1024-65535)
         self.data.setdefault("transportHttpPort", 8765)
         self.data.setdefault("transportHttpsPort", 8766)
@@ -1151,6 +1153,8 @@ class Store:
             "trackedChanges": bool(d.get("trackedChanges", False)),
             "newSessionPerEmail": bool(d.get("newSessionPerEmail", False)),
             "transportMode": (d.get("transportMode") if d.get("transportMode") in ("auto", "http", "https") else "auto"),
+            "certMode": (d.get("certMode") if d.get("certMode") in ("ca", "self_signed_leaf", "byo") else "ca"),
+            "certHost": (str(d.get("certHost")).lower() if isinstance(d.get("certHost"), str) and re.fullmatch(r"(?i)[a-z0-9._-]{1,253}", str(d.get("certHost"))) else "localhost"),
             "certMode": (d.get("certMode") if d.get("certMode") in ("ca", "self_signed_leaf") else "ca"),
             "transportHttpPort": (int(d.get("transportHttpPort")) if isinstance(d.get("transportHttpPort"), int) and 1024 <= int(d.get("transportHttpPort")) <= 65535 else 8765),
             "transportHttpsPort": (int(d.get("transportHttpsPort")) if isinstance(d.get("transportHttpsPort"), int) and 1024 <= int(d.get("transportHttpsPort")) <= 65535 else 8766),
@@ -3003,6 +3007,17 @@ class SlideKickHandler(BaseHTTPRequestHandler):
                     if int(body["transportHttpsPort"]) == int(self.store.data.get("transportHttpPort") or 8765):
                         raise ApiError(400, "transportHttpsPort must differ from transportHttpPort")
                     self.store.data["transportHttpsPort"] = int(body["transportHttpsPort"])
+                    changed = True
+                if "certMode" in body and body["certMode"] is not None:
+                    if str(body["certMode"]) not in ("ca", "self_signed_leaf", "byo"):
+                        raise ApiError(400, "certMode must be ca, self_signed_leaf or byo")
+                    self.store.data["certMode"] = str(body["certMode"])
+                    changed = True
+                if "certHost" in body and body["certHost"] is not None:
+                    _ch = str(body["certHost"])
+                    if not re.fullmatch(r"(?i)[a-z0-9._-]{1,253}", _ch):
+                        raise ApiError(400, "certHost must be a DNS name (letters, digits, dots, dashes)")
+                    self.store.data["certHost"] = _ch.lower()
                     changed = True
                 if "transportMode" in body and body["transportMode"] is not None:
                     _tm = str(body["transportMode"])
