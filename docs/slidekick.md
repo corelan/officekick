@@ -42,9 +42,10 @@ for this reason; plain `--ribbon` installs are not supported.
 ### About the icon in the Add-ins dialog
 
 The add-in may show a generic/blank icon in the Add-ins dialog. That is
-expected with the http-only localhost transport: the pane and the manifest
-work over plain http (Office whitelists localhost), but the dialog's
+expected when the panes are served over plain http: the pane and the manifest
+work over http (Office whitelists localhost), but the dialog's
 webview refuses to render http images, so the icon thumbnail is skipped.
+Serve the panes over https (Transport options > https) and the icon renders.
 The icons themselves are served fine (they appear anywhere non-dialog
 content is shown); functionality is unaffected. No icon hosting outside
 localhost is used or planned (the icons must stay fully local).

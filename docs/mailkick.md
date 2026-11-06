@@ -30,27 +30,32 @@ installer nor the other two add-ins are affected. The requirements:
 4. **Port 8766** - the loopback TLS listener lives in the same server
    process, localhost only (127.0.0.1 / ::1).
 
-### Your three options (the installer asks on macOS)
+### The certificate question (one ask, three options)
 
-**Option 1 - the default: a self-signed, per-user loopback CA.** The
-installer first CHECKS for a certificate that is already on disk: if it is
-unexpired, has a localhost SAN and its chain is trusted, it is REUSED and
-nothing is generated or re-imported; only when that check fails (expired /
-wrong SAN / not trusted - the reason is printed) does it generate. The
-generated pair is a small CA plus a `localhost` certificate, and it *imports
-that generated CA into your trusted keychains* (login keychain, per-user
-`security add-trusted-cert`, no admin rights; macOS may show one
-confirmation). That import is what makes the self-signed certificate work:
-until the CA is trusted, **every** https client on this machine - Outlook
-included - will call the pane "signed by an invalid certificate". You can
-inspect or revoke the entry at any time in Keychain Access (look for
-"OfficeKick Loopback CA").
+**Option 1 (the default): a self-signed leaf - no CA.** The installer first
+CHECKS for a usable certificate pair on disk (expiry, SAN, trust) and reuses
+it; only when the check fails does it generate a fresh leaf: one unique
+self-signed server certificate (CN=localhost + SANs, CA:FALSE, EKU
+serverAuth) - **no CA is created or imported**. Trusting the leaf itself is
+an explicit consent screen in the installer (fingerprint + expiry shown).
+macOS: one `security add-trusted-cert` trust entry in the login keychain.
+Windows: a silent Trusted People import, then a real https request through
+the Windows TLS stack to prove what Office will see - and the option to also
+add the leaf to CurrentUser\Root, which field-testing shows is what Office's
+WebView2 actually honors for a leaf-only setup. Full details + the where-to-
+see-it paths: [certificates.md](certificates.md).
 
-**Option 2 - bring your own already-trusted certificate.** If a CA your Mac
+**Option 2 - the classic loopback CA.** The previous default: the installer
+generates a per-user loopback CA + a signed localhost certificate and trusts
+the CA in your login keychain (macOS; `OfficeKick Loopback CA` in Keychain
+Access). Renewals stay silent - the CA re-issues the leaf. Trade-off: one
+trust decision covers a whole CA. Uninstall can remove the CA by
+fingerprint; inspect or revoke it in Keychain Access.
+
+**Option 3 - bring your own already-trusted certificate.** If a CA your Mac
 already trusts (a corporate/internal CA, or an mkcert-style root you
 installed yourself) can issue you a `localhost` certificate, the installer
-can use it and then creates/trusts **nothing**. Choose `2` at the installer
-prompt, or pass
+can use it and then creates/trusts **nothing**. Choose option 3, or pass
 `--mailkick-cert PATH --mailkick-key PATH`. The certificate must comply
 with:
 
@@ -68,14 +73,13 @@ with:
 The installer validates all of the above when you provide the files and
 skips MailKick with a clear per-item message if any check fails.
 
-**Option 3 - no https at all: skip MailKick for Outlook.** Answer `3` at
-the prompt or pass `--skip-mailkick`: no TLS listener changes, no
-certificate, no keychain import, and any previously staged MailKick
-manifest is removed from Outlook. SlideKick and DocKick install normally
-and remain plain-http.
+**Not using MailKick at all.** Leave Outlook switched OFF in the add-in
+picker (or pass `--skip-mailkick`): no certificates are created or trusted
+for it, and any previously staged MailKick manifest is removed from
+Outlook. SlideKick and DocKick install normally.
 
 **A working certificate covers every add-in, not just MailKick.** Once a
-usable loopback certificate exists (the generated one or yours), the
+usable https certificate exists (generated leaf/CA or yours), the
 installer points SlideKick and DocKick manifests at the same
 `https://localhost:8766` listener - one trusted scheme for all panes.
 Without a usable certificate everything except the Outlook skip-gate
@@ -191,10 +195,10 @@ run to `~/Library/Containers/com.microsoft.Outlook/Data/Documents/wef/mailkick.x
    **Get Add-ins**.
 4. **About the https URLs**: Outlook's Add-from-File dialog (and this
    build's wef-folder pickup) requires EVERY URL in the manifest to be
-   https - the pane URL too. From 0.9.193 the macOS installer therefore
-   generates a per-user loopback CA + a localhost certificate
-   (~/.officekick/certs), trusts the CA in your login keychain (no admin
-   rights), and MailKick's manifest points at **https://localhost:8766** -
+   https - the pane URL too. The default certificate mode is a self-signed
+   leaf in `~/.officekick/certs` (trust explicitly consented per platform -
+   see certificates.md), and MailKick's manifest points at
+   **https://localhost:8766** -
    the same server process answering a second TLS listener. The icons point
    at the project's GitHub assets (fetched once at install, then cached by
    Office). Nothing user-related leaves the machine: the TLS only wraps the

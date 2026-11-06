@@ -37,61 +37,33 @@ cd officekick
 python3 install.py        # Windows: py -3 install.py
 ```
 
-The installer shows a menu:
+The installer opens a menu:
 
-1. **Install** (also repairs an existing install)
-2. **Update** (pulls the repo with git, then updates)
-3. **Start (or restart) the local server only**
-4. `x` = **Uninstall**, `0` = exit
+1. **Install / repair** - the add-in picker (Word + PowerPoint on by default,
+   Outlook off until you enable it)
+2. **Update**
+3. **Server** (start / restart / stop / status)
+4. **Transport options** - transport mode, listener ports, certificate mode
+5. **Uninstall**
 
-(The same actions exist as CLI flags: `--install`, `--update`,
-`--start`/`--restart`, `--uninstall`.)
+Details, the full flag list, and the self-healing behaviors:
+[docs/installer.md](docs/installer.md).
 
-What the installer does:
+The essentials:
 
-- Checks `python3` (3.8 or newer).
-- Finds your Office apps.
-- Copies the files to `~/Library/Application Support/OfficeKick` (macOS) or
-  `%LOCALAPPDATA%\OfficeKick` (Windows).
-- Registers the add-ins with each Office app (macOS: WEF sideload; Windows:
-  a per-user trusted folder catalog. Outlook on Windows needs the one-time
-  "Add from File" dialog - the installer prints the steps).
-- Starts the local server on `http://localhost:8765` and health-checks it
-  (on macOS with a working loopback certificate it also serves the trusted
-  `https://localhost:8766` listener).
-- Asks whether to start the server at login. Default is **yes**.
-  - macOS: a login item ("OfficeKickServer" via SMAppService).
-  - Windows: a per-user scheduled task (windowless `pythonw`).
-
-Good to know:
-
-- On Windows, run the installer with `py -3` (the installed Python launcher)
-  instead of `python` - `python` alone is often the Store alias that opens
-  the Microsoft Store instead of running your script.
-- No admin rights are needed.
-- The add-ins talk to the local server over `http://localhost:8765` (Office
-  allows localhost over plain http). **On macOS a working loopback
-  certificate serves EVERY add-in** over one trusted listener,
-  `https://localhost:8766` - Outlook additionally requires https for every
-  URL in its manifest. The installer asks which route you want: (1) the
-  default - a self-signed per-user loopback CA generated and imported into
-  your trusted keychains; (2) your own already-trusted certificate
-  (`--mailkick-cert/--mailkick-key`, nothing is generated or imported); or
-  (3) skip MailKick for Outlook entirely (`--skip-mailkick`) - SlideKick and
-  DocKick then stay plain http and MailKick is not staged for Outlook.
-- The interactive menu defaults: Word + PowerPoint installed, Outlook NOT -
-  enable Outlook in the add-in menu (it creates a self-signed loopback CA +
-  localhost certificate; the menu warns about it and checks the https
-  prerequisites first). Automation: `--install --mailkick` opts in;
-  `--install` alone (re)installs Word + PowerPoint and keeps Outlook only
-  when it was already installed. Full tool chatter of every run lands in
-  install.log next to install.py; the console shows the step lines only.
-  A working certificate activates for **all three** add-ins, not just
-  MailKick (see the scheme table below). Details + the
-  exactly-what-your-certificate-must-contain checklist:
-  [docs/mailkick.md](docs/mailkick.md) > Requirements.
-- The macOS server wrapper restarts the server if it crashes.
-- Re-running the installer is safe. It repairs and updates in place.
+- Everything talks to the local server. One trusted https listener serves
+  every add-in the moment a usable certificate exists; plain http is the
+  fallback (and the Windows default until you switch the transport).
+  Outlook always needs https URLs in its manifest.
+- **Certificates**: the default mode is a **self-signed leaf** (no CA is
+  created; the leaf itself gets trusted - explicit consent, uninstall-safe).
+  Alternatives, chosen through one question or the Transport menu: the
+  classic loopback CA, or bring-your-own (see
+  [docs/certificates.md](docs/certificates.md)). On Windows the flow verifies
+  the trust out of band and offers the Root fallback Office requires
+  (WebView2 leaf-trust is field-verified as rejected).
+- On Windows, run the installer with `py -3` instead of `python`.
+- No admin rights are needed. The full run log lands in `install.log`.
 
 ## Update
 
@@ -111,15 +83,17 @@ once with the repair tool - see the troubleshooting section in
 
 ### Ports and how to tell which scheme an add-in uses
 
-| Add-in | macOS | Windows |
-|---|---|---|
-| SlideKick (PowerPoint) | `http://localhost:8765`, or `https://localhost:8766` when a working loopback certificate exists | `http://localhost:8765` |
-| DocKick (Word) | same as SlideKick | `http://localhost:8765` |
-| MailKick (Outlook) | `https://localhost:8766` (loopback TLS; skipped without it) | `http://localhost:8765` |
+| Add-in | url |
+|---|---|
+| every pane | `http://localhost:<http port>` and, once a working certificate exists, `https://localhost:<https port>` |
 
-On macOS the installer activates the certificate for **all three** add-ins
-once one is present and working - one trusted https listener serves every
-pane; without a usable certificate everything falls back to http.
+One listener per scheme serves all three add-ins. With the transport mode on
+`https`, the https listener is required (and Outlook always needs https
+manifest URLs, so MailKick is staged only when https works).
+
+The moment a usable certificate exists, **all three** add-ins ride it. The
+bottom status line in a task pane tells the truth per pane: a lock plus the
+https port = TLS; the plain port in blue (light theme) / cyan (dark) = http.
 
 How to tell what a pane is actually using: the **bottom status line** in the
 task pane shows it - a 🔒 plus port **8766** means the pane is served over
@@ -189,11 +163,10 @@ you configured.
   ribbon-commands manifest makes the add-in vanish from BOTH dialogs
   (ribbon-commands manifests make the add-in disappear on the tested
   builds - do not install with --ribbon).
-- **Outlook (MailKick)**: the installer places the manifest in Outlook's own
-  add-in folder. Quit and reopen Outlook. If MailKick does not appear:
-  Get Add-ins -> My add-ins -> Custom Addins -> Add a custom add-in ->
-  Add from File (press Cmd+Shift+G for the path). See
-  [docs/mailkick.md](docs/mailkick.md).
+- **Outlook (MailKick)**: the manifest lands in Outlook's own add-in folder
+  (macOS); quit and reopen Outlook. If MailKick does not appear:
+  Get Add-ins > My add-ins > Custom Add-ins > Add a custom add-in >
+  Add from File (Cmd+Shift+G). See [docs/mailkick.md](docs/mailkick.md).
 
 First run:
 
@@ -253,10 +226,11 @@ python3 install.py --uninstall --remove-certs --purge-config   # full cleanup in
 # Windows: py -3 install.py --uninstall [--purge-config]
 ```
 
-Or pick **Uninstall** in the installer menu. Then quit and reopen your Office
-apps. The installer keeps `~/.officekick` (API keys, profiles, sessions) unless
-nothing but the add-ins + server goes unless you pass `--remove-certs` / `--purge-config`
-(or answer yes to the same questions interactively). Both questions default to KEEP.
+Or pick **Uninstall** in the installer menu. It asks two questions - the
+certificate store entries and the config folder - and both default to KEEP:
+an uninstall never destroys your setup unless you say so. After an uninstall
+the certificate mode resets to self-signed leaf. Details:
+[docs/installer.md > Uninstall](docs/installer.md).
 
 ## More
 
@@ -269,15 +243,13 @@ nothing but the add-ins + server goes unless you pass `--remove-certs` / `--purg
 - [docs/mailkick.md](docs/mailkick.md) - the Outlook add-in: summarize,
   translate, draft replies + forwards (you send), categories, templates,
   simulator, troubleshooting.
+- [docs/installer.md](docs/installer.md) - the installer menus, transport
+  options, certificate modes, uninstall (asks + defaults, flags).
+- [docs/certificates.md](docs/certificates.md) - how the local https
+  certificates are generated, trusted, renewed, and removed, per platform.
 - [docs/architecture.md](docs/architecture.md) - how the stack works.
 - [CHANGELOG.md](CHANGELOG.md) | [LICENSE](LICENSE)
 
 Licensed by **Corelan Consulting bv** - free to use with attribution, use at
 your own risk, may not be sold or commercialized, modifications must reference
 the original author.
-An uninstall removes the add-ins and the server only: both removal asks
-(certificates, config folder) default to KEEP, so an uninstall never destroys
-your setup. Use `--remove-certs` / `--purge-config` (or answer yes to the
-asks) to remove the certificates (trust + files) and/or `~/.officekick`
-(config.json, API keys, profiles, sessions). A bring-your-own certificate's
-own trust entry is never removed - only the copies OfficeKick made.

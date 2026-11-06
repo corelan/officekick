@@ -152,8 +152,9 @@ The exact task pane runs in a normal browser against an in-memory document
 http://127.0.0.1:8765/wordkick/static/simulator.html
 ```
 
-With the loopback certificate active, the same page also answers on
-`https://localhost:8766` (macOS).
+With a certificate active (leaf or CA - see
+[certificates.md](certificates.md)), the same page also answers on
+`https://localhost:8766`.
 
 ## Troubleshooting (Word)
 
