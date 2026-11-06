@@ -745,27 +745,35 @@ def run_quiet(cmd, **kw):
 
 
 def ask_yes(prompt, default_yes=True):
+    """Colored question on its own left-aligned line, printed BEFORE the
+    action it belongs to is taken."""
     if DRY_RUN:
+        note("question (dry-run): %s -> default %s" % (prompt, "yes" if default_yes else "no"))
         return default_yes
     try:
         if not sys.stdin.isatty():
+            note("question (non-tty): %s -> default %s" % (prompt, "yes" if default_yes else "no"))
             return default_yes   # piped/automated runs take the default silently
     except (OSError, ValueError, AttributeError):
         return default_yes
     suffix = "[Y/n]" if default_yes else "[y/N]"
     while True:
         try:
-            ans = input("  > %s %s: " % (prompt, suffix)).strip().lower()
+            ans = input("  " + _paint("? " + prompt + " ", "cyan") + _paint(suffix, "dim") + ": ").strip().lower()
         except EOFError:
+            note("question EOF: %s -> default %s" % (prompt, "yes" if default_yes else "no"))
             return default_yes
         except KeyboardInterrupt:
             out("\n  aborted")
             raise SystemExit(130)
         if not ans:
+            note("question: %s -> default %s" % (prompt, "yes" if default_yes else "no"))
             return default_yes
         if ans in ("y", "yes"):
+            note("question: %s -> yes" % prompt)
             return True
         if ans in ("n", "no"):
+            note("question: %s -> no" % prompt)
             return False
         out("  please answer y or n")
 
@@ -997,11 +1005,15 @@ def pick_mailkick_route():
     """Which TLS route for Outlook (macOS only; called only when MailKick is
     selected). 'auto' = generate a self-signed loopback CA + localhost
     certificate (the user was already warned about this in the add-in menu),
-    'custom' = the user's own already-trusted PEM pair, 'skip' = none."""
+    'custom' = the user's own already-trusted PEM pair, 'skip' = none.
+    Called BEFORE the certificates phase line so the questions precede the
+    action."""
+    good, _how, techniques = https_feasible()
+    del good
     global MAILKICK_CERT, MAILKICK_KEY
     if MAILKICK_CERT or MAILKICK_KEY:
-        good, problems = validate_user_cert(MAILKICK_CERT, MAILKICK_KEY)
-        if good:
+        good2, problems = validate_user_cert(MAILKICK_CERT, MAILKICK_KEY)
+        if good2:
             return "custom"
         for pr in problems:
             warn("provided MailKick certificate: " + pr)
@@ -1009,17 +1021,17 @@ def pick_mailkick_route():
     if DRY_RUN or (not sys.stdin.isatty()):
         return "auto"    # automation opt-in (--mailkick): reuse-first applies
     print("")
-    print("  Outlook pane transport: the self-signed loopback CA + certificate")
-    print("  from the earlier warning (default), or your own trusted pair.")
-    print("")
-    if ask_yes("Use the self-signed loopback CA (recommended)", True):
+    print("  " + _paint("Outlook pane transport", "bold") + " - the self-signed")
+    print("  loopback CA + certificate (%s) or your own trusted pair." %
+          (techniques[0].split(" - ")[0] if techniques else "openssl"))
+    MAILKICK_CHOICE_TMP = ask_yes("Use the self-signed loopback CA (recommended)", True)
+    if MAILKICK_CHOICE_TMP:
         return "auto"
     for attempt in range(3):
-        print("")
-        crt = input("  path to your TLS certificate (PEM): ").strip()
-        key = input("  path to the matching private key (PEM, unencrypted): ").strip()
-        good, problems = validate_user_cert(crt, key)
-        if good:
+        crt = input("  " + _paint("? path to your TLS certificate (PEM): ", "cyan")).strip()
+        key = input("  " + _paint("? path to the matching private key (PEM, unencrypted): ", "cyan")).strip()
+        good2, problems = validate_user_cert(crt, key)
+        if good2:
             MAILKICK_CERT, MAILKICK_KEY = crt, key
             return "custom"
         for pr in problems:
@@ -1870,8 +1882,9 @@ def ask_autostart():
 
 
 def install(mode_name="Install", interactive=True):
-    global INTERACTIVE
+    global INTERACTIVE, AUTOSTART_WANT, MAILKICK_CHOICE
     INTERACTIVE = interactive
+    AUTOSTART_WANT = None
     banner(mode_name)
     preflight(mode_name)
     # add-in selection FIRST (console: one ok-line; details in the log)
@@ -1879,8 +1892,15 @@ def install(mode_name="Install", interactive=True):
     total = 6
     phase(1, total, "preparing", prepare_phase)
     phase(2, total, "deploying", deploy_files)
+    # questions BEFORE the actions they belong to: the TLS route asks now
+    # (the certificate phase acts on the answer), the autostart ask sits
+    # right before its own phase
+    if "mailkick" in (ADDINS or set()) and is_mac() and MAILKICK_CHOICE is None:
+        MAILKICK_CHOICE = pick_mailkick_route()
     phase(3, total, "certificates", tls_phase)
     phase(4, total, "registering with Office", registration_phase)
+    if INTERACTIVE and not DRY_RUN:
+        AUTOSTART_WANT = ask_autostart()
     phase(5, total, "autostart", autostart_phase)
     phase(6, total, "starting the server", server_phase)
     done_note(mode_name)
@@ -1893,15 +1913,16 @@ def prepare_phase():
 
 
 def tls_phase():
-    """Certificate work: decide the MailKick route (only when Outlook is
-    selected; Windows needs none), then ensure a working loopback pair."""
+    """Certificate work: the route was asked before this phase line; here we
+    only act on it (Windows needs none), then ensure a working loopback pair."""
     global MAILKICK_CHOICE
     if "mailkick" not in ADDINS:
         return "none needed (" + ", ".join(app_label(a) for a in sorted(ADDINS)) + ")"
     if not is_mac():
         MAILKICK_CHOICE = "auto"      # Windows Outlook rides plain http
         return "not needed on Windows (plain-http localhost)"
-    MAILKICK_CHOICE = pick_mailkick_route()
+    if MAILKICK_CHOICE not in ("auto", "custom", "skip"):
+        MAILKICK_CHOICE = pick_mailkick_route()   # non-interactive fallback
     if MAILKICK_CHOICE == "custom":
         cdir = tls_cert_dir()
         os.makedirs(cdir, exist_ok=True)
@@ -1932,16 +1953,22 @@ def registration_phase():
 
 
 def autostart_phase():
-    """Register the autostart, or print the manual start command."""
+    """Register the autostart with the answer given BEFORE this phase line,
+    or the non-interactive default (register/keep)."""
     global AUTOSTART_WANT
     if DRY_RUN:
         AUTOSTART_WANT = True
         return "[dry-run] would register"
-    want = ask_autostart() if (INTERACTIVE and not DRY_RUN) else True
+    want = AUTOSTART_WANT
+    if want is None:
+        present = mac_login_item_present() if is_mac() else windows_autostart_present()
+        want = True
+        note("autostart (non-interactive): existing=%s -> kept/re-registered"
+             % ("yes" if present else "no"))
     if not want:
-        print("        manual start: %s %s --config %s --static-dir %s --port %d"
-              % (sys.executable, server_py(), config_file(), install_dir(), PORT))
-        return "not added (manual start command printed above)"
+        note("autostart declined - manual start: %s %s --config %s --static-dir %s --port %d"
+             % (sys.executable, server_py(), config_file(), install_dir(), PORT))
+        return "not added (manual start command: install.log)"
     if is_mac():
         autostart_mac()
         return "login item registered"
