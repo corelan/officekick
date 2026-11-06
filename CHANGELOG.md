@@ -108,6 +108,21 @@
 - `render_manifest(addin_dir, port, https_port, host)` and
   `validate_existing_tls(crt, host)` are hostname-aware.
 
+## 0.9.242 (uninstall overhaul, later this release)
+
+- uninstall now asks, in order, with BOTH defaults on KEEP (nothing is
+  destroyed by an uninstall by default):
+  - certificates: remove the local certificates OfficeKick installed (CA/leaf
+    trust entry in the user keychain or Windows TrustedPeople, plus the files
+    in ~/.officekick/certs); a BYO certificate's own trust entry is never
+    touched (only our file copies are deleted, with a warning).
+  - config: wipe ~/.officekick (config.json, API keys, profiles, sessions) -
+    keeping it means the next install.py reuses the whole setup.
+- flags for automation: --remove-certs, --purge-config (pre-existing).
+- CA removal helper: user-scope trust settings + login-keychain items matched
+  by sha1 against our CA (never by name when the CA file is present), so
+  unrelated certificates are untouched.
+- WEF-manifest purge now honors --dry-run.
 ## 0.9.241
 ### Added (self-signed leaf certificate mode, no CA)
 - New server setting `certMode` (`ca` - the existing classic mode - or

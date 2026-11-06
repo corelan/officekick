@@ -274,3 +274,9 @@ you pass `--purge-config` or answer yes on the config question.
 Licensed by **Corelan Consulting bv** - free to use with attribution, use at
 your own risk, may not be sold or commercialized, modifications must reference
 the original author.
+An uninstall removes the add-ins and the server only: both removal asks
+(certificates, config folder) default to KEEP, so an uninstall never destroys
+your setup. Use `--remove-certs` / `--purge-config` (or answer yes to the
+asks) to remove the certificates (trust + files) and/or `~/.officekick`
+(config.json, API keys, profiles, sessions). A bring-your-own certificate's
+own trust entry is never removed - only the copies OfficeKick made.

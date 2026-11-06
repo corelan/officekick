@@ -9,7 +9,7 @@ MailKick (Outlook). Works on macOS and Windows; auto-detects the platform.
                                       Outlook only with --mailkick / --mailkick-cert-key
                                       or when Outlook was previously installed)
     python3 install.py --update       git pull (if this is a checkout) + update
-    python3 install.py --uninstall [--purge-config]
+    python3 install.py --uninstall [--remove-certs] [--purge-config]
     python3 install.py --start | --stop | --restart | --status
     python3 install.py --dry-run      with any mode: print the actions, run none
     python3 install.py --port N       server port (default 8765)
@@ -39,7 +39,9 @@ Design notes:
 - autostart: macOS = login item (the "OfficeKickServer" app bundle, registered
   with an in-bundle SMAppService helper; System Events fallback), Windows =
   a per-user scheduled task at logon (HKCU Run-key fallback);
-- uninstall keeps ~/.officekick (config, profiles, sessions) unless --purge-config.
+- uninstall keeps ~/.officekick (config, profiles, sessions, certificates)
+  unless --purge-config / --remove-certs (or the same answers in the interactive
+  uninstall). Both removal asks default to KEEP.
 """
 import argparse
 import json
@@ -2414,6 +2416,9 @@ def purge_stale_wef_manifests():
     # dangling registration - documents that had the pane open then throw
     # "This add-in is no longer available" on every open until the add-in is
     # refreshed. Refuse loudly instead.
+    if DRY_RUN:
+        out("  [..]  [dry-run] would purge stale WEF manifests (real files untouched)")
+        return 0
     ppt, word, outlook = office_apps_running()
     running = [n for n, gone in (("PowerPoint", ppt), ("Word", word), ("Outlook", outlook)) if gone]
     if running:
@@ -2700,19 +2705,118 @@ def windows_autostart_present():
 
 
 # -------------------------------------------------------------- uninstall #
-def do_uninstall(purge):
+def _mac_keychain_shas(cn, keychain="login.keychain-db"):
+    """SHA1 hashes of every login-keychain item under a common name."""
+    _rc, pems = run_quiet(["security", "find-certificate", "-a", "-p",
+                           "-c", cn, os.path.expanduser("~/Library/Keychains/" + keychain)])
+    shas = []
+    for blob in re.findall(r"-----BEGIN CERTIFICATE-----.*?-----END CERTIFICATE-----",
+                           pems or "", re.S):
+        b64 = "".join(l for l in blob.splitlines() if "-----" not in l)
+        try:
+            shas.append(hashlib.sha1(base64.b64decode(b64)).hexdigest())
+        except Exception:
+            pass
+    return shas
+
+
+def _remove_ca_trust(ca_crt=None):
+    """Remove OUR loopback CA trust: user-scope trust settings plus the
+    matching login-keychain items (identified by sha1 while the CA file is
+    present, otherwise by our common name). Never touches other CAs."""
+    if not is_mac():
+        return True
+    known = None
+    if ca_crt and os.path.isfile(ca_crt):
+        _rc, o = run_quiet(["openssl", "x509", "-in", ca_crt, "-noout",
+                            "-fingerprint", "-sha1"])
+        if _rc == 0:
+            known = [o.strip().split("=")[-1].replace(":", "").lower()]
+    if known:
+        rc, o = run_quiet(["security", "remove-trusted-cert", ca_crt])
+        _log("loopback CA trust settings removed (sha1=%s, rc %d)" % (known[0], rc), ts=True)
+    gone = 0
+    for h in _mac_keychain_shas("OfficeKick Loopback CA"):
+        if known is None or h in known:
+            run_quiet(["security", "delete-certificate", "-Z", h,
+                       os.path.expanduser("~/Library/Keychains/login.keychain-db")])
+            gone += 1
+    _log("loopback CA keychain items removed: %d" % gone, ts=True)
+    return True
+
+
+# ---------------------------------------------------------------- uninstall #
+def do_uninstall(purge, rm_certs=None):
+    """Remove the add-ins + server. Both data asks default to KEEP so an
+    uninstall never silently destroys the user's setup:
+      - certificates: ask to remove the local certificates we installed
+        (trust entry in the keychain/TrustedPeople + the files on disk);
+        a BYO certificate's own trust entry is never touched
+      - config: ask to wipe ~/.officekick (config.json, API keys, profiles,
+        sessions); keeping it means install.py sees the old setup again on
+        the next install
+    --purge-config / --remove-certs force the removals non-interactively;
+    interactive runs ask with the default on 'keep'."""
     out("")
     out("  Uninstalling OfficeKick")
-    stop_server()
     meta = _leaf_meta_load()
-    if meta.get("mode") == "self_signed_leaf" and os.path.isfile(_leaf_paths()[1]):
-        _log("uninstall: removing the OfficeKick leaf-certificate trust (sha1=%s)"
-             % (meta.get("sha1") or "?"))
-        _remove_leaf_trust(_leaf_paths()[1])
-        try:
-            os.remove(_leaf_paths()[3])
-        except OSError:
-            pass
+    cdir = tls_cert_dir()
+    crt_p = _leaf_paths()[1]
+    ca_p = os.path.join(cdir, "ca.crt")
+    byo = str(meta.get("mode") or "") == "byo"
+    ca_present = os.path.isfile(ca_p)
+    leaf_present = os.path.isfile(crt_p)
+    anything_certs = ca_present or leaf_present
+
+    def _describe_certs():
+        if ca_present and leaf_present:
+            return "the loopback CA + localhost certificate"
+        if ca_present:
+            return "the loopback CA"
+        if byo and leaf_present:
+            return "the certificate FILES we copied (%s)" % crt_p
+        return "the leaf certificate"
+
+    def _describe_trust():
+        if byo:
+            return "(your own trust entry stays in place)"
+        return "(keychain/TrustedPeople trust entry + files)" if (is_mac() or is_windows()) \
+            else "(files)"
+
+    stop_server()
+
+    # Questions BEFORE the actions they belong to (default = keep everything)
+    if rm_certs is None:
+        if DRY_RUN or (not sys.stdin.isatty()):
+            rm_certs = False
+            if anything_certs and DRY_RUN:
+                out("  [..]  [dry-run] would ask to remove %s %s - default: KEEP"
+                    % (_describe_certs(), _describe_trust()))
+        elif anything_certs:
+            print("")
+            out("  certificates in place: %s" % os.path.join(cdir, ""))
+            out("    %s" % _paint(_describe_certs(), "cyan"))
+            rm_certs = ask_yes("Also remove %s %s" % (_describe_certs(), _describe_trust()), False)
+            _log("uninstall cert-removal answer: %s" % ("yes" if rm_certs else "no (kept)"), ts=True)
+        else:
+            rm_certs = False
+    if purge is None:
+        if DRY_RUN or (not sys.stdin.isatty()):
+            purge = False
+            if DRY_RUN:
+                out("  [..]  [dry-run] would ask to wipe the config folder (%s) -"
+                    " default: KEEP" % config_dir())
+        else:
+            purge = ask_yes("Also wipe the config folder (%s - config.json, stored"
+                            " API keys, profiles, sessions%s)?" % (
+                                config_dir(),
+                                "; includes the certificate + log files" if anything_certs else ""),
+                            False)
+            _log("uninstall config-wipe answer: %s" % ("yes" if purge else "no (kept)"), ts=True)
+    if rm_certs and purge:
+        note("the config wipe covers the certificate files; the trust removal still runs")
+
+    # --- platform unregistration (always) ---
     if is_mac():
         if DRY_RUN:
             out("  [..]  [dry-run] would unregister the login item and remove %s" % app_bundle())
@@ -2772,19 +2876,41 @@ def do_uninstall(purge):
         if os.path.isdir(inst):
             shutil.rmtree(inst, ignore_errors=True)
             ok("removed " + inst)
-    cfg = config_dir()
-    if purge is None:
-        print("")
-        purge = (not DRY_RUN) and ask_yes(
-            "Also remove the config (%s - stored API keys, profiles, sessions)?" % cfg, False)
+
+    # --- certificates (only when the ask/flag said so) ---
+    if rm_certs and os.path.isdir(cdir):
+        if byo:
+            warn("your own certificate stays TRUSTED in the trust store - we never"
+                 " touch trust entries we did not create (remove it yourself if you"
+                 " no longer want it)")
+        else:
+            if ca_present:
+                _remove_ca_trust(ca_p)
+                ok("loopback CA removed from the user trust store")
+            if leaf_present:
+                _remove_leaf_trust(crt_p)
+                ok("leaf certificate removed from the user trust store")
+        if DRY_RUN:
+            out("  [..]  [dry-run] would delete " + cdir)
+        else:
+            shutil.rmtree(cdir, ignore_errors=True)
+            if os.path.isdir(cdir):
+                warn("could not fully remove " + cdir)
+            else:
+                ok("certificate + key files deleted: " + cdir)
+    elif not rm_certs and anything_certs:
+        out("  [ok] certificates + keys kept at %s (trust untouched)" % cdir)
+
+    # --- config (wipe or keep) ---
     if purge:
         if DRY_RUN:
-            out("  [..]  [dry-run] would wipe " + cfg)
+            out("  [..]  [dry-run] would wipe " + config_dir())
         else:
-            shutil.rmtree(cfg, ignore_errors=True)
-            ok("config wiped: " + cfg)
+            shutil.rmtree(config_dir(), ignore_errors=True)
+            ok("config wiped: " + config_dir())
     else:
-        out("  [ok] config kept at %s (keys, profiles and sessions intact)" % cfg)
+        out("  [ok] config kept at %s (config.json, keys, profiles and sessions intact)"
+            % config_dir())
     out("")
     warn("quit and reopen PowerPoint / Word / Outlook to finish removing the add-ins")
     pause_after("uninstall")
@@ -3357,6 +3483,8 @@ def main():
                     help="matching unencrypted private key for --mailkick-cert (PEM)")
     ap.add_argument("--stop", action="store_true", help="stop the local server")
     ap.add_argument("--status", action="store_true", help="show whether the local server is running")
+    ap.add_argument("--remove-certs", action="store_true",
+                    help="with --uninstall: also remove the local certificates OfficeKick installed (trust entry + files); otherwise they are kept")
     ap.add_argument("--purge-config", action="store_true",
                     help="with --uninstall: also wipe ~/.officekick")
     ap.add_argument("--port", type=int, default=DEFAULT_PORT, help="server port (default %d)" % DEFAULT_PORT)
@@ -3439,7 +3567,8 @@ def main():
         raise SystemExit(do_status())
     if args.uninstall:
         banner("uninstall")
-        do_uninstall(True if args.purge_config else None)
+        do_uninstall(True if args.purge_config else None,
+                     True if args.remove_certs else None)
         return
     if args.update:
         git_pull()
