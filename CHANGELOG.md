@@ -30,6 +30,19 @@
   behaviour, speaker notes on DocKick-only variants: tracked changes, and
   MailKick's never-send rules + context extras).
 
+## 0.9.274
+
+### Changed
+- the installer's read path is cached (~2 s): the menus called
+  _config_settings FOUR times per redraw, each with its own loopback HTTP
+  attempt. On machines where a refused-or-filtered loopback connect waits
+  the socket timeout, that multiplied into a visibly slow transport menu;
+  the cache now collapses a draw to one call (and arrow-key redraws to
+  zero), with the per-call timeout tightened 1.5 s -> 0.6 s (a local server
+  answers in milliseconds). Writes and the settings verification invalidate
+  the cache, so no stale reads. Battery: cold draw ~130 ms -> cached draw
+  ~0 ms, post-write invalidation verified.
+
 ## 0.9.273
 
 ### Fixed

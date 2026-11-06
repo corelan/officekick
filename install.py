@@ -533,15 +533,24 @@ def https_feasible():
     return (len(reasons) == 0, reasons, techniques)
 
 
-def _config_settings():
+_CFG_CACHE = {"t": 0.0, "d": None}
+
+
+def _config_settings(max_age=2.0):
     """Settings from the running server first; keys the server does not
     know (older builds) fall back to the config file; {} when neither is
-    reachable."""
+    reachable. Cached ~2 s: the menus call this four times per draw, and on
+    some Windows boxes a refused-or-filtered loopback connect waits the full
+    socket timeout - four of those per redraw read as a slow menu (0.9.274)."""
+    import time as _time
+    cached = _CFG_CACHE["d"]
+    if cached is not None and (_time.time() - _CFG_CACHE["t"]) < max_age:
+        return cached
     srv = None
     try:
         import urllib.request
         opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
-        with opener.open("http://127.0.0.1:%d/api/config" % PORT, timeout=1.5) as resp:
+        with opener.open("http://127.0.0.1:%d/api/config" % PORT, timeout=0.6) as resp:
             d = json.loads(resp.read().decode("utf-8", "replace")) or {}
             srv = {k: d.get(k) for k in ("transportMode", "transportHttpPort",
                                          "transportHttpsPort", "certMode", "certHost")}
@@ -565,14 +574,22 @@ def _config_settings():
                 _log("settings divergence on %s: server=%r file=%r - the file"
                      " wins (the server re-reads at its next restart)" % (k, srv.get(k), out[k]),
                      ts=True)
+        _CFG_CACHE["t"] = _time.time()
+        _CFG_CACHE["d"] = out
         return out
     try:
         with open(config_file(), "r", encoding="utf-8") as fh:
             d = json.load(fh) or {}
-        return {k: d.get(k) for k in ("transportMode", "transportHttpPort",
-                                      "transportHttpsPort", "certMode", "certHost")}
+        out = {k: d.get(k) for k in ("transportMode", "transportHttpPort",
+                                     "transportHttpsPort", "certMode", "certHost")}
+        _CFG_CACHE["t"] = _time.time()
+        _CFG_CACHE["d"] = out
+        return out
     except Exception:
-        return {}
+        out = {}
+        _CFG_CACHE["t"] = _time.time()
+        _CFG_CACHE["d"] = out
+        return out
 
 
 def _valid_port(v):
@@ -614,6 +631,7 @@ def _persist_file(pairs):
     _cdir = os.path.dirname(config_file())
     if _cdir and not os.path.isdir(_cdir):
         os.makedirs(_cdir, exist_ok=True)   # a fresh machine: no ~/.officekick yet
+    _CFG_CACHE["d"] = None   # a write invalidates the read cache
     with open(config_file(), "w", encoding="utf-8") as fh:
         json.dump(cfg, fh, indent=2)
     try:
@@ -637,6 +655,7 @@ def _api_set(body):
         opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
         with opener.open(req, timeout=3) as resp:
             resp.read()
+        _CFG_CACHE["d"] = None   # verify against the post-PUT state
         got = _config_settings()
         for k, v in body.items():
             if got.get(k) != v:
