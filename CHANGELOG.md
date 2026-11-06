@@ -78,6 +78,31 @@
   Q&A pair lands in Previous requests and in the session history. Rules
   added to all three system prompts (MailKick's version says a clarify reply
   replaces - not supplements - the ops/reply round).
+## 0.9.265
+
+### Fixed
+- image placement is deterministic now: the direct setSelectedDataAsync
+  insert always lands on the slide the user has OPEN (no slide-targeting
+  exists in the PowerPoint JS API), so an op naming a different slide
+  (typical: a slide the batch just created) went to the wrong slide. The
+  apply now goes straight to the picture-filled-shape path for off-slide
+  targets: the image is inserted as a picture-filled rectangle ON the
+  requested slide via fill.setImage, and the row reports
+  "inserted on slide N as a picture-filled rectangle ...". Same-slide and
+  simulator runs keep the direct insert (with the size ladder when the
+  host rejects the payload).
+
+### Fixed (validator)
+- a create_shape textbox earlier in the SAME batch was invisible to the
+  validator's text-state: a later format_text with find "2 · Wire" against
+  the freshly created textbox read the pre-batch snapshot and
+  false-rejected "not found in that shape's current text". The batch's own
+  textbox text is now registered in the text state (when the slide's shape
+  count is detailed) and the verified sim flow shows the find-format
+  validating and applying. (Find mismatches on shapes the model numbered
+  wrongly still fail at apply time with the self-diagnosing reason - that
+  guard is the failsafe, unchanged.)
+
 ## 0.9.264
 
 ### Fixed

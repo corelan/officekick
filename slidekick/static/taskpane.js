@@ -2395,23 +2395,8 @@ OfficeDeck.prototype.addImage = function (payload) {
     // regardless of payload - use the PROVEN primitive instead: a rectangle
     // at the requested geometry picture-filled via fill.setImage (the same
     // code path as set_shape_image, shipped at PowerPointApi 1.10).
-    return self.run("addImageShapeFallback", function (ctx) {
-      if (!Office.context.requirements.isSetSupported("PowerPointApi", "1.10")) {
-        throw new FriendlyError("the picture-filled-shape fallback needs PowerPointApi 1.10 - update PowerPoint (16.105+ on Mac).");
-      }
-      var geo = payload.geometry || {};
-      var g0 = { left: geo.left != null ? geo.left : 80, top: geo.top != null ? geo.top : 110,
-                 width: geo.width != null ? geo.width : 800, height: geo.height != null ? geo.height : 450 };
-      var shapes = ctx.presentation.slides.getItemAt(payload.slide != null ? payload.slide : 0).shapes;
-      var sh = shapes.addGeometricShape("rectangle", g0);
-      try { sh.name = "sk-shape-image"; } catch (eN) { /* naming optional */ }
-      sh.fill.setImage(raw0);
-      return ctx.sync().then(function () {
-        return { ok: true,
-          note: "inserted as a picture-filled rectangle (" + kb(raw0) + " KB) - the direct image insert failed on this host (" +
-            String(e0msg || "unknown").slice(0, 60) + ")" };
-      });
-    });
+    return self.addImageShape({ b64: raw0, slide: payload.slide, geometry: payload.geometry,
+                                why: e0msg });
   }
   var e0msg = "";
   var raw0b = raw0;
@@ -2434,6 +2419,41 @@ OfficeDeck.prototype.addImage = function (payload) {
         });
       });
     }, function () { return shapeFallback(); });
+  });
+};
+
+OfficeDeck.prototype.addImageShape = function (payload) {
+  // (0.9.265): the PROVEN primitive for placing an image on an EXACT slide.
+  // The direct setSelectedDataAsync insert always lands on the slide the
+  // user has open (no slide-targeting exists in the PowerPoint JS API), so
+  // batches that just created their target slide need this path. A
+  // rectangle at the requested geometry is picture-filled via fill.setImage
+  // (the same code path as set_shape_image, PowerPointApi 1.10).
+  var kb = function (s) { return (s.length * 0.75 / 1024).toFixed(0); };
+  var self = this;
+  var raw0 = String(payload.b64 || "");
+  var m0 = raw0.match(/^data:[^;]+;base64,/);
+  if (m0) raw0 = raw0.slice(m0[0].length);
+  var why = payload.why || "the direct insert always lands on the slide you have open";
+  return self.run("addImageShape", function (ctx) {
+    if (!Office.context.requirements.isSetSupported("PowerPointApi", "1.10")) {
+      throw new FriendlyError("placing an image on a specific slide needs PowerPointApi 1.10 - update PowerPoint (16.105+ on Mac).");
+    }
+    var geo = payload.geometry || {};
+    var g0 = { left: geo.left != null ? geo.left : 80,
+               top: geo.top != null ? geo.top : 110,
+               width: geo.width != null ? geo.width : 800,
+               height: geo.height != null ? geo.height : 450 };
+    var sl = payload.slide != null ? payload.slide : 0;
+    var shapes = ctx.presentation.slides.getItemAt(sl).shapes;
+    var sh = shapes.addGeometricShape("rectangle", g0);
+    try { sh.name = "«redacted:sk-…»"; } catch (eN) { /* naming optional */ }
+    sh.fill.setImage(raw0);
+    return ctx.sync().then(function () {
+      return { ok: true,
+        note: "inserted on slide " + (sl + 1) + " as a picture-filled rectangle (" + kb(raw0) + " KB)" +
+          " - direct inserts land on the slide you have open (" + String(why).slice(0, 60) + ")" };
+    });
   });
 };
 
@@ -3678,6 +3698,15 @@ OfficeDeck.prototype.setNotes = function (i, text) {
         out.slide = op.slide;
       }
       if ((t === "create_table" || t === "create_shape" || t === "create_image") && typeof out.slide === "number") {
+        // register the batch-created shape's TEXT for later ops' find checks
+        // (0.9.265: a create_shape textbox earlier in the batch was invisible
+        // to textOf - a format op's find read the PRE-batch snapshot and
+        // false-rejected "2 · Wire" not found). Only when the slide's shape
+        // count is detailed in the snapshot (else defer to apply time).
+        var csX = ctx && ctx.slides[out.slide - 1] && ctx.slides[out.slide - 1].shapes;
+        if (out.text && ctx && out.slide <= ctx.slideCount && csX && csX.length) {
+          textState[out.slide + ":" + (csX.length + (plannedShapes[out.slide] || 0) + 1)] = out.text;
+        }
         plannedShapes[out.slide] = (plannedShapes[out.slide] || 0) + 1;
       }
       ops.push(out);
@@ -4022,8 +4051,15 @@ OfficeDeck.prototype.setNotes = function (i, text) {
               connection: imgRef.connection, model: imgRef.model, prompt: op.prompt,
             }).then(function (img) {
             if (!img || !img.b64) throw new FriendlyError("server returned no image data");
-            return deck.addImage({ b64: img.b64, slide: cur, geometry: op.geometry }).then(function (ri) {
-              var note = !SK.sim && op.slide != null && ctx && op.slide - 1 !== ctx.activeSlide
+            // the direct insert reaches only the slide the user has OPEN -
+            // when the op names a DIFFERENT slide (typical: the batch just
+            // created it), go straight to the picture-filled-shape path
+            // (0.9.265) so the image lands on the requested slide.
+            var offSlide = !SK.sim && op.slide != null && ctx && op.slide - 1 !== ctx.activeSlide;
+            var useShape = offSlide ? deck.addImageShape({ b64: img.b64, slide: cur, geometry: op.geometry })
+                                    : deck.addImage({ b64: img.b64, slide: cur, geometry: op.geometry });
+            return useShape.then(function (ri) {
+              var note = (offSlide && !(ri && ri.note))
                 ? " (targeting the slide you have open in PowerPoint; requested slide " + op.slide + ")" : "";
               if (ri && ri.note) note += (note ? " " : "") + "[" + ri.note + "]";
               lines.push({ ok: true, text: "image inserted (" + imgRef.connection + ":" + imgRef.model + ")" + note });
