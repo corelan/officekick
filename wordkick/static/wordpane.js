@@ -1855,7 +1855,7 @@ var nw = $("sess-new");
             return { ok: true, how: "after the paragraph containing '" + place.slice(0, 60) + "'" };
           });
         }.bind(this));
-      });
+      }.bind(this));
     });
   };
 
@@ -2452,7 +2452,7 @@ var nw = $("sess-new");
         return ctx.sync().then(function () {
           return { ok: true, how: "anchor '" + place.slice(0, 60) + "' not found - inserted at end of document" };
         });
-      });
+      }.bind(this));
     });
   };
 

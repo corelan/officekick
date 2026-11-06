@@ -42,6 +42,19 @@
   exact layout Office honors, and docs gain the manual Trust Center +
   reg-add unblock for machines that installed older builds.
 
+## 0.9.283
+
+### Fixed
+- anchored images in DocKick died with "this._wholeParaRangeOf is not a
+  function" (field: a story ask with three images placed after specific
+  paragraphs - all three failed, retry included). The anchor branch of
+  addImage called this._wholeParaRangeOf inside a ctx.sync().then(...) whose
+  outer callback was not .bind(this)-ed, so `this` was undefined there.
+  insertParagraphs' anchor branch had the same latent hole (end-of-document
+  inserts never reach it, which is why the paragraphs in the same ask had
+  worked). Both outer callbacks are now bound; the end/shortage branches
+  are untouched.
+
 ## 0.9.282
 
 ### Fixed
