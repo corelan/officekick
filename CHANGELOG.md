@@ -42,6 +42,15 @@
   exact layout Office honors, and docs gain the manual Trust Center +
   reg-add unblock for machines that installed older builds.
 
+## 0.9.279
+
+### Changed
+- the TrustedCatalogs Url now carries a trailing backslash. The office
+  add-ins dialog on the field box still said "add/enable catalogs from the
+  Trust Center" after the flag fix + a verified install - folder-catalog
+  Urls are stored WITH the trailing backslash when added via the Trust
+  Center UI, so the bootstrap entry now matches that form.
+
 ## 0.9.278
 
 ### Fixed

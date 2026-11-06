@@ -2856,6 +2856,8 @@ def sideload_windows_catalog():
     mdir = manifest_dir()
     os.makedirs(mdir, exist_ok=True)
     key = CATALOG_BASE + "\\" + CATALOG_KEY
+    if not mdir.endswith("\\"):
+        mdir = mdir + "\\"   # folder-catalog Urls carry a trailing backslash
     try:
         with winreg.CreateKeyEx(winreg.HKEY_CURRENT_USER, key, 0, winreg.KEY_SET_VALUE) as k:
             winreg.SetValueEx(k, "Url", 0, winreg.REG_SZ, mdir)
