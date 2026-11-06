@@ -78,6 +78,27 @@
   Q&A pair lands in Previous requests and in the session history. Rules
   added to all three system prompts (MailKick's version says a clarify reply
   replaces - not supplements - the ops/reply round).
+## 0.9.271
+
+### Added
+- TARGET CONFIRMATION LADDER (user rule: when it is not clear WHERE to
+  insert/write/change/delete/move, confirm - AI first, then the user):
+  (1) an unnamed target (targeting verbs, no slide number, the plan writes
+  exactly one existing slide) gets ONE AI confirmation round - the model
+  sees the original prompt and either re-confirms deliberately (the plan
+  runs), asks the user itself ({"kind":"clarify"} renders), or corrects;
+  (2) when the insert-ask guard drops EVERY action (the model kept the
+  wrong aim after its confirmation round), the pane asks the USER:
+  "Where should the work land?" with interactive options - stick to the
+  named slide, override with the plan's aim (that choice then skips the
+  guard for the re-run), or cancel - plus free text, and the pick
+  auto-reruns the ask with the answer embedded. The AI round sees the
+  original conversation; one confirmation round per run.
+
+### Fixed
+- the stage-1 continuation hung the run (the return skipped renderParsed);
+  it now renders the confirmed/clarify result like the other re-ask paths.
+
 ## 0.9.270
 
 ### Fixed

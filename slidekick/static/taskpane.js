@@ -4328,6 +4328,7 @@ OfficeDeck.prototype.setNotes = function (i, text) {
     SK.busy = true;
     SK.runCancelled = false;
     SK.insertGuard = null;   // a new run rebuilds the target guard from its own parse (0.9.270)
+    SK.targetConfirmDone = false;   // one AI target-confirmation round per run
     input.disabled = true;   // the text stays visible but locked while working
     setRunEnabled(false);
     chatTimerStart();
@@ -4959,7 +4960,11 @@ OfficeDeck.prototype.setNotes = function (i, text) {
                      /(?:^|[\s(,.])slides?\s+(\d{1,4})\b/i.exec(instruction);
             return m2 ? parseInt(m2[1], 10) : 0;
           })();
-          if (namedTarget && ctx && ctx.slides && namedTarget <= ctx.slides.length) {
+          // 0.9.271: an interactive target answer (the pick embeds this
+          // marker) is the user's explicit instruction - no re-ask, no drop
+          var userTargetOverride = /your earlier choice on "Where should the work land?[\s\S]*the slides the plan aims at/i.test(instruction || "");
+          if (userTargetOverride) SK.insertGuard = null;
+          if (namedTarget && ctx && ctx.slides && namedTarget <= ctx.slides.length && !userTargetOverride) {
             var tmap = {};
             var createCount0 = 0;
             (parsed.ops || []).forEach(function (op2) {
@@ -5015,6 +5020,49 @@ OfficeDeck.prototype.setNotes = function (i, text) {
         }
         return parsed;
       }).then(function (parsed) {
+        // 0.9.271 stage 1 (case B): the ask carries a targeting VERB but no
+        // slide number, and the plan writes exactly ONE existing slide -
+        // the model may have guessed. One AI confirmation round: the model
+        // deliberately re-confirms (same plan) or asks the user (clarify).
+        if (parsed && parsed.ok && parsed.kind === "slide_ops" && (parsed.ops || []).length &&
+            !(SK.targetConfirmDone) && ctx && ctx.slides && instruction &&
+            /\b(insert|add|remove|delete|move|replace|change|write|apply|place|put)\b/i.test(instruction) &&
+            !/slides?\s+\d|\bslide\s+\d|\bafter\b/i.test(instruction)) {
+          var tSet = [];
+          var hasCreatesB = parsed.ops.some(function (o5) { return o5 && o5.type === "create_slide"; });
+          parsed.ops.forEach(function (o4) {
+            if (o4 && o4.slide != null && o4.slide >= 1 && o4.slide <= ctx.slides.length &&
+                tSet.indexOf(o4.slide) < 0) tSet.push(o4.slide);
+          });
+          if (tSet.length === 1 && !hasCreatesB) {
+            SK.targetConfirmDone = true;   // one confirmation round per run
+            var confMsg = messages.concat([
+              { role: "assistant", content: String((SK.lastModelText || {}).text || "") },
+              { role: "user", content: "TARGET CONFIRMATION: the user's request does not state WHERE - " +
+                "your plan writes to slide " + tSet[0] + " of " + ctx.slides.length + " (1-based). " +
+                "If that is certainly the intended target, reply with the SAME plan unchanged. " +
+                "If the request leaves the target open, ask the user: reply {\"kind\":\"clarify\",\"question\":\"...\",\"options\":[2-4 short choices]} " +
+                "(or reply with a CORRECTED plan if the wording clearly implies another target). " +
+                "Slide_ops JSON or clarify JSON only." },
+            ]);
+            setStatus("Confirming the target slide with the model…", "busy");
+            return askRetryable(function () { return apiJson("/api/chat", "POST", { connection: ref.connection, model: ref.model, messages: confMsg }); })
+              .then(function (r5) {
+                dbg("target.confirm", { text: String(r5.text || "").slice(0, 160) });
+                SK.lastModelText = { text: r5.text };
+                var p5 = tryParse(r5.text);
+                if (p5.ok && p5.kind === "clarify") {
+                  // the model agrees the target is open - interactive clarify
+                  renderClarify(p5, instruction);
+                  SK.lastInstruction = instruction;
+                  setStatus("Pick one of the options (or write your own answer) to continue.", "pending");
+                  pushHistory(instruction, assistantHistoryText(p5));
+                  return Promise.resolve(null);
+                }
+                return renderParsed(p5.ok ? p5 : parsed, ctx, instruction);
+              }).catch(function () { return renderParsed(parsed, ctx, instruction); });
+          }
+        }
         if (parsed && parsed.kind === "clarify") {
           // 0.9.235: the model asks the user to pick the form of the result
           SK.clarifyChain = (SK.clarifyChain || 0) + 1;
@@ -5724,6 +5772,33 @@ OfficeDeck.prototype.setNotes = function (i, text) {
       }
       // nothing survived validation: no per-row wall of failures - one clear
       // box + a one-click re-ask of the same instruction
+      // 0.9.271: when the target guard dropped everything on an insert-ask
+      // (the model kept the wrong aim after its confirmation round), the
+      // remaining ambiguity is the USER's to decide - interactive clarify.
+      var guardDrops = validation.invalid.filter(function (iv) {
+        return String(iv.reason || "").indexOf("target guard:") === 0;
+      });
+      if (!validation.ops.length && guardDrops.length && guardDrops.length === validation.invalid.length &&
+          SK.insertGuard && SK.insertGuard.named != null) {
+        var aimSet = [];
+        guardDrops.forEach(function (gd) {
+          var s3 = gd.op && gd.op.slide;
+          if (s3 != null && aimSet.indexOf(s3) < 0) aimSet.push(s3);
+        });
+        var qText = "Where should the work land? Your ask names slide " + SK.insertGuard.named +
+          ", and the plan aimed at slide(s) " + aimSet.join(", ") +
+          " - the confirmation round did not resolve it.";
+        var opts = ["slide " + SK.insertGuard.named + " (as my ask said)",
+                    "the slides the plan aims at - " + aimSet.join(", "),
+                    "cancel - do nothing"];
+        var clP = { kind: "clarify", question: qText, options: opts };
+        SK.insertGuard = null;   // the answered choice rebuilds the guard on the re-run
+        SK.lastInstruction = SK.lastInstruction || instruction;
+        renderClarify(clP, SK.lastInstruction);
+        setStatus("Confirm where to apply the plan.", "pending");
+        pushHistory(SK.lastInstruction, assistantHistoryText(clP));
+        return;
+      }
       var allbad = document.createElement("div");
       allbad.className = "status error";
       allbad.textContent = "None of the " + validation.invalid.length + " action(s) survived validation" +
