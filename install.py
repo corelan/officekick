@@ -576,6 +576,27 @@ def clear_screen():
         pass
 
 
+def _https_state():
+    """(active, description) for the https://localhost:<port+1> listener in
+    the info header above menus. Never raises."""
+    port_tls = PORT + 1
+    try:
+        import ssl
+        import urllib.request
+        ctx = ssl._create_unverified_context()   # the loopback pair is ours; no CA dance here
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}),
+                                             urllib.request.HTTPSHandler(context=ctx))
+        with opener.open("https://localhost:%d/api/health" % port_tls, timeout=1.2) as resp:
+            d = json.loads(resp.read().decode("utf-8", "replace"))
+        if d.get("ok") is True:
+            return True, "https listener active on https://localhost:%d (version %s)" % (
+                port_tls, d.get("version"))
+        return False, "https listener on port %d answers but is unhealthy" % port_tls
+    except Exception:
+        return False, "https listener not running on port %d (transport mode: %s)" % (
+            port_tls, _current_transport())
+
+
 def banner(mode=None):
     clear_screen()
     head = "%s v%s  -  installer" % (APP_NAME, VERSION)
@@ -587,14 +608,16 @@ def banner(mode=None):
     print(_paint("-" * 74, "cyan"))
     h = health(PORT)
     inst = detect_installed()
-    if h:
-        srv = "running on 127.0.0.1:%d (version %s)" % (PORT, h.get("version"))
-    else:
-        srv = "not running (start it here or: install.py --start)"
+    tls_on, tls_desc = _https_state()
     print("  detected : %s %s | python %s" % (
         platform.system(), platform.release(), platform.python_version()))
     print("  install  : %s" % install_dir())
-    print("  server   : %s" % srv)
+    if h:
+        print("  server   : running (version %s)" % h.get("version"))
+        print("        http  : http://127.0.0.1:%d (always on - heartbeat for install/update/restart)" % PORT)
+        print("        https : %s" % tls_desc)
+    else:
+        print("  server   : not running (start it here or: install.py --start)")
     print("  add-ins  : %s" % (", ".join(name for (folder, name, _mf) in OURS
                                         if folder in inst) or "not installed yet"))
     if mode:
@@ -2505,6 +2528,8 @@ def do_status():
     h = health(PORT)
     if h:
         print("  running  : http://127.0.0.1:%d (version %s)" % (PORT, h.get("version")))
+        tls_on, tls_desc = _https_state()
+        print("  https    : %s" % tls_desc)
         inst = detect_installed()
         print("  add-ins  : %s" % (", ".join(name for (folder, name, _mf) in OURS if folder in inst)
                                 or "not installed"))
@@ -2529,8 +2554,12 @@ def server_menu():
         h = health(PORT)
         print("")
         print("  ----- server -----")
-        print("  " + ("running v%s on port %d" % (h.get("version"), PORT) if h
-                         else "not running"))
+        if h:
+            print("  running v%s on http://127.0.0.1:%d" % (h.get("version"), PORT))
+            tls_on, tls_desc = _https_state()
+            print("  https: %s" % tls_desc)
+        else:
+            print("  not running")
         return rows
 
     while True:
