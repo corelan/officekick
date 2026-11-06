@@ -4935,9 +4935,23 @@ OfficeDeck.prototype.setNotes = function (i, text) {
           })();
           if (namedTarget && ctx && ctx.slides && namedTarget <= ctx.slides.length) {
             var tmap = {};
-            (parsed.ops || []).forEach(function (op2) { if (op2 && op2.slide) tmap[op2.slide] = 1; });
+            var createCount0 = 0;
+            (parsed.ops || []).forEach(function (op2) {
+              if (op2 && op2.slide) tmap[op2.slide] = 1;
+              if (op2 && op2.type === "create_slide") createCount0++;
+            });
             var tl = Object.keys(tmap).map(Number);
-            if (tl.length && tl.indexOf(namedTarget) < 0) {
+            // 0.9.267: "insert slides after N" - targets N+1.. are CORRECT when
+            // the batch itself creates them (the old guard forced the model to
+            // re-aim AT the named slide and an after-insert plan then painted
+            // the user's real slide). Exempt: ask uses after/insert wording,
+            // the plan carries create_slide, and all targets fit
+            // named+1 .. named+creates within the virtual deck.
+            var afterW = /\bafter\b|\binsert\b|\bnew slides?\b|\badd slides?\b/i.test(instruction);
+            var hostsOk = afterW && createCount0 > 0 && tl.length > 0 &&
+              tl.every(function (t3) { return t3 <= ctx.slides.length + createCount0; }) &&
+              tl.every(function (t3) { return t3 >= namedTarget && t3 <= namedTarget + createCount0; });
+            if (tl.length && tl.indexOf(namedTarget) < 0 && !hostsOk) {
               dbg("target.mismatch", { named: namedTarget, ops: tl.join(",") });
               var reMsg = messages.concat([
                 { role: "assistant", content: String((SK.lastModelText || {}).text || "") },

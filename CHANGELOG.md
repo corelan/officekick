@@ -78,6 +78,24 @@
   Q&A pair lands in Previous requests and in the session history. Rules
   added to all three system prompts (MailKick's version says a clarify reply
   replaces - not supplements - the ops/reply round).
+## 0.9.268
+
+### Fixed
+- the target guard understood "slide N" but not "insert slides AFTER N": an
+  ask like "make a visualization of slide 138, insert slides after it" got
+  its correct plan (creates at 139/140) rejected as a wrong-target and the
+  model was re-asked to aim AT the named slide - so the run painted the
+  image and the infographic onto the user's real slide while the two new
+  slides stayed empty. The guard now honors after-insert semantics: when
+  the ask uses after/insert/new-slide wording, the plan carries create_slide
+  ops, and every target sits in named+1..named+creates within the virtual
+  deck, the plan passes instead of being re-asked. Genuine misses (the open
+  slide aimed at instead of the named one, no creates) still re-ask.
+- the find-based format_text rows in that run failed with "VR & ED"/
+  "Consider using not found" because the model numbered ITS OWN newly
+  created textboxes wrongly (shape 6 = its "Text Reasoning" box, not the
+  VR & ED panel copy - apply-time guard, correct behavior).
+
 ## 0.9.267
 
 ### Fixed
