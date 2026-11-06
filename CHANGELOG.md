@@ -78,6 +78,26 @@
   Q&A pair lands in Previous requests and in the session history. Rules
   added to all three system prompts (MailKick's version says a clarify reply
   replaces - not supplements - the ops/reply round).
+## 0.9.239
+### Added (transport mode - http/https/auto, persisted)
+- New server setting `transportMode`: `auto` (the classic behaviour - serve
+  https://localhost:8766 whenever a usable loopback certificate exists), `http`
+  (plain http even when certificates exist), `https` (require the TLS listener;
+  the installer creates/renews the certificate). Settable via Settings PUT
+  (whitelisted + validated; invalid values are refused) and from the new
+  installer menu 5) Transport or `--transport auto|http|https`.
+- The installer's manifest render respects the stored mode: `http` renders
+  plain-http manifests (MailKick is skipped with a note - Outlook requires
+  https), `https` creates/renews the loopback pair even without the Outlook
+  add-in. Updates keep the stored mode (they never flip it).
+- The certificates phase prints CA/certificate details on the console after
+  it runs (subject CN, expiry, days left, the file paths under
+  ~/.officekick/certs) for reused, reissued and freshly generated pairs; the
+  pair check runs on EVERY install/update whenever TLS is in use. When only
+  the leaf is bad/expiring (< 30 days) the leaf is re-issued from the SAME
+  already-trusted CA (no new trust import); a fresh CA is generated only when
+  the CA itself is unusable.
+
 ### Changed (installer UX - install.py redesigned)
 - Menu-driven installer: banner (version, Created by Corelan Consulting bv,
   repo link, detected platform/install dir/server + add-in status), main

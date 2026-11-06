@@ -501,6 +501,68 @@ def https_feasible():
     return (True, [], [])   # Windows: no TLS component needed for Outlook
 
 
+def _current_transport():
+    """The persisted transport mode (auto/http/https): from the running
+    server first, then from the config file; auto when unknown."""
+    try:
+        import urllib.request
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        with opener.open("http://127.0.0.1:%d/api/config" % PORT, timeout=1.5) as resp:
+            mode = (json.loads(resp.read().decode("utf-8", "replace")) or {}).get("transportMode")
+        if mode in ("auto", "http", "https"):
+            return mode
+    except Exception:
+        pass
+    try:
+        with open(config_file(), "r", encoding="utf-8") as fh:
+            mode = (json.load(fh) or {}).get("transportMode")
+        if mode in ("auto", "http", "https"):
+            return mode
+    except Exception:
+        pass
+    return "auto"
+
+
+def _set_transport(mode):
+    """Persist the transport mode: through the running server (settings PUT)
+    so both sides agree, or straight into the config file when it is down."""
+    if mode not in ("auto", "http", "https"):
+        return False
+    if health(PORT):
+        try:
+            import urllib.request
+            req = urllib.request.Request(
+                "http://127.0.0.1:%d/api/settings" % PORT,
+                data=json.dumps({"transportMode": mode}).encode("utf-8"),
+                headers={"Content-Type": "application/json"}, method="PUT")
+            opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+            with opener.open(req, timeout=3) as resp:
+                resp.read()
+            note("transportMode set to %s (via the running server)" % mode)
+            return True
+        except Exception as exc:
+            warn("could not store transportMode via the server (%s) - writing the config file" % exc)
+    try:
+        cfg = {}
+        try:
+            with open(config_file(), "r", encoding="utf-8") as fh:
+                cfg = json.load(fh) or {}
+        except Exception:
+            cfg = {}
+        cfg["transportMode"] = mode
+        with open(config_file(), "w", encoding="utf-8") as fh:
+            json.dump(cfg, fh, indent=2)
+        try:
+            os.chmod(config_file(), 0o600)
+        except OSError:
+            pass
+        note("transportMode set to %s (config file written)" % mode)
+        return True
+    except Exception as exc:
+        warn("could not write %s: %s" % (config_file(), exc))
+        return False
+
+
 def clear_screen():
     """Wipe the terminal and put the cursor at the top-left (tty only; a
     no-op for piped/automation runs and windowless scheduled tasks)."""
@@ -1057,16 +1119,102 @@ def validate_existing_tls(crt):
     return None
 
 
+CERT_FACTS = {}            # loopback TLS info, printed after the certificates phase
+
+
+def _cert_facts(crt):
+    """Name + expiry of one PEM certificate ({} = unreadable)."""
+    rc, o = run_quiet(["openssl", "x509", "-in", crt, "-noout", "-subject", "-enddate"])
+    if rc != 0:
+        return {}
+    cn = "?"
+    m = re.search(r"CN ?= ?([^\n,]+)", o)
+    if m:
+        cn = m.group(1).strip()
+    expires = "?"
+    m = re.search(r"notAfter=(.+)", o)
+    if m:
+        expires = m.group(1).strip()
+    days = None
+    try:
+        from datetime import datetime, timezone
+        end = datetime.strptime(re.sub(r"\s+", " ", expires),
+                                "%b %d %H:%M:%S %Y %Z").replace(tzinfo=timezone.utc)
+        days = (end - datetime.now(timezone.utc)).days
+    except Exception:
+        pass
+    return {"cn": cn, "expires": expires, "days": days}
+
+
+def _fact_line(facts):
+    if not facts:
+        return "unreadable"
+    more = (", %d days left" % facts["days"]) if isinstance(facts.get("days"), int) else ""
+    return "CN=%s, expires %s%s" % (facts.get("cn", "?"), facts.get("expires", "?"), more)
+
+
+def _print_cert_facts():
+    """Console block after the certificates phase: names, expiry, file paths."""
+    if not CERT_FACTS:
+        return
+    print("")
+    print("  " + _paint("Loopback TLS (%s)" % CERT_FACTS["mode"], "bold"))
+    print("    CA    : %s" % CERT_FACTS["ca_path"])
+    print("            %s" % CERT_FACTS["ca_line"])
+    print("    cert  : %s" % CERT_FACTS["leaf_path"])
+    print("            %s" % CERT_FACTS["leaf_line"])
+    print("    keys  : %s" % CERT_FACTS["key_line"])
+
+
+def _ca_healthy(ca_crt):
+    """The loopback CA still exists, is not expired and is still trusted."""
+    if not (os.path.isfile(ca_crt)):
+        return False
+    rc, _o = run_quiet(["openssl", "x509", "-in", ca_crt, "-noout", "-checkend", str(86400 * 60)])
+    if rc != 0:
+        return False
+    rc, _o = run_quiet(["security", "verify-cert", "-c", ca_crt, "-p", "ssl"])
+    return rc == 0
+
+
+def _ca_sign(cert_dir, csr, crt):
+    """Sign the leaf with the loopback CA; tolerate a re-sign of the same
+    subject (unique_subject=no + serial bump + db rotation on refusal)."""
+    attr = os.path.join(cert_dir, "index.txt.attr")
+    with open(attr, "w") as fh:
+        fh.write("unique_subject = no\n")
+    cmd = ["openssl", "ca", "-batch", "-config", os.path.join(cert_dir, "ca.cnf"),
+           "-startdate", "20180101000000Z", "-enddate", "20380101000000Z",
+           "-in", csr, "-out", crt]
+    rc, o = run_quiet(cmd)
+    if rc != 0 and "already a certificate" in (o or ""):
+        _log("ca db refuses a re-sign - rotating index.txt and bumping the serial, then retrying")
+        idx = os.path.join(cert_dir, "index.txt")
+        if os.path.isfile(idx):
+            shutil.move(idx, idx + (".bak-%d" % (time.time_ns() % 1000000)))
+        srl = os.path.join(cert_dir, "serial")
+        try:
+            snum = int(open(srl).read().strip(), 16)
+        except Exception:
+            snum = int(time.time())
+        with open(srl, "w") as fh:
+            fh.write("%04X" % (snum + 1))
+        rc, o = run_quiet(cmd)
+    return rc, o
+
+
 def ensure_tls_certs():
-    """Generate a per-user CA + localhost server cert (0.9.193) and trust the
-    CA in the USER keychain, so the macOS server can additionally answer
-    https://localhost:8766 - Outlook's Add-from-File validates every manifest
-    URL as https. Returns (crt, key) or None. No admin rights.""
-    """
+    """Make sure a USABLE loopback pair exists for the https listener:
+    reuse a valid one; reissue the leaf from the SAME already-trusted CA when
+    only the leaf is bad/missing/expiring (< 30 days); otherwise generate a
+    fresh CA + leaf + trust import. Returns (crt, key) or None; all facts go
+    to CERT_FACTS for the console block after the certificates phase."""
+    global CERT_FACTS
+    CERT_FACTS = {}
     if not is_mac():
         return None
-    import shutil as _sh
-    if not _sh.which("openssl"):
+    if not shutil.which("openssl"):
+        warn("TLS check skipped: openssl not found")
         return None
     cert_dir = os.path.join(config_dir(), "certs")
     crt = os.path.join(cert_dir, "server.crt")
@@ -1078,26 +1226,110 @@ def ensure_tls_certs():
         os.chmod(cert_dir, 0o700)
     except OSError:
         pass
-    existing = validate_existing_tls(crt)
-    if existing is None and os.path.isfile(crt) and os.path.isfile(key):
-        ok("reusing the existing loopback certificate (%s) - still valid and" % crt)
-        out("  [ok]  trusted; no certificate was generated and nothing was re-imported.")
-        return (crt, key)
-    if existing:
-        warn("the existing loopback certificate is not usable (%s) - it will be" % existing)
-        out("       regenerated.")
+
+    def _record(mode, extra_note=""):
+        leaf = _cert_facts(crt)
+        ca = _cert_facts(ca_crt)
+        CERT_FACTS.update({
+            "mode": mode,
+            "ca_path": ca_crt,
+            "ca_line": _fact_line(ca),
+            "leaf_path": crt,
+            "leaf_line": _fact_line(leaf),
+            "key_line": "server.key + ca.key in %s (private, chmod 0600)" % cert_dir,
+        })
+        _log("tls %s: leaf[%s] ca[%s] files in %s%s" % (
+            mode, CERT_FACTS["leaf_line"], CERT_FACTS["ca_line"], cert_dir,
+            ((" - " + extra_note) if extra_note else "")))
+
+    leaf_reason = None
+    if os.path.isfile(crt) and os.path.isfile(key):
+        leaf_reason = validate_existing_tls(crt)
+        if leaf_reason is None:
+            _record("reused")
+            _log("reusing the existing loopback certificate - still valid and"
+                 " trusted; nothing was generated or re-imported")
+            return (crt, key)
+        warn("the existing loopback certificate is not usable (%s)" % leaf_reason)
+        note("check result for %s: %s" % (crt, leaf_reason))
+    else:
+        _log("no loopback certificate on disk yet (%s)" % cert_dir)
+
+    # leaf-only problem: reissue the leaf from the SAME already-trusted CA -
+    # never re-trust to fix a chain problem (no keychain prompt this way)
+    if _ca_healthy(ca_crt) and os.path.isfile(ca_key):
+        days = (_cert_facts(ca_crt).get("days") or "?")
+        _log("the CA is still valid + trusted - reissuing only the leaf from it"
+             " (CA %d days left; leaf will be re-signed, no re-trust needed)" % days)
+        if DRY_RUN:
+            note("[dry-run] would reissue the loopback leaf from the existing CA")
+            return None
+        ext = os.path.join(cert_dir, "localhost.ext")
+        with open(ext, "w") as fh:
+            fh.write("subjectAltName=DNS:localhost,IP:127.0.0.1,IP:0:0:0:0:0:0:0:1\n"
+                     "keyUsage = digitalSignature, keyEncipherment\n"
+                     "extendedKeyUsage = serverAuth\n")
+        cnf = os.path.join(cert_dir, "ca.cnf")
+        db = os.path.join(cert_dir, "index.txt")
+        serial = os.path.join(cert_dir, "serial")
+        open(db, "a").close()
+        if not os.path.exists(serial):
+            open(serial, "w").write("1000")
+        with open(cnf, "w") as fh:
+            fh.write("""[ ca ]
+default_ca = CA_default
+[ CA_default ]
+database = %s
+serial = %s
+new_certs_dir = %s
+certificate = %s
+private_key = %s
+default_md = sha256
+default_days = 3650
+policy = policy_any
+copy_extensions = copy
+[ policy_any ]
+commonName = supplied
+[ req ]
+distinguished_name = req_dn
+[ req_dn ]
+""" % (db, serial, cert_dir, ca_crt, ca_key))
+        rc, o = run_quiet(["openssl", "req", "-newkey", "rsa:2048", "-nodes", "-keyout", key,
+                           "-out", os.path.join(cert_dir, "server.csr"),
+                           "-subj", "/CN=localhost", "-addext",
+                           "subjectAltName=DNS:localhost,IP:127.0.0.1"])
+        if rc == 0:
+            rc, o = _ca_sign(cert_dir, os.path.join(cert_dir, "server.csr"), crt)
+        else:
+            o = "leaf key/req generation failed"
+        if rc != 0:
+            warn("leaf reissue failed - falling back to a full regeneration (%s)"
+                 % (o or "openssl error")[:160])
+            _log("leaf reissue failure detail: %s" % (o or ""))
+        else:
+            try:
+                os.remove(os.path.join(cert_dir, "server.csr"))
+                os.remove(ext)
+            except OSError:
+                pass
+            try:
+                os.chmod(key, 0o600)
+            except OSError:
+                pass
+            _record("reissued from the existing CA (no new CA, no re-trust)")
+            if validate_existing_tls(crt) is None:
+                return (crt, key)
+            warn("the reissued leaf did not validate - regenerating the full pair")
+
     if DRY_RUN:
-        out("  [..]  [dry-run] would generate loopback TLS certs under " + cert_dir)
+        note("[dry-run] would generate a new loopback CA + localhost certificate"
+             " under %s and import the CA into the login keychain" % cert_dir)
         return None
     ext = os.path.join(cert_dir, "localhost.ext")
     with open(ext, "w") as fh:
         fh.write("subjectAltName=DNS:localhost,IP:127.0.0.1,IP:0:0:0:0:0:0:0:1\n"
                  "keyUsage = digitalSignature, keyEncipherment\n"
                  "extendedKeyUsage = serverAuth\n")
-    # macOS Certificate Transparency: certs issued after ~2019 without SCTs
-    # are rejected by strict webviews even under a user-trusted root (New
-    # Outlook: "not signed by a valid security certificate"). Issue the leaf
-    # with a backdated notBefore via `openssl ca` to fall under the cutoff.
     cnf = os.path.join(cert_dir, "ca.cnf")
     db = os.path.join(cert_dir, "index.txt")
     serial = os.path.join(cert_dir, "serial")
@@ -1131,15 +1363,19 @@ distinguished_name = req_dn
          "-out", os.path.join(cert_dir, "server.csr"),
          "-subj", "/CN=localhost", "-addext",
          "subjectAltName=DNS:localhost,IP:127.0.0.1"],
-        ["openssl", "ca", "-batch", "-config", cnf,
-         "-startdate", "20180101000000Z", "-enddate", "20380101000000Z",
-         "-in", os.path.join(cert_dir, "server.csr"), "-out", crt],
     ]
     for cmd in cmds:
         rc, o = run_quiet(cmd)
         if rc != 0:
             warn("TLS cert generation failed (%s)" % (o or cmd[0]))
+            _log("generation failure detail: %s" % (o or ""))
             return None
+    rc, o = _ca_sign(cert_dir, os.path.join(cert_dir, "server.csr"), crt)
+    if rc != 0:
+        warn("TLS cert signing failed (%s)" % (o or "openssl error")[:160])
+        _log("signing failure detail: %s" % (o or ""))
+        CERT_FACTS = {}
+        return None
     try:
         os.remove(os.path.join(cert_dir, "server.csr"))
         os.remove(ext)
@@ -1153,10 +1389,11 @@ distinguished_name = req_dn
     rc, o = run_quiet(["security", "add-trusted-cert", "-r", "trustRoot",
                        "-k", keychain, ca_crt])
     if rc == 0:
-        ok("loopback CA trusted in your login keychain")
+        ok("loopback CA trusted in your login keychain (imported: %s)" % ca_crt)
     else:
         warn("could not auto-trust the loopback CA - run once yourself, then restart the server:")
-        out("       security add-trusted-cert -r trustRoot -k $HOME/Library/Keychains/login.keychain-db " + ca_crt)
+        print("       security add-trusted-cert -r trustRoot -k $HOME/Library/Keychains/login.keychain-db " + ca_crt)
+    _record("generated (fresh CA + leaf)")
     return (crt, key)
 
 
@@ -1300,6 +1537,29 @@ def render_and_sideload():
             warn("loopback certificate present but not usable (%s) - re-run" % reason)
             print("        install.py --install to regenerate and re-trust it.")
             _log("tls pair present but unusable: %s" % reason)
+    transport = _current_transport()
+    if transport == "http" and is_mac() and "mailkick" in (ADDINS or set()):
+        warn("transport mode is plain http - Outlook cannot use it; switching"
+             " MailKick off the list for this run")
+        renderable = ((ADDINS or set()) - {"mailkick"})
+        note("transport http: mailkick removed from this render (%s)" % ",".join(sorted(renderable)))
+        ADDINS.clear()
+        ADDINS.update(renderable)
+    if transport == "https":
+        if not tls_pair and is_mac():
+            warn("transport mode https - the certificate check did not pass;"
+                 " creating/renewing the loopback pair now")
+            pair = ensure_tls_certs()
+            reason2 = None
+            if pair:
+                reason2 = validate_existing_tls(pair[0])
+            if pair and reason2 is None:
+                tls_pair = pair
+            else:
+                warn("https mode but no usable certificate - the manifests stay plain http"
+                     " (the https listener will start once a pair validates)")
+        elif not tls_pair and not is_mac():
+            warn("transport mode https is a macOS feature - Windows stays plain http")
     step("rendering add-in manifests (%s, %s)" %
          (("https://localhost:%d via the loopback certificate" % (PORT + 1)) if tls_pair
           else ("http://localhost:%d" % PORT),
@@ -1899,6 +2159,7 @@ def install(mode_name="Install", interactive=True):
     if "mailkick" in (ADDINS or set()) and is_mac() and MAILKICK_CHOICE is None:
         MAILKICK_CHOICE = pick_mailkick_route()
     phase(3, total, "certificates", tls_phase)
+    _print_cert_facts()
     phase(4, total, "registering with Office", registration_phase)
     if INTERACTIVE and not DRY_RUN:
         AUTOSTART_WANT = ask_autostart()
@@ -1937,29 +2198,57 @@ def prepare_phase():
 
 def tls_phase():
     """Certificate work: the route was asked before this phase line; here we
-    only act on it (Windows needs none), then ensure a working loopback pair."""
-    global MAILKICK_CHOICE
-    if "mailkick" not in ADDINS:
-        return "none needed (" + ", ".join(app_label(a) for a in sorted(ADDINS)) + ")"
+    only act on it. The cert check runs whenever TLS is in use (existing pair
+    present) - not tied to the Outlook toggle - and reuses / reissues /
+    regenerates as needed."""
+    global CERT_FACTS, MAILKICK_CHOICE
+    CERT_FACTS = {}
     if not is_mac():
-        MAILKICK_CHOICE = "auto"      # Windows Outlook rides plain http
-        return "not needed on Windows (plain-http localhost)"
-    if MAILKICK_CHOICE not in ("auto", "custom", "skip"):
-        MAILKICK_CHOICE = pick_mailkick_route()   # non-interactive fallback
-    if MAILKICK_CHOICE == "custom":
-        cdir = tls_cert_dir()
-        os.makedirs(cdir, exist_ok=True)
-        shutil.copyfile(MAILKICK_CERT, os.path.join(cdir, "server.crt"))
-        shutil.copyfile(MAILKICK_KEY, os.path.join(cdir, "server.key"))
-        os.chmod(os.path.join(cdir, "server.key"), 0o600)
-        note("custom certificate copied to %s" % cdir)
-        return "your own certificate (copied, validated)"
-    if MAILKICK_CHOICE == "skip":
-        return "skipped (Outlook will not be registered)"
-    pair = ensure_tls_certs()
-    if pair:
-        return "loopback CA + localhost certificate ready (reused or generated)"
-    return "NOT ready - Outlook registration will be skipped (see install.log)"
+        if "mailkick" in ADDINS:
+            return "not needed on Windows (plain-http localhost)"
+        return "no TLS on Windows (plain http)"
+    crt = os.path.join(tls_cert_dir(), "server.crt")
+    key = os.path.join(tls_cert_dir(), "server.key")
+    have_pair = os.path.isfile(crt) and os.path.isfile(key)
+    if "mailkick" in ADDINS:
+        if MAILKICK_CHOICE not in ("auto", "custom", "skip"):
+            MAILKICK_CHOICE = pick_mailkick_route()   # non-interactive fallback
+        if MAILKICK_CHOICE == "custom":
+            cdir = tls_cert_dir()
+            os.makedirs(cdir, exist_ok=True)
+            shutil.copyfile(MAILKICK_CERT, os.path.join(cdir, "server.crt"))
+            shutil.copyfile(MAILKICK_KEY, os.path.join(cdir, "server.key"))
+            os.chmod(os.path.join(cdir, "server.key"), 0o600)
+            f = _cert_facts(crt)
+            CERT_FACTS.update({"mode": "your own certificate (PEM, validated + copied)",
+                               "ca_path": os.path.join(cdir, "ca.crt"),
+                               "ca_line": "yours (unchanged by this install, if present)",
+                               "leaf_path": crt, "leaf_line": _fact_line(f),
+                               "key_line": "server.key in %s (private, chmod 0600)" % cdir})
+            note("custom certificate copied to %s (leaf %s; key %s)"
+                 % (crt, CERT_FACTS["leaf_line"], CERT_FACTS["key_line"]))
+            return "your own certificate (copied, validated)"
+        if MAILKICK_CHOICE == "skip":
+            return "skipped (Outlook will not be registered)"
+        pair = ensure_tls_certs()
+        if pair:
+            return "loopback CA + localhost certificate ready (%s)" % CERT_FACTS["mode"]
+        return "NOT ready - Outlook registration will be skipped (see install.log)"
+    if have_pair:
+        pair = ensure_tls_certs()   # https still in use for the other panes
+        if pair:
+            return "loopback TLS re-checked (%s; used by Word/PowerPoint)" % CERT_FACTS["mode"]
+        warn("https is no longer usable - the add-ins fall back to plain http"
+             " (re-run install.py --install and enable Outlook to repair TLS)")
+        return "existing TLS unusable - plain http fallback (see install.log)"
+    if _current_transport() == "https" and is_mac():
+        pair = ensure_tls_certs()
+        if pair:
+            return "loopback TLS created (%s; https transport mode)" % CERT_FACTS["mode"]
+        warn("https transport mode on, but the certificate could not be created"
+             " - the manifests stay plain http")
+        return "https requested - certificate setup failed (plain http fallback)"
+    return "none needed - plain http (no Outlook selected, no TLS in use)"
 
 
 def registration_phase():
@@ -2016,8 +2305,10 @@ def done_note(mode_name):
         if folder in (ADDINS or set()) and apps.get(folder):
             ok("%s %s %s" % (name, verb, app_label(folder)))
     out("")
-    out("  Quit and REOPEN your Office apps, then check About tab ->")
-    out("  'Pane build: %s'. Details of this run: install.log" % read_version())
+    out("  Quit and REOPEN your Office apps. When a task pane is open, its")
+    out("  About tab shows 'Pane build: %s' - to open one use Insert >" % read_version())
+    out("  Add-ins > My Add-ins (or Add from File when offered); the per-app")
+    out("  steps live in docs/<dockick|slidekick|mailkick>.md. Log: install.log")
     out("  Simulator (no Office needed): %s/slidekick/static/simulator.html" % _sim_base())
     _first_run_notes()
     check_pane_errors()
@@ -2103,6 +2394,80 @@ def check_pane_errors():
 
 
 # ------------------------------------------------------------------- flows #
+def _reapply_transport(mode, label):
+    """Store the mode, re-render the manifests accordingly, restart the
+    server so the listeners match, and report."""
+    ok("transport mode -> %s" % mode)
+    _set_transport(mode)
+    if mode == "https" and is_mac():
+        tls_phase()          # create/renew the pair when it is missing
+        _print_cert_facts()
+    if office_app_running():
+        warn("Office apps are running - skipping the cache flush (the manifest"
+             " render still runs)")
+    else:
+        clear_office_caches()
+    render_and_sideload()
+    stop_server()
+    start_only()
+    ok("done - the panes now load over %s (manifests re-rendered)" % mode)
+
+
+def transport_menu():
+    cur = _current_transport()
+    rows = [
+        ("1", "auto    (https when a working certificate exists - the classic default)", None),
+        ("2", "plain http only (certificates ignored; Outlook not usable with this)", None),
+        ("3", "https always (creates/renews the loopback CA + certificate for ALL panes)", None),
+        (None, "@SEP", None),
+        ("0", "back (mode stays: %s)" % cur, "magenta"),
+    ]
+
+    def body():
+        clear_screen()
+        h = health(PORT)
+        print("")
+        print("  ----- transport -----")
+        print("  current mode: %s" % cur)
+        if h:
+            print("  server: running v%s on port %d" % (h.get("version"), PORT))
+        return rows
+
+    while True:
+        r = body()
+        sel = menu_pick(rows, 0, "(up/down + Enter, 1-3 = set, 0 = back)")
+        if sel is None:
+            print("")
+            for (act, label, _st) in rows:
+                if label == "@SEP":
+                    print("")
+                    continue
+                print("    %s" % label if not act else "    %s) %s" % (act, label))
+            print("")
+            try:
+                if not sys.stdin.isatty():
+                    print("  (non-interactive: pass --transport auto|http|https)")
+                    return
+                choice = input("  > choose [1/2/3, 0; default 0]: ").strip().lower()
+            except EOFError:
+                return
+            if choice in ("", "0", "q", "back"):
+                return
+            order = {"1": "auto", "2": "http", "3": "https"}
+            if choice not in order:
+                print("  please choose 1, 2, 3 or 0")
+                continue
+            _reapply_transport(order[choice], choice)
+            cur = _current_transport()
+            continue
+        act = rows[sel][0]
+        if act == "0" or not act:
+            return
+        mode = {"1": "auto", "2": "http", "3": "https"}[act]
+        _reapply_transport(mode, act)
+        cur = _current_transport()
+
+
 def do_status():
     h = health(PORT)
     if h:
@@ -2218,6 +2583,8 @@ def main():
     ap.add_argument("--no-ribbon", action="store_true",
                     help="Windows: leave the commands out (list-mode only)")
     ap.add_argument("--dry-run", action="store_true", help="print the actions, run none")
+    ap.add_argument("--transport", default=None, choices=["auto", "http", "https"], metavar="MODE",
+                    help="persist the pane transport: auto (https when a valid certificate exists) | http (plain http, certificates ignored) | https (always https; creates the certificate) - updates keep the stored mode")
     args = ap.parse_args()
     global SKIP_MAILKICK, MAILKICK_CERT, MAILKICK_KEY, MAILKICK_OPT
     SKIP_MAILKICK = args.skip_mailkick
@@ -2233,6 +2600,10 @@ def main():
     # list-mode + the Shared Folder dialog = the working path.
     RIBBON = bool(args.ribbon)   # opt-in on BOTH platforms now (see 0.9.107 revert note below)
 
+    if args.transport:
+        ok("transport mode -> %s (persisted; updates keep it)" % args.transport)
+        _set_transport(args.transport)
+
     if not (is_mac() or is_windows()):
         die("this installer supports macOS and Windows only (detected: %s)." % sys.platform)
 
@@ -2245,6 +2616,14 @@ def main():
     elif args.dry_run:
         log_open("dry-run")
 
+    if args.transport and not (args.install or args.update or args.uninstall):
+        banner("transport %s" % args.transport)
+        if not is_mac() and args.transport == "https":
+            warn("https is a macOS feature - Windows stays plain http")
+        else:
+            _reapply_transport(args.transport, args.transport)
+            pause_after("transport")
+        return
     if args.start:
         start_only()
         return
@@ -2277,6 +2656,7 @@ def main():
         ("1", "Install / repair    (Word + PowerPoint on; Outlook off by default)", None),
         ("2", "Update              (git pull + refresh; keeps your add-ins)", None),
         ("3", "Server              (start / restart / stop / status)", None),
+        ("5", "Transport (%s)  (http / https / auto)" % _current_transport(), None),
         (None, "@SEP", None),
         ("4", "Uninstall", "red"),
         (None, "@SEP", None),
@@ -2326,6 +2706,8 @@ def main():
                 install("Update", interactive=False)
             elif act == "3":
                 server_menu()
+            elif act == "5":
+                transport_menu()
             elif act == "4":
                 banner("uninstall")
                 do_uninstall(None)

@@ -169,6 +169,26 @@ class TestSlideKickServer(unittest.TestCase):
             "name": "g", "type": "generic-openai", "baseUrl": "ftp://x"}, True)
         self.assertEqual(st, 400)
 
+    def test_transport_mode_setting(self):
+        # default
+        st, cfg = self.S.req("/api/config")
+        self.assertEqual(cfg["transportMode"], "auto")
+        # set + read back
+        st, _ = self.S.req("/api/settings", "PUT", {"transportMode": "http"})
+        self.assertEqual(st, 200)
+        st, cfg = self.S.req("/api/config")
+        self.assertEqual(cfg["transportMode"], "http")
+        for mode in ("auto", "https", "auto"):
+            st, _ = self.S.req("/api/settings", "PUT", {"transportMode": mode})
+            self.assertEqual(st, 200)
+        st, cfg = self.S.req("/api/config")
+        self.assertEqual(cfg["transportMode"], "auto")
+        # invalid -> 400, value untouched
+        st, _data = self.S.req("/api/settings", "PUT", {"transportMode": "bogus"}, True)
+        self.assertEqual(st, 400)
+        st, cfg = self.S.req("/api/config")
+        self.assertEqual(cfg["transportMode"], "auto")
+
     def test_approvals_settings(self):
         st, _ = self.S.req("/api/settings", "PUT", {
             "approvals": {"delete_slide": "auto", "apply_layout": "deny"}})

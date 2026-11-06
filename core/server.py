@@ -34,7 +34,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 APP = "OfficeKick"
-VERSION = "0.9.238"
+VERSION = "0.9.239"
 
 # --------------------------------------------------------------------------- #
 # Self-restart: the server watches for <cfg dir>/restart.flag. Whatever writes
@@ -798,6 +798,11 @@ class Store:
         # 0.9.233 MailKick session behaviour: a different open email starts
         # a clean session (opt-in; the mail pane tracks the itemId)
         self.data.setdefault("newSessionPerEmail", False)
+        # 0.9.239 transport for the panes: auto (https when a usable loopback
+        # certificate exists - the classic behaviour), http (plain http even
+        # when certificates exist), https (require+serve the TLS listener;
+        # the installer creates/renews the certificate before starting)
+        self.data.setdefault("transportMode", "auto")
         self.data.setdefault("autoClean", True)        # delete old sessions on pane open
         self.data.setdefault("autoCleanDays", 120)     # session older than N days -> removed
         self.data.setdefault("logCleanDays", 30)        # debug/access logs older than N days -> removed
@@ -1139,6 +1144,7 @@ class Store:
             "customPromptDefault": DEFAULT_CUSTOM_PROMPT,
             "trackedChanges": bool(d.get("trackedChanges", False)),
             "newSessionPerEmail": bool(d.get("newSessionPerEmail", False)),
+            "transportMode": (d.get("transportMode") if d.get("transportMode") in ("auto", "http", "https") else "auto"),
             "autoClean": bool(d.get("autoClean", True)),
             "autoCleanDays": int(d.get("autoCleanDays", 120)),
             "autoUpdateCheck": bool(d.get("autoUpdateCheck", True)),
@@ -2964,6 +2970,12 @@ class SlideKickHandler(BaseHTTPRequestHandler):
                 if "newSessionPerEmail" in body and body["newSessionPerEmail"] is not None:
                     self.store.data["newSessionPerEmail"] = bool(body["newSessionPerEmail"])
                     changed = True
+                if "transportMode" in body and body["transportMode"] is not None:
+                    _tm = str(body["transportMode"])
+                    if _tm not in ("auto", "http", "https"):
+                        raise ApiError(400, "transportMode must be auto, http or https")
+                    self.store.data["transportMode"] = _tm
+                    changed = True
                 if "autoClean" in body and body["autoClean"] is not None:
                     self.store.data["autoClean"] = bool(body["autoClean"])
                     changed = True
@@ -3185,11 +3197,24 @@ def main(argv=None):
         # 0.9.193: macOS Outlook's Add-from-File validates EVERY manifest URL
         # as https - including the pane URL. When a cert pair exists in the
         # config dir, serve the SAME pane + APIs additionally over TLS on
-        # port+1 (https://localhost:8766) in this same process. MailKick's
-        # manifest points at the TLS listener; SlideKick/DocKick keep http.
+        # port+1 (https://localhost:8766). 0.9.239: transportMode (a server
+        # setting) gates this: auto = the classic behaviour above; http =
+        # plain http even when certificates exist; https = require the pair
+        # (the installer creates/renews it; the manifests point at TLS).
+        transport = (store.data.get("transportMode") or "auto")
+        if transport not in ("auto", "http", "https"):
+            transport = "auto"
         tls_p2 = os.path.join(os.path.dirname(str(store.path)), "certs", "server.crt")
         tls_k2 = os.path.join(os.path.dirname(str(store.path)), "certs", "server.key")
-        if not tls and os.path.isfile(tls_p2) and os.path.isfile(tls_k2):
+        tls_pair_present = os.path.isfile(tls_p2) and os.path.isfile(tls_k2)
+        if transport == "http":
+            print("transport mode: http (https listener not started even with"
+                  " certificates present)", flush=True)
+        elif transport == "https" and not (tls or tls_pair_present):
+            print("transport mode: https but no certificate pair in %s -"
+                  " start the TLS step with install.py (menu 5) or"
+                  " --transport https" % os.path.dirname(str(store.path)), flush=True)
+        if not tls and transport in ("auto", "https") and tls_pair_present:
             try:
                 tls_servers = build_dual_servers(args.port + 1, store,
                                                  args.static_dir, args.verbose,
@@ -3197,8 +3222,7 @@ def main(argv=None):
                 if tls_servers:
                     servers.extend(tls_servers)
                     print("TLS listener ready on https://localhost:%d "
-                          "(Outlook's Add-from-File needs https URLs)"
-                          % (args.port + 1), flush=True)
+                          "(transport mode: %s)" % (args.port + 1, transport), flush=True)
             except OSError as exc:
                 print("TLS listener on port %d skipped: %s"
                       % (args.port + 1, exc), file=sys.stderr)
