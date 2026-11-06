@@ -1078,6 +1078,12 @@ def start_server():
     if DRY_RUN:
         out("  [..]  [dry-run] would start the server on port %d" % PORT)
         return True
+    if not os.path.isdir(install_dir()):
+        # self-heal: the deployed folder is missing (uninstalled or wiped) -
+        # deploy the SERVER first, otherwise Popen cwd raises WinError 267
+        warn("the deployed server folder is missing - deploying the server now")
+        deploy_files(set())   # server only
+        ok("server deployed to " + install_dir())
     if is_mac():
         shim = os.path.join(app_bundle(), "Contents", "MacOS",
                             "officekick-server")
@@ -1605,11 +1611,23 @@ def _generate_leaf_cert(cdir, crt, key, days, install_id):
             import traceback
             import cryptography
         except ImportError:
-            warn("self-signed leaf generation needs the 'cryptography' package on Windows")
-            print("        run once, then re-run the installer:")
-            print("            python -m pip install --user cryptography")
-            _log("leaf generation unavailable: 'cryptography' missing (Windows)")
-            return False
+            # install the dependency OURSELVES (user-scope pip, no admin) -
+            # standing behavior from the mac waves: the installer never sends
+            # the user away for a dependency it can fetch
+            warn("the 'cryptography' package is missing on Windows - installing"
+                 " it now (pip --user, no admin needed)")
+            rc, o = run_quiet([sys.executable, "-m", "pip", "install",
+                               "--user", "cryptography"])
+            _log("pip install --user cryptography: rc %d %s" % (rc, (o or "")[-200:]),
+                 ts=True)
+            try:
+                import cryptography   # noqa
+                ok("installed the 'cryptography' package")
+            except ImportError:
+                warn("could not auto-install 'cryptography' - run once manually, then re-run:")
+                print("        python -m pip install --user cryptography")
+                _log("leaf generation unavailable: 'cryptography' install failed (Windows)")
+                return False
         try:
             from cryptography import x509
             from cryptography.hazmat.primitives import hashes, serialization
@@ -2163,9 +2181,10 @@ def _set_cert_mode(mode):
 
 
 
-def deploy_files():
+def deploy_files(addins=None):
     dst = install_dir()
-    addins = ADDINS or set()
+    if addins is None:
+        addins = ADDINS or set()
     if DRY_RUN:
         n = len([a for a in OURS if a[0] in addins and os.path.isdir(repo_path(a[0]))])
         return "[dry-run] server + %d add-in folder(s) -> %s" % (n, dst)

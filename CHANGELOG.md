@@ -78,6 +78,18 @@
   Q&A pair lands in Previous requests and in the session history. Rules
   added to all three system prompts (MailKick's version says a clarify reply
   replaces - not supplements - the ops/reply round).
+## 0.9.249
+
+### Fixed
+- Windows: the leaf generator self-installs the `cryptography` package
+  (`python -m pip install --user cryptography`, no admin) instead of sending
+  the user away mid-flow.
+- start_server self-heals a MISSING deploy folder (the WinError 267 crash:
+  the transport menu's restart pointed Popen's cwd at a nonexistent
+  install dir after an uninstall) by deploying the server first.
+- deploy_files takes an explicit add-ins argument (None = the stored
+  selection, set() = server-only).
+
 ## 0.9.248 (store-deletion hardening, found by the real install->uninstall audit)
 
 ### Fixed
