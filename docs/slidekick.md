@@ -26,10 +26,21 @@ is about how SlideKick works.
 
 ### Opening the pane (the one working path on every platform)
 
-- **Windows**: quit and reopen PowerPoint, then Home tab -> **Add-ins** ->
-  **Advanced** (the link next to Manage) -> the classic **Office Add-ins**
-  dialog -> **SHARED FOLDER** at the top -> **Corelan SlideKick** ->
-  **Add** (once per application; it stays in the list afterwards).
+- **Windows**: quit and reopen PowerPoint FIRST - the launch-time
+  sideload (registry `Wef\Developer`, written by every install) puts the
+  add-in in the **Home tab -> Add-ins** dropdown with no dialog work at
+  all. The classic-dialog route is the catalog layer: Home tab ->
+  **Add-ins** -> **Advanced** (the link next to Manage, not the modern
+  "Apps" browse view - it never lists folder catalogs) -> the classic
+  **Office Add-ins** dialog -> **SHARED FOLDER** at the top ->
+  **Corelan SlideKick** -> **Add** (once per application; it stays in
+  the list afterwards). On the newest Windows 11 builds the Trust Center
+  catalog UI REJECTS local drive paths (*"Desole... Avez-vous inclus
+  "https://"?"*): enter the loopback **UNC** form instead -
+  `\\localhost\c$\Users\<user>\AppData\Local\OfficeKick\manifest`
+  (the admin share C$ is on by default), tick **"Afficher dans le
+  menu"**, and restart PowerPoint. Full troubleshooting order:
+  [setup-windows.md](setup-windows.md#if-the-add-in-does-not-appear-in-word-windows).
 - **macOS**: open a deck, then **Home tab -> Add-ins** (dropdown) ->
   **Developer Add-ins** -> **Corelan SlideKick**.
 

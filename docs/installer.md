@@ -51,7 +51,12 @@ Phases (questions are asked *before* the phase line that acts on them):
    a foreign listener on the https port aborts with instructions).
 2. **deploying** - copies the files (macOS: `~/Library/Application
    Support/OfficeKick`; Windows: `%LOCALAPPDATA%\OfficeKick`) and registers
-   the add-ins (WEF sideload / trusted folder catalog).
+   the add-ins (WEF sideload / trusted folder catalog). If an installed
+   add-in does not appear in Word/PowerPoint, work through the checks in
+   [setup-windows.md](setup-windows.md#if-the-add-in-does-not-appear-in-word-windows)
+   (relaunch first - the sideload is read at app launch - then the Trust
+   Center catalog, where the newest Windows 11 Word builds require the
+   loopback UNC form for folder paths).
 3. **certificates** - acts on the answer from the certificate question
    (see [certificates.md](certificates.md)). The consent screen explains
    up front that after you answer yes, YOUR SYSTEM opens one more dialog

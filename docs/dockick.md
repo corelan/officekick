@@ -24,9 +24,20 @@ Install + uninstall basics: see the top-level [README](../README.md).
 
 ### Opening the pane (the one working path on every platform)
 
-- **Windows**: quit and reopen Word, then Home tab -> **Add-ins** ->
-  **Advanced** -> the classic **Office Add-ins** dialog -> **SHARED
-  FOLDER** at the top -> **Corelan DocKick** -> **Add** (once).
+- **Windows**: quit and reopen Word FIRST - the launch-time sideload
+  (registry `Wef\Developer`, written by every install) puts the add-in in
+  the **Home tab -> Add-ins** dropdown with no dialog work at all. The
+  classic-dialog route is the catalog layer: Insertion/Mes complements ->
+  the classic **Office Add-ins** dialog (use the link next to Manage, not
+  the modern "Apps" browse view - it never lists folder catalogs) ->
+  **SHARED FOLDER** at the top -> **Corelan DocKick** -> **Add** (once).
+  On the newest Windows 11 Word builds the Trust Center catalog UI
+  REJECTS local drive paths (*"Desole... Avez-vous inclus "https://"?"*):
+  enter the loopback **UNC** form instead -
+  `\\localhost\c$\Users\<user>\AppData\Local\OfficeKick\manifest`
+  (the admin share C$ is on by default), tick **"Afficher dans le
+  menu"**, and restart Word. Full troubleshooting order:
+  [setup-windows.md](setup-windows.md#if-the-add-in-does-not-appear-in-word-windows).
 - **macOS**: open a document, then **Home tab -> Add-ins** (dropdown) ->
   **Developer Add-ins** -> **Corelan DocKick**.
 
