@@ -4,7 +4,7 @@
 OfficeKick unified installer - SlideKick (PowerPoint) + DocKick (Word) +
 MailKick (Outlook). Works on macOS and Windows; auto-detects the platform.
 
-    python3 install.py                menu: Install / Update / Server / Uninstall
+    python3 install.py                menu: Install / Update / Server / Transport / Uninstall
     python3 install.py --install      non-interactive install (Word + PowerPoint;
                                       Outlook only with --mailkick / --mailkick-cert-key
                                       or when Outlook was previously installed)
@@ -3385,8 +3385,6 @@ def server_menu():
         ("3", "stop", None),
         ("4", "status", None),
         (None, "@SEP", None),
-        ("5", "Uninstall (removes the add-ins + this server)", "red"),
-        (None, "@SEP", None),
         ("0", "back", "magenta"),
     ]
 
@@ -3428,7 +3426,7 @@ def server_menu():
             selrows = {"1": 0, "2": 1, "3": 2, "4": 3, "5": 4}
             sel = selrows.get(choice)
             if sel is None:
-                print("  please choose 1, 2, 3, 4 or 0")
+                print("  please choose 1, 2, 3, 4, 5 or 0")
                 continue
         act = r[sel][0]
         _log("server menu selection: %s" % act, ts=True)
@@ -3450,11 +3448,6 @@ def server_menu():
         elif act == "4":
             do_status()
             pause_after("status")
-        elif act == "5":
-            banner("uninstall")
-            do_uninstall(None)
-            cur = _current_transport()   # uninstall may wipe ~/.officekick
-            return                        # back to the main menu afterwards
         else:
             return
 
@@ -3584,10 +3577,13 @@ def main():
     _rows = [
         ("1", "Install / repair    (Word + PowerPoint on; Outlook off by default)", None),
         ("2", "Update              (git pull + refresh; keeps your add-ins)", None),
-        ("3", "Server              (start / restart / stop / status / uninstall)", None),
+        ("3", "Server              (start / restart / stop / status)", None),
         (None, "@SEP", None),
         ("4", "Transport options   (mode: %s | ports: http %d / https %d)" % (
             _current_transport(), _current_ports()[0], _current_ports()[1]), None),
+        (None, "@SEP", None),
+        ("5", "Uninstall          (removes the add-ins + this server)",
+         "red"),
         (None, "@SEP", None),
         ("0", "exit", "magenta"),
     ]
@@ -3606,7 +3602,7 @@ def main():
                     print("  (non-interactive: no choice given - pass --install / --update / --uninstall)")
                     _log("menu: non-interactive, nothing chosen")
                     return None
-                choice = input("  > choose [1/2/3/4, 0; default 1]: ").strip().lower()
+                choice = input("  > choose [1/2/3/4/5, 0; default 1]: ").strip().lower()
             except EOFError:
                 return None
             _log("menu input: %r" % choice, ts=True)
@@ -3619,7 +3615,7 @@ def main():
 
     while True:
         print("")
-        sel = menu_pick(_rows, 0, "(up/down + Enter = select, 1-4 = direct, q = exit)")
+        sel = menu_pick(_rows, 0, "(up/down + Enter = select, 1-5 = direct, q = exit)")
         if sel is None:
             sel = _ask_menu_typed()
             if sel is None:
@@ -3637,6 +3633,9 @@ def main():
                 server_menu()
             elif act == "4":
                 transport_menu()
+            elif act == "5":
+                banner("uninstall")
+                do_uninstall(None)
             else:
                 return   # act == "0"
         except MenuAbort:
