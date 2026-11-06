@@ -37,14 +37,21 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+$BOOTSTRAP_VERSION = "0.9.272"
 
 if (-not $ToolsDir) {
     $home0 = $env:USERPROFILE
     if (-not $home0) { $home0 = $env:HOME }
     $ToolsDir = Join-Path $home0 "Tools"
 }
+if ([string]::IsNullOrWhiteSpace($ToolsDir)) {
+    Fail "the tools folder resolved EMPTY - pass it explicitly: -ToolsDir %USERPROFILE%\Tools"
+}
 
 function Info([string]$m) { Write-Host "[info] $m" }
+Info "OfficeKick Windows bootstrap v$BOOTSTRAP_VERSION"
+Info "tools folder: $ToolsDir"
+
 function Step([string]$m) { Write-Host "[..]   $m" }
 function Ok([string]$m)   { Write-Host "[ok]   $m" }
 function Warn([string]$m) { Write-Host "[warn] $m" }
@@ -204,7 +211,10 @@ Refresh-SessionPath
 $repoDir = Join-Path $ToolsDir "officekick"
 $offerClone = -not $NoClone
 if ($offerClone -and -not $Yes) {
-    $offerClone = Confirm "Clone the OfficeKick repository into $ToolsDir?"
+    $offerClone = Confirm ("Clone the OfficeKick repository into [" + $ToolsDir + "]?")
+}
+if ($offerClone -and [string]::IsNullOrWhiteSpace($ToolsDir)) {
+    Fail "internal: the tools folder is empty - pass -ToolsDir <dir> and re-run"
 }
 if ($offerClone) {
     if (-not (Test-Path $ToolsDir)) {
