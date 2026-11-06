@@ -486,7 +486,21 @@ def https_feasible():
     return (True, [], [])   # Windows: no TLS component needed for Outlook
 
 
+def clear_screen():
+    """Wipe the terminal and put the cursor at the top-left (tty only; a
+    no-op for piped/automation runs and windowless scheduled tasks)."""
+    try:
+        if sys.stdin.isatty() and sys.stdout.isatty():
+            if is_windows():
+                os.system("")   # enable ANSI/VT processing on modern consoles
+            sys.stdout.write("\x1b[2J\x1b[H")
+            sys.stdout.flush()
+    except Exception:
+        pass
+
+
 def banner(mode=None):
+    clear_screen()
     head = "%s v%s  -  installer" % (APP_NAME, VERSION)
     print("")
     print(_paint("-" * 74, "cyan"))
@@ -558,6 +572,7 @@ def select_addins(interactive):
     for (folder, _label, was) in rows:
         state[folder] = (True if folder != "mailkick" else False) if not was else True
     feas, feas_why, feas_how = https_feasible()
+    clear_screen()
     print("")
     print("  Add-ins (Word + PowerPoint are enabled by default, Outlook is not):")
     print("")
@@ -2035,6 +2050,7 @@ def server_menu():
     ]
 
     def body():
+        clear_screen()
         h = health(PORT)
         print("")
         print("  ----- server -----")
