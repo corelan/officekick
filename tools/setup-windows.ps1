@@ -79,7 +79,10 @@ function Confirm([string]$question) {
 }
 
 # ----------------------------------------------------------------------
-# Python 3
+# Python 3 - via the official PYTHON INSTALL MANAGER from python.org
+# (never winget for Python). The manager MSIX installs per user; the
+# latest Python runtime comes from `py install latest` (bundled runtimes
+# already satisfy it).
 # ----------------------------------------------------------------------
 if (-not $SkipPython) {
     $have = Get-PythonVersion
@@ -87,51 +90,50 @@ if (-not $SkipPython) {
         Ok "Python found: $have (nothing to install)"
     } else {
         $installed = $false
-        if (Have-Command "winget") {
-            foreach ($id in @("Python.Python.3.14", "Python.Python.3.13")) {
-                Step "installing Python 3 via winget (id $id, user scope)..."
-                winget install -e --id $id --scope user --silent `
-                    --accept-package-agreements --accept-source-agreements
-                if ($LASTEXITCODE -eq 0) { $installed = $true; break; }
-                Warn "winget id $id unavailable - trying the next one"
-            }
-        } else {
-            Warn "winget is not available - using the python.org direct installer"
+        if (Have-Command "py") {
+            Step "installing the latest Python via the Python install manager..."
+            py install latest
+            if ($LASTEXITCODE -eq 0) { $installed = $true }
+            else { Warn "the existing py launcher could not install runtimes (it may be the classic launcher) - installing the manager from python.org" }
         }
         if (-not $installed) {
-            # fallback: python.org latest 3.x amd64 installer (per-user, PATH)
-            Step "fetching the latest Python 3 installer from python.org..."
-            $exe = $null
+            Step "installing the Python install manager (python.org official MSIX, per user)..."
             try {
-                $page = (Invoke-WebRequest -UseBasicParsing -TimeoutSec 30 `
-                    "https://www.python.org/downloads/windows/").Content
-                if ($page -isnot [string]) { $page = [string]($page -join "`n") }
-                $cands = @()
-                foreach ($m in [regex]::Matches($page, "https://www\.python\.org/ftp/python/3\.(\d+)\.(\d+)/python-3\.\1\.\2-amd64\.exe")) {
-                    $cands += [pscustomobject]@{ ver = [version]("3." + $m.Groups[1].Value + "." + $m.Groups[2].Value); url = $m.Value }
+                Add-AppxPackage -AppInstallerFile "https://www.python.org/ftp/python/pymanager/pymanager.appinstaller"
+            } catch {
+                Warn "the appinstaller route failed: $($_.Exception.Message)"
+                Step "downloading the manager MSIX directly from the python.org index..."
+                try {
+                    $ftp = (Invoke-WebRequest -UseBasicParsing -TimeoutSec 30 `
+                        "https://www.python.org/ftp/python/pymanager/").Content
+                    if ($ftp -isnot [string]) { $ftp = [string]($ftp -join "`n") }
+                    $cands = @()
+                    foreach ($m in [regex]::Matches($ftp, "python-manager-(\d+)\.(\d+)\.msix")) {
+                        $cands += [pscustomobject]@{
+                            ver = [version]($m.Groups[1].Value + "." + $m.Groups[2].Value)
+                            url = "https://www.python.org/ftp/python/pymanager/" + $m.Value
+                        }
+                    }
+                    $latest = $cands | Sort-Object ver -Descending | Select-Object -First 1
+                    if (-not $latest) { Fail "could not resolve a Python install manager MSIX on python.org" }
+                    Info "downloading $($latest.url)"
+                    $tmpM = Join-Path $env:TEMP "python-manager.msix"
+                    Invoke-WebRequest -UseBasicParsing -Uri $latest.url -OutFile $tmpM -TimeoutSec 900
+                    Add-AppxPackage -Path $tmpM
+                    Remove-Item $tmpM -ErrorAction SilentlyContinue
+                } catch {
+                    Fail "could not install the Python install manager - install it manually from https://www.python.org/downloads/ (the Python install manager section) and re-run this script"
                 }
-                $cands = $cands | Sort-Object ver -Descending
-                $cands = $cands | Where-Object { $_.ver.Major -eq 3 -and $_.ver.Minor -ge 11 }
-                if ($cands.Count -gt 0) { $exe = $cands[0].url }
-            } catch { Warn "could not read python.org: $($_.Exception.Message)" }
-            if (-not $exe) {
-                Warn "could not resolve the latest python.org installer - trying a known-good mirror"
-                $exe = "https://www.python.org/ftp/python/3.14.0/python-3.14.0-amd64.exe"
             }
-            Info "downloading $exe"
-            $tmpPy = Join-Path $env:TEMP "python3-setup.exe"
-            Invoke-WebRequest -UseBasicParsing -Uri $exe -OutFile $tmpPy -TimeoutSec 600
-            Step "running the installer (silent, per-user, pre-pends PATH)..."
-            Start-Process -FilePath $tmpPy -ArgumentList "/quiet", `
-                "InstallAllUsers=0", "PrependPath=1", "CompileAll=0", "Include_test=0" `
-                -Wait
-            Remove-Item $tmpPy -ErrorAction SilentlyContinue
-            $installed = $true
+            Refresh-SessionPath
+            Step "installing the latest Python via the install manager..."
+            py install latest
+            if ($LASTEXITCODE -ne 0) { Warn "py install latest failed - the manager may still be initializing; continuing to verification" }
         }
         Refresh-SessionPath
         $have = Get-PythonVersion
         if ($have) { Ok "Python installed: $have" }
-        else { Fail "Python did not install - install it from https://www.python.org/downloads/windows/ and re-run this script" }
+        else { Fail "Python is not available yet - open a NEW terminal (PATH refresh) and re-run, or check with: py -V" }
     }
 } else {
     Info "skipping Python (-SkipPython)"

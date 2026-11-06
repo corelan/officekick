@@ -82,8 +82,10 @@
 
 ### Added (repository tooling)
 - tools/setup-windows.ps1: a PowerShell dependency installer for Windows -
-  installs the latest available Python 3 (winget first, python.org silent
-  fallback) and Git for Windows (winget, git-for-windows release fallback),
+  installs Python through the official PYTHON INSTALL MANAGER downloaded
+  from python.org (Add-AppxPackage -AppInstallerFile ...; never winget for
+  Python; direct FTP-index MSIX fallback; then `py install latest`) and
+  Git for Windows (winget, git-for-windows release fallback),
   then offers an interactive git clone of the repository into
   %USERPROFILE%\Tools\officekick (an existing clone updates with
   git pull --ff-only). Per-user, no admin, unattended flags (-Yes,

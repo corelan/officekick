@@ -8,12 +8,16 @@ package managers' install locations, the PATH, and the tools folder.
 
 What it installs:
 
-- **Python 3** - the latest release winget offers (currently 3.12+; the
-  script tries the newest ids first), or the python.org amd64 installer
-  silently when winget is not available. Skipped when a Python 3.x is
-  already installed (`py -3` / `python`).
-- **Git for Windows** - via winget (`Git.Git`), or the latest
-  git-for-windows release asset from GitHub. Skipped when `git` exists.
+- **The Python install manager** - python.org's official tool, downloaded
+  from python.org itself (never via winget) with PowerShell's
+  `Add-AppxPackage -AppInstallerFile
+  https://www.python.org/ftp/python/pymanager/pymanager.appinstaller`
+  (per user, no admin; a direct python.org FTP-index MSIX download is the
+  fallback), then `py install latest` brings the newest Python runtime.
+  Skipped when a Python 3.x is already installed (`py -3` / `python`).
+- **Git for Windows** - via winget (`Git.Git`; winget is used for Git only,
+  not Python), or the latest git-for-windows release asset from GitHub.
+  Skipped when `git` exists.
 - **The repo clone** - offered interactively (answer the `y/N` prompt);
   an existing clone is updated with `git pull --ff-only`.
 
