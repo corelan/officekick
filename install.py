@@ -501,7 +501,26 @@ def https_feasible():
         except Exception as exc:
             reasons.append("python ssl module unavailable: %s" % exc)
         return (len(reasons) == 0, reasons, techniques)
-    return (True, [], [])   # Windows: no TLS component needed for Outlook
+    # Windows: TLS only comes into play when the stored transport is https
+    if _current_transport() != "https":
+        return (True, [], [])   # plain http - no TLS component for Outlook
+    reasons, techniques = [], []
+    try:
+        import cryptography  # noqa: F401
+        _ver = getattr(cryptography, "__version__", "")
+        techniques.append("python cryptography%s - generates the self-signed"
+                          " leaf (installer auto-installs it if missing)" %
+                          ((" " + _ver) if _ver else ""))
+    except ImportError:
+        reasons.append("the 'cryptography' package is missing - the installer"
+                       " auto-installs it (pip --user) during the certificate step")
+    try:
+        import ssl  # noqa: F401
+        techniques.append("python ssl - serves the https://localhost:%d pane"
+                          " listener" % (HTTPS_PORT if HTTPS_PORT else PORT + 1))
+    except Exception as exc:
+        reasons.append("python ssl module unavailable: %s" % exc)
+    return (len(reasons) == 0, reasons, techniques)
 
 
 def _config_settings():
@@ -737,14 +756,17 @@ def select_addins(interactive):
     def _prereq_lines():
         """The https status block (list of lines, no painting side effects)."""
         out_lines = []
-        if not is_mac():
+        if not is_mac() and _current_transport() != "https":
             out_lines.append(_paint("  https prereqs for Outlook: ", "bold") + "not needed -")
             out_lines.append("  Outlook rides the plain-http localhost listener on")
             out_lines.append("  Windows; no certificate is created or trusted.")
             return out_lines
+        # Windows + https transport: the same prerequisite rendering as mac
         if feas:
             out_lines.append("  " + _paint("https prerequisites for Outlook: MET", "green"))
             for t in feas_how:
+                if "security tool" in t or "'security'" in t:
+                    continue   # mac-only technique
                 out_lines.append("    - " + t)
         else:
             out_lines.append("  " + _paint("https prerequisites for Outlook: NOT MET", "red")
@@ -1616,15 +1638,26 @@ def _generate_leaf_cert(cdir, crt, key, days, install_id):
             # the user away for a dependency it can fetch
             warn("the 'cryptography' package is missing on Windows - installing"
                  " it now (pip --user, no admin needed)")
-            rc, o = run_quiet([sys.executable, "-m", "pip", "install",
-                               "--user", "cryptography"])
-            _log("pip install --user cryptography: rc %d %s" % (rc, (o or "")[-200:]),
-                 ts=True)
-            try:
-                import cryptography   # noqa
+            import importlib
+            installed = False
+            for pip_args in (["--user"], []):
+                rc, o = run_quiet([sys.executable, "-m", "pip", "install"] +
+                                  pip_args + ["cryptography"], timeout=600)
+                _log("pip install %scryptography: rc %d out=%s"
+                     % ((" ".join(pip_args) + " ") if pip_args else "", rc,
+                        (o or "")[-220:]), ts=True)
+                if rc == 0:
+                    importlib.invalidate_caches()
+                    try:
+                        import cryptography  # noqa
+                        installed = True
+                        break
+                    except ImportError:
+                        continue
+            if installed:
                 ok("installed the 'cryptography' package")
-            except ImportError:
-                warn("could not auto-install 'cryptography' - run once manually, then re-run:")
+            else:
+                warn("could not auto-install 'cryptography' - check pip/network, then re-run:")
                 print("        python -m pip install --user cryptography")
                 _log("leaf generation unavailable: 'cryptography' install failed (Windows)")
                 return False
@@ -3205,10 +3238,13 @@ def tls_phase():
                 warn(pr)
             return "BYO certificate unusable - re-run install.py (BYO setup); see install.log"
         return "BYO certificate missing on disk - re-run the BYO setup"
-    if not is_mac():
+    if not is_mac() and _current_transport() != "https":
         if "mailkick" in ADDINS:
             return "not needed on Windows (plain-http localhost)"
         return "no TLS on Windows (plain http)"
+    # Windows + https transport: the same leaf/CA flow as mac
+    # (the leaf generator self-installs the 'cryptography' package there)
+        # generator self-installs the 'cryptography' package there)
     crt = os.path.join(tls_cert_dir(), "server.crt")
     key = os.path.join(tls_cert_dir(), "server.key")
     have_pair = os.path.isfile(crt) and os.path.isfile(key)
@@ -3577,10 +3613,18 @@ def transport_menu():
 
 
 def _reapply_transport(mode, label=None):
-    """Store the mode (+ optional ports), re-render the manifests
-    accordingly, restart the server so the listeners match, and report."""
+    """Store the mode (+ optional ports). When the server component is
+    installed, the manifests are re-rendered and the server restarted so the
+    change applies right away. When NOTHING is installed yet, ONLY the mode
+    is stored - no deploy, no WEF staging, no server start (it applies at the
+    next install)."""
     ok("transport mode -> %s" % mode)
     _set_transport(mode)
+    installed = os.path.isfile(server_py()) and os.path.isdir(install_dir())
+    if not installed:
+        note("nothing is installed yet - the %s mode is stored and applies when"
+             " the add-ins are installed" % mode)
+        return
     if mode == "https" and is_mac():
         crt0 = os.path.join(tls_cert_dir(), "server.crt")
         if INTERACTIVE and not (os.path.isfile(crt0) and validate_existing_tls(crt0) is None

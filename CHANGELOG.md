@@ -78,6 +78,21 @@
   Q&A pair lands in Previous requests and in the session history. Rules
   added to all three system prompts (MailKick's version says a clarify reply
   replaces - not supplements - the ops/reply round).
+## 0.9.251
+
+### Fixed
+- Windows honours the https TRANSPORT: the Windows branches (prerequisite
+  text, [3/6] certificates, tls_phase) hard-coded "no TLS on Windows (plain
+  http)" and ignored the stored https mode - an https install warned about a
+  missing certificate at step 4 AFTER saying "no TLS needed" at step 3, with
+  Outlook unusable for the chosen transport. https on Windows now behaves
+  like mac: prerequisites (cryptography/ssl) are checked and displayed,
+  Outlook locks while they are unmet, and the certificates phase runs the
+  leaf flow (the generator self-installs cryptography).
+- the cryptography auto-install: pip --user falls back to a plain install,
+  600 s timeout, import-caches invalidated - the first attempt had failed
+  silently (its rc never surfaced).
+
 ## 0.9.249
 
 ### Fixed
