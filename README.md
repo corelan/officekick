@@ -17,7 +17,7 @@ and Windows and share one technology stack.
    does, updates, uninstall
 3. [Activate the add-ins](#activate-the-add-ins) - step by step per product:
    [Word](#word) / [PowerPoint](#powerpoint) / [Outlook](#outlook), Windows
-   and macOS separately - plus [first run](#first-run)
+   and macOS separately - plus [first run](#first-run-getting-started)
 4. [Using it](#using-it) - ports, the server, macOS permissions
 5. [How it works](#how-it-works) - the flow, security and privacy
 6. [References](#references) - the full documentation index
