@@ -42,6 +42,21 @@
   exact layout Office honors, and docs gain the manual Trust Center +
   reg-add unblock for machines that installed older builds.
 
+## 0.9.288
+
+### Fixed
+- uninstalling with --purge-config destroyed config.json unrecoverably
+  (plain rmtree of ~/.officekick: API keys, profiles, sessions) while the
+  flagged path and the interactive ask look identical in the output - the
+  user reported his config vanishing from an uninstall he ran the day after
+  reading the "everything" command. The purge now MOVES the folder to a
+  timestamped sibling next to it (<config dir>-purged-<timestamp>, same
+  name on every OS) - everything stays recoverable - and only wipes when
+  the move itself fails. The interactive question now says the folder is
+  moved aside, not deleted. Battery: purge keeps config.json + logs intact
+  inside the moved folder, a second purge with nothing present is a no-op,
+  and the keep path leaves the file untouched.
+
 ## 0.9.287
 
 ### Fixed

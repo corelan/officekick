@@ -3173,9 +3173,10 @@ def do_uninstall(purge, rm_certs=None):
       - certificates: ask to remove the local certificates we installed
         (trust entry in the keychain/TrustedPeople + the files on disk);
         a BYO certificate's own trust entry is never touched
-      - config: ask to wipe ~/.officekick (config.json, API keys, profiles,
-        sessions); keeping it means install.py sees the old setup again on
-        the next install
+      - config: ask to MOVE ~/.officekick aside to a timestamped backup
+        (config.json, API keys, profiles, sessions stay recoverable);
+        keeping it means install.py sees the old setup again on the next
+        install. The backup name: <config dir>-purged-<timestamp>.
     --purge-config / --remove-certs force the removals non-interactively;
     interactive runs ask with the default on 'keep'."""
     out("")
@@ -3229,8 +3230,9 @@ def do_uninstall(purge, rm_certs=None):
             if DRY_RUN:
                 step("[dry-run] would ask to wipe the config folder - default: KEEP")
         else:
-            purge = ask_yes("Also wipe the config folder (%s - config.json, stored"
-                            " API keys, profiles, sessions%s)?" % (
+            purge = ask_yes("Also remove the config folder (%s - config.json, stored"
+                            " API keys, profiles, sessions%s)? It is MOVED ASIDE to a"
+                            " timestamped backup next to it, not deleted" % (
                                 config_dir(),
                                 "; includes the certificate + log files" if anything_certs else ""),
                             False)
@@ -3344,10 +3346,26 @@ def do_uninstall(purge, rm_certs=None):
     # --- config (wipe or keep) ---
     if purge:
         if DRY_RUN:
-            step("[dry-run] would wipe " + config_dir())
+            step("[dry-run] would move " + config_dir() + " aside (kept, timestamped)")
         else:
-            shutil.rmtree(config_dir(), ignore_errors=True)
-            ok("config wiped: " + config_dir())
+            # 0.9.288: a purge used to be UNRECOVERABLE (plain rmtree) while
+            # the flagged and interactive paths look identical in output.
+            # Field: an uninstall run with --purge-config the user does not
+            # remember typing wiped API keys + profiles + sessions. The purge
+            # now MOVES the folder to a timestamped sibling next to it -
+            # recoverable - and only falls back to the wipe when the move
+            # fails. The name carries the reason, never delete-first.
+            _ts = time.strftime("%Y%m%d-%H%M%S")
+            target = config_dir() + "-purged-" + _ts
+            try:
+                if os.path.isdir(config_dir()):
+                    shutil.move(config_dir(), target)
+                    ok("config folder moved aside (kept, recoverable): " + target)
+                else:
+                    ok("no config folder present - nothing to move")
+            except OSError as exc:
+                shutil.rmtree(config_dir(), ignore_errors=True)
+                warn("could not move the config folder aside (%s) - wiped instead" % exc)
     else:
         out("  [ok]       config kept at %s (config.json, keys, profiles and sessions intact)"
             % config_dir())
