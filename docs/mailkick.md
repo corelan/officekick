@@ -12,19 +12,25 @@ drafts; you review and send.
 
 MailKick runs in **both New and classic macOS Outlook** (verified: with a
 trusted certificate the pane is added from either mode; the mode itself is
-NOT the gate) and needs a one-time loopback TLS setup. If any of these
-don't suit you, choose not to install MailKick in Outlook - neither the
-installer nor the other two add-ins are affected. The requirements:
+NOT the gate) and needs a trusted https pane once. If any of these don't
+suit you, choose not to install MailKick in Outlook - neither the installer
+nor the other two add-ins are affected. The requirements:
 
-1. **A loopback TLS certificate, generated and trusted once.** Outlook's
+1. **A trusted https certificate for localhost - the DEFAULT is the
+   self-signed leaf (no CA), the same on macOS as on Windows.** Outlook's
    Add-from-File (and this build's WEF pickup) requires every manifest URL
-   to be https, so the installer creates `~/.officekick/certs/`: a per-user
-   "OfficeKick Loopback CA" plus a localhost certificate (issued via
-   `openssl`, backdated to Jan 2018 to satisfy macOS' Certificate
-   Transparency policy), and trusts the CA in your login keychain
-   (`security add-trusted-cert`, no admin rights; macOS may show one
-   confirmation dialog). You can inspect or revoke it any time in Keychain
-   Access.
+   to be https, so the installer works in `~/.officekick/certs/`: it
+   generates one unique self-signed server certificate (CN=localhost +
+   SANs, CA:FALSE, EKU serverAuth), shows the consent screen (fingerprint +
+   expiry), and - on your yes - trusts the LEAF ITSELF in your login
+   keychain (`security add-trusted-cert`; macOS may show one confirmation
+   dialog - click Trust). No CA exists or is imported in this mode, and a
+   directly trusted self-signed leaf is not subject to macOS' Certificate
+   Transparency policy (that policy applies to CA-issued chains - the CA
+   mode handles it with a backdated CA; see the CA option below). You can
+   inspect or revoke the leaf any time in Keychain Access. If you prefer a
+   CA (renewals stay silent) or your own already-trusted certificate, both
+   remain selectable alternatives (options 2 and 3 below).
 3. **Dependency: `openssl`** (every macOS ships it at `/usr/bin/openssl`;
    nothing else is downloaded). Without it no certificate can be issued.
 4. **Port 8766** - the loopback TLS listener lives in the same server

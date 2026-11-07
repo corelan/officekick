@@ -5,7 +5,7 @@ and Windows and share one technology stack.
 
 - **Corelan SlideKick** - the PowerPoint add-in ([docs/slidekick.md](docs/slidekick.md))
 - **Corelan DocKick** - the Word add-in ([docs/dockick.md](docs/dockick.md))
-- **Corelan MailKick** - the Outlook add-in: summarize, translate, draft replies (you send), categories. MailKick requires a trusted **https** pane on EVERY platform, in every Outlook mode (New and classic) - the installer stages it only when https is ready: on Windows that is the trusted localhost leaf certificate, on macOS a one-time loopback-TLS setup ([requirements](docs/mailkick.md#requirements-for-outlook-macos---read-before-installing)); it is skipped automatically when the prerequisites are not met ([docs/mailkick.md](docs/mailkick.md))
+- **Corelan MailKick** - the Outlook add-in: summarize, translate, draft replies (you send), categories. MailKick requires a trusted **https** pane on EVERY platform, in every Outlook mode (New and classic) - the installer stages it only when https is ready. The **self-signed leaf is the default certificate mode on every platform** (Windows: the leaf trusted in CurrentUser Root; macOS: the leaf trusted in the login keychain - one consent, one trust decision; the loopback CA and bring-your-own remain selectable alternatives). It is skipped automatically when the prerequisites are not met ([requirements](docs/mailkick.md#requirements-for-outlook-macos---read-before-installing), [docs/mailkick.md](docs/mailkick.md))
 
 ## Contents
 
@@ -330,9 +330,10 @@ the activation steps per app, then the one-time configuration).
 **MailKick requires https everywhere** - on every platform, in every
 Outlook mode (New or classic). Outlook refuses http add-in URLs, so the
 installer stages MailKick **only when the https side is ready**: a working
-localhost certificate (self-signed leaf by default; on Windows your
-Root-store trust, on macOS the loopback setup - see
-[docs/certificates.md](docs/certificates.md) and the macOS requirements in
+localhost certificate. The **self-signed leaf is the default on every
+platform**; the installer asks for your consent and creates/trusts it, and
+the loopback CA or bring-your-own stay selectable alternatives
+([docs/certificates.md](docs/certificates.md), the macOS requirements in
 [docs/mailkick.md](docs/mailkick.md#requirements-for-outlook-macos---read-before-installing)).
 Word/PowerPoint fall back to plain http when no certificate exists; ONLY
 Outlook does not.
