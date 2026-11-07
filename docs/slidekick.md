@@ -26,6 +26,13 @@ is about how SlideKick works.
 
 ### Opening the pane (the one working path on every platform)
 
+Per-document behavior (Office, not something the installer can change):
+
+> Every **new** document starts without the pane - open it from the list
+> button (or the ribbon, on builds with the commands manifest). A document
+> **saved with the pane open** remembers it: reopening the file brings the
+> pane back on its own, no second click.
+
 - **Windows**: quit and reopen PowerPoint FIRST - the launch-time
   sideload (registry `Wef\Developer`, written by every install) puts the
   add-in in the **Home tab -> Add-ins** dropdown with no dialog work at

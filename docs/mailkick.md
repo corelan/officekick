@@ -94,6 +94,14 @@ Outlook in the add-in menu, and continue (non-interactive equivalent:
 last step is the Get Add-ins re-add from the
 Troubleshooting section below.
 
+Per-document behavior (Office, not something the installer can change):
+
+> Every **new** document starts without the pane - open it from the list
+> button (or the ribbon, on builds with the commands manifest). A document
+> **saved with the pane open** remembers it: reopening the file brings the
+> pane back on its own, no second click.
+
+
 ## What it does
 - **Read context**: when a message is selected (the reading pane keeps the
   add-in alive), MailKick sees from/to/subject/body/categories. The

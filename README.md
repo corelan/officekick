@@ -197,6 +197,22 @@ One rule comes first, on every platform:
 > does not see the add-ins until it restarts. The pane's About tab shows the
 > running **Pane build** version; use it to confirm a reload took effect.
 
+Once registered, the add-in is permanently in the list - what you do per
+document is **open its pane**:
+
+> **Every NEW document starts without the pane.** Office only shows the pane
+> after you open the add-in (the list entry / the ribbon button). Click it
+> once per document and the task pane opens beside the content.
+>
+> **A document REMEMBERS the pane once it has been saved with it open.** The
+> open pane is part of the saved file: reopening a saved document brings the
+> pane back by itself - no clicking again. So the rhythm after the install
+> is: new document -> one click on the add-in -> the pane is there for as
+> long as you work -> save -> it comes back next time.
+
+Once the pane is open, set it up once (the next two sections walk through
+the activation steps per app, then the one-time configuration).
+
 ### Word
 
 **Windows**
@@ -283,7 +299,9 @@ says so clearly).
    its checks live in
    [docs/mailkick.md](docs/mailkick.md#requirements-for-outlook-macos---read-before-installing).
 
-### First run
+### First run (getting started)
+
+The pane is open - set it up once, in four steps:
 
 1. **Connections** tab: add a provider (Type + Base URL + optional API key).
    "Test connection" lists its models.
@@ -301,6 +319,12 @@ says so clearly).
    the status line; the approval policy decides what gets applied - set it
    in Settings > Approval policy
    ([settings.md > Approval policy](docs/settings.md#settings--approval-policy)).
+
+That is it - no repeated setup. The provider/profile choices apply to every
+Office app on the machine (one shared local server). The two things to
+remember about the pane itself: it is **per document** (open the add-in once
+per new document), and it **comes back on its own** for documents you save
+with the pane open ([Activate the add-ins](#activate-the-add-ins)).
 
 ## Using it
 
