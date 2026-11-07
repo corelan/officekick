@@ -327,18 +327,48 @@ the activation steps per app, then the one-time configuration).
 
 ### Outlook
 
-Outlook always needs https URLs in its manifest, so MailKick stages only
-when the https side is ready (the installer checks the prerequisites and
-says so clearly).
+**MailKick requires https everywhere** - on every platform, in every
+Outlook mode (New or classic). Outlook refuses http add-in URLs, so the
+installer stages MailKick **only when the https side is ready**: a working
+localhost certificate (self-signed leaf by default; on Windows your
+Root-store trust, on macOS the loopback setup - see
+[docs/certificates.md](docs/certificates.md) and the macOS requirements in
+[docs/mailkick.md](docs/mailkick.md#requirements-for-outlook-macos---read-before-installing)).
+Word/PowerPoint fall back to plain http when no certificate exists; ONLY
+Outlook does not.
 
 **Windows**
 
 1. The installer stages MailKick only when the https prerequisites are met
-   (`cryptography` present - the installer auto-installs it - and a trusted
-   certificate). If the picker listed Outlook as blocked, re-run
+   (`cryptography` present - the installer auto-installs it - and your
+   trusted certificate). If the picker listed Outlook as blocked, re-run
    `py -3 install.py` after reading the printed reason.
-2. Quit and reopen Outlook: MailKick appears in the add-in ribbon like the
-   other panes.
+2. Quit and reopen Outlook. Where the add-in appears, by Outlook mode:
+
+   - **Classic Outlook** (the traditional desktop app): the dev-sideload
+     registration makes MailKick a button on the item ribbons (reading a
+     message / composing); the add-in management dialog is
+     **Home > All Apps > Get Add-ins**.
+   - **New Outlook** (the default on a clean Windows 11 install; web-based):
+     the desktop WEF sideload does not reach this mode. Install MailKick's
+     manifest ONCE as a custom add-in, from your BROWSER (Microsoft's
+     documented route - custom XML sideloads go through the web dialog, not
+     the new in-app Store):
+     1. Sign in to outlook.live.com (the same account the desktop New
+        Outlook uses) and open `https://aka.ms/olksideload` -
+        the **Add-Ins for Outlook** window opens.
+     2. **My add-ins** → **Custom Addins** → **Add a custom add-in** →
+        **Add from file** → pick
+        `%LOCALAPPDATA%\OfficeKick\manifest\mailkick.xml` → **Install**.
+     3. Custom add-ins carry across your Outlook versions and devices, so
+        the desktop New Outlook picks MailKick up after a restart.
+     4. Find it while using Outlook: on the **Home** ribbon / left app bar
+        it hides behind **More apps → Add apps** (that page is the STORE -
+        MailKick is local, so it only shows after the step above); while
+        reading or composing a message, installed add-ins open through the
+        **Apps** button on the message's action bar or the add-in's own
+        ribbon button. The classic **Add from URL** option is retired:
+        download/copy the XML and use **Add from file**.
 
 **macOS**
 

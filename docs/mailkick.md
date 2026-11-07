@@ -201,6 +201,40 @@ run to `~/Library/Containers/com.microsoft.Outlook/Data/Documents/wef/mailkick.x
    paste the path above). On macOS Outlook, **Get Add-ins lives behind the
    three-dot (...) button in the toolbar** - click the dots, then
    **Get Add-ins**.
+
+## Install on Windows - classic AND "New Outlook"
+
+The manifest is staged to
+`%LOCALAPPDATA%\OfficeKick\manifest\mailkick.xml`.
+
+- **Classic Outlook**: the desktop WEF sideload applies (the installer's
+  per-add-in registration) - the MailKick button appears on message and
+  compose ribbons; the management dialog is **Home > All Apps > Get
+  Add-ins**.
+- **NEW Outlook** (the default on a clean Windows 11 install): the desktop
+  WEF folder does NOT reach this mode, and Microsoft's new in-app Store
+  (**More apps > Add apps** on the ribbon/left bar) carries STORE apps
+  only - a local custom add-in cannot be added there yet. Microsoft's
+  documented route for custom XML manifests in New Outlook goes through
+  the WEB, once:
+
+  1. In your browser, sign in to Outlook (outlook.live.com) with the SAME
+     account the desktop New Outlook uses.
+  2. Open `https://aka.ms/olksideload` - the **Add-Ins for Outlook**
+     window opens.
+  3. **My add-ins** -> **Custom Addins** -> **Add a custom add-in** ->
+     **Add from file** -> pick
+     `%LOCALAPPDATA%\OfficeKick\manifest\mailkick.xml` -> **Install**.
+     (The old **Add from URL** option is retired - download the file and
+     use Add from file.)
+  4. Custom add-ins carry across Outlook modes and devices: after a
+     desktop New Outlook restart, MailKick is there. While reading or
+     composing a message, open installed add-ins through the **Apps**
+     button on the message action bar, or the add-in's own ribbon button.
+
+  Note: custom add-ins are tied to the signed-in account; a tenant with
+  custom-add-in uploads disabled by its admin has to be exempted for this
+  route to exist.
 4. **About the https URLs**: Outlook's Add-from-File dialog (and this
    build's wef-folder pickup) requires EVERY URL in the manifest to be
    https - the pane URL too. The default certificate mode is a self-signed
