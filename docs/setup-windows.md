@@ -36,38 +36,47 @@ Everything installs **per user** - no administrator rights needed anywhere.
 The script installs these two things and nothing else - no repo clone, no
 installer run.
 
-**Option A - straight from the internet, no download** (one command in a
-PowerShell window; the Linux `curl | bash` habit works here too - `irm`
-downloads, `iex` runs):
+**Option A - straight from the internet, no download.** One command, and it
+MUST be typed in a POWERSHELL window (the blue one; `irm` and `iex` do not
+exist in the black Command Prompt window - there they fail with "'irm' is
+not recognized"). Open PowerShell first: Start menu, type `powershell`,
+Enter. `irm` downloads the script, `iex` runs it:
 
 ```powershell
 irm https://raw.githubusercontent.com/corelan/officekick/main/tools/setup-windows.ps1 | iex
 ```
 
-The literal-curl variant (Windows 10+ ships a genuine `curl.exe` in
-System32; type `curl.exe`, not the `curl` PowerShell alias, which is a
-different thing in Windows PowerShell 5.1):
+The literal-curl variant - THE COMMAND PROMPT (cmd) form (Windows 10+ ships
+a genuine `curl.exe` in System32, so the download-and-run works there
+without touching the execution policy; in PowerShell always type
+`curl.exe` - plain `curl` is a DIFFERENT PowerShell alias, not this tool,
+on Windows PowerShell 5.1):
 
 ```powershell
 curl.exe -fsSL https://raw.githubusercontent.com/corelan/officekick/main/tools/setup-windows.ps1 | powershell -NoProfile -ExecutionPolicy Bypass -Command -
 ```
 
 **Option B - you have downloaded the script** (e.g. saved
-`tools/setup-windows.ps1` from the repository or a zip):
+`tools/setup-windows.ps1` from the repository or a zip) - the long form
+below works in EITHER window (cmd or PowerShell), because it launches its
+own PowerShell:
 
 ```powershell
 cd <where you saved it>
 powershell -NoProfile -ExecutionPolicy Bypass -File .\setup-windows.ps1
 ```
 
-Flags: `-SkipPython`, `-SkipGit`. Flags through the pipe form (see the
-diagnostics notes below):
+Flags: `-SkipPython`, `-SkipGit`. Flags through a pipe need the scriptblock
+form (a plain pipe cannot carry parameters) - run in POWERSHELL:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -Command "& ([scriptblock]::Create((irm https://raw.githubusercontent.com/corelan/officekick/main/tools/setup-windows.ps1))) -SkipGit"
 ```
 
 ## Manual install (no script)
+
+All of the next two blocks run in a POWERSHELL window (`Add-AppxPackage`
+and `winget` are PowerShell tools; the Command Prompt has no `winget`).
 
 Python (the official install manager, then the runtime):
 
@@ -86,7 +95,8 @@ or the 64-bit installer from
 [git-scm.com/download/win](https://git-scm.com/download/win), installed
 per-user.
 
-Verify both in a NEW terminal (the PATH refresh matters):
+Verify both - in EITHER window (Command Prompt or PowerShell), opened NEW
+after the installs (the PATH entries only appear in new windows):
 
 ```bat
 py -3 --version
@@ -193,6 +203,7 @@ The installer registers two layers; check them in this order:
    add-ins until it restarts. Verify the layer first:
 
    ```bat
+   rem Command Prompt (cmd):
    reg query "HKCU\Software\Microsoft\Office\16.0\Wef\Developer" /s
    ```
 

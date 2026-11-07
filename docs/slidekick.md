@@ -306,6 +306,9 @@ PowerPoint specifics on top of the shared settings:
 
 ## Simulator & development (PowerPoint)
 
+Development commands run in the macOS Terminal (the PowerShell-flavored
+bits, like the certificate probe, only make sense on the matching OS):
+
 ```bash
 # serve straight from a repo checkout (dev mode)
 python3 core/server.py --config ~/.officekick/config.json --static-dir "$(pwd)" --port 8765

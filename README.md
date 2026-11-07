@@ -10,7 +10,7 @@ and Windows and share one technology stack.
 ## Contents
 
 1. [Dependencies](#dependencies) - how to install Python 3 and Git:
-   [Windows](#windows) (script or manual) / [macOS](#macos) / [Linux](#linux)
+   [Windows](#windows) (script or manual) / [macOS](#macos)
 2. [Get the code and run the installer](#get-the-code-and-run-the-installer) -
    [Windows](#get-the-code-and-run-the-installer---windows) /
    [macOS](#get-the-code-and-run-the-installer---macos) - what the installer
@@ -35,20 +35,57 @@ The add-ins also use the `cryptography` package for the https certificates -
 the installer checks for it at START and installs it itself if needed
 (`pip --user`); you never install it by hand.
 
+**OfficeKick runs on Windows and macOS only.** Its panes host inside desktop
+Microsoft Office, which does not exist on Linux; there is no Linux build and
+no Linux support anywhere in the project. All commands below are labeled
+with the prompt they belong to:
+**PowerShell** (the blue Windows shell - type `powershell` in the Start
+menu), **Command prompt** (the black Windows `cmd.exe` window), and
+**Terminal** (the macOS shell).
+
 ### Windows
 
-**By script (recommended)** - one PowerShell command installs both
-prerequisites per user (no admin): Python 3 through python.org's official
+**By script (recommended).** Three equivalent command variants follow, so
+your setup matches one of them exactly. All install the same two things,
+per user, without admin rights: Python 3 through python.org's official
 **Python Install Manager** (never winget for Python) and Git for Windows
-(winget, with a GitHub-release fallback):
+(winget, with a GitHub-release fallback).
+
+The prompt matters - Windows has TWO different command prompts:
+
+- **PowerShell** = the blue window. Open it: Start menu, type `powershell`,
+  press Enter.
+- **Command Prompt** (cmd) = the black window with `C:\Users\...>` lines.
+  Open it: Start menu, type `cmd`, press Enter.
+
+**1. Run in a POWERSHELL window** (this line does NOT exist in the Command
+Prompt - typing it there fails with "'irm' is not recognized"):
 
 ```powershell
 irm https://raw.githubusercontent.com/corelan/officekick/main/tools/setup-windows.ps1 | iex
 ```
 
-or from a downloaded copy of `tools/setup-windows.ps1`:
+**2. Run in a COMMAND PROMPT window** (Windows 10/11 include `curl.exe`;
+this form is native to the Command Prompt and does not depend on the
+execution policy):
+
+```bat
+curl.exe -fsSL https://raw.githubusercontent.com/corelan/officekick/main/tools/setup-windows.ps1 | powershell -NoProfile -ExecutionPolicy Bypass -Command -
+```
+
+**3. From a downloaded copy** of `tools/setup-windows.ps1` (saved from the
+repository or a zip) - works in EITHER prompt, because the command line
+starts its own PowerShell:
+
+```bat
+rem Command Prompt:
+cd /d C:\where\you\saved\it
+powershell -NoProfile -ExecutionPolicy Bypass -File setup-windows.ps1
+```
 
 ```powershell
+# PowerShell (equivalent):
+cd C:\where\you\saved\it
 powershell -NoProfile -ExecutionPolicy Bypass -File .\setup-windows.ps1
 ```
 
@@ -56,7 +93,7 @@ The script stops there: it is a **dependencies** script - it does not clone
 the repository and it does not run the installer. Full details, flags, and
 the execution-policy explanation: [docs/setup-windows.md](docs/setup-windows.md).
 
-**Manually** (what the script does, spelled out):
+**Alternative: no script at all** (four commands, in a POWERSHELL window):
 
 ```powershell
 # 1. the official Python Install Manager, then the runtime
@@ -66,7 +103,12 @@ py install default
 winget install -e --id Git.Git --silent --accept-package-agreements --accept-source-agreements
 ```
 
-Verify in a NEW terminal (PATH refresh):
+(`Add-AppxPackage` and `winget` are PowerShell tools; the Command Prompt has
+no `winget` - keep these four lines in the blue window.)
+
+Then VERIFY the two commands are available. In EITHER prompt (Command
+Prompt or PowerShell) - but in a NEW window, because the PATH entries only
+appear in windows opened after the install:
 
 ```bat
 py -3 --version
@@ -74,6 +116,9 @@ git --version
 ```
 
 ### macOS
+
+All macOS commands run in the **Terminal** app (open it: Spotlight, type
+`Terminal`, press Enter).
 
 Option 1 - the built-in path: **Xcode command line tools** provide both
 `git` and a usable `python3`:
@@ -89,19 +134,6 @@ anything else):
 ```bash
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 brew install python3 git
-```
-
-### Linux
-
-The task panes host inside **desktop Microsoft Office**, which exists on
-Windows and macOS only; `install.py` has no Linux branch and a Linux box
-cannot register or serve the panes. There is no supported Linux install -
-running the Office web client against the local server is untested and not
-part of this project. If you only want to poke at the server sources, the
-usual package-manager line applies:
-
-```bash
-sudo apt-get install python3 python3-pip git
 ```
 
 ## Get the code and run the installer
@@ -168,7 +200,13 @@ MailKick needs the https prerequisites met before the installer offers it
 ### Update / uninstall
 
 ```bash
-python3 install.py --update     # Windows: py -3 install.py --update
+# macOS, in Terminal:
+python3 install.py --update
+```
+
+```bat
+rem Windows - Command Prompt or PowerShell both work:
+py -3 install.py --update
 ```
 
 `--update` = git pull + redeploy + restart (quit your Office apps first;
@@ -180,9 +218,14 @@ asks you to quit Office and reload the pane when it finishes. Heel an
 ([docs/slidekick.md](docs/slidekick.md), troubleshooting).
 
 ```bash
-python3 install.py --uninstall                      # keeps your config
-python3 install.py --uninstall --remove-certs --purge-config   # everything
-# Windows: py -3 install.py --uninstall [--purge-config]
+# macOS, in Terminal:
+python3 install.py --uninstall                                   # keeps your config
+python3 install.py --uninstall --remove-certs --purge-config     # also removes the certificates and moves the config folder aside to a backup
+```
+
+```bat
+rem Windows - Command Prompt or PowerShell:
+py -3 install.py --uninstall
 ```
 
 Details: [docs/installer.md](docs/installer.md#uninstall).
@@ -347,8 +390,13 @@ If the pane's footer text (next to the heartbeat dot) turns red with an
 OS-specific hint, start the server from your OfficeKick checkout:
 
 ```bash
-python3 install.py --start      # macOS
-py -3 install.py --start        # Windows
+# macOS, in Terminal:
+python3 install.py --start
+```
+
+```bat
+rem Windows - Command Prompt or PowerShell:
+py -3 install.py --start
 ```
 
 `--start` brings the server up and health-checks it; it changes nothing
@@ -390,7 +438,7 @@ Providers on your LAN need one macOS consent:
   "Cannot reach 192.168.x.x ... ([Errno 65] No route to host)" while the same
   provider answers from a Terminal. Only private-IP providers hit this; cloud
   providers are not affected.
-- Windows and Linux have no such gate.
+- Windows has no such gate.
 
 Do not use `tccutil reset` to re-trigger this: on current macOS builds it
 cannot reset the LocalNetwork service, and `tccutil reset All` wipes ALL saved
