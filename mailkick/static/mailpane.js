@@ -4355,6 +4355,39 @@ function applyOps(deck, ops, ctx) {
     var v = Math.max(80, Math.min(160, parseInt(pct, 10) || 100));
     document.body.style.zoom = (v / 100);
   }
+  // 0.9.289: the working tab ("Sessions") is disabled until a profile
+  // exists. A fresh pane boots straight into Settings > Connections with a
+  // purple two-step box (connection first, then profile); the Sessions tab
+  // unlocks the moment a profile is saved (every config load re-evaluates).
+  function refreshProfileGate() {
+    var none = !((((SK.cfg || {}).profiles) || []).length);
+    var chatBtn = document.querySelector('#tabs button[data-tab="chat"]');
+    if (chatBtn) {
+      chatBtn.disabled = none;
+      chatBtn.title = none ? "Create a provider connection and a profile first (Settings > Connections)"
+                           : "";
+    }
+    if (none && SK.activeTab === "chat") {
+      switchTab("settings");
+      switchSettingsSub("connections");
+    }
+    var panel = document.getElementById("sub-connections");
+    if (panel) {
+      var warnBox = document.getElementById("profile-gate-warn");
+      if (none) {
+        if (!warnBox) {
+          warnBox = document.createElement("div");
+          warnBox.id = "profile-gate-warn";
+          panel.insertBefore(warnBox, panel.firstChild);
+        }
+        warnBox.className = "opnote updavail";
+        warnBox.textContent = "Set up in two steps: (1) create at least one CONNECTION to a model provider below (Base URL + optional API key; Test lists its models), then (2) create a PROFILE that points at it (Connections and Profiles tabs are side by side). The Sessions tab unlocks as soon as a profile exists.";
+      } else if (warnBox) {
+        warnBox.parentNode.removeChild(warnBox);
+      }
+    }
+  }
+
   function loadConfigAndRender() {
     return apiJson("/api/config", "GET").then(function (cfg) {
       SK.cfg = cfg;
@@ -4380,6 +4413,7 @@ function applyOps(deck, ops, ctx) {
       renderProfiles();
       renderSettings();
       renderAbout();
+      refreshProfileGate();
       var onboarding = $("chat-output");
       if (!(cfg.connections || []).length && !document.getElementById("onboarding-banner")) {
         var b = document.createElement("div");

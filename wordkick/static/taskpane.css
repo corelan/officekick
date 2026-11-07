@@ -850,3 +850,6 @@ body.dark .clarifybox .clarify-q { color: #a5b4fc; }
 .clarifybox .clarify-input { flex: 1 1 auto; min-width: 0; }
 .clarifybox .clarify-picked { margin-top: 6px; font-weight: 600; color: #4338ca; }
 body.dark .clarifybox .clarify-picked { color: #a5b4fc; }
+
+/* 0.9.289: the Sessions tab stays disabled until a profile exists */
+.sk-tabs button[disabled] { opacity: 0.45; cursor: not-allowed; }

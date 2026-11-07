@@ -42,6 +42,21 @@
   exact layout Office honors, and docs gain the manual Trust Center +
   reg-add unblock for machines that installed older builds.
 
+## 0.9.289
+
+### Added
+- the profile gate: the working tab ("Sessions") stays DISABLED until at
+  least one profile exists. A pane that boots with no profiles opens
+  straight into Settings > Connections and shows a purple box with the two
+  setup steps ("(1) create at least one CONNECTION ... then (2) create a
+  PROFILE ...; the Sessions tab unlocks as soon as a profile exists"). The
+  gate re-evaluates on every config load: saving a profile re-enables the
+  tab and removes the box, with no reload of the add-in needed beyond the
+  normal pane refresh. All three panes (SlideKick, DocKick, MailKick) +
+  the disabled-tab styling; verified live in the simulator: fresh state =
+  disabled + directed + box; after one profile = enabled on the Sessions
+  tab.
+
 ## 0.9.288
 
 ### Fixed
