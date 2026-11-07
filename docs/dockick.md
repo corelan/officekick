@@ -39,11 +39,14 @@ Per-document behavior (Office, not something the installer can change):
   the modern "Apps" browse view - it never lists folder catalogs) ->
   **SHARED FOLDER** at the top -> **Corelan DocKick** -> **Add** (once).
   On the newest Windows 11 Word builds the Trust Center catalog UI
-  REJECTS local drive paths (*"Desole... Avez-vous inclus "https://"?"*):
+  REJECTS local drive paths (*"Désolé... Avez-vous inclus
+  "https://"?"* - an English Word build words it *"Sorry, the location
+  you entered is not valid. Did you include "https://"?"* - it wants
+  a URL/network form):
   enter the loopback **UNC** form instead -
   `\\localhost\c$\Users\<user>\AppData\Local\OfficeKick\manifest`
-  (the admin share C$ is on by default), tick **"Afficher dans le
-  menu"**, and restart Word. Full troubleshooting order:
+  (the admin share C$ is on by default), tick **"Show in Menu"**
+  (French Word: "Afficher dans le menu"), and restart Word. Full troubleshooting order:
   [setup-windows.md](setup-windows.md#if-the-add-in-does-not-appear-in-word-windows).
 - **macOS**: open a document, then **Home tab -> Add-ins** (dropdown) ->
   **Developer Add-ins** -> **Corelan DocKick**.

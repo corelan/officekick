@@ -210,22 +210,31 @@ The installer registers two layers; check them in this order:
    Expected: `RefreshAddins` = 1 plus one entry per installed add-in, each
    pointing at `%LOCALAPPDATA%\OfficeKick\manifest\<addin>.xml`.
 
-2. **The Trust Center catalog** (the classic dialog's Shared Folder /
-   *Dossiers partages* tab) - field testing on a very new Windows 11 Word
-   build found this quirk: the catalog UI **rejects local drive paths**
-   with *"Desole... L'emplacement que vous avez entre est incorrect.
-   Avez-vous inclus "https://"?"*. The working form is the loopback
-   **UNC** path (the admin share C$ is on by default on clean Windows 11
-   installs; no setup needed):
+2. **The Trust Center catalog** (the classic dialog's **SHARED FOLDER**
+   tab - French Word names it "Dossiers partagés") - field testing on a
+   very new Windows 11 Word build found this quirk: the catalog UI
+   **rejects local drive paths** with *"Désolé... L'emplacement que vous
+   avez entré est incorrect. Avez-vous inclus "https://"?"* (an English
+   Word build shows the same dialog as *"Sorry, the location you entered
+   is not valid. Did you include "https://"?"*). The working form is the
+   loopback **UNC** path (the admin share C$ is on by default on clean
+   Windows 11 installs; no setup needed):
 
    ```
    \\localhost\c$\Users\<user>\AppData\Local\OfficeKick\manifest
    ```
 
-   Word -> Fichier -> Options -> Centre de gestion de la confidentialite ->
-   Parametres... -> **Catalogues de complements approuves** -> paste the
-   UNC path -> **Ajouter un catalogue** -> tick **"Afficher dans le
-   menu"** -> OK -> restart Word. The installer pre-registers the same
+   Add it through the Word OPTIONS dialog, in the labels your Word shows
+   (the UI language follows the Office install):
+
+   - English Word: File -> Options -> **Trust Center** -> **Trust Center
+     Settings...** -> **Trusted Add-in Catalogs** -> paste the UNC path ->
+     **Add catalog** -> tick **"Show in Menu"** -> OK -> restart Word.
+   - French Word: Fichier -> Options -> **Centre de gestion de la
+     confidentialité** -> **Paramètres du Centre de gestion de la
+     confidentialité...** -> **Catalogues de compléments approuvés** ->
+     paste the UNC path -> **Ajouter un catalogue** -> tick **"Afficher
+     dans le menu"** -> OK -> restart Word. The installer pre-registers the
    catalog in the registry (`...\WEF\TrustedCatalogs` with `flag` = 1;
    older installs wrote the value under a name Office ignores - delete the
    `{C7B1F2A9-...}` subkey once or let the UI entry take over, both store

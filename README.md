@@ -282,10 +282,19 @@ the activation steps per app, then the one-time configuration).
    \\localhost\c$\Users\<user>\AppData\Local\OfficeKick\manifest
    ```
 
-   Fichier → Options → Centre de gestion de la confidentialité →
-   Paramètres… → **Catalogues de compléments approuvés** → paste that path →
-   **Ajouter un catalogue** → tick **"Afficher dans le menu"** → OK →
-   restart Word. The full diagnosis order (registry checks first):
+   Add it through the Word options dialog, in the labels YOUR Word shows
+   (the UI language follows the Office install):
+
+   - English Word: File → Options → **Trust Center** → **Trust Center
+     Settings…** → **Trusted Add-in Catalogs** → paste that path →
+     **Add catalog** → tick **"Show in Menu"** → OK → restart Word.
+   - French Word: Fichier → Options → **Centre de gestion de la
+     confidentialité** → **Paramètres du Centre de gestion de la
+     confidentialité…** → **Catalogues de compléments approuvés** → paste
+     that path → **Ajouter un catalogue** → tick **"Afficher dans le
+     menu"** → OK → restart Word.
+
+   The full diagnosis order (registry checks first):
    [docs/setup-windows.md > If the add-in does not appear in Word](docs/setup-windows.md#if-the-add-in-does-not-appear-in-word-windows).
 
 **macOS**
