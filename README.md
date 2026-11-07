@@ -5,7 +5,7 @@ and Windows and share one technology stack.
 
 - **Corelan SlideKick** - the PowerPoint add-in ([docs/slidekick.md](docs/slidekick.md))
 - **Corelan DocKick** - the Word add-in ([docs/dockick.md](docs/dockick.md))
-- **Corelan MailKick** - the Outlook add-in: summarize, translate, draft replies (you send), categories. MailKick requires a trusted **https** pane on EVERY platform, in every Outlook mode (New and classic) - the installer stages it only when https is ready. The **self-signed leaf is the default certificate mode on every platform** (Windows: the leaf trusted in CurrentUser Root; macOS: the leaf trusted in the login keychain - one consent, one trust decision; the loopback CA and bring-your-own remain selectable alternatives). It is skipped automatically when the prerequisites are not met ([requirements](docs/mailkick.md#requirements-for-outlook-macos---read-before-installing), [docs/mailkick.md](docs/mailkick.md))
+- **Corelan MailKick** - the Outlook add-in (New and classic, Windows/macOS): summarize, translate, draft replies (you send), categories. Needs the https prerequisites met (the installer handles and stages it automatically; details: [docs/mailkick.md](docs/mailkick.md))
 
 ## Contents
 
