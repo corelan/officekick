@@ -1,26 +1,40 @@
-# Windows setup: dependencies, the repository, and PowerShell's execution policy
+# Windows setup - dependencies (Python 3 + Git)
 
-`tools/setup-windows.ps1` installs the prerequisites for `install.py` on
-Windows, then offers to clone the OfficeKick repository into
-`%USERPROFILE%\Tools\officekick`. It installs **per user** where possible -
-no administrator rights are needed - and touches nothing besides the
-package managers' install locations, the PATH, and the tools folder.
+This page is **step 1 of the Windows install**: putting the prerequisites on
+the machine. OfficeKick's add-ins are installed later by `install.py` from a
+git clone - the README's **"Get the code and run the installer"** section
+carries those steps, and this script **neither clones nor runs the
+installer**.
 
-## Prerequisites in plain words
+## What you need
 
-- Running the OfficeKick installer (`install.py`) needs **Python 3** on the
-  machine - on Windows that means the `py -3` command works. Do NOT rely on
-  `python`: on a clean Windows box it is often a Store alias that opens the
-  shop instead of an interpreter.
-- **Git** (the command-line utility) is required only if you want the
-  repository cloned (`git clone ...` into `%USERPROFILE%\Tools`) - which is
-  the recommended durable setup (updates become a `git pull`).
-- Both are installed by the one script below: it fetches the **Python
-  install manager** from python.org and runs `py install default` - the manager's tag for the latest RECOMMENDED release (winget is
-  deliberately not used for Python), and installs Git for Windows (winget,
-  with a github release fallback).
+- **Python 3** - the installer runs as `py -3`. Do not rely on plain
+  `python`: on a clean Windows box it is often a Microsoft Store alias that
+  opens the shop instead of an interpreter.
+- **Git** - gets you the code and keeps it current (`install.py --update`
+  pulls, redeploys and restarts). Git is technically optional but strongly
+  recommended: without it, updates re-download a zip instead of a `git pull`.
 
-## Installing the dependencies with the script
+Everything installs **per user** - no administrator rights needed anywhere.
+
+## Installing the dependencies with the script (recommended)
+
+`tools/setup-windows.ps1` installs both:
+
+- **The Python install manager** - python.org's official tool, downloaded
+  from python.org itself (never via winget) with `Add-AppxPackage
+  -AppInstallerFile
+  https://www.python.org/ftp/python/pymanager/pymanager.appinstaller`
+  (per user, no admin; a direct python.org FTP-index MSIX download is the
+  fallback), then `py install default` brings the newest Python runtime (the
+  manager errors on `py install latest` - `latest` is not a tag; use
+  `default`). Skipped when a Python 3.x is already present (`py -3`/`python`).
+- **Git for Windows** - via winget (`Git.Git`; winget is used for Git only,
+  not Python), or the latest git-for-windows release asset from GitHub.
+  Skipped when `git` exists.
+
+The script installs these two things and nothing else - no repo clone, no
+installer run.
 
 **Option A - straight from the internet, no download** (one command in a
 PowerShell window; the Linux `curl | bash` habit works here too - `irm`
@@ -46,24 +60,40 @@ cd <where you saved it>
 powershell -NoProfile -ExecutionPolicy Bypass -File .\setup-windows.ps1
 ```
 
-What the script does, in detail:
+Flags: `-SkipPython`, `-SkipGit`. Flags through the pipe form (see the
+diagnostics notes below):
 
-- **The Python install manager** - python.org's official tool, downloaded
-  from python.org itself (never via winget) with PowerShell's
-  `Add-AppxPackage -AppInstallerFile
-  https://www.python.org/ftp/python/pymanager/pymanager.appinstaller`
-  (per user, no admin; a direct python.org FTP-index MSIX download is the
-  fallback), then `py install default` brings the newest Python runtime (the manager errors on `py install latest` - 'latest' is not a tag; use `default`).
-  Skipped when a Python 3.x is already installed (`py -3` / `python`).
-- **Git for Windows** - via winget (`Git.Git`; winget is used for Git only,
-  not Python), or the latest git-for-windows release asset from GitHub.
-  Skipped when `git` exists.
-- **The repo clone** - offered interactively (answer the `y/N` prompt);
-  an existing clone is updated with `git pull --ff-only`.
-- Flags: `-Yes` (unattended), `-NoClone`, `-SkipPython`, `-SkipGit`,
-  `-ToolsDir <dir>` (default `%USERPROFILE%\Tools`), `-CloneUrl <url>`.
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -Command "& ([scriptblock]::Create((irm https://raw.githubusercontent.com/corelan/officekick/main/tools/setup-windows.ps1))) -SkipGit"
+```
 
-Things worth knowing:
+## Manual install (no script)
+
+Python (the official install manager, then the runtime):
+
+```powershell
+Add-AppxPackage -AppInstallerFile https://www.python.org/ftp/python/pymanager/pymanager.appinstaller
+py install default
+```
+
+Git (either route works):
+
+```powershell
+winget install -e --id Git.Git --silent --accept-package-agreements --accept-source-agreements
+```
+
+or the 64-bit installer from
+[git-scm.com/download/win](https://git-scm.com/download/win), installed
+per-user.
+
+Verify both in a NEW terminal (the PATH refresh matters):
+
+```bat
+py -3 --version
+git --version
+```
+
+## Things worth knowing about the one-liners
 
 - No administrator prompt is needed anywhere in this flow (everything
   installs per user); an elevated terminal works too and adds nothing.
@@ -79,15 +109,8 @@ Things worth knowing:
 powershell -NoProfile -ExecutionPolicy Bypass -Command "[Net.ServicePointManager]::SecurityProtocol='Tls12'; irm https://raw.githubusercontent.com/corelan/officekick/main/tools/setup-windows.ps1 | iex"
 ```
 
-- Passing flags through a pipe does not work directly (`iex` cannot take
-  the script's parameters) - use the script-block form...:
-
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -Command "& ([scriptblock]::Create((irm https://raw.githubusercontent.com/corelan/officekick/main/tools/setup-windows.ps1))) -Yes -NoClone"
-```
-
-- **If `irm` "did not work": check which prompt you are in first.**
-  `irm` and `iex` are PowerShell commands - in a CMD window they fail with
+- **If `irm` "did not work": check which prompt you are in first.** `irm`
+  and `iex` are PowerShell commands - in a CMD window they fail with
   "'irm' is not recognized". Either start PowerShell first, or use the
   `curl.exe` pipe form above (which is cmd-native). To make a failing
   one-liner SELF-DIAGNOSING, run this in PowerShell instead of piping on:
@@ -101,15 +124,7 @@ try { irm https://raw.githubusercontent.com/corelan/officekick/main/tools/setup-
   - Name resolution / proxy errors = the machine blocks
     `raw.githubusercontent.com` -> use the downloaded-file route (option B).
 
-- If you are already inside a PowerShell window, the session-scoped
-  equivalent of the `-ExecutionPolicy Bypass` flag is:
-
-```powershell
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-.\setup-windows.ps1
-```
-
-## The execution policy, properly explained
+## The PowerShell execution policy, properly explained
 
 Windows PowerShell refuses to run `.ps1` script FILES unless the local
 execution policy allows it (typing commands into the console is always
@@ -148,6 +163,25 @@ Check the effective policy any time with `Get-ExecutionPolicy -List`.
 The OfficeKick installer needs no PowerShell scripts at runtime - this
 setup script is the only `.ps1` in the workflow - so `Process`-scope
 Bypass for this one run is the smallest, cleanest choice.
+
+## Step 2 is manual - the folder and the clone
+
+The dependency script stops here; the clone is a five-second action you do
+yourself (that keeps the script purely about the machine). The full
+walkthrough lives in the README: **Get the code and run the installer**.
+Short version, in cmd:
+
+```bat
+mkdir "%USERPROFILE%\Tools" 2>nul
+cd /d "%USERPROFILE%\Tools"
+git clone https://github.com/corelan/officekick.git
+cd officekick
+py -3 install.py
+```
+
+(PowerShell uses `$env:USERPROFILE` instead of `%USERPROFILE%`; `cd /d` is
+cmd-specific. Verify any time: `py -3 --version`, `git --version`, and
+after installing: `http://127.0.0.1:8765/api/health`.)
 
 ## If the add-in does not appear in Word (Windows)
 
@@ -188,41 +222,3 @@ The installer registers two layers; check them in this order:
 
 3. The modern **Add-ins -> Manage "Apps"** dialog never lists local folder
    catalogs on any build - it is a dead end for this use case.
-
-## After the script - the folder and the clone, manually
-
-The script's clone step is a convenience; you never have to rely on it. The
-folder path uses **different syntax per prompt kind**:
-
-- In a **command prompt (cmd)** - `%USERPROFILE%` and `cd /d`:
-
-```bat
-mkdir "%USERPROFILE%\Tools" 2>nul
-cd /d "%USERPROFILE%\Tools"
-git clone https://github.com/corelan/officekick.git
-cd officekick
-py -3 install.py
-```
-
-- In **PowerShell** - `$env:USERPROFILE`:
-
-```powershell
-cd "$env:USERPROFILE\Tools\officekick"      # if the script cloned it
-# or manually:
-mkdir "$env:USERPROFILE\Tools" -Force
-cd "$env:USERPROFILE\Tools"
-git clone https://github.com/corelan/officekick.git
-cd officekick
-py -3 install.py
-```
-
-(`cd $env:USERPROFILE\...` in a CMD window does nothing useful - cmd does
-not expand `$env:` variables. That is why both forms are spelled out.)
-
-The installer opens its menu (1 Install / repair -> the add-in picker ->
-the certificate question; see [installer.md](installer.md)). With https
-selected, the certificate trust consent screen explains the one OS dialog
-(certificate modes: [certificates.md](certificates.md)).
-
-Verify any time: `py -3 --version`, `git --version`, and after installing
-`http://127.0.0.1:8765/api/health`.

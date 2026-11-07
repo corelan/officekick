@@ -1,10 +1,19 @@
-# OfficeKick - Windows dependency installer (PowerShell)
+# OfficeKick - Windows DEPENDENCY installer (PowerShell)
 #
-# Installs the prerequisites for install.py, then (optionally) clones the
-# OfficeKick repository into %USERPROFILE%\Tools.
+# Installs the prerequisites for install.py:
+#   - Python 3 via python.org's official PYTHON INSTALL MANAGER
+#     (never winget for Python - user scope, no admin)
+#   - Git for Windows (winget, with a GitHub-release fallback)
 #
-#   - Python 3 (latest available through winget: 3.x, user scope, no admin)
-#   - Git for Windows (latest release)
+# It does NOT clone the OfficeKick repository and it does NOT run the
+# installer - after this script, get the code and run the installer by
+# hand (see README.md, "Get the code and run the installer"):
+#
+#     mkdir "%USERPROFILE%\Tools"
+#     cd /d "%USERPROFILE%\Tools"
+#     git clone https://github.com/corelan/officekick.git
+#     cd officekick
+#     py -3 install.py
 #
 # HOW TO RUN:
 #   from the internet (no download needed):
@@ -15,42 +24,24 @@
 #    how to pass -flags through the pipe)
 #
 # OPTIONS:
-#   -NoClone                skip the repository clone offer
-#   -Yes                    answer YES to interactive prompts (unattended)
-#   -ToolsDir <dir>         tools folder (default: %USERPROFILE%\Tools)
-#   -CloneUrl <url>         repository URL (default: officekick on GitHub)
 #   -SkipPython / -SkipGit  do not attempt that install
 #
 # Everything installs PER-USER where possible - no administrator rights
-# are needed. The script changes nothing outside the tools folder, the
-# package managers' own install locations, and the PATH.
+# are needed. The script changes nothing outside the package managers'
+# own install locations and the PATH.
 
 #Requires -Version 5.1
 [CmdletBinding()]
 param(
-    [switch]$NoClone,
-    [switch]$Yes,
     [switch]$SkipPython,
-    [switch]$SkipGit,
-    [string]$ToolsDir,
-    [string]$CloneUrl = "https://github.com/corelan/officekick.git"
+    [switch]$SkipGit
 )
 
 $ErrorActionPreference = "Stop"
-$BOOTSTRAP_VERSION = "0.9.272"
-
-if (-not $ToolsDir) {
-    $home0 = $env:USERPROFILE
-    if (-not $home0) { $home0 = $env:HOME }
-    $ToolsDir = Join-Path $home0 "Tools"
-}
-if ([string]::IsNullOrWhiteSpace($ToolsDir)) {
-    Fail "the tools folder resolved EMPTY - pass it explicitly: -ToolsDir %USERPROFILE%\Tools"
-}
+$BOOTSTRAP_VERSION = "0.9.288"
 
 function Info([string]$m) { Write-Host "[info] $m" }
-Info "OfficeKick Windows bootstrap v$BOOTSTRAP_VERSION"
-Info "tools folder: $ToolsDir"
+Info "OfficeKick Windows bootstrap v$BOOTSTRAP_VERSION (dependencies only - no clone)"
 
 function Step([string]$m) { Write-Host "[..]   $m" }
 function Ok([string]$m)   { Write-Host "[ok]   $m" }
@@ -81,12 +72,6 @@ function Get-PythonVersion {
         if ($s -match "^Python 3\.(\d+)\.") { return $s; }
     }
     return $null
-}
-
-function Confirm([string]$question) {
-    if ($Yes) { return $true; }
-    $a = Read-Host "$question [y/N]"
-    return ($a -match "^[Yy]")
 }
 
 # ----------------------------------------------------------------------
@@ -205,52 +190,15 @@ if (-not $SkipGit) {
 }
 
 # ----------------------------------------------------------------------
-# The OfficeKick repository
+# Next steps (do them by hand - this script manages dependencies only)
 # ----------------------------------------------------------------------
 Refresh-SessionPath
-$repoDir = Join-Path $ToolsDir "officekick"
-$offerClone = -not $NoClone
-if ($offerClone -and -not $Yes) {
-    $offerClone = Confirm ("Clone the OfficeKick repository into [" + $ToolsDir + "]?")
-}
-if ($offerClone -and [string]::IsNullOrWhiteSpace($ToolsDir)) {
-    Fail "internal: the tools folder is empty - pass -ToolsDir <dir> and re-run"
-}
-if ($offerClone) {
-    if (-not (Test-Path $ToolsDir)) {
-        Step "creating $ToolsDir"
-        New-Item -ItemType Directory -Path $ToolsDir -Force | Out-Null
-    }
-    if (Test-Path $repoDir) {
-        Step "$repoDir exists - updating (git pull --ff-only)..."
-        Push-Location $repoDir
-        try {
-            git -c http.sslBackend=schannel pull --ff-only
-            if ($LASTEXITCODE -eq 0) { Ok "updated" }
-            else { Warn "git pull failed (exit $LASTEXITCODE) - the existing clone is kept as-is" }
-        } finally { Pop-Location }
-    } else {
-        Step "cloning $CloneUrl into $repoDir ..."
-        git clone $CloneUrl $repoDir
-        if ($LASTEXITCODE -eq 0) { Ok "cloned" }
-        else { Fail "the clone failed - check the URL/credentials, then re-run with -NoClone" }
-    }
-} else {
-    Info "skipping the repository clone"
-}
-
-# ----------------------------------------------------------------------
-# Next steps
-# ----------------------------------------------------------------------
 Info ""
 Info "Next steps:"
-if (Test-Path $repoDir) {
-    Info "  cd $repoDir"
-    Info "  py -3 install.py            (menu: 1 Install / repair)"
-    Info "  documentation:  docs\installer.md, docs\setup-windows.md"
-} elseif (Have-Command "git") {
-    Info "  clone the repo, then:  py -3 install.py"
-} else {
-    Info "  install Python 3 + Git, then clone the repository"
-}
+Info "  make your own folder for the clone, then:"
+Info "    cd /d %USERPROFILE%\Tools"
+Info "    git clone https://github.com/corelan/officekick.git"
+Info "    cd officekick"
+Info "    py -3 install.py"
+Info "  (README.md, section 'Get the code and run the installer')"
 Ok "done."

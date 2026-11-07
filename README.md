@@ -9,55 +9,113 @@ and Windows and share one technology stack.
 
 ## Contents
 
-1. [Dependencies](#dependencies)
-2. [How to install](#how-to-install) -
-   [Windows](#windows) / [macOS](#macos) / [Linux](#linux)
-3. [How to install - the installer itself](#the-installer-itself) - the menu, first run, update, uninstall
-4. [Using it](#using-it) - where the panes appear, ports, the server,
-   permissions
+1. [Dependencies](#dependencies) - how to install Python 3 and Git:
+   [Windows](#windows) (script or manual) / [macOS](#macos) / [Linux](#linux)
+2. [Get the code and run the installer](#get-the-code-and-run-the-installer) -
+   [Windows](#get-the-code-and-run-the-installer---windows) /
+   [macOS](#get-the-code-and-run-the-installer---macos) - what the installer
+   does, updates, uninstall
+3. [Activate the add-ins](#activate-the-add-ins) - step by step per product:
+   [Word](#word) / [PowerPoint](#powerpoint) / [Outlook](#outlook), Windows
+   and macOS separately - plus [first run](#first-run)
+4. [Using it](#using-it) - ports, the server, macOS permissions
 5. [How it works](#how-it-works) - the flow, security and privacy
 6. [References](#references) - the full documentation index
 
 ## Dependencies
 
-| Platform | What is required | Where it comes from |
-|---|---|---|
-| **Windows** | **Python 3** (the installer runs as `py -3`; plain `python` is often just the Store alias) + **Git**, but only if you want a clone of the repo | installed for you by the PowerShell script `tools/setup-windows.ps1` - see [Windows](#windows) below |
-| **macOS** | **Python 3** (`python3` - Apple's command-line tools provide one; python.org's installer works too). **Git** only for a repo clone | usually already present; `python3 --version` checks. `git` ships with the command-line tools and with GitHub Desktop |
-| **Linux** | see the honest note under [Linux](#linux) - the add-ins need desktop Office | - |
+Two things must exist before `install.py` runs: **Python 3** (the installer
+runs as `py -3` on Windows) and **Git**. Git is technically optional - but it
+is the way to get the code AND the way the installer keeps your install
+current (`py -3 install.py --update` = pull + redeploy + restart; also one
+click from the pane on git installs). Use git unless you have a specific
+reason not to: without it, updates re-download a zip instead of a `git pull`.
 
-Everything installs **per user** - no administrator rights anywhere. The
-Windows PowerShell script installs the latest Python 3 through python.org's
-official **Python install manager** (never winget for Python) and Git for
-Windows, then offers to clone the repository.
+The add-ins also use the `cryptography` package for the https certificates -
+the installer checks for it at START and installs it itself if needed
+(`pip --user`); you never install it by hand.
 
-**Windows - one command from the internet** (Windows 10+ ships a real
-`curl.exe` in System32, so the Linux pipe habit works; `irm | iex` is the
-native form):
+### Windows
+
+**By script (recommended)** - one PowerShell command installs both
+prerequisites per user (no admin): Python 3 through python.org's official
+**Python Install Manager** (never winget for Python) and Git for Windows
+(winget, with a GitHub-release fallback):
 
 ```powershell
 irm https://raw.githubusercontent.com/corelan/officekick/main/tools/setup-windows.ps1 | iex
 ```
 
-**Windows - from a downloaded copy** of `tools/setup-windows.ps1`:
+or from a downloaded copy of `tools/setup-windows.ps1`:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\setup-windows.ps1
 ```
 
-(The `-ExecutionPolicy Bypass` applies to that one process only - the policy
-explanation, the flag list, `curl.exe`-pipe variants, and step-by-step
-details: [docs/setup-windows.md](docs/setup-windows.md).)
+The script stops there: it is a **dependencies** script - it does not clone
+the repository and it does not run the installer. Full details, flags, and
+the execution-policy explanation: [docs/setup-windows.md](docs/setup-windows.md).
 
-## How to install
+**Manually** (what the script does, spelled out):
 
-### Windows
+```powershell
+# 1. the official Python Install Manager, then the runtime
+Add-AppxPackage -AppInstallerFile https://www.python.org/ftp/python/pymanager/pymanager.appinstaller
+py install default
+# 2. Git (winget, or the installer from git-scm.com/download/win)
+winget install -e --id Git.Git --silent --accept-package-agreements --accept-source-agreements
+```
 
-1. Install the dependencies with the PowerShell script above (or accept the
-   defaults: Python 3 + Git land on your PATH).
-2. Make the folder and clone the repository **manually** (the script offers
-   this too, but you never have to rely on it). In a normal command prompt
-   (cmd):
+Verify in a NEW terminal (PATH refresh):
+
+```bat
+py -3 --version
+git --version
+```
+
+### macOS
+
+Option 1 - the built-in path: **Xcode command line tools** provide both
+`git` and a usable `python3`:
+
+```bash
+xcode-select --install          # opens a dialog; wait for the install
+python3 --version && git --version
+```
+
+Option 2 - [Homebrew](https://brew.sh) (recommended if you use it for
+anything else):
+
+```bash
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+brew install python3 git
+```
+
+### Linux
+
+The task panes host inside **desktop Microsoft Office**, which exists on
+Windows and macOS only; `install.py` has no Linux branch and a Linux box
+cannot register or serve the panes. There is no supported Linux install -
+running the Office web client against the local server is untested and not
+part of this project. If you only want to poke at the server sources, the
+usual package-manager line applies:
+
+```bash
+sudo apt-get install python3 python3-pip git
+```
+
+## Get the code and run the installer
+
+Once the dependencies exist, the install is the same shape on every OS:
+make a folder you like, clone, run `install.py`. The installer is
+interactive (a menu - details in [docs/installer.md](docs/installer.md));
+flag-driven variants like `--install` never pause at the end.
+
+### Get the code and run the installer - Windows
+
+Pick **one** of the two prompts (cmd or PowerShell) and run the whole block:
+
+cmd:
 
 ```bat
 mkdir "%USERPROFILE%\Tools" 2>nul
@@ -67,127 +125,163 @@ cd officekick
 py -3 install.py
 ```
 
-   In PowerShell the equivalent:
+PowerShell:
 
 ```powershell
 mkdir "$env:USERPROFILE\Tools" -Force
-cd "$env:USERPROFILE\Tools\officekick"
+cd "$env:USERPROFILE\Tools"
+git clone https://github.com/corelan/officekick.git
+cd officekick
+py -3 install.py
 ```
 
-   (A download-zip instead of the clone works the same way - just unpack it
-   into the Tools folder and `cd` into the unpacked folder.)
-3. Run the installer: `py -3 install.py` in that folder.
+(`cmd` uses `%USERPROFILE%` and needs `cd /d`; PowerShell uses
+`$env:USERPROFILE`. A download-zip instead of the clone works the same way:
+unpack it into the Tools folder and `cd` into the unpacked folder - but you
+lose `git pull` updates, which is a real loss.)
 
-The Windows Office route for pane registration lives in [Using it](#using-it).
+**Quit every Office app first** (Word/PowerPoint/Outlook) - the installer
+refuses to touch the add-in registration while they run. The installer walks
+six phases (prepare → deploy → certificates → register → autostart → start
+the server): the certificate phase shows a consent screen and may open ONE
+more OS dialog asking you to ACCEPT the locally generated certificate -
+that is expected, accept it (why:
+[docs/certificates.md](docs/certificates.md)).
 
-> **cmd vs PowerShell folder syntax**: cmd uses `%USERPROFILE%` and needs
-> `cd /d` to switch drives; PowerShell uses `$env:USERPROFILE`. The examples
-> above are labeled per shell.
+After the run, activate the add-ins in the Office apps -
+[the next section](#activate-the-add-ins).
 
-### macOS
-
-1. Confirm `python3 --version` works (command-line tools provide it).
-2. Clone the repository and run the installer:
+### Get the code and run the installer - macOS
 
 ```bash
+mkdir -p "$HOME/Tools" && cd "$HOME/Tools"
 git clone https://github.com/corelan/officekick.git
 cd officekick
 python3 install.py
 ```
 
-3. macOS specifics: locally hosted models (Ollama on your LAN) need one
-   consent - see [macOS permissions](#macos-permissions-locally-hosted-models).
+macOS specifics: locally hosted models (Ollama on your LAN) need one
+consent - see [macOS permissions](#macos-permissions-locally-hosted-models).
+MailKick needs the https prerequisites met before the installer offers it
+([detail](docs/mailkick.md#requirements-for-outlook-macos---read-before-installing)).
 
-### Linux
-
-The task panes host inside **desktop Microsoft Office**, which exists on
-Windows and macOS only; `install.py` has no Linux branch and a Linux box
-cannot register or serve the panes. There is no supported Linux install -
-running the Office web client against the local server is untested and not
-part of this project.
-
-## The installer itself
-
-One installer for macOS and Windows. It detects the platform by itself.
-
-The interactive menu:
-
-1. **Install / repair** - the add-in picker (Word + PowerPoint on by default,
-   Outlook off until you enable it)
-2. **Update**
-3. **Server** (start / restart / stop / status)
-4. **Transport options** - transport mode, listener ports, certificate mode
-5. **Uninstall**
-
-Details, the full flag list, and the self-healing behaviors:
-[docs/installer.md](docs/installer.md).
-
-The essentials:
-
-- Everything talks to the local server. One trusted https listener serves
-  every add-in the moment a usable certificate exists; plain http is the
-  fallback (and the Windows default until you switch the transport).
-  Outlook always needs https URLs in its manifest.
-- **Certificates**: the default mode is a **self-signed leaf** (no CA is
-  created; the leaf itself gets trusted - explicit consent, uninstall-safe).
-  Alternatives, chosen through one question or the Transport menu: the
-  classic loopback CA, or bring-your-own (see
-  [docs/certificates.md](docs/certificates.md)). On Windows the flow verifies
-  the trust out of band and offers the Root fallback Office requires
-  (WebView2 leaf-trust is field-verified as rejected).
-
-### Update
+### Update / uninstall
 
 ```bash
-python3 install.py --update    # Windows: py -3 install.py --update
+python3 install.py --update     # Windows: py -3 install.py --update
 ```
 
-This pulls the repo with git and updates the install. Quit your Office apps
-**before** running it (on macOS the installer refuses to touch the add-in
-registration while an Office app is running), then reopen them so the task
-panes load the new files.
-
-If a deck or document ever greets you with an
-"Add-in Error / This add-in is no longer available" toast on open, heal it
-once with the repair tool - see the troubleshooting section in
-[docs/slidekick.md](docs/slidekick.md).
-
-### Uninstall
+`--update` = git pull + redeploy + restart (quit your Office apps first;
+on macOS the installer refuses to touch the registration while an app is
+running). With git installed, the **pane's check-for-updates button does
+the whole flow in one click** ("Update now - pull + redeploy + restart"); it
+asks you to quit Office and reload the pane when it finishes. Heel an
+"add-in is no longer available" toast once with the repair tool
+([docs/slidekick.md](docs/slidekick.md), troubleshooting).
 
 ```bash
-python3 install.py --uninstall            # keeps your config
-python3 install.py --uninstall --remove-certs --purge-config   # full cleanup incl. certificates + config
+python3 install.py --uninstall                      # keeps your config
+python3 install.py --uninstall --remove-certs --purge-config   # everything
 # Windows: py -3 install.py --uninstall [--purge-config]
 ```
 
-Or pick **Uninstall** in the installer menu. It asks two questions - the
-certificate store entries and the config folder - and both default to KEEP:
-an uninstall never destroys your setup unless you say so. After an uninstall
-the certificate mode resets to self-signed leaf. Details:
-[docs/installer.md > Uninstall](docs/installer.md).
+Details: [docs/installer.md](docs/installer.md#uninstall).
 
-## Using it
+## Activate the add-ins
 
-### Where the panes appear
+One rule comes first, on every platform:
 
-- **PowerPoint (macOS)**: Home tab -> **Add-ins** (dropdown) ->
-  **Developer Add-ins** -> **Corelan SlideKick**.
-- **Word (macOS)**: same route -> **Corelan DocKick**.
-- **PowerPoint / Word (Windows)**: install once (with Office closed), then
-  **quit and reopen** the app - the launch-time sideload makes the panes
-  appear in **Home -> Add-ins** (dropdown). The classic dialog route
-  (Insertion/Mes complements -> **SHARED FOLDER/DOSSIERS PARTAGEES** -> the
-  add-in -> Add) needs the folder catalog enabled - on the newest Windows 11
-  Word builds the Trust Center catalog UI REJECTS local drive paths (sorry,
-  did you include "https://"?): enter the loopback **UNC** form instead:
-  \\localhost\c$\Users\<user>\AppData\Local\OfficeKick\manifest
-  (the admin share C$ is on by default), tick "Show in menu" / "Afficher
-  dans le menu", then restart the app. The newer "Apps" dialog (Add-ins ->
-  Manage) only lists store and organization add-ins on every build.
-- **Outlook (MailKick)**: the manifest lands in Outlook's own add-in folder
-  (macOS); quit and reopen Outlook. If MailKick does not appear:
-  Get Add-ins > My add-ins > Custom Add-ins > Add a custom add-in >
-  Add from File (Cmd+Shift+G). See [docs/mailkick.md](docs/mailkick.md).
+> **Quit and reopen the Office app after every install or update.** The
+> registrations (the registry dev-sideload on Windows, the WEF folder on
+> macOS) are read at app LAUNCH - an app that was running during the install
+> does not see the add-ins until it restarts. The pane's About tab shows the
+> running **Pane build** version; use it to confirm a reload took effect.
+
+### Word
+
+**Windows**
+
+1. Open Word and look at the **Home tab → Add-ins** (the dropdown next to
+   the button). The install's per-add-in launch-time sideload normally puts
+   *Corelan DocKick* there already - if it is listed, you are done.
+2. If it is not: use the classic dialog route. `Insertion / Mes compléments`
+   → the classic **Office Add-ins** dialog (use the "Advanced" link next to
+   Manage - NOT the modern "Apps" browse view, which never lists folder
+   catalogs on any build) → tab **SHARED FOLDER / DOSSIERS PARTAGÉS** at the
+   top → **Corelan DocKick** → **Add** (once per application; it stays in
+   the list afterwards).
+3. The Shared Folder tab lists what the Trust Center catalog enumerates.
+   The installer pre-registers that catalog in the registry
+   (`HKCU\...\WEF\TrustedCatalogs` with `Url` + `flag` = 1). If the tab is
+   still empty, add the catalog through the Trust Center once - and on the
+   newest Windows 11 Word builds **the catalog UI rejects local drive
+   paths** ("Avez-vous inclus "https://"?" - it wants a URL/network form):
+   enter the loopback **UNC** form instead
+   (the admin share `C$` is on by default on clean installs):
+
+   ```
+   \\localhost\c$\Users\<user>\AppData\Local\OfficeKick\manifest
+   ```
+
+   Fichier → Options → Centre de gestion de la confidentialité →
+   Paramètres… → **Catalogues de compléments approuvés** → paste that path →
+   **Ajouter un catalogue** → tick **"Afficher dans le menu"** → OK →
+   restart Word. The full diagnosis order (registry checks first):
+   [docs/setup-windows.md > If the add-in does not appear in Word](docs/setup-windows.md#if-the-add-in-does-not-appear-in-word-windows).
+
+**macOS**
+
+1. Open a document.
+2. Home tab → **Add-ins** (dropdown) → **Developer Add-ins** →
+   **Corelan DocKick**. The pane appears; the icon stays in the dropdown
+   every session.
+
+### PowerPoint
+
+**Windows**
+
+1. Open PowerPoint → **Home tab → Add-ins** (dropdown) - the launch-time
+   sideload normally lists *Corelan SlideKick* already.
+2. Otherwise: Home → Add-ins → **Advanced** (the link next to Manage) → the
+   classic **Office Add-ins** dialog → **SHARED FOLDER** at the top →
+   **Corelan SlideKick** → **Add**. (The Trust Center catalog route is the
+   same one described under [Word (Windows)](#word) above - including the
+   UNC-path quirk on the newest Windows 11 builds.)
+
+**macOS**
+
+1. Open a deck.
+2. Home tab → **Add-ins** (dropdown) → **Developer Add-ins** →
+   **Corelan SlideKick**.
+   (16.0.19725+ builds also gain a ribbon button from a commands manifest;
+   [docs/slidekick.md](docs/slidekick.md) has the caveat for builds that
+   hide ribbon-commands add-ins.)
+
+### Outlook
+
+Outlook always needs https URLs in its manifest, so MailKick stages only
+when the https side is ready (the installer checks the prerequisites and
+says so clearly).
+
+**Windows**
+
+1. The installer stages MailKick only when the https prerequisites are met
+   (`cryptography` present - the installer auto-installs it - and a trusted
+   certificate). If the picker listed Outlook as blocked, re-run
+   `py -3 install.py` after reading the printed reason.
+2. Quit and reopen Outlook: MailKick appears in the add-in ribbon like the
+   other panes.
+
+**macOS**
+
+1. Quit and reopen Outlook; the manifest lands in Outlook's own add-in
+   folder (`~/Library/Containers/com.microsoft.Outlook/Data/Documents/wef/`).
+2. If MailKick does not appear: **Get Add-ins → My add-ins → Custom
+   Add-ins → Add a custom add-in → Add from File (Cmd+Shift+G)** and pick
+   the staged `mailkick.xml`.
+3. Outlook works in New and classic; the one-time loopback-TLS setup and
+   its checks live in
+   [docs/mailkick.md](docs/mailkick.md#requirements-for-outlook-macos---read-before-installing).
 
 ### First run
 
@@ -207,6 +301,8 @@ the certificate mode resets to self-signed leaf. Details:
    the status line; the approval policy decides what gets applied - set it
    in Settings > Approval policy
    ([settings.md > Approval policy](docs/settings.md#settings--approval-policy)).
+
+## Using it
 
 ### Ports and how to tell which scheme a pane uses
 
@@ -309,10 +405,10 @@ Everything runs on your machine:
 
 ## References
 
-- [docs/setup-windows.md](docs/setup-windows.md) - the Windows dependency
-  installer (`tools/setup-windows.ps1`: the Python install manager + Git,
-  the repo clone into `%USERPROFILE%\Tools`) + the PowerShell execution
-  policy how-to.
+- [docs/setup-windows.md](docs/setup-windows.md) - the Windows **dependency**
+  script (`tools/setup-windows.ps1`: the Python Install Manager + Git; no
+  clone, no installer run) + the execution-policy how-to + the Windows
+  add-in troubleshooting order.
 - [docs/installer.md](docs/installer.md) - the installer menus, transport
   options, certificate modes, uninstall (asks + defaults, flags).
 - [docs/certificates.md](docs/certificates.md) - how the local https
