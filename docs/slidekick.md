@@ -276,6 +276,10 @@ actual pixels from a provider with an OpenAI-style images API, and inserts them
 
 - Image models live in the profile: the optional **Image model** slot
   (connection + model - e.g. OpenAI with `gpt-image-1`).
+- The **image style** (Settings > Style) is appended to every image prompt
+  as the final directive - photorealistic by default; pick cartoon, flat
+  vector, infographic etc. and generated pictures follow it without you
+  describing the style in the ask ([docs/settings.md > Style](settings.md#settings--style)).
 - The Image model list shows **image-capable only** (via the provider's own
   metadata on OpenRouter; name heuristics elsewhere). Tick the
   **show all models** checkbox if your image model isn't detected; a custom

@@ -526,7 +526,8 @@ Everything runs on your machine:
 - [docs/certificates.md](docs/certificates.md) - how the local https
   certificates are generated, trusted, renewed, and removed, per platform.
 - [docs/settings.md](docs/settings.md) - every setting explained: what it
-  means, how to configure it (config, profiles, approvals, search steps).
+  means, how to configure it (connections, profiles, approvals, search
+  steps, the Style tab: custom style prompt + the image style).
 - [docs/slidekick.md](docs/slidekick.md) - the PowerPoint add-in: actions,
   approvals, design passes, simulator, troubleshooting.
 - [docs/dockick.md](docs/dockick.md) - the Word add-in: document actions,

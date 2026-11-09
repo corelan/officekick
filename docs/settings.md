@@ -16,14 +16,22 @@ add-ins share ONE config:
 - [Settings > Connections](#settings--connections)
 - [Settings > Profiles](#settings--profiles)
 - [Settings > Search](#settings--search)
+- [Settings > Style](#settings--style)
 - [Inspector](#inspector-tab)
 - [The run activity log](#the-run-activity-log)
 - [Where things live on disk](#where-things-live-on-disk)
 
 ## Settings > General
 
-### Custom system prompt
+## Settings > Style
 
+This tab carries the two style controls shared by all three add-ins.
+
+### Custom style prompt
+
+- The former "Custom system prompt" (Settings > General), renamed and moved
+  here (0.9.290). The storage key did not change: your existing text and
+  the built-in default carry over.
 - An extra instruction block that rides along with every request.
 - The pane shows the EFFECTIVE prompt: your text when set, otherwise the
   built-in default. The built-in default itself is never editable here -
@@ -31,9 +39,24 @@ add-ins share ONE config:
 - The default has three blocks (`### Content (accuracy)`, `###
   Writing style`, `### Formatting`): stick to facts actually present,
   plain active voice, and a monospace rule for code/command lines.
-- Saving: type your text, press **Save custom prompt**. A green
+- Saving: type your text, press **Save custom style prompt**. A green
   "✓ saved" flash confirms it. Maximum 4000 characters.
 - Keeping the `###` block headers is recommended: the models follow them.
+
+### Image style
+
+- Applies to every generated picture - `create_image`, `insert_image` and
+  `set_shape_image` - in every add-in.
+- Options: **photorealistic** (the default - also when nothing is
+  selected, and for any unknown/empty stored value), cartoon, anime,
+  watercolor, oil painting, flat vector, 3d render, pixel art, children's
+  book illustration, line art, infographic.
+- Mechanism: the server appends the choice as the FINAL directive of the
+  image prompt (`Style: render as <style>.` - case/space-insensitive on
+  input, normalized on save). Your model-written image prompt does not
+  need to mention the style; its content instructions still apply, the
+  style line outlasts them as the last words.
+- Saving: pick, press **Save style**. Echoed back in /api/config.
 
 ### Enable debug logging
 
