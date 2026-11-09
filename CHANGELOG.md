@@ -42,6 +42,17 @@
   exact layout Office honors, and docs gain the manual Trust Center +
   reg-add unblock for machines that installed older builds.
 
+## 0.9.292
+
+### Changed
+- the image-style directive is now CONDITIONAL instead of an override: the
+  appended line reads "if the requested image style is not clear from the
+  description above, create the image in \<selected style\>; if a specific
+  style is evident from the description itself, follow that instead".
+  A user prompt that already carries its own style (a watercolor of...,
+  pixel art...) wins; the Style-tab selection (photorealistic by default)
+  applies to everything else. The settings.md mechanism text matches.
+
 ## 0.9.291
 
 ### Added

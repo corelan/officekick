@@ -51,11 +51,12 @@ This tab carries the two style controls shared by all three add-ins.
   selected, and for any unknown/empty stored value), cartoon, anime,
   watercolor, oil painting, flat vector, 3d render, pixel art, children's
   book illustration, line art, infographic.
-- Mechanism: the server appends the choice as the FINAL directive of the
-  image prompt (`Style: render as <style>.` - case/space-insensitive on
-  input, normalized on save). Your model-written image prompt does not
-  need to mention the style; its content instructions still apply, the
-  style line outlasts them as the last words.
+- Mechanism: the server appends one directive line to the image prompt:
+  *"if the requested image style is not clear from the description above,
+  create the image in \<selected style\>; if a specific style is evident
+  from the description itself, follow that instead"* - so a prompt that
+  already names a style wins, and otherwise the selected style applies.
+  Input is case/space-insensitive, normalized on save.
 - Saving: pick, press **Save style**. Echoed back in /api/config.
 
 ### Enable debug logging

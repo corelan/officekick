@@ -34,7 +34,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 APP = "OfficeKick"
-VERSION = "0.9.291"
+VERSION = "0.9.292"
 
 # --------------------------------------------------------------------------- #
 # Self-restart: the server watches for <cfg dir>/restart.flag. Whatever writes
@@ -410,15 +410,22 @@ def canonical_image_style(raw):
 
 
 def compose_image_prompt(store, prompt):
-    """Append the Style tab's image selection to an image request, phrased
-    as the LAST words so the style directive outlasts content
-    instructions; the default (no value) = photorealistic (0.9.290: an
-    unstyled ask must not fall back to the model's own taste)."""
+    """Append the Style tab's image selection to an image request. The
+    directive defers to a style the user's own description already makes
+    clear ("a watercolor of..." stays watercolor even when the stored style
+    is photorealistic), and otherwise applies the selected style. The
+    default (no value) = photorealistic (0.9.290: an unstyled ask must not
+    fall back to the model's own taste; 0.9.292: the fallback is a
+    CONDITION, not an override)."""
     if store is not None:
         style = canonical_image_style((store.data.get("imageStyle") or "").strip())
     else:
         style = IMAGE_STYLE_DEFAULT
-    return "%s\n\nStyle: render as %s." % (str(prompt or "").rstrip(), style)
+    return (str(prompt or "").rstrip()
+            + "\n\nStyle: if the requested image style is not clear from the"
+              " description above, create the image in " + style + " style;"
+              " if a specific style is evident from the description itself"
+              ", follow that instead.")
 
 # how to start the server again when it is down (per OS / setup, shown by the panes).
 # Windows: prefer the registered logon task (starts it detached+hidden); else the clone's installer.
