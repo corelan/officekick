@@ -42,6 +42,18 @@
   exact layout Office honors, and docs gain the manual Trust Center +
   reg-add unblock for machines that installed older builds.
 
+## 0.9.297
+
+### Fixed
+- long URLs stretched the chat box instead of wrapping (field: a live
+  web-results answer with full article URLs pushed the container wide).
+  The chat output, the Previous-requests rows, the History bubbles, the
+  session list, the request inspector and the response viewer now break
+  long unbroken strings at any character (overflow-wrap: anywhere +
+  min-width: 0 for the flex children), and pre blocks wrap instead of
+  scrolling sideways. Verified in the simulator: a 150+ character URL stays
+  inside the box (scrollWidth == clientWidth).
+
 ## 0.9.296
 
 ### Added

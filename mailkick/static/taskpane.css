@@ -910,3 +910,18 @@ body.dark #resp-viewer .rv-card { background: #16181c; color: #e6e6e6; }
 #resp-viewer .rv-body .mdh1 { font-size: 17px; }
 #resp-viewer .rv-body .mdh2 { font-size: 15px; }
 #resp-viewer .rv-body .mdh3, #resp-viewer .rv-body .mdh4 { font-size: 14px; }
+
+/* 0.9.297: long URLs wrap inside the boxes instead of stretching them */
+#chat-output, #chat-output div, #chat-output span, #chat-output p, #chat-output pre,
+#pastbody, #past-body, #past-body .pastturn, #past-body .pt-req, #past-body .pt-res,
+#past-body .pt-snippet, #past-body .pt-excerpt,
+#sess-list .sesscard, #sess-list .sesschat, #sess-list .bubble,
+#req-list .reqgrp, #req-list .reqbody, #req-list pre,
+#resp-viewer .rv-body, #resp-viewer .rv-body * {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+#req-list pre, #chat-output pre, #chat-output .mdcode, #resp-viewer .rv-body pre.mdcode {
+  white-space: pre-wrap;
+}
