@@ -945,6 +945,12 @@
   })();
   function escapeRe(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
 
+  function stripLevelMarkers(s) {
+    // the outline shows sub-bullets as "[L2] text" (0.9.298) - a model may
+    // copy the marker into a find string; match against the RAW text
+    return String(s || "").replace(/^(\s*\[L\d+\]\s*)+/, "");
+  }
+
   function stripReasoning(text) {
     var out = String(text == null ? "" : text);
     STRIP_RES.forEach(function (rx) { out = out.replace(rx, ""); });
@@ -1102,6 +1108,7 @@
     '- {"type":"delete_slide","slide":N}',
     "",
     "Rules:",
+    "- BULLET LEVELS (bullet indentations): in shape text, [L2] marks a SECOND-level (sub)bullet, [L3] the third level; no marker = a top-level (L1) bullet. Levels are part of the CURRENT outline text only: NEVER include [L...] markers in your replace_text find/replace or format_text find values (strip them - the pane matches the real text without markers).\n",
     "- Slide numbers are 1-based (slide 1 = the first slide in the filmstrip) and MUST come from the outline below. When the user says \"slide 2\", use \"slide\":2. Never invent them. Shape indexes keep the numbers shown in the outline.",
     "- One body element = one bullet/paragraph; keep bullets short unless told otherwise.",
     "- When a shape's text ends with \"…[text continues]\" the outline shows only a preview: NEVER rebuild the whole shape from a preview (you would erase the hidden part of the list). Edit list items with replace_text + \"find\" (fragment replace) instead.",
@@ -2085,6 +2092,40 @@
     }).catch(function () { self._geoApi = false; });
   };
 
+  OfficeDeck.prototype._probeLevels = function () {
+    var self = this;
+    if (this._lvlApi !== undefined) return Promise.resolve();
+    this._lvlApi = false;   // default: no per-paragraph levels
+    var supported = false;
+    try { supported = Office.context.requirements.isSetSupported("PowerPointApi", "1.11"); } catch (e) { /* older host */ }
+    if (!supported) return Promise.resolve();
+    return self.run("probeLevels", function (ctx) {
+      var slides = ctx.presentation.slides;
+      slides.load("items/id");
+      return ctx.sync().then(function () {
+        if (!slides.items.length) throw new Error("skip");
+        var shapes = slides.items[0].shapes;
+        shapes.load("items/hasTextFrame");
+        return ctx.sync().then(function () {
+          var tf = null;
+          (shapes.items || []).forEach(function (sh) {
+            if (!tf && sh.hasTextFrame) tf = sh.getTextFrameOrNullObject();
+          });
+          if (!tf) throw new Error("skip");
+          // may throw InvalidReference on builds without the collection
+          tf.paragraphs.load("items/text,items/level");
+          return ctx.sync();
+        });
+      });
+    }).then(function () {
+      self._lvlApi = true;
+      dbg("levels.probe", { ok: true });
+    }, function (e) {
+      self._lvlApi = false;
+      dbg("levels.probe", { ok: false, why: String(e && e.message || e).slice(0, 80) });
+    });
+  };
+
   OfficeDeck.prototype._probePlaceholders = function () {
     var self = this;
     if (this._pfApi !== undefined) return Promise.resolve();
@@ -2121,6 +2162,7 @@
     if (this._textApi === undefined) pre = pre.then(function () { return self._probeTextApi(); });
     if (this._pfApi === undefined) pre = pre.then(function () { return self._probePlaceholders(); });
     if (this._geoApi === undefined) pre = pre.then(function () { return self._probeGeometry(); });
+    if (this._lvlApi === undefined) pre = pre.then(function () { return self._probeLevels(); });
     return pre.then(function () {
       var wantText = self._textApi !== false;
       var wantPf = self._pfApi === true;
@@ -2185,12 +2227,34 @@
                 tfs.forEach(function (entry) {
                   if (!entry.tf.isNullObject && entry.tf.hasText) {
                     entry.tf.textRange.load("text");
+                    if (self._lvlApi) {
+                      // 0.9.298: bullet indentations (paragraph.level) - the
+                      // model could not see sub-bullet structure: composed
+                      // per paragraph as "[L2] text" (L1 implied = top level)
+                      try {
+                        entry.tf.paragraphs.load("items/text,items/level");
+                        entry.paraApi = true;
+                      } catch (ePara) { entry.paraApi = false; }
+                    }
                     trs.push(entry);
                   }
                 });
                 var afterTr = wantText ? ctx.sync() : Promise.resolve();
                 return afterTr.then(function () {
-                  trs.forEach(function (entry) { entry.shape.text = entry.tf.textRange.text || ""; });
+                  trs.forEach(function (entry) {
+                    if (!entry.paraApi) { entry.shape.text = entry.tf.textRange.text || ""; return; }
+                    try {
+                      var paras = entry.tf.paragraphs.items || [];
+                      if (!paras.length) { entry.shape.text = entry.tf.textRange.text || ""; return; }
+                      entry.shape.text = paras.map(function (p) {
+                        var t0 = String(p.text === undefined ? "" : (p.text || ""));
+                        var lv = (p.level === undefined || p.level === null) ? 0 : Number(p.level) || 0;
+                        return (lv > 0 ? "[L" + (lv + 1) + "] " : "") + t0;
+                      }).join("\n");
+                    } catch (eLev) {
+                      entry.shape.text = entry.tf.textRange.text || "";
+                    }
+                  });
                   if (wantText) {
                     data.forEach(function (s) {
                       s.shapes.forEach(function (sh) { if (sh.text === undefined) sh.text = ""; });
@@ -2928,7 +2992,8 @@ OfficeDeck.prototype.formatTextSubstring = function (slideIndex, shapeIndex, fin
           throw new FriendlyError("shape " + (shapeIndex + 1) + " on slide " + (slideIndex + 1) +
             " has no text to format (it is a " + ty.toLowerCase() + " shape) - format_text needs a text shape (textbox or placeholder); a table\'s text lives in its cells.");
         }
-        var idx = String(range.text || "").toLowerCase().indexOf(String(findText).toLowerCase());
+        var idx = String(range.text || "").toLowerCase()
+        .indexOf(stripLevelMarkers(String(findText)).toLowerCase());
         if (idx < 0) throw new FriendlyError("\"" + findText + "\" not found in that shape's current text.");
         var sub = range.getSubstring(idx, String(findText).length);
         if (font.bold != null) sub.font.bold = font.bold;
@@ -3597,7 +3662,7 @@ OfficeDeck.prototype.setNotes = function (i, text) {
         if (typeof op.text !== "string" || !op.text.length) { bad("missing text"); return; }
         out.slide = op.slide; out.shape = op.shape; out.text = op.text;
         if (typeof op.find === "string" && op.find.trim()) {
-          var findR = op.find.trim();
+          var findR = stripLevelMarkers(op.find.trim());   // 0.9.298: outline markers may be copied verbatim
           if (findR.length > 200) { bad("find text too long (200 chars max)"); return; }
           var shapeTxtR = textOf(op.slide, op.shape);   // earlier batch ops may already have rewritten this shape
         if (!futureSlide(op.slide) && shapeTxtR !== null && shapeTxtR.toLowerCase().indexOf(findR.toLowerCase()) === -1) {
@@ -3682,7 +3747,7 @@ OfficeDeck.prototype.setNotes = function (i, text) {
         if (op.font && typeof op.font !== "object") { bad("font must be an object"); return; }
         out.slide = op.slide; out.shape = op.shape; out.font = fontF;
         if (typeof op.find === "string" && op.find.trim()) {
-          var findS = op.find.trim();
+          var findS = stripLevelMarkers(op.find.trim());   // 0.9.298
           if (findS.length > 200) { bad("find text too long (200 chars max)"); return; }
           var shapeTxtF = textOf(op.slide, op.shape);   // earlier batch ops may already have rewritten this shape
         if (!futureSlide(op.slide) && shapeTxtF !== null && shapeTxtF.toLowerCase().indexOf(findS.toLowerCase()) === -1) {

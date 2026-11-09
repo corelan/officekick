@@ -42,6 +42,20 @@
   exact layout Office honors, and docs gain the manual Trust Center +
   reg-add unblock for machines that installed older builds.
 
+## 0.9.298
+
+### Fixed
+- SlideKick could not SEE bullet indentations (paragraph levels) in the
+  outline/read_slide text, so models flattened sub-bullet structure in
+  edits. The deck read now pulls every paragraph's LEVEL
+  (PowerPointApi 1.11, probed like the placeholder API; graceful fallback
+  to the flat text on older builds) and renders shape text per paragraph
+  as "[L2] text" (no marker = a top-level bullet); the ask rules explain
+  the marker and tell models to strip [L...] markers from any find values
+  they copy verbatim (the matcher normalizes them too, both at validation
+  and at apply time). Bullet levels are preserved by find/replace edits
+  (the marker describes the current state only).
+
 ## 0.9.297
 
 ### Fixed
