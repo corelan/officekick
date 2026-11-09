@@ -42,6 +42,22 @@
   exact layout Office honors, and docs gain the manual Trust Center +
   reg-add unblock for machines that installed older builds.
 
+## 0.9.296
+
+### Added
+- the full-response viewer also covers the box under the prompt: every
+  "Previous requests" response row is clickable and opens the COMPLETE
+  content (the same themed overlay as History; the row keeps a 400-char
+  preview + an on-click hint).
+- a proactive pre-edit read: an ask that names slides AND an edit verb
+  (replace/simplify/reword/rewrite/tighten/rephrase/shorten/edit/trim/
+  polish/fix/update/improve/change/redraft) now fetches those slides' FULL
+  text BEFORE the first ask and injects it with the rule "build find
+  strings as EXACT substrings of this text". Field: "simplify the bullets
+  on slide 46" died 4/4 at "find text not found" - the model had only the
+  outline preview and invented find strings (verified live: the injection
+  appears in the first chat body with the real slide text).
+
 ## 0.9.295
 
 ### Added

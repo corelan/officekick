@@ -4530,8 +4530,19 @@ OfficeDeck.prototype.setNotes = function (i, text) {
           var slideCount = SK.lastCtx ? SK.lastCtx.slideCount : 0;
           var compact = SK.lastCtx ? ((SK.lastCtx.slides || []).length > 40) : false;
           var wantRead = READ_ASK_RE.test(instruction || "");
+          // 0.9.296: a targeted EDIT on named slides (rewrite/simplify/
+          // replace/reword...) also needs the REAL current text BEFORE the
+          // ask - models write replace_text find strings from the outline
+          // preview + reasoning, and every find missed (field: "simplify
+          // the bullets on slide 46" -> 4 invalid ops, the whole edit
+          // wasted). Read the mentioned slides proactively; the injection
+          // text tells the model to build find strings as exact
+          // substrings of this text.
+          var EDIT_FOR_SLIDES_RE = /\b(replace|simplify|reword|rewrite|tighten|shorten|rephrase|edit|trim|polish|redraft|fix|update|improve|change)\b/i;
+          var wantEdit = EDIT_FOR_SLIDES_RE.test(instruction || "") &&
+            /slides?\s+\d/i.test(instruction || "");
           var nums = [];
-          if (wantRead && instruction) {
+          if ((wantRead || wantEdit) && instruction) {
             var mm, re2 = /\bslides?\s+(\d+\b[^)]{0,40})/gi;
             while ((mm = re2.exec(instruction)) !== null && nums.length < 6) {
               var digits = mm[1].match(/\d+/g) || [];
@@ -4543,14 +4554,14 @@ OfficeDeck.prototype.setNotes = function (i, text) {
             }
             nums.sort(function (a, b) { return a - b; });
           }
-          if (wantRead && nums.length) {
+          if ((wantRead || wantEdit) && nums.length) {
             SK.readRounds = (SK.readRounds || 0) + 1;   // the shared 2-read budget
             setStatus("Reading slide(s) " + nums.join(", ") + " in full\u2026", "busy");
             preReadDone = SK.deck.readSlides(nums).then(function (full) {
               dbg("pre.read_slide", { slides: nums, chars: full.length });
               messages = messages.concat([{ role: "user", content:
-                "FULL SLIDE TEXT of the slide(s) the user asked you to read (1-based, same numbering as the outline):\n" + full +
-                "\n\nUse this complete text for the ORIGINAL USER REQUEST; quote it accurately; do NOT reply with read_slide for these slide(s) again." }]);
+                "FULL SLIDE TEXT of the mentioned slide(s) (1-based, same numbering as the outline):\n" + full +
+                "\n\nUse this complete text for the ORIGINAL USER REQUEST; quote it accurately; when writing replace_text or format_text \"find\" strings, use EXACT substrings of THIS text (do not invent wording); do NOT reply with read_slide for these slide(s) again." }]);
               return true;
             }).catch(function (ePr) {
               dbg("pre.read_slide.failed", { err: String(ePr && ePr.message || ePr).slice(0, 160) });
@@ -5510,11 +5521,22 @@ OfficeDeck.prototype.setNotes = function (i, text) {
     body.appendChild(q1);
     var q2 = document.createElement("div");
     q2.className = "pt-res";
+    q2.style.cursor = "pointer";
+    q2.title = "Click to open the full response";
     var b2 = document.createElement("b");
     b2.textContent = "Response: ";
     q2.appendChild(b2);
     var ac = String(a.content || "");
+    // 0.9.296: the response row opens COMPLETE + formatted (the same
+    // viewer as History) - the box row stays a 400-char preview
+    q2.addEventListener("click", function () { openTextViewer("AI response", ac); });
     q2.appendChild(document.createTextNode(ac.length > 400 ? ac.slice(0, 400) + "…" : ac));
+    if (ac.length > 400) {
+      var hint2 = document.createElement("span");
+      hint2.className = "ptts";
+      hint2.textContent = "  (click for the full response)";
+      q2.appendChild(hint2);
+    }
     body.appendChild(q2);
     head.addEventListener("click", function () {
       var isOpen = body.classList.toggle("open");

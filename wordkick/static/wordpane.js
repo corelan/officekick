@@ -3966,11 +3966,22 @@ function applyOps(deck, ops, ctx) {
     body.appendChild(q1);
     var q2 = document.createElement("div");
     q2.className = "pt-res";
+    q2.style.cursor = "pointer";
+    q2.title = "Click to open the full response";
     var b2 = document.createElement("b");
     b2.textContent = "Response: ";
     q2.appendChild(b2);
     var ac = String(a.content || "");
+    // 0.9.296: the response row opens COMPLETE + formatted (the same
+    // viewer as History) - the box row stays a 400-char preview
+    q2.addEventListener("click", function () { openTextViewer("AI response", ac); });
     q2.appendChild(document.createTextNode(ac.length > 400 ? ac.slice(0, 400) + "…" : ac));
+    if (ac.length > 400) {
+      var hint2 = document.createElement("span");
+      hint2.className = "ptts";
+      hint2.textContent = "  (click for the full response)";
+      q2.appendChild(hint2);
+    }
     body.appendChild(q2);
     head.addEventListener("click", function () {
       var isOpen = body.classList.toggle("open");
