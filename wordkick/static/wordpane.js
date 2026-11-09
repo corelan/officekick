@@ -1386,6 +1386,74 @@
     input.addEventListener("blur", function () { done(false); });
   }
 
+  // 0.9.295: the full-response viewer - History keeps only a 240-char
+  // bubble preview (lost formatting + cut-off); clicking an assistant
+  // bubble opens the COMPLETE response, lightly markdown-formatted.
+  function escapeHtmlTk(s) {
+    return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  }
+  function mdToSafeHtml(md) {
+    var src = String(md || "");
+    var blocks = [];
+    src = src.replace(/```[\s\S]*?```/g, function (code) {
+      blocks.push('<pre class="mdcode">' + escapeHtmlTk(code.replace(/^```\w*\n?/, "").replace(/```$/, "")) + "</pre>");
+      return "\u0000B" + (blocks.length - 1) + "\u0000";
+    });
+    var inline = function (s) {
+      return escapeHtmlTk(s)
+        .replace(/`([^`]+)`/g, "<code>$1</code>")
+        .replace(/\*\*([^*\n]+)\*\*/g, "<b>$1</b>")
+        .replace(/(^|[\s(])\*([^*\n]+)\*/g, "$1<i>$2</i>");
+    };
+    var out = src.split(/\n{2,}/).map(function (block) {
+      var t0 = block.trim();
+      if (!t0) return "";
+      var marker = t0.match(/^\u0000B(\d+)\u0000$/);
+      if (marker) return blocks[parseInt(marker[1], 10)];
+      var lines = t0.split("\n");
+      var isList = lines.every(function (l) { return /^[-*]\s+/.test(l.trim()); });
+      var isNum = lines.every(function (l) { return /^\d+[.)]\s+/.test(l.trim()); });
+      if (isList) return "<ul>" + lines.map(function (l) { return "<li>" + inline(l.replace(/^[-*]\s+/, "")) + "</li>"; }).join("") + "</ul>";
+      if (isNum) return "<ol>" + lines.map(function (l) { return "<li>" + inline(l.replace(/^\d+[.)]\s+/, "")) + "</li>"; }).join("") + "</ol>";
+      var allHeads = lines.length && lines.every(function (l) { return /^#{1,4}\s+/.test(l || ""); });
+      if (allHeads) {
+        return lines.map(function (l) {
+          var h2 = /^#{1,4}\s+/.exec(l);
+          var lvl = Math.min(h2[0].trim().length, 4);
+          return '<div class="mdh mdh' + lvl + '">' + inline(l.replace(/^#+\s+/, "")) + "</div>";
+        }).join("");
+      }
+      var hm = /^#{1,4}\s+/.exec(lines[0]);
+      if (hm && lines.length === 1) {
+        var lvl = Math.min(hm[0].trim().length, 4);
+        return '<div class="mdh mdh' + lvl + '">' + inline(lines[0].replace(/^#+\s+/, "")) + "</div>";
+      }
+      return "<p>" + lines.map(inline).join("<br>") + "</p>";
+    }).join("");
+    return out || escapeHtmlTk(src);
+  }
+  function openTextViewer(title, content) {
+    var scrim = document.getElementById("resp-viewer");
+    if (!scrim) {
+      scrim = document.createElement("div");
+      scrim.id = "resp-viewer";
+      scrim.innerHTML = '<div class="rv-card"><div class="rv-head"><b id="rv-title"></b>' +
+        '<button class="btn subtle" id="rv-close" type="button">\u2715 close</button></div>' +
+        '<div id="rv-body" class="rv-body"></div></div>';
+      document.body.appendChild(scrim);
+      document.getElementById("rv-close").addEventListener("click", function () { scrim.classList.add("hidden"); });
+      scrim.addEventListener("click", function (e) { if (e.target === scrim) scrim.classList.add("hidden"); });
+      document.addEventListener("keydown", function (e) {
+        if (e.key === "Escape" && !document.getElementById("resp-viewer").classList.contains("hidden")) {
+          document.getElementById("resp-viewer").classList.add("hidden");
+        }
+      });
+    }
+    document.getElementById("rv-title").textContent = title || "Response";
+    document.getElementById("rv-body").innerHTML = mdToSafeHtml(content);
+    scrim.classList.remove("hidden");
+  }
+
   function showSessionChat(sessId, card) {
     var box = card.querySelector(".sesschat");
     if (!box.classList.contains("hidden")) { box.classList.add("hidden"); box.innerHTML = ""; return; }
@@ -1417,10 +1485,27 @@
           var tclick = String(m.content || "");
           b.addEventListener("click", function () { copyRequestToInput(tclick); });
         }
-        if (c.length > 240) c = c.slice(0, 240) + "…";
+        var hintFull = false;
+        if (m.role !== "user") {
+          // 0.9.295: a text response opens FULL + formatted on click
+          var fullResp = String(m.content || "");
+          b.style.cursor = "pointer";
+          b.title = "Click to open the full response";
+          b.addEventListener("click", function () { openTextViewer("AI response", fullResp); });
+        }
+        if (c.length > 240) {
+          c = c.slice(0, 240) + "…";
+          if (m.role !== "user") hintFull = true;
+        }
         var txt = document.createElement("span");
         txt.textContent = c;
         b.appendChild(who); b.appendChild(txt);
+        if (hintFull) {
+          var hint = document.createElement("span");
+          hint.className = "ptts";
+          hint.textContent = "  (click for the full response)";
+          b.appendChild(hint);
+        }
         frag.appendChild(b);
       });
       box.innerHTML = "";

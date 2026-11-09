@@ -42,6 +42,20 @@
   exact layout Office honors, and docs gain the manual Trust Center +
   reg-add unblock for machines that installed older builds.
 
+## 0.9.295
+
+### Added
+- the full-response viewer: text replies in History were shown as a
+  240-character plain-text bubble (formatting lost, cut off). Every
+  assistant bubble now has a "(click for the full response)" hint and opens
+  the COMPLETE response in an overlay, lightly markdown-formatted
+  (headings, bold/italic, ordered/unordered lists, inline code and fenced
+  code blocks; everything html-escaped first - no link/code execution from
+  model output). Close via the button, clicking outside, or Escape. All
+  three panes; theme-aware. Verified live in the simulator: a seeded
+  long-markdown reply renders fully (heading/list/code asserted, the final
+  line present) and the History bubble stays a short preview.
+
 ## 0.9.294
 
 ### Added
