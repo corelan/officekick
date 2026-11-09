@@ -42,6 +42,23 @@
   exact layout Office honors, and docs gain the manual Trust Center +
   reg-add unblock for machines that installed older builds.
 
+## 0.9.293
+
+### Fixed
+- the target guard re-asked away a CLARIFY-answered destination. Field:
+  "use the text from slide 45 and 46 to make an image on slide 47" - after
+  the user answered the placement question with "On slide 47 (the open
+  slide)", the guard parsed slide 45 as the destination (the first number
+  in the ask = actually just a READ SOURCE slide), saw the plan targeting
+  47, re-asked with "aim at 45", and the model obeyed - the image landed on
+  the read-source slide despite the confirmed choice. The guard now
+  accepts EVERY clarify-answered target (generic detection: "your earlier
+  choice ...: On slide N", any question wording) and the OPEN/SELECTED
+  slides as permitted destinations, and stands down entirely when all ops
+  target that set (the old work-land exact-phrase override remains).
+  Verified live in the simulator with the field ask verbatim: one chat
+  call (no re-ask, no nudge), the gate, apply, deck = 47 slides.
+
 ## 0.9.292
 
 ### Changed

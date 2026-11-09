@@ -5003,6 +5003,20 @@ OfficeDeck.prototype.setNotes = function (i, text) {
           // marker) is the user's explicit instruction - no re-ask, no drop
           var userTargetOverride = /your earlier choice on "Where should the work land?[\s\S]*the slides the plan aims at/i.test(instruction || "");
           if (userTargetOverride) SK.insertGuard = null;
+          // 0.9.293: a CLARIFY-answered destination is the user's explicit
+          // instruction - generic detection (any question wording), and the
+          // OPEN/SELECTED slides are permitted targets too: the first slide
+          // number in the ask text is often just a READ SOURCE ("use the
+          // text from slide 45 and 46 ... on slide 47") and re-asking with
+          // "aim at 45" made the model repaint the read-source slide
+          // (field: an image ask that the user had already pointed at the
+          // open slide landed on the read source). If every op targets the
+          // clarified/selected/named set, the guard stands down entirely.
+          var clarifiedTarget = (function () {
+            var m3 = /your earlier choice[^:]{0,140}:\s*"?on\s+slides?\s+(\d{1,4})/i.exec(instruction || "");
+            return m3 ? parseInt(m3[1], 10) : 0;
+          })();
+          var selectedSlides1 = (ctx.selected || []).map(function (x) { return x + 1; });
           if (namedTarget && ctx && ctx.slides && namedTarget <= ctx.slides.length && !userTargetOverride) {
             var tmap = {};
             var createCount0 = 0;
@@ -5021,7 +5035,9 @@ OfficeDeck.prototype.setNotes = function (i, text) {
             var hostsOk = afterW && createCount0 > 0 && tl.length > 0 &&
               tl.every(function (t3) { return t3 <= ctx.slides.length + createCount0; }) &&
               tl.every(function (t3) { return t3 >= namedTarget && t3 <= namedTarget + createCount0; });
-            if (tl.length && tl.indexOf(namedTarget) < 0 && !hostsOk) {
+            var okTargets = [namedTarget, clarifiedTarget].concat(selectedSlides1);
+            var outsideOk = tl.filter(function (t3) { return okTargets.indexOf(t3) < 0; });
+            if (tl.length && outsideOk.length === tl.length && tl.indexOf(namedTarget) < 0 && !hostsOk) {
               dbg("target.mismatch", { named: namedTarget, ops: tl.join(","), afterW: afterW, creates: createCount0 });
               // 0.9.269: an insert-after ask re-asked with "aim everything at
               // slide N" taught the model to DROP its create_slide ops and
