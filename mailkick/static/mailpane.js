@@ -4576,7 +4576,7 @@ function applyOps(deck, ops, ctx) {
       stEl.innerHTML = [["photorealistic", "photorealistic (default)"], ["cartoon", "cartoon"], ["anime", "anime"],
         ["watercolor", "watercolor"], ["oil painting", "oil painting"], ["flat vector", "flat vector"],
         ["3d render", "3d render"], ["pixel art", "pixel art"],
-        ["children's book illustration", "children's book illustration"], ["line art", "line art"]]
+        ["children's book illustration", "children's book illustration"], ["line art", "line art"], ["infographic", "infographic"]]
         .map(function (o) { return '<option value="' + o[0] + '">' + o[1] + "</option>"; }).join("");
       $("style-image-save").addEventListener("click", function () {
         var v = stEl.value;

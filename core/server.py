@@ -34,7 +34,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 APP = "OfficeKick"
-VERSION = "0.9.290"
+VERSION = "0.9.291"
 
 # --------------------------------------------------------------------------- #
 # Self-restart: the server watches for <cfg dir>/restart.flag. Whatever writes
@@ -387,6 +387,7 @@ IMAGE_STYLES = (
     "pixel art",
     "children's book illustration",
     "line art",
+    "infographic",
 )
 IMAGE_STYLE_DEFAULT = "photorealistic"
 

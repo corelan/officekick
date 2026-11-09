@@ -42,6 +42,13 @@
   exact layout Office honors, and docs gain the manual Trust Center +
   reg-add unblock for machines that installed older builds.
 
+## 0.9.291
+
+### Added
+- "infographic" in the Style tab's image-style list (server catalog + all
+  three panes' dropdowns). Case/space-insensitive canonicalization applies
+  on input, so stored values read back cleanly either way.
+
 ## 0.9.290
 
 ### Added
