@@ -34,7 +34,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 APP = "OfficeKick"
-VERSION = "0.9.289"
+VERSION = "0.9.290"
 
 # --------------------------------------------------------------------------- #
 # Self-restart: the server watches for <cfg dir>/restart.flag. Whatever writes
@@ -372,6 +372,52 @@ DEFAULT_CUSTOM_PROMPT = (
     "- For every line (or table cell) that contains shell, filenames, folder paths, commands, CLI flags, code, syntax, URLs or protocol elements: make the separate format_text request with font {\"name\":\"Consolas\"} on that shape. Never treat such lines as prose.\n"
     "- Do not apply the monospace rule to ordinary text; when in doubt, ask."
 )
+
+# Image styles (Settings > Style): appended to every image generation
+# request as the FINAL directive. The default is photorealistic - also when
+# nothing is selected (an empty stored value reads as the default).
+IMAGE_STYLES = (
+    "photorealistic",
+    "cartoon",
+    "anime",
+    "watercolor",
+    "oil painting",
+    "flat vector",
+    "3d render",
+    "pixel art",
+    "children's book illustration",
+    "line art",
+)
+IMAGE_STYLE_DEFAULT = "photorealistic"
+
+
+def canonical_image_style(raw):
+    """Return the canonical style id: '' -> the default; a known style
+    (space/case-insensitive) -> canonical; anything unknown -> the default
+    (the dropdown only sends known ids, but stored values from older builds
+    or API callers must not poison image prompts)."""
+    v = str(raw or "").strip().lower()
+    if not v:
+        return IMAGE_STYLE_DEFAULT
+    for m in IMAGE_STYLES:
+        if m == v:
+            return m
+    for m in IMAGE_STYLES:
+        if m.replace(" ", "") == v.replace(" ", ""):
+            return m
+    return IMAGE_STYLE_DEFAULT
+
+
+def compose_image_prompt(store, prompt):
+    """Append the Style tab's image selection to an image request, phrased
+    as the LAST words so the style directive outlasts content
+    instructions; the default (no value) = photorealistic (0.9.290: an
+    unstyled ask must not fall back to the model's own taste)."""
+    if store is not None:
+        style = canonical_image_style((store.data.get("imageStyle") or "").strip())
+    else:
+        style = IMAGE_STYLE_DEFAULT
+    return "%s\n\nStyle: render as %s." % (str(prompt or "").rstrip(), style)
 
 # how to start the server again when it is down (per OS / setup, shown by the panes).
 # Windows: prefer the registered logon task (starts it detached+hidden); else the clone's installer.
@@ -937,6 +983,9 @@ class Store:
         # custom instructions appended to every system prompt (style, tone,
         # house rules); empty by default for fresh installs
         self.data.setdefault("customPrompt", "")
+        # image style for generated pictures (photorealistic default,
+        # Settings > Style); "" reads as the default
+        self.data.setdefault("imageStyle", IMAGE_STYLE_DEFAULT)
         # web search: an ordered sequence lives in searchProfiles
         # (profile = {name, steps: [{kind: "server", engine} | {kind:
         # "online", connection, model?}]}; no selected profile = the free
@@ -1253,6 +1302,7 @@ class Store:
             "generateNotes": bool(d.get("generateNotes", False)),
             "paneFontSize": int(d.get("paneFontSize", 100)),
             "customPrompt": str(d.get("customPrompt", "") or ""),
+            "imageStyle": canonical_image_style(d.get("imageStyle")),
             "webSearchEngine": str(d.get("webSearchEngine", "auto") or "auto"),
             # keys never leave the box: only set/unset markers are public
             "webSearchKeySet": bool(d.get("webSearchKey", "")),
@@ -3014,6 +3064,7 @@ class SlideKickHandler(BaseHTTPRequestHandler):
                 if not model or not prompt:
                     raise ApiError(400, "image request needs 'model' and 'prompt'")
                 size = body.get("size") or None
+                prompt = compose_image_prompt(self.store, prompt)
                 jid = "img-%d-%d" % (time.time() * 1000, threading.get_ident())
                 with IMAGE_JOBS_LOCK:
                     _prune_image_jobs()
@@ -3064,6 +3115,7 @@ class SlideKickHandler(BaseHTTPRequestHandler):
                                 "no large empty whitespace or blank margins around it; "
                                 "composition fills the frame edge-to-edge, "
                                 "tight full-bleed composition.")
+                prompt = compose_image_prompt(self.store, prompt)   # after the whitespace rule
                 size = body.get("size") or None
                 b64 = provider_generate_image(conn, model, prompt, size)
                 self._send_json({"ok": True, "b64": b64, "model": model})
@@ -3126,6 +3178,10 @@ class SlideKickHandler(BaseHTTPRequestHandler):
                 if "customPrompt" in body and body["customPrompt"] is not None:
                     _cp = str(body["customPrompt"] or "")
                     self.store.data["customPrompt"] = _cp[:4000]
+                    changed = True
+                if "imageStyle" in body and body["imageStyle"] is not None:
+                    _ist = canonical_image_style(body["imageStyle"])   # "" -> the default
+                    self.store.data["imageStyle"] = _ist
                     changed = True
                 if "paneFontSize" in body and body["paneFontSize"] is not None:
                     try:

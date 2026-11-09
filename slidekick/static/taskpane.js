@@ -6679,6 +6679,8 @@ OfficeDeck.prototype.setNotes = function (i, text) {
       if (cpEl2 && document.activeElement !== cpEl2) {
         cpEl2.value = String((SK.cfg && SK.cfg.customPrompt) || (SK.cfg && SK.cfg.customPromptDefault) || "");
       }
+      var st2 = $("style-image");
+      if (st2 && document.activeElement !== st2) st2.value = (SK.cfg && SK.cfg.imageStyle) || "photorealistic";
       // the auto-apply checkbox was wired before the config arrived - keep it
       // in sync with the stored setting from now on (the "off after reopen" bug)
       var sap2 = $("set-autoapply");
@@ -6870,6 +6872,21 @@ OfficeDeck.prototype.setNotes = function (i, text) {
     Array.prototype.forEach.call(document.querySelectorAll("#settings-subtabs button"), function (b) {
       b.addEventListener("click", function () { switchSettingsSub(b.dataset.subtab); });
     });
+        var stEl = $("style-image");
+    if (stEl) {
+      stEl.innerHTML = [["photorealistic", "photorealistic (default)"], ["cartoon", "cartoon"], ["anime", "anime"],
+        ["watercolor", "watercolor"], ["oil painting", "oil painting"], ["flat vector", "flat vector"],
+        ["3d render", "3d render"], ["pixel art", "pixel art"],
+        ["children's book illustration", "children's book illustration"], ["line art", "line art"]]
+        .map(function (o) { return '<option value="' + o[0] + '">' + o[1] + "</option>"; }).join("");
+      $("style-image-save").addEventListener("click", function () {
+        var v = stEl.value;
+        apiJson("/api/settings", "PUT", { imageStyle: v }).then(function (res) {
+          if (SK.cfg) SK.cfg.imageStyle = (res && res.imageStyle) || v;
+          flashSaved("saved-imagestyle", "\u2713 style saved: " + v);
+        }).catch(function () { flashSaved("saved-imagestyle", "save failed"); });
+      });
+    }
     var cpEl = $("settings-customprompt");
     var cpSave = $("settings-customprompt-save");
     if (cpEl) {

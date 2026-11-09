@@ -42,6 +42,24 @@
   exact layout Office honors, and docs gain the manual Trust Center +
   reg-add unblock for machines that installed older builds.
 
+## 0.9.290
+
+### Added
+- a Style tab in the settings of all three panes. It carries the renamed
+  "Custom style prompt" (moved there from General - the storage key and the
+  built-in default are unchanged, existing text carries over), plus the new
+  image-style selector: photorealistic (the default, also when nothing is
+  selected), cartoon, anime, watercolor, oil painting, flat vector, 3d
+  render, pixel art, children's book illustration, line art. The server
+  stores the choice (imageStyle), echoes it in /api/config, accepts it via
+  /api/settings (an empty value reads as the default), and appends it as
+  the FINAL directive of every image generation prompt (both the async
+  image jobs and the sync generate path, after the whitespace rule) - so
+  an unstyled ask never falls back to the model's own taste. Verified by a
+  unit battery (canonicalization incl. space/case-insensitive ids, the
+  compose output, empty -> photorealistic) and a live roundtrip (PUT
+  cartoon -> echoed; PUT "" -> photorealistic).
+
 ## 0.9.289
 
 ### Added

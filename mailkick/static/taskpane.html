@@ -99,6 +99,7 @@
       <button data-subtab="connections">Connections</button>
       <button data-subtab="profiles">Profiles</button>
         <button data-subtab="search">Search</button>
+      <button data-subtab="style">Style</button>
       <button data-subtab="inspector">Inspector</button>
     </div>
     <div class="subpanel active" id="sub-general">
@@ -121,11 +122,6 @@
         <label class="field-inline check"><input type="checkbox" id="settings-debug" /> enable debug logging</label>
       </div>
       <span class="savedflash" id="saved-debug" aria-live="polite"></span>
-      </div>
-      <div class="setgroup"><h2 class="setgh">Custom system prompt (all add-ins)</h2>
-      <textarea id="settings-customprompt" rows="16" spellcheck="false" placeholder="Optional instructions appended to every AI request - e.g. writing style, tone, formatting house rules..."></textarea>
-      <p class="muted" style="margin:0 0 4px 0">Appended to the system prompt of every ask. Click Save when done. Clearing this and saving falls back to the built-in quality/style prompt.</p>
-      <div class="row"><button id="settings-customprompt-save" class="btn" type="button">Save custom prompt</button><span class="savedflash" id="saved-customprompt" aria-live="polite"></span></div>
       </div>
       <div class="setgroup"><h2 class="setgh">Sessions</h2>
       <div class="row">
@@ -299,6 +295,23 @@
       </div>
       <p class="muted" id="srp-status" style="margin:4px 0 0 0"></p>
       </div>
+    <div class="subpanel" id="sub-style">
+      <div class="setgroup"><h2 class="setgh">Custom style prompt (all add-ins)</h2>
+      <textarea id="settings-customprompt" rows="16" spellcheck="false" placeholder="Optional style guidance appended to every AI request - writing style, tone, visual design rules, formatting house rules..."></textarea>
+      <p class="muted" style="margin:0 0 4px 0">Appended to the system prompt of every ask in every add-in. Click Save when done; clearing this and saving falls back to the built-in quality/style prompt.</p>
+      <div class="row"><button id="settings-customprompt-save" class="btn" type="button">Save custom style prompt</button><span class="savedflash" id="saved-customprompt" aria-live="polite"></span></div>
+      </div>
+      <div class="setgroup"><h2 class="setgh">Image style</h2>
+      <div class="row">
+        <label>Style for generated images
+          <select id="style-image"></select>
+        </label>
+        <button id="style-image-save" class="btn primary" type="button">Save style</button>
+      </div>
+      <p class="muted" style="margin:0 0 4px 0">Applied to every generated picture (create_image, set_shape_image). Photorealistic is the default - also when nothing is selected. The server appends the style as the final directive in the image prompt.</p>
+      <span class="savedflash" id="saved-imagestyle" aria-live="polite"></span>
+      </div>
+    </div>
       <div class="subpanel" id="sub-inspector">
       <div class="row row-wrap">
         <button id="req-clear" class="btn subtle" type="button">Clear log</button>
