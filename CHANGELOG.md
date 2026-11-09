@@ -42,6 +42,22 @@
   exact layout Office honors, and docs gain the manual Trust Center +
   reg-add unblock for machines that installed older builds.
 
+## 0.9.294
+
+### Added
+- the AI target-confirmation round for AMBIGUOUS destinations: when the ask
+  lists SEVERAL slide numbers (content sources + destination) and the plan
+  aims inside that list but not at the parsed "named" one, the pane now
+  asks the MODEL once ("TARGET CONFIRM: slides 45, 46, 47 mentioned - the
+  first number may be a content SOURCE; decide the destination and re-emit,
+  or bubble one clarify question") instead of hard re-asking with the
+  destructive aim-at-the-first-number nudge. A clarify answer remains
+  authoritative in the next round (0.9.293); the single-destination hard
+  re-ask ("turn slide 124 into...") is unchanged for the fast path.
+  Verified live with the source-ask shape: two chat calls (the second = the
+  TARGET CONFIRM), no WRONG TARGET nudge, the gate received the image op
+  aimed at 47, apply clean on a 50-slide deck.
+
 ## 0.9.293
 
 ### Fixed

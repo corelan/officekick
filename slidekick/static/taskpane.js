@@ -5037,7 +5037,47 @@ OfficeDeck.prototype.setNotes = function (i, text) {
               tl.every(function (t3) { return t3 >= namedTarget && t3 <= namedTarget + createCount0; });
             var okTargets = [namedTarget, clarifiedTarget].concat(selectedSlides1);
             var outsideOk = tl.filter(function (t3) { return okTargets.indexOf(t3) < 0; });
+            // 0.9.294: the ask lists SEVERAL slides (content SOURCES +
+            // destination) and the plan aims inside that list but not at
+            // the parsed named slide - the destination is AMBIGUOUS. Ask
+            // the MODEL once (it re-aims, or bubbles one clarify question;
+            // a user answer stays authoritative next round). The hard
+            // re-ask remains for singles ("turn slide 124 into...", where
+            // 124 IS the destination and field use demands the fast fix).
+            var allNums = (function () {
+              var seen = {};
+              var rx = /(?:^|[\s(,.])(?:[\w-]{1,20}\s*)?slides?\s+(\d{1,4})/gi;
+              var m4;
+              while ((m4 = rx.exec(instruction || ""))) seen[parseInt(m4[1], 10)] = 1;
+              return Object.keys(seen).map(Number).sort(function (a, b) { return a - b; });
+            })();
+            var aimsInList = tl.some(function (t3) { return allNums.indexOf(t3) >= 0; });
+            var ambiguous = allNums.length >= 2 && aimsInList && !SK.targetConfirmDone;
             if (tl.length && outsideOk.length === tl.length && tl.indexOf(namedTarget) < 0 && !hostsOk) {
+              if (ambiguous) {
+                SK.targetConfirmDone = true;
+                SK.insertGuard = null;   // a confirm round's outcome re-validates cleanly
+                var confBody = "TARGET CONFIRM (one round): the user's request mentions slides " + allNums.join(", ") +
+                  " and your ops target slide " + tl.join(", ") + ". The first number (" + namedTarget +
+                  ") may be a content SOURCE rather than the destination. Decide the DESTINATION from the request wording and re-emit the SAME ops aimed there (slide_ops JSON only)" +
+                  (clarifiedTarget ? " - the user's earlier choice (slide " + clarifiedTarget + ") is authoritative and must stand" : "") +
+                  '; or reply {"kind":"clarify","question":"...","options":[...]} (one short question) when the wording genuinely leaves it open.';
+                var confMsg = messages.concat([
+                  { role: "assistant", content: String((SK.lastModelText || {}).text || "") },
+                  { role: "user", content: confBody },
+                ]);
+                dbg("target.confirm", { named: namedTarget, clarified: clarifiedTarget,
+                  nums: allNums.join(","), ops: tl.join(",") });
+                setStatus("The ask mentions slides " + allNums.join(", ") + " but which one receives the result is unclear - confirming with the model\u2026", "busy");
+                return askRetryable(function () { return apiJson("/api/chat", "POST", { connection: ref.connection, model: ref.model, messages: confMsg }); })
+                  .then(function (rc) {
+                    dbg("target.confirm.response", { text: rc.text, elapsedMs: rc.elapsedMs });
+                    SK.lastModelText = { text: rc.text };
+                    var pc = tryParse(rc.text);
+                    if (pc.ok && pc.kind === "clarify") return pc;
+                    return pc.ok ? pc : parsed;
+                  }).catch(function () { return parsed; });
+              }
               dbg("target.mismatch", { named: namedTarget, ops: tl.join(","), afterW: afterW, creates: createCount0 });
               // 0.9.269: an insert-after ask re-asked with "aim everything at
               // slide N" taught the model to DROP its create_slide ops and
