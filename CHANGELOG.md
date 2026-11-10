@@ -42,6 +42,21 @@
   exact layout Office honors, and docs gain the manual Trust Center +
   reg-add unblock for machines that installed older builds.
 
+## 0.9.305
+
+### Added
+- MailKick's propose quick-action asks WHAT to propose first: a profile
+  picker in the clarify slot (same visual language as a model clarify)
+  with Question, Reminder, Follow-up, Accept (positive), Decline
+  (negative), Set up meeting, Decision / commitment (the free-choice kind
+  the old propose prompt already carried) and Other. Other focuses the
+  free-text row, where any keyword works ("schedule an outage review").
+  Picking a profile closes the picker and runs the normal propose
+  pipeline with a PROPOSAL PROFILE directive that pins every returned
+  draft_reply to that kind - one ask path, same gate, nothing sent by
+  MailKick itself. Without a profile picked (slot missing on odd hosts)
+  the old free propose still runs.
+
 ## 0.9.304
 
 ### Fixed

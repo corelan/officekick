@@ -2692,7 +2692,7 @@ function applyOps(deck, ops, ctx) {
     }
   }
 
-  function runQuickReply(stance) {
+  function runQuickReply(stance, profile) {
     // reply + / reply - / propose quick actions: a canned instruction runs
     // through the normal pipeline (the open email's conversation is attached
     // as context); the model proposes draft_reply action(s) with the
@@ -2719,6 +2719,12 @@ function applyOps(deck, ops, ctx) {
         "[Proposal 1 - <kind you picked>] at the top of its body (simple inline " +
         "HTML only). Reply entirely in the conversation's language and tone. " +
         "Do not send anything.";
+      if (profile) {
+        // 0.9.305: the user picked a proposal profile - that kind wins
+        instruction += " The user picked the PROPOSAL PROFILE \"" + String(profile) +
+          "\": every proposal must fit exactly that kind (stance and content " +
+          "tailored to it); drop the other kinds and the free choice above.";
+      }
     } else {
       var stanceText = stance === "pos"
         ? "positive and agreeable"
@@ -2729,6 +2735,60 @@ function applyOps(deck, ops, ctx) {
     inp.disabled = false;
     inp.value = instruction;
     runPrompt();
+  }
+
+  // 0.9.305: the propose quick-action asks WHICH proposal profile first
+  // (same visual language as a model clarify, in the clarify slot).
+  var PROPOSE_PROFILES = [
+    "Question", "Reminder", "Follow-up", "Accept (positive)", "Decline (negative)",
+    "Set up meeting", "Decision / commitment", "Other"
+  ];
+  function renderProposePicker() {
+    if (SK.busy) return;
+    var prof = currentProfile();
+    if (!prof) { setStatus("No profile yet - create one on the Profiles tab first.", "error"); switchTab("settings"); switchSettingsSub("profiles"); return; }
+    var slot = $("clarify-slot");
+    if (!slot) { runQuickReply("propose"); return; }   // no slot host: free propose
+    slot.innerHTML = "";
+    slot.style.display = "";
+    var box = document.createElement("div");
+    box.className = "clarifybox";
+    var q = document.createElement("div");
+    q.className = "clarify-q";
+    q.textContent = "What kind of reply proposal?";
+    box.appendChild(q);
+    var close = function () { slot.innerHTML = ""; slot.style.display = "none"; };
+    var pick = function (val) { close(); runQuickReply("propose", val); };
+    var row = document.createElement("div");
+    row.className = "clarify-row";
+    var ti = document.createElement("input");
+    ti.type = "text";
+    ti.className = "clarify-input";
+    ti.placeholder = "other - type your own keyword\u2026";
+    var go = document.createElement("button");
+    go.className = "btn";
+    go.type = "button";
+    go.textContent = "Propose";
+    go.disabled = true;
+    ti.addEventListener("input", function () { go.disabled = !ti.value.trim(); });
+    ti.addEventListener("keydown", function (eK) {
+      if (eK.key === "Enter") { eK.preventDefault(); if (ti.value.trim()) pick(ti.value.trim()); }
+    });
+    go.addEventListener("click", function () { if (ti.value.trim()) pick(ti.value.trim()); });
+    PROPOSE_PROFILES.forEach(function (p) {
+      var b = document.createElement("button");
+      b.className = "btn clarify-opt";
+      b.type = "button";
+      b.textContent = p;
+      b.addEventListener("click", function () {
+        if (p === "Other") { ti.focus(); return; }   // Other = the free-text row
+        pick(p);
+      });
+      box.appendChild(b);
+    });
+    row.appendChild(ti); row.appendChild(go);
+    box.appendChild(row);
+    slot.appendChild(box);
   }
 
   function runPrompt() {
@@ -4556,7 +4616,7 @@ function applyOps(deck, ops, ctx) {
     var rpos = $("reply-pos"), rneg = $("reply-neg"), rprop = $("reply-propose");
     if (rpos) rpos.addEventListener("click", function () { runQuickReply("pos"); });
     if (rneg) rneg.addEventListener("click", function () { runQuickReply("neg"); });
-    if (rprop) rprop.addEventListener("click", function () { runQuickReply("propose"); });
+    if (rprop) rprop.addEventListener("click", renderProposePicker);   // 0.9.305: profile picker first
     $("chat-input").addEventListener("keydown", function (ev) {
       if ((ev.metaKey || ev.ctrlKey) && ev.key === "Enter") { ev.preventDefault(); runPrompt(); }
     });

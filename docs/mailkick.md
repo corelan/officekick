@@ -136,6 +136,12 @@ Per-document behavior (Office, not something the installer can change):
   gate (default `auto`, so the reply window opens immediately after the run);
   you review it and send. MailKick never sends email.
 
+- **Propose** (next to the quick replies): first asks what to propose - a
+  picker with Question, Reminder, Follow-up, Accept (positive), Decline
+  (negative), Set up meeting, Decision / commitment and Other (type any
+  keyword). The picked profile pins every proposed `draft_reply` variant
+  to that kind; the proposals land behind the same approval gate.
+
   `reply +` / `reply −` accept a "reply to all/everyone" request too (the
   draft_reply op carries `"all":true` then, and the pane uses displayReplyAllForm).
   Meeting requests are supported with the `new_meeting` op: the model fills
