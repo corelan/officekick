@@ -62,6 +62,8 @@ disappear, so the installer defaults to list-mode.
 | Action | What it does | Default policy |
 |---|---|---|
 | insert paragraphs | adds styled paragraphs at the end (Title / Heading 1-3 / Quote / List Paragraph / Normal) | auto |
+
+Sub-bullets: prefix an item's text with [L2] (up to [L9] for deeper indentation) and the pane makes it a real list item at that level; the outline shows existing list items the same way ([L2] markers, no marker = normal text).
 | edit paragraph | replaces one paragraph's text, keeping its style | auto |
 | accept tracked changes | accepts ALL tracked changes in the document (`body.getTrackedChanges().acceptAll()`) - finalize the AI edits made with revisions on; confirm by default | confirm |
 | reject tracked changes | rejects ALL tracked changes in the document (`rejectAll()`) - discard the AI edits made with revisions on | confirm |

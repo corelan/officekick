@@ -78,7 +78,7 @@ localhost is used or planned (the icons must stay fully local).
   dropdown.
 - With *include deck context* checked, the pane sends a compact outline (slides,
   shape indices with texts **and geometry**, selection) with your request, so
-  instructions like "reword the current slide" work without naming slide numbers.
+  instructions like "reword the current slide" work without naming slide numbers. Sub-bullets appear (and can be written) as [L2]/[L3].../[L9] markers - nine indent levels deep; markers in body lines become real bullet indentation.
 - The model returns a structured action list. SlideKick **validates** every
   action against the outline (indices, shape references) and applies it only
   after the approval policy is satisfied:

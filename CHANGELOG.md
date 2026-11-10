@@ -42,6 +42,29 @@
   exact layout Office honors, and docs gain the manual Trust Center +
   reg-add unblock for machines that installed older builds.
 
+## 0.9.301
+
+### Added
+- Bullet levels deep to NINE: the [L2]..[L9] body markers write real
+  indentation up to PowerPoint's deepest indent level (0-based level 8) -
+  [L1] marks an explicit top-level bullet, and anything deeper than [L9]
+  clamps to it, so no [L...] marker can ever leak into stored text again
+  (the 0.9.300 cap was [L5] and left [L1]/[L6+] markers as literal junk).
+- DocKick gains the same loop for Word: the document read now bakes
+  "[L2] text" markers onto list items (Paragraph.isListItem +
+  ListItem.level, guarded per paragraph - builds without the API stay
+  flat), and insert_paragraphs / rewrite_doc items prefixed with
+  [L2]..[L9] become REAL list items at that indentation: the pane strips
+  the markers, forces the built-in list style for the level
+  (ListBullet..ListBullet5), and sets ListItem.level after the text/style
+  sync - failures degrade to a visible note on the action row, never
+  losing text. The Word simulator mirrors all of it (stored levels, style
+  forcing, marker bake-back) so the model sees identical reads. Word's
+  ListItem level is 0-based like PowerPoint's - 9 indent levels on both.
+- Word ask rules/schema teach the marker convention (outline shows [L2]
+  markers; writable on insert_paragraphs / rewrite_doc items up to [L9];
+  never in find values).
+
 ## 0.9.300
 
 ### Added
