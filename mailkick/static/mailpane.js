@@ -2675,6 +2675,7 @@ function applyOps(deck, ops, ctx) {
   function cancelRun() {
     if (!SK.busy) return;
     SK.runCancelled = true;
+    SK.cancelErase = true;   // a canceled request is wiped from the record (0.9.302)
     if (SK.activeFetch && SK.activeFetch.abort) {
       try { SK.activeFetch.abort(); } catch (eA) { /* already settled */ }
     }
@@ -2746,6 +2747,7 @@ function applyOps(deck, ops, ctx) {
     filePreviousRun();  // the previous request/response moves into the history box NOW
     SK.busy = true;
     SK.runCancelled = false;
+    SK.cancelErase = false;  // fresh run: cancellable until it renders (renderParsed re-clears)
     input.disabled = true;   // the text stays visible but locked while working
     setRunEnabled(false);
     chatTimerStart();
@@ -3029,11 +3031,21 @@ function applyOps(deck, ops, ctx) {
       });
     }).catch(function (err) {
       var msg = err && err.friendly ? err.message : (err && err.message) || String(err);
-      setStatus(msg, "error");
-      // the request left the pane but failed - keep it in the session too
-      pushHistory(instruction, "(failed: " + msg + ")");
-      // give the request back so the user can just hit Run again
-      if (input && !input.value) input.value = instruction;
+      // 0.9.302: a CANCELED request never existed - no history pair, no
+      // Previous-requests filing (the zone is empty, so the next run's
+      // filePreviousRun skips it too), and the model context never sees it.
+      // Cancels AFTER the run rendered (auto-apply under way) are real:
+      // renderParsed cleared the flag and ops may have landed.
+      if (SK.cancelErase && /Run cancelled/i.test(msg)) {
+        setStatus("Run cancelled.", "pending");
+        dbg("run.cancelled.forget", {});
+      } else {
+        setStatus(msg, "error");
+        // the request left the pane but failed - keep it in the session too
+        pushHistory(instruction, "(failed: " + msg + ")");
+        // give the request back so the user can just hit Run again
+        if (input && !input.value) input.value = instruction;
+      }
     }).then(function () {
       stopChatTimer();
       SK.busy = false;
@@ -3449,6 +3461,7 @@ function applyOps(deck, ops, ctx) {
   }
 
   function renderParsed(parsed, ctx, instruction) {
+    SK.cancelErase = false;   // from here the run is real: even a cancel keeps its record
     SK.lastInstruction = instruction;
     var out = $("chat-output");
     out.innerHTML = "";

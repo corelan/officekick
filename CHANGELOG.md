@@ -42,6 +42,19 @@
   exact layout Office honors, and docs gain the manual Trust Center +
   reg-add unblock for machines that installed older builds.
 
+## 0.9.302
+
+### Changed
+- Canceling a request wipes it from the record: no history pair (the
+  session store never sees it, later model asks cannot carry it), no
+  Previous-requests row (the empty zone is skipped by the next run's
+  filing), the request text stays in the box for a re-run, and the status
+  reads "Run cancelled." in neutral styling instead of an error. All three
+  panes. A cancelErase flag drives it: set by the cancel button, cleared
+  the moment the run renders its result - so a cancel AFTER rendering
+  (auto-apply already under way, ops may have landed) keeps its record,
+  and ordinary failures still store "(failed: ...)" pairs as before.
+
 ## 0.9.301
 
 ### Added
