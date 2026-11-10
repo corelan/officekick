@@ -42,6 +42,18 @@
   exact layout Office honors, and docs gain the manual Trust Center +
   reg-add unblock for machines that installed older builds.
 
+## 0.9.307
+
+### Fixed
+- The 1-based-label law completed across the op surface: every remaining
+  error string that could print an internal index now labels the numbers
+  the way the ops/outline do - SlideKick's setShapeTextFind, a dozen
+  simulator messages (slide/shape errors), and DocKick's paragraph
+  messages (the deck receives op.para - 1; the rows used to say
+  "Paragraph 3" for a para-4 op). A grep audit for raw-index prints in
+  all six pane files comes back empty; sim E2E prints "Shape 9 on
+  slide 4" for a slide-4/shape-9 op.
+
 ## 0.9.306
 
 ### Fixed

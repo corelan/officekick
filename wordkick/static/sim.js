@@ -104,7 +104,7 @@
       return { ok: true, where: "end" };
     },
     editParagraph: async function (index, text) {
-      if (!paras[index]) throw new FriendlyError("Paragraph " + index + " does not exist");
+      if (!paras[index]) throw new FriendlyError("Paragraph " + (index + 1) + " does not exist");   // 0.9.307: 1-based
       paras[index].text = String(text);
       return { ok: true };
     },
@@ -131,7 +131,7 @@
       return { ok: true, anchor: target };
     },
     deleteParagraph: async function (index) {
-      if (!paras[index]) throw new FriendlyError("Paragraph " + index + " does not exist");
+      if (!paras[index]) throw new FriendlyError("Paragraph " + (index + 1) + " does not exist");   // 0.9.307: 1-based
       paras.splice(index, 1);
       return { ok: true };
     },
@@ -163,7 +163,7 @@
     },
     formatTextFind: async function (index, findText, font) {
       const para = paras[index];
-      if (!para) throw new FriendlyError("Paragraph " + index + " does not exist");
+      if (!para) throw new FriendlyError("Paragraph " + (index + 1) + " does not exist");   // 0.9.307: 1-based
       const t = String(para.text || "");
       const lower = t.toLowerCase();
       const needle = String(findText).toLowerCase();
@@ -177,7 +177,7 @@
       return { ok: true, count: hits };
     },
     formatText: async function (index, font, style) {
-      if (!paras[index]) throw new FriendlyError("Paragraph " + index + " does not exist");
+      if (!paras[index]) throw new FriendlyError("Paragraph " + (index + 1) + " does not exist");   // 0.9.307: 1-based
       paras[index].font = Object.assign(paras[index].font || {}, font);
       if (style) {
         var label = String(style).replace(/([a-z])([A-Z])/g, "$1 $2").replace(/^./, function (c) { return c.toUpperCase(); });

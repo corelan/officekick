@@ -131,7 +131,7 @@ window.__SK_SIM__ = true;
     }
     async addTable({ values, slide, geometry }) {
       const i = slide;
-      if (!slides[i]) throw new FriendlyError("Slide " + i + " does not exist");
+      if (!slides[i]) throw new FriendlyError("Slide " + (i + 1) + " does not exist")   /* 0.9.307: 1-based */;
       geometry = geometry || {};
       slides[i].shapes.push({
         name: "Table " + values.length + "x" + values[0].length,
@@ -194,7 +194,7 @@ window.__SK_SIM__ = true;
     }
     async createShape(slideIndex, op) {
       const sl = slides[slideIndex];
-      if (!sl) throw new FriendlyError("Slide " + slideIndex + " does not exist");
+      if (!sl) throw new FriendlyError("Slide " + (slideIndex + 1) + " does not exist")   /* 0.9.307: 1-based */;
       const g = op.geometry || {};
       sl.shapes.push({
         idx: sl.shapes.length,
@@ -211,7 +211,7 @@ window.__SK_SIM__ = true;
     }
     async setBackground(slideIndex, payload) {
       const sl = slides[slideIndex];
-      if (!sl) throw new FriendlyError("Slide " + slideIndex + " does not exist");
+      if (!sl) throw new FriendlyError("Slide " + (slideIndex + 1) + " does not exist")   /* 0.9.307: 1-based */;
       sl.background = payload.kind === "image"
         ? { kind: "image", b64len: (payload.b64 || "").length, transparency: payload.transparency }
         : { kind: payload.kind, color: payload.color, transparency: payload.transparency };
@@ -246,7 +246,7 @@ window.__SK_SIM__ = true;
     }
     async addHyperlink(slideIndex, shapeIndex, url, tip) {
       const sh = slides[slideIndex] && slides[slideIndex].shapes[shapeIndex];
-      if (!sh) throw new FriendlyError("Shape " + shapeIndex + " on slide " + slideIndex + " does not exist");
+      if (!sh) throw new FriendlyError("Shape " + (shapeIndex + 1) + " on slide " + (slideIndex + 1) + " does not exist")   /* 0.9.307: 1-based */;
       sh.hyperlink = { address: url, screenTip: tip || "" };
       return { ok: true };
     }
@@ -269,7 +269,7 @@ window.__SK_SIM__ = true;
     }
     async styleShape(slideIndex, shapeIndex, fill, line, transparency) {
       const sh = slides[slideIndex] && slides[slideIndex].shapes[shapeIndex];
-      if (!sh) throw new FriendlyError("Shape " + shapeIndex + " on slide " + slideIndex + " does not exist");
+      if (!sh) throw new FriendlyError("Shape " + (shapeIndex + 1) + " on slide " + (slideIndex + 1) + " does not exist")   /* 0.9.307: 1-based */;
       if (fill) sh.fill = String(fill);
       if (line) sh.line = String(line);
       if (transparency != null) sh.transparency = Number(transparency);
@@ -277,14 +277,14 @@ window.__SK_SIM__ = true;
     }
     async setShapeImage(slideIndex, shapeIndex, b64, transparency) {
       const sh = slides[slideIndex] && slides[slideIndex].shapes[shapeIndex];
-      if (!sh) throw new FriendlyError("Shape " + shapeIndex + " on slide " + slideIndex + " does not exist");
+      if (!sh) throw new FriendlyError("Shape " + (shapeIndex + 1) + " on slide " + (slideIndex + 1) + " does not exist")   /* 0.9.307: 1-based */;
       sh.fillImage = { b64len: (b64 || "").length };
       if (transparency != null) sh.transparency = Number(transparency);
       return { ok: true };
     }
     async setAltText(slideIndex, shapeIndex, description, title) {
       const sh = slides[slideIndex] && slides[slideIndex].shapes[shapeIndex];
-      if (!sh) throw new FriendlyError("Shape " + shapeIndex + " on slide " + slideIndex + " does not exist");
+      if (!sh) throw new FriendlyError("Shape " + (shapeIndex + 1) + " on slide " + (slideIndex + 1) + " does not exist")   /* 0.9.307: 1-based */;
       sh.altTextDescription = description;
       if (title) sh.altTextTitle = title;
       return { ok: true };
@@ -294,7 +294,7 @@ window.__SK_SIM__ = true;
     }
     async addImage({ b64, slide, geometry }) {
       const i = slide;
-      if (!slides[i]) throw new FriendlyError("Slide " + i + " does not exist");
+      if (!slides[i]) throw new FriendlyError("Slide " + (i + 1) + " does not exist")   /* 0.9.307: 1-based */;
       geometry = geometry || {};
       slides[i].shapes.push({
         name: "Image (generated)",
@@ -341,7 +341,7 @@ window.__SK_SIM__ = true;
       return { index: slides.length - 1, notesManual: null };
     }
     _shapeByRole(i, wantTitle) {
-      if (!slides[i]) throw new FriendlyError("Slide " + i + " does not exist");
+      if (!slides[i]) throw new FriendlyError("Slide " + (i + 1) + " does not exist")   /* 0.9.307: 1-based */;
       return slides[i].shapes.find((sh) => (wantTitle ? sh.isTitle : sh.isBody));
     }
     async setSlideTitle(i, text) {
@@ -374,17 +374,17 @@ window.__SK_SIM__ = true;
       return { ok: true, mode: "fragment" };
     }
     async setNotes(i, text) {
-      if (!slides[i]) throw new FriendlyError("Slide " + i + " does not exist");
+      if (!slides[i]) throw new FriendlyError("Slide " + (i + 1) + " does not exist")   /* 0.9.307: 1-based */;
       slides[i].notes = String(text);
       return { manual: false };
     }
     async deleteSlide(i) {
-      if (!slides[i]) throw new FriendlyError("Slide " + i + " does not exist");
+      if (!slides[i]) throw new FriendlyError("Slide " + (i + 1) + " does not exist")   /* 0.9.307: 1-based */;
       slides.splice(i, 1);
       selected = selected.includes(i) ? [] : selected;
     }
     async applyLayout(i, kind) {
-      if (!slides[i]) throw new FriendlyError("Slide " + i + " does not exist");
+      if (!slides[i]) throw new FriendlyError("Slide " + (i + 1) + " does not exist")   /* 0.9.307: 1-based */;
       const lay = normalizeLayout(kind);
       slides[i].layout = lay;
       if (lay === "blank" && !slides[i].shapes.find((s) => s.isBody)) {

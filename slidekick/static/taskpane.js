@@ -3425,7 +3425,7 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
       tf.load("isNullObject,hasText");
       return ctx.sync().then(function () {
         if (tf.isNullObject || !tf.hasText) {
-          throw new FriendlyError("Shape " + shapeIndex + " on slide " + slideIndex + " has no text");
+          throw new FriendlyError("Shape " + (shapeIndex + 1) + " on slide " + (slideIndex + 1) + " has no text");
         }
         var range = tf.textRange;
         range.load("text");

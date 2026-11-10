@@ -2082,7 +2082,7 @@ var nw = $("sess-new");
       paras.load("text, style");
       return ctx.sync().then(function () {
         var p = paras.items[index];
-        if (!p) throw new FriendlyError("Paragraph " + index + " does not exist");
+        if (!p) throw new FriendlyError("Paragraph " + (index + 1) + " does not exist");   // 0.9.307: op numbering is 1-based
         p.insertText(String(text), "Replace");
         return ctx.sync().then(function () { return { ok: true }; });
       });
@@ -2384,7 +2384,7 @@ var nw = $("sess-new");
       paras.load("text");
       return ctx.sync().then(function () {
         var p = paras.items[index];
-        if (!p) throw new FriendlyError("Paragraph " + index + " does not exist");
+        if (!p) throw new FriendlyError("Paragraph " + (index + 1) + " does not exist");   // 0.9.307: op numbering is 1-based
         p.delete();
         return ctx.sync().then(function () { return { ok: true }; });
       });
