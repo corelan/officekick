@@ -3583,6 +3583,17 @@ OfficeDeck.prototype.setNotes = function (i, text) {
     // op being validated) count as valid targets: the validator sees the deck
     // as it will be AFTER those creates, not only as it is right now
     var virtualCount = ctx ? ctx.slideCount : 0;
+    // 0.9.299: the virtual deck as a POSITION MAP for batch creates.
+    // virtualCount alone only saw creates past the END of the deck; a
+    // create_slide with "after" MID-deck lands on a slot the CURRENT deck
+    // already numbers (the old slides shift back), so later ops resolved
+    // against the pre-batch numbering and find checks ran on the WRONG
+    // slide's text (the "format the new slides - find text not found"
+    // class). slots[i] = the ORIGINAL slide (1-based) occupying 1-based
+    // slot i+1 after the creates processed so far, null = THIS batch
+    // creates that slide (defer find/shape checks to apply time).
+    var slots = [];
+    if (ctx) { for (var sIdx = 0; sIdx < ctx.slideCount; sIdx++) slots.push(sIdx + 1); }
     // shapes the batch itself adds to an EXISTING slide (create_table /
     // create_shape / create_image) shift the post-batch shape numbering:
     // format/move ops may target those fresh shapes (declared OUTSIDE the
@@ -3603,10 +3614,21 @@ OfficeDeck.prototype.setNotes = function (i, text) {
       }
       var bad = function (reason) { invalid.push({ op: op, reason: reason }); };
       var slideOk = function (v) { return typeof v === "number" && Math.floor(v) === v && v >= 1 && (!ctx || v <= virtualCount); };
-      // a slide the CURRENT deck does not have yet = created later in this
-      // batch: shape/find checks cannot use the stored context - defer them
-      // to apply time (a wrong shape number fails honestly there)
-      var futureSlide = function (v) { return ctx && typeof v === "number" && v > ctx.slideCount; };
+      // a slide the CURRENT deck does not have yet - past the end OR a
+      // mid-deck slot the batch fills with a create_slide ("after N",
+      // 0.9.299) = created later in this batch: shape/find checks cannot
+      // use the stored context - defer them to apply time (a wrong shape
+      // number fails honestly there)
+      var futureSlide = function (v) {
+        if (!ctx || typeof v !== "number" || v < 1 || v > slots.length) return false;
+        return slots[v - 1] === null;
+      };
+      // resolve an op's slide number (a post-create slot) to the ctx slide
+      // it touches at apply time; null = the batch creates that slide
+      var originSlide = function (v) {
+        if (!ctx || typeof v !== "number" || v < 1 || v > slots.length) return v;
+        return slots[v - 1];
+      };
       var shapeOk = function (sl, sh) {
         if (!ctx || !ctx.slides[sl - 1]) return false;
         return (ctx.slides[sl - 1].shapes || []).some(function (s) { return s.idx === sh - 1 && s.text != null; });
@@ -3645,6 +3667,16 @@ OfficeDeck.prototype.setNotes = function (i, text) {
         out.body = body;
         out.notes = notesOff ? null : (typeof op.notes === "string" ? op.notes : null);
         out.after = typeof op.after === "number" ? op.after : null;
+        // 0.9.299: mirror the applier's placement (after:0 = very start,
+        // after:N = after 1-based slide N, null/absent = appended at the
+        // end; the applier clamps the position to the current deck size)
+        // so later ops resolve against the SAME slot map the apply pass
+        // walks. Two creates with the same "after" stack: the second
+        // inserts first, the first shifts back - exactly moveSlide's order.
+        var insIdx = slots.length;
+        if (op.after === 0) insIdx = 0;
+        else if (typeof op.after === "number" && op.after >= 1) insIdx = Math.min(Math.floor(op.after), slots.length);
+        slots.splice(insIdx, 0, null);
         virtualCount += 1;   // later ops in this batch may target this slide
       } else if (t === "edit_slide") {
         if (!slideOk(op.slide)) { bad("bad slide index"); return; }
@@ -3658,21 +3690,21 @@ OfficeDeck.prototype.setNotes = function (i, text) {
         if (out.title === null && out.body === null && out.notes === null) { bad("nothing to change (all fields null)"); return; }
       } else if (t === "replace_text") {
         if (!slideOk(op.slide)) { bad("bad slide index"); return; }
-        if (!shapeOk(op.slide, op.shape)) { bad("shape " + op.shape + " not in the context list for slide " + op.slide); return; }
+        if (!futureSlide(op.slide) && !shapeOk(originSlide(op.slide), op.shape)) { bad("shape " + op.shape + " not in the context list for slide " + op.slide); return; }
         if (typeof op.text !== "string" || !op.text.length) { bad("missing text"); return; }
         out.slide = op.slide; out.shape = op.shape; out.text = op.text;
         if (typeof op.find === "string" && op.find.trim()) {
           var findR = stripLevelMarkers(op.find.trim());   // 0.9.298: outline markers may be copied verbatim
           if (findR.length > 200) { bad("find text too long (200 chars max)"); return; }
-          var shapeTxtR = textOf(op.slide, op.shape);   // earlier batch ops may already have rewritten this shape
+          var shapeTxtR = textOf(originSlide(op.slide), op.shape);   // earlier batch ops may already have rewritten this shape
         if (!futureSlide(op.slide) && shapeTxtR !== null && shapeTxtR.toLowerCase().indexOf(findR.toLowerCase()) === -1) {
           bad("find text not found in that shape's current text"); return;
         }
           out.find = findR;
         }
         // remember what THIS op leaves in the shape for later find checks
-        var curTr = textOf(op.slide, op.shape);
-        textState[op.slide + ":" + op.shape] = out.find ?
+        var curTr = textOf(originSlide(op.slide), op.shape);
+        textState[originSlide(op.slide) + ":" + op.shape] = out.find ?
           (typeof curTr === "string" ? (cutReplace(curTr, findR, op.text)) : null) : op.text;
       } else if (t === "set_notes") {
         // notes-off no longer drops the op: it goes through as "confirm"
@@ -3706,7 +3738,7 @@ OfficeDeck.prototype.setNotes = function (i, text) {
         out.geometry = geoT;
       } else if (t === "move_shape") {
         if (!slideOk(op.slide)) { bad("bad slide index"); return; }
-        if (!futureSlide(op.slide) && !shapeIdxOk(op.slide, op.shape)) { bad("shape " + op.shape + " not in the context list for slide " + op.slide); return; }
+        if (!futureSlide(op.slide) && !shapeIdxOk(originSlide(op.slide), op.shape)) { bad("shape " + op.shape + " not in the context list for slide " + op.slide); return; }
         var anyM = false, geoM = {};
         ["left", "top", "width", "height"].forEach(function (p3) {
           if (typeof op[p3] === "number") { geoM[p3] = op[p3]; anyM = true; }
@@ -3733,7 +3765,7 @@ OfficeDeck.prototype.setNotes = function (i, text) {
             : "bad slide index: slide must be a number (1-" + (ctx ? ctx.slideCount : 0) + ")");
           return;
         }
-        if (!futureSlide(op.slide) && !shapeIdxOk(op.slide, op.shape)) { bad("shape " + op.shape + " not in the context list for slide " + op.slide); return; }
+        if (!futureSlide(op.slide) && !shapeIdxOk(originSlide(op.slide), op.shape)) { bad("shape " + op.shape + " not in the context list for slide " + op.slide); return; }
         var fontF = {}, hasAny = false;
         ["bold", "italic", "allCaps", "underline"].forEach(function (k2) {
           if (typeof op.font !== "undefined" && typeof op.font[k2] === "boolean") { fontF[k2] = op.font[k2]; hasAny = true; }
@@ -3749,7 +3781,7 @@ OfficeDeck.prototype.setNotes = function (i, text) {
         if (typeof op.find === "string" && op.find.trim()) {
           var findS = stripLevelMarkers(op.find.trim());   // 0.9.298
           if (findS.length > 200) { bad("find text too long (200 chars max)"); return; }
-          var shapeTxtF = textOf(op.slide, op.shape);   // earlier batch ops may already have rewritten this shape
+          var shapeTxtF = textOf(originSlide(op.slide), op.shape);   // earlier batch ops may already have rewritten this shape
         if (!futureSlide(op.slide) && shapeTxtF !== null && shapeTxtF.toLowerCase().indexOf(findS.toLowerCase()) === -1) {
           bad("find text not found in that shape's current text"); return;
         }
@@ -3767,8 +3799,9 @@ OfficeDeck.prototype.setNotes = function (i, text) {
         out.font = fontS;
       } else if (t === "style_shape") {
         if (!slideOk(op.slide)) { bad("bad slide index"); return; }
-        var shapeInCtxS = ctx && ctx.slides[op.slide - 1] &&
-          (ctx.slides[op.slide - 1].shapes || []).some(function (s) { return s.idx === op.shape - 1; });
+        var originS = originSlide(op.slide);
+        var shapeInCtxS = ctx && typeof originS === "number" && ctx.slides[originS - 1] &&
+          (ctx.slides[originS - 1].shapes || []).some(function (s) { return s.idx === op.shape - 1; });
         if (!futureSlide(op.slide) && !shapeInCtxS) { bad("shape " + op.shape + " not in the context list for slide " + op.slide); return; }
         var fillS = null, lineS = null;
         if (typeof op.fill === "string" && op.fill.trim()) {
@@ -3799,8 +3832,9 @@ OfficeDeck.prototype.setNotes = function (i, text) {
         out.slide = op.slide; out.kind = op.kind;
       } else if (t === "set_shape_image") {
         if (!slideOk(op.slide)) { bad("bad slide index"); return; }
-        var shapeInCtxI = ctx && ctx.slides[op.slide - 1] &&
-          (ctx.slides[op.slide - 1].shapes || []).some(function (sh) { return sh.idx === op.shape - 1; });
+        var originI = originSlide(op.slide);
+        var shapeInCtxI = ctx && typeof originI === "number" && ctx.slides[originI - 1] &&
+          (ctx.slides[originI - 1].shapes || []).some(function (sh) { return sh.idx === op.shape - 1; });
         if (!futureSlide(op.slide) && !shapeInCtxI) { bad("shape " + op.shape + " not in the context list for slide " + op.slide); return; }
         if (typeof op.prompt !== "string" || op.prompt.trim().length < 3) { bad("missing image prompt"); return; }
         if (op.prompt.length > 4000) { bad("image prompt too long (max 4000 chars)"); return; }
@@ -3808,16 +3842,18 @@ OfficeDeck.prototype.setNotes = function (i, text) {
         if (typeof op.transparency === "number" && op.transparency >= 0 && op.transparency <= 1) out.transparency = op.transparency;
       } else if (t === "add_hyperlink") {
         if (!slideOk(op.slide)) { bad("bad slide index"); return; }
-        var shapeInCtxH = ctx && ctx.slides[op.slide - 1] &&
-          (ctx.slides[op.slide - 1].shapes || []).some(function (sh) { return sh.idx === op.shape - 1; });
+        var originH = originSlide(op.slide);
+        var shapeInCtxH = ctx && typeof originH === "number" && ctx.slides[originH - 1] &&
+          (ctx.slides[originH - 1].shapes || []).some(function (sh) { return sh.idx === op.shape - 1; });
         if (!futureSlide(op.slide) && !shapeInCtxH) { bad("shape " + op.shape + " not in the context list for slide " + op.slide); return; }
         if (typeof op.url !== "string" || !/^(https?:\/\/\S+|mailto:\S+)$/.test(op.url.trim())) { bad("url must be http(s)://... or mailto:..."); return; }
         out.slide = op.slide; out.shape = op.shape; out.url = op.url.trim();
         if (typeof op.tip === "string" && op.tip.trim()) out.tip = op.tip.trim().slice(0, 200);
       } else if (t === "set_alt_text") {
         if (!slideOk(op.slide)) { bad("bad slide index"); return; }
-        var shapeInCtxA = ctx && ctx.slides[op.slide - 1] &&
-          (ctx.slides[op.slide - 1].shapes || []).some(function (sh) { return sh.idx === op.shape - 1; });
+        var originA = originSlide(op.slide);
+        var shapeInCtxA = ctx && typeof originA === "number" && ctx.slides[originA - 1] &&
+          (ctx.slides[originA - 1].shapes || []).some(function (sh) { return sh.idx === op.shape - 1; });
         if (!futureSlide(op.slide) && !shapeInCtxA) { bad("shape " + op.shape + " not in the context list for slide " + op.slide); return; }
         if (typeof op.description !== "string" || !op.description.trim()) { bad("alt text needs a description"); return; }
         out.slide = op.slide; out.shape = op.shape; out.description = op.description.trim().slice(0, 500);
@@ -3881,13 +3917,13 @@ OfficeDeck.prototype.setNotes = function (i, text) {
         out.slide = op.slide; out.layout = normalizeLayout(op.layout);
       } else if (t === "copy_shape" || t === "move_shape_to") {
         if (!slideOk(op.slide)) { bad("bad source slide index"); return; }
-        if (!futureSlide(op.slide) && !shapeIdxOk(op.slide, op.shape)) { bad("shape " + op.shape + " not in the context list for slide " + op.slide); return; }
+        if (!futureSlide(op.slide) && !shapeIdxOk(originSlide(op.slide), op.shape)) { bad("shape " + op.shape + " not in the context list for slide " + op.slide); return; }
         out.slide = op.slide; out.shape = Math.round(op.shape);
         if (op.to == null) {
           out.to = op.slide;
-        } else if (typeof op.to === "number" && Math.floor(op.to) === op.to && op.to >= 1 && op.to <= (ctx ? ctx.slideCount : op.slide)) {
-          out.to = Math.round(op.to);
-        } else { bad("to must be a slide number 1.." + (ctx ? ctx.slideCount : op.slide)); return; }
+        } else if (typeof op.to === "number" && Math.floor(op.to) === op.to && op.to >= 1 && op.to <= (ctx ? virtualCount : op.slide)) {
+          out.to = Math.round(op.to);   // 0.9.299: a batch-created slide is a valid destination
+        } else { bad("to must be a slide number 1.." + (ctx ? virtualCount : op.slide)); return; }
         var geoX = {};
         ["left", "top", "width", "height"].forEach(function (gk5) {
           if (typeof op[gk5] === "number") geoX[gk5] = op[gk5];
@@ -3903,11 +3939,12 @@ OfficeDeck.prototype.setNotes = function (i, text) {
         // to textOf - a format op's find read the PRE-batch snapshot and
         // false-rejected "2 · Wire" not found). Only when the slide's shape
         // count is detailed in the snapshot (else defer to apply time).
-        var csX = ctx && ctx.slides[out.slide - 1] && ctx.slides[out.slide - 1].shapes;
-        if (out.text && ctx && out.slide <= ctx.slideCount && csX && csX.length) {
-          textState[out.slide + ":" + (csX.length + (plannedShapes[out.slide] || 0) + 1)] = out.text;
+        var originX = originSlide(out.slide);
+        var csX = ctx && typeof originX === "number" && ctx.slides[originX - 1] && ctx.slides[originX - 1].shapes;
+        if (out.text && ctx && originX != null && csX && csX.length) {
+          textState[originX + ":" + (csX.length + (plannedShapes[originX] || 0) + 1)] = out.text;
         }
-        plannedShapes[out.slide] = (plannedShapes[out.slide] || 0) + 1;
+        if (originX != null) plannedShapes[originX] = (plannedShapes[originX] || 0) + 1;
       }
       ops.push(out);
     });
@@ -3933,13 +3970,19 @@ OfficeDeck.prototype.setNotes = function (i, text) {
     // at the next renderParsed.
     var ig = SK.insertGuard;
     if (ig && ig.named != null && ig.base != null && ctx) {
-      var cCt = ops.filter(function (o5) { return o5.type === "create_slide"; }).length;
       for (var ix5 = ops.length - 1; ix5 >= 0; ix5--) {
         var o6 = ops[ix5];
         var s6 = o6 ? o6.slide : undefined;
         if (o6.type === "create_slide" || s6 == null) continue;
-        if (s6 <= ctx.slideCount && s6 !== ig.named &&
-            !(s6 > ig.named && s6 <= ig.named + cCt)) {
+        // 0.9.299: the guard walks the same slot map - a write lands on a
+        // slide the batch itself creates (origin null, wherever the creates
+        // position them) or on the named slide, nothing else. The old
+        // (named, named+cCt] arithmetic allowed writes onto EXISTING slides
+        // that merely had those slot numbers (end-appended creates left
+        // old slides at named+1..; mid-deck creates shift them).
+        var g6 = (typeof s6 === "number" && s6 >= 1 && s6 <= slots.length) ? slots[s6 - 1] : undefined;
+        if (g6 === null) continue;
+        if (s6 <= ctx.slideCount && s6 !== ig.named) {
           invalid.push({ op: o6,
             reason: "target guard: this ask inserts slides after slide " + ig.named +
               " - this action wrote to existing slide " + s6 +

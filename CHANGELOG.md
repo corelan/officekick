@@ -42,6 +42,32 @@
   exact layout Office honors, and docs gain the manual Trust Center +
   reg-add unblock for machines that installed older builds.
 
+## 0.9.299
+
+### Fixed
+- SlideKick rejected edits aimed at slides the batch itself creates
+  MID-DECK (the "make 2 slides after 28 and format them" ask: every
+  format_text died at the gate with "find text not found in that
+  shape's current text" - the validator saw the deck only as it is
+  NOW, and slots 29/30 were the OLD slides 29/30). The validator keeps
+  a SLOT MAP of the batch's virtual deck: create_slide positions mirror
+  the applier exactly (after:0 = start, after:N = after slide N,
+  absent = appended; the applier's clamps and same-after stacking are
+  reproduced), and every shape/find/context check resolves the op's
+  slide number through it - slots the batch creates defer those checks
+  to apply time (a wrong shape number still fails honestly there),
+  shifted existing slides are checked against the text they will have.
+  replace_text/move_shape/format_text/style_shape/set_shape_image/
+  add_hyperlink/set_alt_text all resolve through the map; copy/move
+  shapes INTO a created slide is a valid destination now, and
+  replace_text on a created slide no longer dies on "shape not in the
+  context list". The 0.9.270 target guard walks the same map: writes
+  are allowed only onto the named slide and the slides this batch
+  creates (wherever they land) instead of the old
+  (named, named+cCt] count arithmetic, which trusted slot numbers that
+  merely looked created (end-appended creates left old slides with
+  those numbers permitted).
+
 ## 0.9.298
 
 ### Fixed
