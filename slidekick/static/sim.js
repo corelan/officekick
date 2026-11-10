@@ -167,6 +167,20 @@ window.__SK_SIM__ = true;
       sh.fontRuns.push({ from: i, len: findText.length, font: font });
       return { ok: true };
     }
+    async setParaLevelByFind(slideIndex, shapeIndex, findText, level) {
+      const sh = slides[slideIndex] && slides[slideIndex].shapes[shapeIndex];
+      if (!sh) throw new FriendlyError("Shape " + (shapeIndex + 1) + " on slide " + (slideIndex + 1) + " does not exist");
+      const ln = String(sh.text || "").split("\n");
+      const needle = String(findText).toLowerCase();
+      let hit = -1;
+      for (let k = 0; k < ln.length; k++) {
+        if (ln[k].toLowerCase().indexOf(needle) >= 0) { hit = k; break; }
+      }
+      if (hit < 0) throw new FriendlyError("\"" + findText + "\" is not a line in that shape's text.");
+      if (!sh.levels) sh.levels = ln.map(() => 0);
+      sh.levels[hit] = level;
+      return { ok: true };
+    }
     async formatSelection(font) {
       if (!fakeSelectedText) throw new FriendlyError("Select some text in the presentation first, then run this again.");
       Object.assign(fakeSelectedFont, font);

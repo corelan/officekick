@@ -42,6 +42,27 @@
   exact layout Office honors, and docs gain the manual Trust Center +
   reg-add unblock for machines that installed older builds.
 
+## 0.9.303
+
+### Added
+- format_text gains a "level" field: the one-op way to change the
+  indentation of an EXISTING bullet line (the previous gap that left
+  "indent the subtopics" asks doing nothing - restructuring was only
+  possible via a whole-body edit_slide rewrite). "find" carries the exact
+  bullet text from the outline, "level" is 0-8 (0 = back to top level,
+  1..8 = the [L2]..[L9] indent levels); the applier locates the paragraph
+  by the find text and sets paragraph.level in its own run (PowerPointApi
+  1.11 guarded, friendly failures for missing/absent text and build
+  rejections). Validation: level without find and out-of-range levels are
+  rejected with reasons; level-only ops are valid (no font change needed).
+  The gate row displays "+ bullet indent -> L2".
+- The ask rules teach the two-step flow and the ambiguity rule: on a FLAT
+  list (no markers, subtopic lines not named) the model asks the user
+  WHICH lines are the subtopics (clarify) instead of guessing a hierarchy,
+  then indents each named line with format_text find+level.
+- The simulator mirrors setParaLevelByFind (per-line levels on the body
+  shape, so the read bakes the changed [L2] marker back).
+
 ## 0.9.302
 
 ### Changed

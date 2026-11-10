@@ -99,7 +99,7 @@
     move_shape_to:     { label: "move shape to", hint: "CUT+paste: relocates a shape to another slide (position kept or re-specified); the original is removed. PowerPointApi 1.13+" },
     create_image: { label: "generate + insert image", hint: "Creates an image from a description with the profile's image model (OpenAI-style images API) and inserts it - lands on the slide you have open in Office." },
     apply_layout: { label: "apply layout", hint: "Applies a different slide layout (design change, text kept)." },
-    format_text: { label: "format text", hint: "bold / italic / color / size / underline / allCaps / alignment / bullets on one shape's text (the numbers from the outline)." },
+    format_text: { label: "format text", hint: "bold / italic / color / size / underline / allCaps / alignment / bullets / bullet indentation (find + level 0-8) on one shape's text (the numbers from the outline)." },
     format_selection: { label: "format selected text", hint: "the same font changes applied to the TEXT YOU SELECTED right now." },
     create_shape: { label: "insert shape", hint: "textbox (with text) or geometric shapes (rectangle/ellipse/roundedRectangle/hexagon/diamond/triangle) and straight lines at a position; optional rotation (degrees)." },
     move_slide: { label: "move slide", hint: "moves a slide so it becomes slide M (numbers as in the outline); runs alone in a batch." },
@@ -1119,6 +1119,8 @@
     '- Office.js cannot CREATE SmartArt, stock icons or 3D models. If the user asks for those, say so and offer shape/textbox-based alternatives (create_shape) or an AI-generated picture (create_image) instead. The outline marks existing SmartArt/model3D shapes so you can reference them.',
     '- {"type":"create_shape","slide":N,"kind":"textbox|rectangle|ellipse|roundedRectangle|hexagon|diamond|triangle|line","text":"only for textbox","left":120,"top":200,"width":240,"height":80} (points, slide-local; line = start point left/top + width/height = endpoint offsets; other shapes: no text; optional "fill":"#RRGGBB", "line":"#RRGGBB", "transparency":0.25 to style the created shape immediately)',
     '- to format only PART of a shape\'s text, add "find":"exact words appearing in that shape\'s text" (case-insensitive substring; e.g. {"type":"format_text","slide":N,"shape":N,"find":"security","font":{"bold":true}})',,
+    '- to CHANGE THE INDENTATION of one existing bullet line, use format_text with "find":"the exact current bullet text" + "level":0-8 (0 = back to top level, 1..8 = the [L2]..[L9] indent levels). Example: {"type":"format_text","slide":N,"shape":M,"find":"vector stores","level":1}. The outline shows the current indentation of every line as [L2]..[L9] markers',
+    '- indentation asks like "indent the subtopics" on a FLAT list (no [L2].. markers visible in the outline, subtopic lines not named by the user) are AMBIGUOUS: ask the user which lines are the subtopics (reply {"kind":"clarify","question":"...","options":[...]}) and indent the named lines with format_text find+level afterwards - never guess the hierarchy of an unnamed flat list',
     '- {"type":"format_selection","font":{"bold":true}} (format ONLY the text the user has selected right now; same font subset; no slide/shape fields)',
     '- {"type":"set_background","slide":N,"kind":"image","prompt":"description","transparency":0.2} (an AI-generated picture as the slide background; transparency 0-1 optional) or {"type":"set_background","slide":N,"kind":"solid","color":"#RRGGBB","transparency":0.2} (solid color; transparency optional)',
     '- {"type":"add_hyperlink","slide":N,"shape":N,"url":"https://...","tip":"tooltip text"} (link the shape to the URL; url must be http(s) or mailto:)',
@@ -3327,6 +3329,47 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
     });
   };
 
+  OfficeDeck.prototype.setParaLevelByFind = function (i, shapeIdx, findText, level) {
+    // 0.9.303: change one bullet line's indentation - the paragraph that
+    // carries findText gets paragraph.level = level. Own run (a failed
+    // sync poisons the context); guarded by the same 1.11 probe as the read.
+    var self = this;
+    if (self._lvlApi !== true) {
+      return Promise.reject(new FriendlyError("bullet indentation needs PowerPointApi 1.11 - your PowerPoint build reads/sets paragraph levels only from 16.83+ on Mac."));
+    }
+    return this.run("setParaLevelByFind", function (ctx) {
+      var shape = ctx.presentation.slides.getItemAt(i).shapes.getItemAt(shapeIdx);
+      var tf = shape.getTextFrameOrNullObject();
+      tf.load("isNullObject,hasText");
+      return ctx.sync().then(function () {
+        if (tf.isNullObject || !tf.hasText) {
+          throw new FriendlyError("Shape " + (shapeIdx + 1) + " on slide " + (i + 1) + " has no text to indent.");
+        }
+        tf.paragraphs.load("items/text");
+        return ctx.sync().then(function () {
+          var paras = tf.paragraphs.items || [];
+          var needle = String(findText).toLowerCase();
+          var hit = -1;
+          for (var k = 0; k < paras.length; k++) {
+            if (String(paras[k].text || "").toLowerCase().indexOf(needle) >= 0) { hit = k; break; }
+          }
+          if (hit < 0) {
+            throw new FriendlyError("\"" + findText + "\" is not a line in that shape's text - use the exact bullet text from the outline.");
+          }
+          paras[hit].level = level;
+          return ctx.sync().then(function () {
+            return { ok: true, para: hit + 1 };
+          }, function (eLev) {
+            throw new FriendlyError("this PowerPoint build rejected the indentation change (" +
+              String((eLev && eLev.message) || eLev).slice(0, 80) + ")");
+          });
+        }, function (eP) {
+          throw new FriendlyError("this PowerPoint build cannot reach per-paragraph levels (needs PowerPointApi 1.11).");
+        });
+      });
+    });
+  };
+
   OfficeDeck.prototype.setShapeText = function (i, shapeIdx, text) {
     return this.run("setShapeText", function (ctx) {
       var shape = ctx.presentation.slides.getItemAt(i).shapes.getItemAt(shapeIdx);
@@ -3848,9 +3891,23 @@ OfficeDeck.prototype.setNotes = function (i, text) {
         if (op.font && typeof op.font.size === "number" && op.font.size >= 6 && op.font.size <= 400) { fontF.size = op.font.size; hasAny = true; }
         if (typeof op.align === "string" && /^(left|center|right)$/i.test(op.align)) { fontF.align = op.align.toLowerCase(); hasAny = true; }
         if (typeof op.bullet === "boolean") { fontF.bullet = op.bullet; hasAny = true; }
-        if (!hasAny) { bad("no format changes requested"); return; }
+        // 0.9.303: "level" = change a bullet line's indentation (0 = top
+        // level, 1..8 = the [L2]..[L9] indent levels of the outline).
+        // Needs find - the whole-shape form makes no sense for one line.
+        var lvlOut = null;
+        if (typeof op.level !== "undefined" && op.level !== null) {
+          if (typeof op.level !== "number" || Math.floor(op.level) !== op.level || op.level < 0 || op.level > 8) {
+            bad("level must be a whole number 0-8 (0 = top level, 8 = the deepest indent, rendered [L9] in the outline)"); return;
+          }
+          if (!op.find || !String(op.find).trim()) {
+            bad("changing bullet indentation (level) needs \"find\" - the exact text of the bullet line"); return;
+          }
+          lvlOut = Math.floor(op.level);
+        }
+        if (!hasAny && lvlOut == null) { bad("no format changes requested"); return; }
         if (op.font && typeof op.font !== "object") { bad("font must be an object"); return; }
         out.slide = op.slide; out.shape = op.shape; out.font = fontF;
+        if (lvlOut !== null) out.level = lvlOut;
         if (typeof op.find === "string" && op.find.trim()) {
           var findS = stripLevelMarkers(op.find.trim());   // 0.9.298
           if (findS.length > 200) { bad("find text too long (200 chars max)"); return; }
@@ -4177,7 +4234,8 @@ OfficeDeck.prototype.setNotes = function (i, text) {
           fparts.push(kf + "=" + (typeof v === "boolean" ? (v ? "on" : "off") : v));
         });
         return "Slide " + op.slide + ", shape " + op.shape + ": " + fparts.join(", ") +
-          (op.find ? " (in \"" + op.find + "\")" : "");
+          (op.find ? " (in \"" + op.find + "\")" : "") +
+          (op.level != null ? (fparts.length ? " + " : "") + "bullet indent -> L" + (op.level + 1) : "");
       }
       case "apply_layout":
         return "Slide " + op.slide + slideTitle(op.slide) + ": layout -> " + op.layout;
@@ -4380,6 +4438,12 @@ OfficeDeck.prototype.setNotes = function (i, text) {
             lines.push({ ok: true, text: "alt text set on slide " + op.slide + ", shape " + op.shape });
           });
         case "format_text": {
+          if (op.level != null) {
+            return deck.setParaLevelByFind(cur, op.shape - 1, op.find, op.level).then(function () {
+              lines.push({ ok: true, text: "indent slide " + op.slide + " shape " + op.shape +
+                " (" + op.find + ") -> bullet level " + (op.level + 1) });
+            });
+          }
           if (op.find) {
             return deck.formatTextSubstring(cur, op.shape - 1, op.find, op.font).then(function () {
               lines.push({ ok: true, text: "format slide " + op.slide + " shape " + op.shape +
