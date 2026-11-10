@@ -42,6 +42,26 @@
   exact layout Office honors, and docs gain the manual Trust Center +
   reg-add unblock for machines that installed older builds.
 
+## 0.9.306
+
+### Fixed
+- setSlideTitle no longer fails whole ops on slides without placeholders:
+  the title pick ladders (1) the placeholder heuristics, (2) a title-NAMED
+  plain textbox (AI-built slides often carry the title that way - the old
+  heuristic rejected textboxes outright), (3) a NEW TEXT BOX in the title
+  band (left 48 / top 24 / 864x60) mirroring the 0.9.287 body fallback;
+  the action row carries "no title placeholder (slide N) - title set in a
+  new text box". Only a textbox-creation failure still fails the op.
+- Slide numbers in deck error messages are 1-BASED everywhere (the office
+  title/body/notes paths printed the raw 0-based index, so "edit slide 66"
+  reported "slide 65" - the pane edited the RIGHT slide, the label lied).
+  The slide simulator's shape/slide messages now label 1-based too.
+- The apply retry pass skips DETERMINISTIC failures (missing
+  placeholder/shape, absent find line, 1.11 gates) and reports them as
+  "not retried (their failure is deterministic - fixing the plan, not
+  retrying, is the cure)" instead of a guaranteed-identical second
+  failure; only genuinely retryable errors get the one extra pass.
+
 ## 0.9.305
 
 ### Added

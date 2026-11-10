@@ -3260,9 +3260,39 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
                 if (!pick && isBodyShape(m.name, m.type, m.ptype)) pick = m;
               }
             });
+            if (!pick && role === "title") {
+              // 0.9.306: step 2 - AI-built slides often carry the title as a
+              // plain TEXTBOX; the placeholder heuristic rejected textboxes,
+              // so accept a title-NAMED shape with a usable text frame.
+              metas.forEach(function (m6) {
+                if (!pick && !m6.tf.isNullObject && /title/i.test(String(m6.name || ""))) pick = m6;
+              });
+            }
             if (!pick) {
               if (role === "title") {
-                throw new FriendlyError("No title placeholder found on slide " + i);
+                // 0.9.306: step 3 - mirror the 0.9.287 body fallback: write
+                // the title into a NEW TEXT BOX in the title band instead of
+                // failing (custom/manual slides without placeholders).
+                var stdT6 = { left: 48, top: 24, width: 864, height: 60 };
+                var fbT6 = "no title placeholder (slide " + (i + 1) + ") - title set in a new text box";
+                try {
+                  var tbT6 = slide.shapes.addTextBox(joined, stdT6);
+                  try { tbT6.name = "sk-shape-title-" + (i + 1); } catch (eT6) { /* optional */ }
+                  return ctx.sync().then(function () { return { ok: true, how: fbT6 }; });
+                } catch (eT7) {
+                  try {
+                    var tbT7 = slide.shapes.addTextBox(joined);
+                    ["left", "top", "width", "height"].forEach(function (gkT) {
+                      try { tbT7[gkT] = stdT6[gkT]; } catch (eGT) { /* optional */ }
+                    });
+                    try { tbT7.name = "sk-shape-title-" + (i + 1); } catch (eT8) { /* optional */ }
+                    return ctx.sync().then(function () { return { ok: true, how: fbT6 }; });
+                  } catch (eT9) {
+                    throw new FriendlyError("No title placeholder found on slide " + (i + 1) +
+                      ", and the text-box fallback failed (" +
+                      String((eT7 && eT7.message) || eT7).slice(0, 80) + ")");
+                  }
+                }
               }
               // 0.9.287: title-only/blank layouts have no body placeholder -
               // write the content into a NEW TEXT BOX instead of failing the
@@ -3288,7 +3318,7 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
                   return ctx.sync().then(function () { return { ok: true, how: fallbackNote }; });
                 } catch (eTb2) {
                   throw new FriendlyError("No body/content placeholder found on slide " +
-                    i + ", and the text-box fallback failed (" +
+                    (i + 1) + ", and the text-box fallback failed (" +
                     String((eTb1 && eTb1.message) || eTb1).slice(0, 80) + ")");
                 }
               }
@@ -3377,7 +3407,7 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
       tf.load("isNullObject,hasText");
       return ctx.sync().then(function () {
         if (tf.isNullObject) {
-          throw new FriendlyError("Shape " + shapeIdx + " on slide " + i + " has no text frame");
+          throw new FriendlyError("Shape " + (shapeIdx + 1) + " on slide " + (i + 1) + " has no text frame");
         }
         tf.textRange.load("text");
         return ctx.sync().then(function () {
@@ -3518,7 +3548,7 @@ OfficeDeck.prototype.setNotes = function (i, text) {
               else if (!pick && !m.ptype && !/slide|date|footer|header|number/i.test(m.name)) pick = m;
             });
             if (!pick) {
-              return { manual: true, reason: "no notes body found on slide " + i };
+              return { manual: true, reason: "no notes body found on slide " + (i + 1) };
             }
             pick.tf.textRange.load("text");
             return ctx.sync().then(function () {
@@ -4534,7 +4564,7 @@ OfficeDeck.prototype.setNotes = function (i, text) {
         }, function (err) {
           var msg = err && err.friendly ? err.message : (err && err.message) || String(err);
           lines.push({ ok: false, text: op.type + ": " + msg });
-          failedOps.push(op);
+          failedOps.push({ op: op, err: msg });   // 0.9.306: the reason rides along
           if (typeof SK.opProgress === "function") SK.opProgress(op, lines.slice(l0), false);
           if (!(err && err.friendly)) {
             lines.push({ ok: false, text: "unexpected error - stopping remaining ops" });
@@ -4554,13 +4584,27 @@ OfficeDeck.prototype.setNotes = function (i, text) {
     ).then(function (abortedMsg) {
       var retryQueue = failedOps.slice();
       if (abortedMsg && abortedIdx >= 0) retryQueue = failedOps.concat(ops.slice(abortedIdx + 1));
+      // 0.9.306: deterministic self-diagnosed failures gain nothing from a
+      // retry (missing placeholder/shape, 1.11 gates, absent find line) -
+      // report them as un-retryable instead of a pointless second failure.
+      var DETERMINISTIC_ERR = /does not exist|placeholder|not a line|has no text|needs PowerPointApi|not found in that shape|cannot reach per-paragraph|rejected the indentation change|is not a line/;
+      var skipDet = [];
+      retryQueue = retryQueue.filter(function (fo) {
+        var em = (fo && fo.err) || "";
+        if (DETERMINISTIC_ERR.test(String(em))) { skipDet.push((fo.op || fo).type); return false; }
+        return true;
+      });
+      if (skipDet.length) {
+        lines.push({ ok: false, text: "not retried (their failure is deterministic - fixing the plan, not retrying, is the cure): " + skipDet.join(", ") });
+      }
       if (!retryQueue.length) return { lines: lines, manualNotes: manualNotes };
       // do its best to complete every step: one extra pass for everything
       // that failed (and for ops skipped by an unexpected error), same order
       lines.push({ ok: true, text: "retrying " + retryQueue.length +
         " uncompleted action(s) once after a short pause…" });
       var rseq = new Promise(function (res) { setTimeout(res, 1500); });
-      retryQueue.forEach(function (op) {
+      retryQueue.forEach(function (fo) {
+        var op = fo && fo.op ? fo.op : fo;
         rseq = rseq.then(function () {
           var l0 = lines.length;
           return runOne(op).then(function () {

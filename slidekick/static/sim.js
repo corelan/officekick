@@ -149,7 +149,7 @@ window.__SK_SIM__ = true;
     }
     async formatText(slideIndex, shapeIndex, font) {
       const sh = slides[slideIndex] && slides[slideIndex].shapes[shapeIndex];
-      if (!sh) throw new FriendlyError("Shape " + shapeIndex + " on slide " + slideIndex + " does not exist");
+      if (!sh) throw new FriendlyError("Shape " + (shapeIndex + 1) + " on slide " + (slideIndex + 1) + " does not exist");   // 0.9.306: 1-based labels
       const ty = String(sh.type || "");
       if (/^(table|chart|picture|image|media|ole|graphic|unsupported)/i.test(ty)) throw new FriendlyError("Shape " + (shapeIndex + 1) + " on slide " + (slideIndex + 1) + " has no text to format (it is a " + ty + " shape) - format_text needs a text shape; a table's text lives in its cells.");
       Object.assign(sh, { font: Object.assign(sh.font || {}, font) });
@@ -157,7 +157,7 @@ window.__SK_SIM__ = true;
     }
     async formatTextSubstring(slideIndex, shapeIndex, findText, font) {
       const sh = slides[slideIndex] && slides[slideIndex].shapes[shapeIndex];
-      if (!sh) throw new FriendlyError("Shape " + shapeIndex + " on slide " + slideIndex + " does not exist");
+      if (!sh) throw new FriendlyError("Shape " + (shapeIndex + 1) + " on slide " + (slideIndex + 1) + " does not exist");   // 0.9.306
       const ty = String(sh.type || "");
       if (/^(table|chart|picture|image|media|ole|graphic|unsupported)/i.test(ty)) throw new FriendlyError("Shape " + (shapeIndex + 1) + " on slide " + (slideIndex + 1) + " has no text to format (it is a " + ty + " shape) - format_text needs a text shape; a table's text lives in its cells.");
       const t = String(sh.text || "");
@@ -312,7 +312,7 @@ window.__SK_SIM__ = true;
     }
     async moveShape(slideIndex, shapeIndex, geometry) {
       const s = slides[slideIndex];
-      if (!s || !s.shapes[shapeIndex]) throw new FriendlyError("Shape " + shapeIndex + " on slide " + slideIndex + " not available");
+      if (!s || !s.shapes[shapeIndex]) throw new FriendlyError("Shape " + (shapeIndex + 1) + " on slide " + (slideIndex + 1) + " not available");
       ["left", "top", "width", "height"].forEach((p) => {
         if (geometry[p] != null) s.shapes[shapeIndex][p] = geometry[p];
       });
@@ -358,15 +358,15 @@ window.__SK_SIM__ = true;
       else delete sh.levels;
     }
     async setShapeText(i, shapeIdx, text) {
-      if (!slides[i]) throw new FriendlyError("Slide " + i + " does not exist");
+      if (!slides[i]) throw new FriendlyError("Slide " + (i + 1) + " does not exist");
       const sh = slides[i].shapes[shapeIdx];
-      if (!sh) throw new FriendlyError("Shape " + shapeIdx + " does not exist on slide " + i);
+      if (!sh) throw new FriendlyError("Shape " + (shapeIdx + 1) + " does not exist on slide " + (i + 1));   // 0.9.306
       sh.text = String(text);
     }
     async setShapeTextFind(i, shapeIdx, findText, replText) {
-      if (!slides[i]) throw new FriendlyError("Slide " + i + " does not exist");
+      if (!slides[i]) throw new FriendlyError("Slide " + (i + 1) + " does not exist");
       const sh = slides[i].shapes[shapeIdx];
-      if (!sh) throw new FriendlyError("Shape " + shapeIdx + " does not exist on slide " + i);
+      if (!sh) throw new FriendlyError("Shape " + (shapeIdx + 1) + " does not exist on slide " + (i + 1));   // 0.9.306
       const full = String(sh.text || "");
       const idx = full.toLowerCase().indexOf(String(findText).toLowerCase());
       if (idx < 0) throw new FriendlyError('"' + findText + '" not found in that shape\'s current text.');
