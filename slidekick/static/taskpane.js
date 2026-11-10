@@ -3804,6 +3804,31 @@ OfficeDeck.prototype.setNotes = function (i, text) {
         out.body = body2;
         out.notes = notesOff ? null : (typeof op.notes === "string" ? op.notes : null);
         if (out.title === null && out.body === null && out.notes === null) { bad("nothing to change (all fields null)"); return; }
+        // 0.9.304: remember the PLANNED body text - later ops in the SAME
+        // batch (format_text find / find+level, replace_text with find)
+        // target the lines THIS edit writes; without it their find checks
+        // read the pre-edit snapshot and false-reject "find text not found"
+        // (the 0.9.265 created-shape class, now for edit_slide). Markers are
+        // stripped so the registered text is exactly what will land.
+        if (out.body && ctx) {
+          var oSl4 = originSlide(op.slide);
+          if (typeof oSl4 === "number" && ctx.slides[oSl4 - 1]) {
+            var shL4 = ctx.slides[oSl4 - 1].shapes || [];
+            var bodyIdx4 = -1;
+            for (var bi4 = 0; bi4 < shL4.length; bi4++) {
+              var sn4 = shL4[bi4];
+              if (isTitleShape(sn4.name || "", sn4.type || "")) continue;
+              if (isBodyShape(sn4.name || "", sn4.type || "")) { bodyIdx4 = bi4; break; }
+            }
+            if (bodyIdx4 < 0) {
+              // no recognizable body placeholder - first non-title text shape
+              for (bi4 = 0; bi4 < shL4.length; bi4++) {
+                if (!isTitleShape(shL4[bi4].name || "", shL4[bi4].type || "") && shL4[bi4].text != null) { bodyIdx4 = bi4; break; }
+              }
+            }
+            if (bodyIdx4 >= 0) textState[oSl4 + ":" + (bodyIdx4 + 1)] = parseBodyLevels(out.body).lines.join("\n");
+          }
+        }
       } else if (t === "replace_text") {
         if (!slideOk(op.slide)) { bad("bad slide index"); return; }
         if (!futureSlide(op.slide) && !shapeOk(originSlide(op.slide), op.shape)) { bad("shape " + op.shape + " not in the context list for slide " + op.slide); return; }

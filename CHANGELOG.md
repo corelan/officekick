@@ -42,6 +42,19 @@
   exact layout Office honors, and docs gain the manual Trust Center +
   reg-add unblock for machines that installed older builds.
 
+## 0.9.304
+
+### Fixed
+- format_text (and replace_text) ops in the SAME batch as an edit_slide
+  that rewrites the slide's body false-rejected with "find text not found
+  in that shape's current text" ("rewrite slide 52 + style the new
+  bullets" ask: 1 live op, 11 dead rows) - the validator's find checks
+  read the PRE-edit snapshot; the planned body only exists after the edit
+  runs. The validator now registers the edit's planned body text (markers
+  stripped) under the slide's body shape for later find checks - the same
+  fix-class as 0.9.265's created textboxes. Finds that will NOT exist
+  post-edit are still rejected, so wrong-target protection holds.
+
 ## 0.9.303
 
 ### Added
