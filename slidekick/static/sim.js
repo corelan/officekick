@@ -69,6 +69,17 @@ window.__SK_SIM__ = true;
     return "blank";
   }
 
+  // bake [L2] prefixes for the outline/read the way the REAL deck read does
+  // (0.9.298 renders paragraph levels as markers; body shapes carry levels)
+  function shapeText(sh) {
+    let t = sh.type === "table" ? tableCellText(sh) : (sh.text == null ? "" : sh.text);
+    if (Array.isArray(sh.levels) && sh.levels.some((v) => v > 0) && typeof t === "string") {
+      const ls = t.split("\n");
+      t = ls.map((s, k) => (sh.levels[k] > 0 ? "[L" + (sh.levels[k] + 1) + "] " : "") + s).join("\n");
+    }
+    return t;
+  }
+
   class SimDeck {
     constructor() {
       this.sim = true;
@@ -85,7 +96,7 @@ window.__SK_SIM__ = true;
           idx: j,
           name: sh.name,
           type: sh.type,
-          text: sh.type === "table" ? tableCellText(sh) : sh.text,
+          text: shapeText(sh),
           isTitle: sh.isTitle,
           isBody: sh.isBody,
           left: sh.left != null ? sh.left : 20,
@@ -110,7 +121,7 @@ window.__SK_SIM__ = true;
         const shs = sl.shapes || [];
         if (!shs.length) lines.push("  (no shapes)");
         shs.forEach((sh, j) => {
-          const txt = String((sh.type === "table" ? tableCellText(sh) : (sh.text == null ? "" : sh.text))).replace(/\r|\n/g, " | ");
+          const txt = String(shapeText(sh)).replace(/\r|\n/g, " | ");
           const label = (sh.name || sh.type || "shape") + ", " + (sh.type || "");
           lines.push('  shape ' + (j + 1) + ' (' + label + '): "' + txt + '"');
         });
@@ -294,7 +305,7 @@ window.__SK_SIM__ = true;
       if (geometry.rotation != null) s.shapes[shapeIndex].rotation = geometry.rotation;
       return { ok: true };
     }
-    async addSlide({ layout, title, body, notes }) {
+    async addSlide({ layout, title, body, notes, bodyLevels }) {
       const lay = normalizeLayout(layout);
       const sh = [
         { name: "Title 1", type: "placeholder", text: title || "", isTitle: true, isBody: false },
@@ -307,6 +318,10 @@ window.__SK_SIM__ = true;
           isTitle: false,
           isBody: true,
         });
+        // 0.9.300: [L2] markers were stripped by the pane - levels ride along
+        if (Array.isArray(bodyLevels) && bodyLevels.some((v) => v > 0)) {
+          sh[sh.length - 1].levels = bodyLevels.slice();
+        }
       }
       slides.push({ layout: lay, title: title || "", notes: typeof notes === "string" ? notes : "", shapes: sh });
       return { index: slides.length - 1, notesManual: null };
@@ -320,10 +335,13 @@ window.__SK_SIM__ = true;
       sh.text = String(text);
       slides[i].title = String(text);   // keep the convenience field in sync for the view
     }
-    async setSlideBody(i, lines) {
+    async setSlideBody(i, lines, levels) {
       const sh = this._shapeByRole(i, false);
       sh.text = Array.isArray(lines) ? lines.join("\n") : String(lines);
       slides[i].body = Array.isArray(lines) ? lines : String(lines).split("\n");
+      // 0.9.300: body levels (markers were already stripped by the pane)
+      if (Array.isArray(levels) && levels.some((v) => v > 0)) sh.levels = levels.slice();
+      else delete sh.levels;
     }
     async setShapeText(i, shapeIdx, text) {
       if (!slides[i]) throw new FriendlyError("Slide " + i + " does not exist");

@@ -42,6 +42,28 @@
   exact layout Office honors, and docs gain the manual Trust Center +
   reg-add unblock for machines that installed older builds.
 
+## 0.9.300
+
+### Added
+- Bullet levels are WRITABLE: [L2]/[L3] prefixes in create_slide/edit_slide
+  body lines - the notation the 0.9.298 deck read uses - now convert into
+  REAL bullet indentation. The pane strips the markers (a new
+  parseBodyLevels helper, one source for all three write paths), writes the
+  stripped text, then applies paragraph.level per line in the same run
+  AFTER the text commits: a level-write rejection (older build, read-only
+  level on some hosts) degrades to a visible note on the action row
+  ("text kept flat") and can never lose the committed body. create_slide
+  reports the note on its "inserted/appended" line, edit_slide on
+  "body set". Builds without PowerPointApi 1.11 get the flat text plus the
+  note instead of literal [L2] junk. The ask rules + create_slide schema
+  line teach the model the convention (prefix body lines with [L2]/[L3]
+  when the user asks for sub-bullets; still never in find values).
+- The simulator mirrors the whole loop: addSlide/setSlideBody carry the
+  levels, and the sim's deck read bakes [L2] prefixes back into the
+  outline/read_slide exactly like the real Office read, so the model's
+  round-trip is identical (E2E-verified: stored text clean + levels
+  persisted, and the model-side read-out carries "[L2] ..." markers).
+
 ## 0.9.299
 
 ### Fixed

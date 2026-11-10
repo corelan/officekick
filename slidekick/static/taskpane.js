@@ -951,6 +951,23 @@
     return String(s || "").replace(/^(\s*\[L\d+\]\s*)+/, "");
   }
 
+  function parseBodyLevels(lines) {
+    // 0.9.300: [L2]/[L3] markers in create_slide/edit_slide body lines are
+    // WRITABLE bullet indentation - the pane strips them from the stored
+    // text and hands the applier per-line levels (0 = top-level). Kept in
+    // one place so Office, simulator and future callers agree on it.
+    var ls = [], lv = [];
+    (lines || []).forEach(function (ln) {
+      var s = String(ln == null ? "" : ln);
+      var m = /^\s*\[L(\d)\]\s*/.exec(s);
+      var n = 0;
+      if (m) { var d = parseInt(m[1], 10); if (d >= 2 && d <= 5) { n = d - 1; s = s.slice(m[0].length); } }
+      ls.push(s); lv.push(n);
+    });
+    var any = lv.some(function (v) { return v > 0; });
+    return { lines: ls, levels: lv, any: any };
+  }
+
   function stripReasoning(text) {
     var out = String(text == null ? "" : text);
     STRIP_RES.forEach(function (rx) { out = out.replace(rx, ""); });
@@ -1079,7 +1096,7 @@
     '{"kind":"slide_ops","ops":[ ... ]}',
     "",
     "Allowed op types:",
-    '- {"type":"create_slide","layout":"title_content|title_only|section|blank","title":"...","body":["bullet",...],"notes":"...","after":N} (body/notes optional; "after" optional: the 1-based slide number to place the NEW slide after - after:0 = at the very start. The pane moves the new slide into that position automatically)',
+    '- {"type":"create_slide","layout":"title_content|title_only|section|blank","title":"...","body":["bullet",...],"notes":"...","after":N} (body/notes optional; "after" optional: the 1-based slide number to place the NEW slide after - after:0 = at the very start. The pane moves the new slide into that position automatically. Body lines prefixed with [L2] / [L3] become real sub-bullets (indentation); never prefix top-level bullets)',
     '- {"type":"edit_slide","slide":N,"title":"..."|null,"body":[...]|null,"notes":"..."|null} (null means: leave unchanged)',
     '- {"type":"replace_text","slide":N,"shape":N,"text":"..."} (reword one shape; N refers to the shape numbers listed for that slide). PREFERRED for a bullet/list item edit: add "find":"<the exact current text of that one bullet/fragment from the outline>" and make "text" the REPLACEMENT for only that fragment - the rest of the shape\'s text is preserved. Without "find" the op replaces the shape\'s WHOLE text, so only do that when the outline shows the entire text (no …[text continues]) or you really want to rewrite it all',
     '- {"type":"set_notes","slide":N,"notes":"..."}',
@@ -1109,6 +1126,7 @@
     "",
     "Rules:",
     "- BULLET LEVELS (bullet indentations): in shape text, [L2] marks a SECOND-level (sub)bullet, [L3] the third level; no marker = a top-level (L1) bullet. Levels are part of the CURRENT outline text only: NEVER include [L...] markers in your replace_text find/replace or format_text find values (strip them - the pane matches the real text without markers).\n",
+    "- BULLET LEVELS are WRITABLE: when the user asks for sub-bullets/indentation in a create_slide or edit_slide body, PREFIX the body line with [L2] (third level: [L3]) - the pane converts the marker into real bullet indentation. Top-level bullets carry NO marker. Never write [L...] markers anywhere else (not in find values, not in reply text).\n",
     "- Slide numbers are 1-based (slide 1 = the first slide in the filmstrip) and MUST come from the outline below. When the user says \"slide 2\", use \"slide\":2. Never invent them. Shape indexes keep the numbers shown in the outline.",
     "- One body element = one bullet/paragraph; keep bullets short unless told otherwise.",
     "- When a shape's text ends with \"…[text continues]\" the outline shows only a preview: NEVER rebuild the whole shape from a preview (you would erase the hidden part of the list). Edit list items with replace_text + \"find\" (fragment replace) instead.",
@@ -2407,7 +2425,31 @@
                   return ctx.sync().then(function () {
                     toSet.forEach(function (t) { t.e.tf.textRange.text = t.v; });
                     return ctx.sync().then(function () {
-                      return { index: newIndex };
+                      // 0.9.300: [L2] body markers -> real bullet indentation,
+                      // written AFTER the text commits (same run, last sync:
+                      // a rejection lands in levelsNote, the text stays put)
+                      var lvls = op.bodyLevels || [];
+                      if (!lvls.some(function (v4) { return v4 > 0; }) || !bodyEntry) {
+                        return { index: newIndex };
+                      }
+                      if (self._lvlApi !== true) {
+                        return { index: newIndex, levelsNote: "this PowerPoint build cannot set bullet levels (needs PowerPointApi 1.11) - text kept flat" };
+                      }
+                      bodyEntry.tf.paragraphs.load("items/text");
+                      return ctx.sync().then(function () {
+                        var paras = bodyEntry.tf.paragraphs.items || [];
+                        var wrote4 = 0;
+                        paras.forEach(function (p4, k4) {
+                          if (k4 < lvls.length && lvls[k4]) { p4.level = lvls[k4]; wrote4++; }
+                        });
+                        return ctx.sync().then(function () {
+                          return { index: newIndex, levelsWrote: wrote4 };
+                        }, function (eLev4) {
+                          return { index: newIndex, levelsNote: "this PowerPoint build rejected bullet indentation (" + String((eLev4 && eLev4.message) || eLev4).slice(0, 80) + ") - text kept flat" };
+                        });
+                      }, function (ePara4) {
+                        return { index: newIndex, levelsNote: "bullet levels unreadable (" + String((ePara4 && ePara4.message) || ePara4).slice(0, 80) + ") - text kept flat" };
+                      });
                     });
                   });
                 });
@@ -3172,9 +3214,9 @@ OfficeDeck.prototype.formatText = function (slideIndex, shapeIndex, font) {
   function tyTemp(shape) { return String(shape.type || ""); }
 
 OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceholderText(i, "title", text); };
-  OfficeDeck.prototype.setSlideBody = function (i, lines) { return this._setPlaceholderText(i, "body", lines); };
+  OfficeDeck.prototype.setSlideBody = function (i, lines, levels) { return this._setPlaceholderText(i, "body", lines, levels); };
 
-  OfficeDeck.prototype._setPlaceholderText = function (i, role, lines) {
+  OfficeDeck.prototype._setPlaceholderText = function (i, role, lines, levels) {
     var self = this;
     var joined = Array.isArray(lines) ? lines.join("\r") : String(lines == null ? "" : lines);
     return this.run("set" + role, function (ctx) {
@@ -3246,7 +3288,31 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
             pick.tf.textRange.load("text");
             return ctx.sync().then(function () {
               pick.tf.textRange.text = joined;
-              return ctx.sync();
+              return ctx.sync().then(function () {
+                // 0.9.300: levels ride the SAME run after the text commits
+                var lvls = levels || [];
+                if (!lvls.some(function (v5) { return v5 > 0; })) return null;
+                if (self._lvlApi !== true) {
+                  return { ok: true, how: "bullet levels not set - this build cannot (needs PowerPointApi 1.11), text kept flat" };
+                }
+                pick.tf.paragraphs.load("items/text");
+                return ctx.sync().then(function () {
+                  var paras = pick.tf.paragraphs.items || [];
+                  var wrote5 = 0, over5 = 0;
+                  paras.forEach(function (p5, k5) {
+                    if (k5 >= lvls.length) { over5++; return; }
+                    if (!lvls[k5]) return;
+                    p5.level = lvls[k5]; wrote5++;
+                  });
+                  return ctx.sync().then(function () {
+                    return { ok: true, how: "bullet levels set (" + wrote5 + (over5 ? ", " + over5 + " unmatched lines skipped" : "") + ")" };
+                  }, function (eLev5) {
+                    return { ok: true, how: "bullet levels rejected by this build (" + String((eLev5 && eLev5.message) || eLev5).slice(0, 70) + ") - text kept flat" };
+                  });
+                }, function (ePara5) {
+                  return { ok: true, how: "bullet levels unreadable (" + String((ePara5 && ePara5.message) || ePara5).slice(0, 70) + ") - text kept flat" };
+                });
+              });
             });
           });
         });
@@ -4124,8 +4190,9 @@ OfficeDeck.prototype.setNotes = function (i, text) {
     var runOne = function (op) {
       var cur = op.slide !== undefined ? op.slide - 1 - shift : undefined;
       switch (op.type) {
-        case "create_slide":
-          return deck.addSlide({ layout: op.layout, title: op.title, body: op.body }).then(function (r) {
+        case "create_slide": {
+          var pbC = parseBodyLevels(op.body);
+          return deck.addSlide({ layout: op.layout, title: op.title, body: pbC.lines, bodyLevels: pbC.levels }).then(function (r) {
             // honor the requested position: 0-based index the new slide should END UP at
             var wantIdx = Math.min(Math.max(op.after, 0), r.index);   // after:N (1-based slide) => 0-based N
             var doNotes = function () {
@@ -4139,17 +4206,18 @@ OfficeDeck.prototype.setNotes = function (i, text) {
             };
             if ((op.after != null) && r.index !== wantIdx) {
               return deck.moveSlide(r.index, wantIdx).then(function () {
-                lines.push({ ok: true, text: "create slide -> inserted at position " + (wantIdx + 1) });
+                lines.push({ ok: true, text: "create slide -> inserted at position " + (wantIdx + 1) + (r.levelsNote ? " - " + r.levelsNote : "") });
                 return doNotes();
               }, function (eMove) {
                 var note = " (requested position failed: " + ((eMove && eMove.message) || eMove) + " - left at end)";
-                lines.push({ ok: true, text: "create slide -> appended at index " + (r.index + 1) + note });
+                lines.push({ ok: true, text: "create slide -> appended at index " + (r.index + 1) + note + (r.levelsNote ? " - " + r.levelsNote : "") });
                 return doNotes();
               });
             }
-            lines.push({ ok: true, text: "create slide -> appended at index " + (r.index + 1) });
+            lines.push({ ok: true, text: "create slide -> appended at index " + (r.index + 1) + (r.levelsNote ? " - " + r.levelsNote : "") });
             return doNotes();
           });
+        }
         case "edit_slide": {
           var chain = Promise.resolve();
           if (op.title != null) {
@@ -4161,8 +4229,10 @@ OfficeDeck.prototype.setNotes = function (i, text) {
           }
           if (op.body != null) {
             chain = chain.then(function () {
-              return deck.setSlideBody(cur, op.body).then(function () {
-                lines.push({ ok: true, text: "edit slide " + op.slide + ": body set (" + op.body.length + " paragraphs)" });
+              var pbE = parseBodyLevels(op.body);
+              return deck.setSlideBody(cur, pbE.lines, pbE.levels).then(function (resE) {
+                lines.push({ ok: true, text: "edit slide " + op.slide + ": body set (" + op.body.length + " paragraphs)" +
+                  (resE && resE.how ? " - " + resE.how : "") });
               });
             });
           }
