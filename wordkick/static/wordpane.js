@@ -1006,7 +1006,7 @@
     'Accepted also: {"kind":"slide_ops","ops":[...]} (treated like doc_ops).',
     "",
     "Allowed op types:",
-    '- {"type":"insert_paragraphs","items":[{"text":"...","style":"normal|title|heading1|heading2|heading3|quote|listParagraph"}],"place":"cursor | end | an anchor text"} (same placement as insert_image; default end; anchor places are what you want for placeholders)',
+    '- {"type":"insert_paragraphs","items":[{"text":"...","style":"normal|title|heading1|heading2|heading3|quote|listParagraph"}],"place":"cursor | end | an anchor text"} (same placement as insert_image; default end; anchor places are what you want for placeholders; an item text prefixed with [L2]..[L9] becomes a real list item at that indent, deepest [L9], [L1] = a top-level bullet)',
     '- {"type":"move_text","find":"existing text","until":"last paragraph text","place":"anchor text"} (CUT one or more consecutive paragraphs - from the one containing find through the one containing until, or when using "count":N the N paragraphs from find - and paste right after the anchor; preserves styles)',
     '- {"type":"copy_text","find":"existing text","until":"last paragraph text or omit","place":"anchor text"} (a paste-COPY: same as move_text but the original block stays put)',
     '- {"type":"move_image","image":N,"place":"anchor text or end"} (relocate the Nth inline picture; image paragraphs are marked [image xN] in the outline)',
@@ -1015,7 +1015,7 @@
     '- {"type":"create_table","values":[["h1","h2"],["a","b"]]} (inserted at the end of the document)',
     '- {"type":"insert_comment","find":"exact anchor text","text":"comment"} (comments need WordApi 1.4)',
     '- {"type":"delete_paragraph","para":N} (para = the paragraph number shown in the outline; 1 = the first paragraph - never invent them)',
-    '- {"type":"rewrite_doc","items":[{"text":"...","style":"..."}]} (DESTROYS the current body - only when explicitly asked for a full rewrite)',
+    '- {"type":"rewrite_doc","items":[{"text":"...","style":"..."}]} (DESTROYS the current body - only when explicitly asked for a full rewrite; item texts prefixed with [L2]..[L9] become real list items at that indent)',
     '- {"type":"create_template","title":"Template name","fields":[{"label":"Field label","type":"text|dropdown|checkbox|date","options":["only for dropdown"]}]} (appends a titled template block with fillable controls; use when the user asks for a template/form/template block; dropdown needs an options array)',
     '- {"type":"insert_image","prompt":"detailed image description","place":"cursor"} (generate a picture from the description and insert it where place says; only when the user asks for a picture/image/illustration/logo)',
     '- {"type":"format_text","para":N,"font":{"bold":true},"align":"center"} (format ONE paragraph from the outline: font = {"bold","italic","color","size","name","underline","allCaps","highlightColor"} subset; align = left|center|right|justify; only what is requested)',
@@ -1030,6 +1030,7 @@
 
     '- {"type":"set_track_changes","on":true|false} (turns the DOCUMENT\'s Track Changes mode on/off - the Review-tab toggle; use when the user asks to start/stop tracking; turning it off does NOT remove existing revisions - offer accept_changes for those; the pane\'s separate "AI edits as tracked changes" lives in Settings)',
     "",
+    "- LIST INDENTATION (writable [L] markers): the outline shows list items as \"[L2] text\" - no marker = a normal paragraph or top-level bullet. WRITABLE: prefix an item's text with [L2] (second level) up to [L9] (deepest, 9 indent levels) in insert_paragraphs / rewrite_doc - the pane turns it into a real list item with that indentation. Never write [L...] markers anywhere else (not in find values).\n",
     "- STYLES AND SIZES (document typography law): RUNNING TEXT (the body of an essay, article, report or letter) is ALWAYS style \"normal\". Use \"title\" for AT MOST ONE document title paragraph, \"heading1\" for section titles, \"heading2\" for subsections. Emphasis inside body text = bold/italic, never a larger size. If you set font.size, keep it near the document's existing scale (body typically 10-14pt, Title at most 28pt) - never upscale running text.",
     "",
     "Rules:",
@@ -1905,7 +1906,7 @@ var nw = $("sess-new");
     return this.run("getContext", function (ctx) {
       var body = ctx.document.body;
       var paras = body.paragraphs;
-      paras.load("text, style, inlinePictures/items");   // 0.9.226: image markers in the outline
+      paras.load("text, style, isListItem, inlinePictures/items");   // 0.9.226: image markers in the outline
       var sel = ctx.document.getSelection();
       sel.load("text");
       var tables = body.tables;
@@ -1913,6 +1914,19 @@ var nw = $("sess-new");
       var pics = body.inlinePictures;
       pics.load("items");
       return ctx.sync().then(function () {
+        // 0.9.301: bake list indent levels as "[L2] text" markers, the same
+        // notation SlideKick's deck read uses. Guarded per item - builds or
+        // paragraphs without the ListItem API stay flat (no markers).
+        var lvlIdx = {};
+        for (var iL = 0; iL < paras.items.length; iL++) {
+          try {
+            if (paras.items[iL].isListItem) {
+              paras.items[iL].listItem.load("level");   // access throws ItemNotFound if not a list item
+              lvlIdx[iL] = 1;
+            }
+          } catch (eLI) { /* not a list item - flat */ }
+        }
+        return ctx.sync().then(function () {
         var n = Math.min(opts.maxParas || paras.items.length, 300);
         var t0 = null;
         var items = [];
@@ -1925,12 +1939,18 @@ var nw = $("sess-new");
             imageCount += np;
             ptxt = (ptxt ? ptxt + " " : "") + "[image x" + np + "]";
           }
+          var lvW = 0;
+          if (lvlIdx[i]) {
+            try { lvW = Number(paras.items[i].listItem.level) || 0; } catch (eLv) { lvW = 0; }
+          }
+          if (lvW > 0) ptxt = "[L" + Math.min(lvW + 1, 9) + "] " + ptxt;
           items.push({ idx: i, text: ptxt, style: paras.items[i].style || "Normal" });
         }
         return ctx.sync().then(function () {
           return { documentName: "document", paragraphCount: paras.items.length,
                    images: imageCount,
                    paragraphs: items, tables: [], selected: sel.text || "", host: self.capabilities().host };
+        });
         });
       });
     });
@@ -1940,54 +1960,121 @@ var nw = $("sess-new");
     // 0.9.211: same placement vocabulary as insert_image -
     //   place "cursor" -> at the selection; "end" (default) -> append;
     //   any other string = ANCHOR: insert after the first body match.
+    // 0.9.301: [L2]..[L9] item prefixes become real list indentation
+    // (level writes run AFTER the text/style sync; failures degrade to a
+    // visible note on the action row and can never lose the text).
+    var self = this;
     return this.run("insertParagraphs", function (ctx) {
       var body = ctx.document.body;
       var items = op.items || [];
       var place = (typeof op.place === "string" && op.place.trim()) ? op.place.trim() : "end";
+      var parsed = [];
+      items.forEach(function (it) {
+        var pl = parseListMarkers([String(it.text == null ? "" : it.text)]);
+        parsed.push({ text: pl.lines[0], style: it.style, lv: pl.levels[0] || 0, markered: pl.any });
+      });
+      var mkStyle = function (it) {
+        // a markered item is a list line: force the built-in list style for
+        // its level (ListBullet..ListBullet5), overriding the model's style
+        return it.markered ? wordBulletToken(it.lv) : styleNameOf(it.style);
+      };
+      var lvlQueue = [];   // {p: paragraph proxy, lv: 0-based level}
       if (place === "end") {
-        items.forEach(function (it) {
-          var p = body.insertParagraph(String(it.text == null ? "" : it.text), "End");
-          setWordStyle(p, styleNameOf(it.style));
+        parsed.forEach(function (it) {
+          var p = body.insertParagraph(it.text, "End");
+          setWordStyle(p, mkStyle(it));
+          if (it.markered) lvlQueue.push({ p: p, lv: it.lv });
         });
-        return ctx.sync().then(function () { return { ok: true, how: "end of document" }; });
+        return ctx.sync().then(function () {
+          return self._applyListLevels(ctx, lvlQueue, "end of document");
+        });
       }
       if (place === "cursor") {
         var sel = ctx.document.getSelection();
+        parsed.forEach(function (it) {
+          var p = sel.insertParagraph(it.text, "After");
+          setWordStyle(p, mkStyle(it));
+          if (it.markered) lvlQueue.push({ p: p, lv: it.lv });
+        });
         return ctx.sync().then(function () {
-          items.forEach(function (it) {
-            var p = sel.insertParagraph(String(it.text == null ? "" : it.text), "After");
-            setWordStyle(p, styleNameOf(it.style));
-          });
-          return { ok: true, how: "at caret/selection" };
+          return self._applyListLevels(ctx, lvlQueue, "at caret/selection");
         });
       }
       var rs = body.search(place);
       rs.load("items");
       return ctx.sync().then(function () {
         var match = rs && rs.items && rs.items[0];
+        var how = match ? "after the paragraph containing '" + place.slice(0, 60) + "'"
+                        : "anchor '" + place.slice(0, 60) + "' not found - end of document";
         if (!match) {
-          items.forEach(function (it2) {
-            var p2 = body.insertParagraph(String(it2.text == null ? "" : it2.text), "End");
-            setWordStyle(p2, styleNameOf(it2.style));
+          parsed.forEach(function (it2) {
+            var p2 = body.insertParagraph(it2.text, "End");
+            setWordStyle(p2, mkStyle(it2));
+            if (it2.markered) lvlQueue.push({ p: p2, lv: it2.lv });
           });
           return ctx.sync().then(function () {
-            return { ok: true, how: "anchor '" + place.slice(0, 60) + "' not found - end of document" };
+            return self._applyListLevels(ctx, lvlQueue, how);
           });
         }
         return _wholeParaRange(ctx, match).then(function (pr) {
           var paraRange = pr || match;
-          items.forEach(function (it3) {
-            var p3 = paraRange.insertParagraph(String(it3.text == null ? "" : it3.text), "After");
-            setWordStyle(p3, styleNameOf(it3.style));
+          parsed.forEach(function (it3) {
+            var p3 = paraRange.insertParagraph(it3.text, "After");
+            setWordStyle(p3, mkStyle(it3));
+            if (it3.markered) lvlQueue.push({ p: p3, lv: it3.lv });
           });
           return ctx.sync().then(function () {
-            return { ok: true, how: "after the paragraph containing '" + place.slice(0, 60) + "'" };
+            return self._applyListLevels(ctx, lvlQueue, how);
           });
-        }.bind(this));
-      }.bind(this));
+        });
+      });
     });
   };
 
+  WordDeck.prototype._applyListLevels = function (ctx, queue, how) {
+    // 0.9.301: ListItem.level for the markered paragraphs, after their
+    // text/style landed. Word.js p.listItem THROWS ItemNotFound at ACCESS
+    // when the paragraph is not a list item - those are counted flat. A
+    // level write rejected at SYNC degrades to a note; the text stays.
+    var wrote = 0, failed = 0;
+    (queue || []).forEach(function (q) {
+      try { q.p.listItem.level = q.lv; wrote++; } catch (eLI) { failed++; }
+    });
+    return ctx.sync().then(function () {
+      var note = "";
+      if ((queue || []).length) {
+        note = failed
+          ? " - list indentation set on " + wrote + "/" + queue.length + " item(s) (" + failed + " kept flat)"
+          : " - list indentation applied (" + wrote + ")";
+      }
+      return { ok: true, how: how + note };
+    }, function (eLev) {
+      return { ok: true, how: how + " - this Word build rejected list indentation (" +
+        String((eLev && eLev.message) || eLev).slice(0, 80) + ") - text kept flat" };
+    });
+  };
+
+  WordDeck.prototype.rewriteDoc = function (op) {
+    var self = this;
+    return this.run("rewriteDoc", function (ctx) {
+      var body = ctx.document.body;
+      body.clear();
+      var last = null;
+      var lvlQueue = [];
+      (op.items || []).forEach(function (it) {
+        var pl = parseListMarkers([String(it.text == null ? "" : it.text)]);
+        var txt = pl.lines[0];
+        var st = pl.any ? wordBulletToken(pl.levels[0] || 0) : styleNameOf(it.style);
+        var p = body.insertParagraph(txt, last ? "After" : "End");
+        last = p;
+        setWordStyle(p, st);
+        if (pl.any) lvlQueue.push({ p: p, lv: pl.levels[0] || 0 });
+      });
+      return ctx.sync().then(function () {
+        return self._applyListLevels(ctx, lvlQueue, "document rewritten");
+      });
+    });
+  };
   WordDeck.prototype.editParagraph = function (index, text) {
     return this.run("editParagraph", function (ctx) {
       // Word.js collections: use .items after load+sync (no getItemAt here)
@@ -2674,7 +2761,36 @@ var nw = $("sess-new");
   function slideOkF(idx, ctx) {
     return typeof idx === "number" && ctx && ctx.paragraphs && ctx.paragraphs[idx - 1];
   }
-function normalizeWordStyle(v) {
+  function parseListMarkers(lines) {
+    // 0.9.301: [L2]..[L9] prefixes on insert_paragraphs / rewrite_doc item
+    // texts are WRITABLE list indentation - the same notation the doc read
+    // renders (the read bakes markers on list items). Strips the markers
+    // and returns per-line levels; Word's ListItem.level is 0-based (0..8
+    // = 9 indent levels). One source for every Word write path.
+    var ls = [], lv = [];
+    (lines || []).forEach(function (ln) {
+      var s = String(ln == null ? "" : ln);
+      var m = /^\s*\[L(\d+)\]\s*/.exec(s);
+      var n = 0;
+      if (m) {
+        var d = parseInt(m[1], 10);
+        n = d <= 1 ? 0 : (d >= 9 ? 8 : d - 1);
+        s = s.slice(m[0].length);
+      }
+      ls.push(s); lv.push(n);
+    });
+    var any = lv.some(function (v) { return v > 0; });
+    return { lines: ls, levels: lv, any: any };
+  }
+
+  function wordBulletToken(lv) {
+    // the built-in list styles carry real list templates; deepest token
+    // is ListBullet5, deeper indent levels still work via listItem.level
+    var toks = ["listBullet", "listBullet2", "listBullet3", "listBullet4", "listBullet5"];
+    return toks[Math.min(lv, 4)];
+  }
+
+  function normalizeWordStyle(v) {
     // Word.BuiltInStyleName tokens (localization-safe via styleBuiltIn)
     var k = String(v || "").toLowerCase().replace(/\s+/g, "");
     var map = {

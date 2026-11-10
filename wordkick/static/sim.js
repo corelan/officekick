@@ -37,6 +37,24 @@
 
   class FriendlyError extends Error { constructor(m) { super(m); this.friendly = true; } }
 
+  function parseSimListMarker(t) {
+    // 0.9.301: mirror the pane - [L2]..[L9] item prefixes become list levels
+    let txt = String(t == null ? "" : t);
+    const m = /^\s*\[L(\d+)\]\s*/.exec(txt);
+    let lv = 0;
+    if (m) {
+      const d = parseInt(m[1], 10);
+      lv = d <= 1 ? 0 : (d >= 9 ? 8 : d - 1);
+      txt = txt.slice(m[0].length);
+    }
+    return { txt, lv };
+  }
+  function simParaText(p) {
+    // bake list levels back into the outline/read exactly like the real read
+    if (p.level > 0 && typeof p.text === "string") return "[L" + (p.level + 1) + "] " + p.text;
+    return p.text == null ? "" : p.text;
+  }
+
   function styleName(kind) {
     if (!kind) return "Normal";
     var k = String(kind).toLowerCase();
@@ -59,7 +77,7 @@
       return {
         documentName: "DocKick simulator document",
         paragraphCount: paras.length,
-        paragraphs: paras.map(function (p, i) { return { idx: i, text: p.text, style: p.style }; }),
+        paragraphs: paras.map(function (p, i) { return { idx: i, text: simParaText(p), style: p.style }; }),
         tables: tables.map(function (t, i) { return { idx: i, values: t.values }; }),
         comments: comments.slice(),
         selected: "",
@@ -75,7 +93,13 @@
     },
     insertParagraphs: async function (op) {
       (op.items || []).forEach(function (it) {
-        paras.push({ text: String(it.text == null ? "" : it.text), style: styleName(it.style) });
+        const pl = parseSimListMarker(it.text);
+        const kind = styleName(it.style);
+        paras.push({
+          text: pl.txt,
+          style: pl.lv > 0 ? "List Paragraph" : kind,   // markered items are list lines
+          level: pl.lv > 0 ? pl.lv : null,
+        });
       });
       return { ok: true, where: "end" };
     },
@@ -185,7 +209,8 @@
     },
     rewriteDoc: async function (items) {
       paras = (items || []).map(function (it) {
-        return { text: String(it.text == null ? "" : it.text), style: styleName(it.style) };
+        const pl = parseSimListMarker(it.text);
+        return { text: pl.txt, style: pl.lv > 0 ? "List Paragraph" : styleName(it.style), level: pl.lv > 0 ? pl.lv : null };
       });
       tables = [];
       return { ok: true };

@@ -959,9 +959,16 @@
     var ls = [], lv = [];
     (lines || []).forEach(function (ln) {
       var s = String(ln == null ? "" : ln);
-      var m = /^\s*\[L(\d)\]\s*/.exec(s);
+      var m = /^\s*\[L(\d+)\]\s*/.exec(s);
       var n = 0;
-      if (m) { var d = parseInt(m[1], 10); if (d >= 2 && d <= 5) { n = d - 1; s = s.slice(m[0].length); } }
+      if (m) {
+        // [L1] = an explicitly marked top-level bullet; [L9] = the deepest
+        // PowerPoint/Word indent (0-based level 8); anything deeper clamps
+        // so no [L...] marker can ever leak into the stored text
+        var d = parseInt(m[1], 10);
+        n = d <= 1 ? 0 : (d >= 9 ? 8 : d - 1);
+        s = s.slice(m[0].length);
+      }
       ls.push(s); lv.push(n);
     });
     var any = lv.some(function (v) { return v > 0; });
@@ -1096,7 +1103,7 @@
     '{"kind":"slide_ops","ops":[ ... ]}',
     "",
     "Allowed op types:",
-    '- {"type":"create_slide","layout":"title_content|title_only|section|blank","title":"...","body":["bullet",...],"notes":"...","after":N} (body/notes optional; "after" optional: the 1-based slide number to place the NEW slide after - after:0 = at the very start. The pane moves the new slide into that position automatically. Body lines prefixed with [L2] / [L3] become real sub-bullets (indentation); never prefix top-level bullets)',
+    '- {"type":"create_slide","layout":"title_content|title_only|section|blank","title":"...","body":["bullet",...],"notes":"...","after":N} (body/notes optional; "after" optional: the 1-based slide number to place the NEW slide after - after:0 = at the very start. The pane moves the new slide into that position automatically. Body lines prefixed with [L2] / [L3] (deepest indent [L9]) become real sub-bullets (indentation); never prefix top-level bullets)',
     '- {"type":"edit_slide","slide":N,"title":"..."|null,"body":[...]|null,"notes":"..."|null} (null means: leave unchanged)',
     '- {"type":"replace_text","slide":N,"shape":N,"text":"..."} (reword one shape; N refers to the shape numbers listed for that slide). PREFERRED for a bullet/list item edit: add "find":"<the exact current text of that one bullet/fragment from the outline>" and make "text" the REPLACEMENT for only that fragment - the rest of the shape\'s text is preserved. Without "find" the op replaces the shape\'s WHOLE text, so only do that when the outline shows the entire text (no …[text continues]) or you really want to rewrite it all',
     '- {"type":"set_notes","slide":N,"notes":"..."}',
@@ -1126,7 +1133,7 @@
     "",
     "Rules:",
     "- BULLET LEVELS (bullet indentations): in shape text, [L2] marks a SECOND-level (sub)bullet, [L3] the third level; no marker = a top-level (L1) bullet. Levels are part of the CURRENT outline text only: NEVER include [L...] markers in your replace_text find/replace or format_text find values (strip them - the pane matches the real text without markers).\n",
-    "- BULLET LEVELS are WRITABLE: when the user asks for sub-bullets/indentation in a create_slide or edit_slide body, PREFIX the body line with [L2] (third level: [L3]) - the pane converts the marker into real bullet indentation. Top-level bullets carry NO marker. Never write [L...] markers anywhere else (not in find values, not in reply text).\n",
+    "- BULLET LEVELS are WRITABLE: when the user asks for sub-bullets/indentation in a create_slide or edit_slide body, PREFIX the body line with [L2] (third level: [L3], deepest indent: [L9]) - the pane converts the marker into real bullet indentation. Top-level bullets carry NO marker. Never write [L...] markers anywhere else (not in find values, not in reply text).\n",
     "- Slide numbers are 1-based (slide 1 = the first slide in the filmstrip) and MUST come from the outline below. When the user says \"slide 2\", use \"slide\":2. Never invent them. Shape indexes keep the numbers shown in the outline.",
     "- One body element = one bullet/paragraph; keep bullets short unless told otherwise.",
     "- When a shape's text ends with \"…[text continues]\" the outline shows only a preview: NEVER rebuild the whole shape from a preview (you would erase the hidden part of the list). Edit list items with replace_text + \"find\" (fragment replace) instead.",
