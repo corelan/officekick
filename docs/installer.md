@@ -64,8 +64,12 @@ Phases (questions are asked *before* the phase line that acts on them):
    heads-up again right before that dialog appears (macOS: keychain
    dialog, click Trust; Windows: the Root-store certificate dialog,
    click Yes).
-4. **registering with Office** - re-renders the manifests, refuses politely
-   while Office apps are running (quit Office, re-run).
+4. **registering with Office** - re-renders the manifests. When Office apps
+   are running, the WEF re-registration (manifest purge + per-app sideload)
+   is skipped with an explicit note - the files are copied and the manifests
+   rendered in any case; quit + reopen each app to pick up the new build, and
+   a later install with all Office apps quit re-runs the skipped
+   re-registration. With no Office app running, nothing changes.
 5. **autostart** - asks before doing anything (macOS login item /
    Windows scheduled task).
 6. **starting the server** - starts + health-checks both listeners.
@@ -98,8 +102,10 @@ re-reads at its next restart).
 
 ## Update (2)
 
-`git pull` + an in-place refresh. Quit Office first (the WEF/catalog work
-refuses while Office runs); reopen the apps afterwards. Your config,
+`git pull` + an in-place refresh. The update completes even with Office apps
+open (files copy + the server restarts); the WEF re-registration and cache
+flush are the only steps skipped while apps run - quit and reopen each Office
+app afterwards to load the new build. Your config,
 profiles, sessions and the selected certificate mode survive every update.
 
 ## Server (3)

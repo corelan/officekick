@@ -209,11 +209,16 @@ rem Windows - Command Prompt or PowerShell both work:
 py -3 install.py --update
 ```
 
-`--update` = git pull + redeploy + restart (quit your Office apps first;
-on macOS the installer refuses to touch the registration while an app is
-running). With git installed, the **pane's check-for-updates button does
-the whole flow in one click** ("Update now - pull + redeploy + restart"); it
-asks you to quit Office and reload the pane when it finishes. Heel an
+`--update` = git pull + redeploy + restart; the update runs to completion
+even while your Office apps are open - the files are copied and the server
+restarts on the new build in any case, and only the Office-touching
+re-registration steps (the WEF manifest purge + sideload on macOS, the cache
+flush) are skipped with a note in the output: **quit and reopen each Office
+app afterwards** so it loads the new pane files (a later install with all
+Office apps quit re-runs the skipped re-registration if you ever need it).
+With git installed, the **pane's check-for-updates button does the whole
+flow in one click** ("Update now - pull + redeploy + restart"); it asks you
+to reload the pane when it finishes. Heal an
 "add-in is no longer available" toast once with the repair tool
 ([docs/slidekick.md](docs/slidekick.md), troubleshooting).
 

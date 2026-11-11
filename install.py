@@ -1172,6 +1172,33 @@ def stop_server():
         time.sleep(0.4)
 
 
+def ghost_port_killer():
+    """0.9.309: kill whatever still LISTENS on the canonical port after the
+    pattern-based stop (a helper-spawned or respawned server whose command
+    line matches no pkill pattern). The pane polls the same port - a ghost
+    answering with the OLD build reads exactly like 'the update stopped
+    early'. Only the listener on our own port is touched."""
+    if DRY_RUN:
+        return
+    if is_mac():
+        rc, o = run_quiet(["lsof", "-ti", "tcp:%d" % PORT])
+        pids = [p for p in (o or "").split() if p.strip().isdigit()]
+        for pid in pids:
+            run_quiet(["kill", "-9", pid])
+        if pids:
+            _log("hard-stopped leftover listener pid(s) on port %d: %s"
+                 % (PORT, ",".join(pids)))
+    else:
+        rc, nout = run_quiet(["netstat", "-ano", "-p", "tcp"])
+        for line in (nout or "").splitlines():
+            parts = line.split()
+            if len(parts) >= 5 and parts[3].upper() == "LISTENING" \
+                    and parts[1].split(":")[-1] == str(PORT):
+                run_quiet(["taskkill", "/PID", parts[4], "/F"])
+                _log("hard-stopped leftover listener pid %s on port %d"
+                     % (parts[4], PORT))
+
+
 def _hard_task_settings(name):
     """schtasks default settings (stop-on-idle, stop-on-batteries, 72h
     execution limit) end long-running servers silently; every install
@@ -2613,6 +2640,7 @@ def render_manifest(addin_dir, port, https_port=None, host=None):
 
 
 def render_and_sideload():
+    global OFFICE_OPEN_RUN
     # 0.9.204: a certificate that is already present AND working (validated
     # by validate_existing_tls: expiry, localhost SAN, trusted chain) is
     # activated for EVERY pane - the manifests for Word/PowerPoint/MailKick
@@ -2668,9 +2696,30 @@ def render_and_sideload():
          (("https://localhost:%d via the loopback certificate" % (HTTPS_PORT if HTTPS_PORT else PORT + 1)) if tls_pair
           else ("http://localhost:%d" % PORT),
           "ribbon commands" if RIBBON else "list-mode"))
+    # 0.9.309: Office running no longer ABORTS the install/update. The files
+    # still get copied and the manifests still get rendered; only the steps
+    # that are UNSAFE while a host runs (the WEF purge and per-app manifest
+    # sideload - both can leave a live host with dangling registrations) are
+    # SKIPPED with an explicit note. The user quits + reopens each Office app
+    # to pick up the new build; a later closed-Office install re-runs the
+    # purge + sideload.
+    office_open = False
     if is_mac() and not DRY_RUN:
-        if purge_stale_wef_manifests() < 0:   # Office running - dangling registrations win
-            die("quit Office completely (Cmd+Q), then re-run install.py --update/--install")
+        ppt_r, word_r, outlook_r = office_apps_running()
+        office_open = ppt_r or word_r or outlook_r
+        if office_open:
+            OFFICE_OPEN_RUN = True
+            running_now = [n for n, g in
+                           (("PowerPoint", ppt_r), ("Word", word_r), ("Outlook", outlook_r)) if g]
+            warn("Office is running (%s) - the files still get copied and the"
+                 " manifests rendered, but the WEF re-registration is SKIPPED"
+                 " this run (re-registering while apps are open can leave them"
+                 " with dangling registrations); quit each Office app (Cmd+Q)"
+                 " and reopen it to pick up the new build." % ", ".join(running_now))
+        else:
+            purge_stale_wef_manifests()
+    elif is_mac():
+        purge_stale_wef_manifests()   # dry-run: its own DRY_RUN guard prints the would-line
     apps = office_apps_present()
     rendered = []
     addins = ADDINS or set()
@@ -2679,7 +2728,7 @@ def render_and_sideload():
         if not want:
             # selected OUT this run (or the MailKick route failed): drop a
             # previous Outlook registration so the pane disappears
-            if folder == "mailkick" and is_mac() and not DRY_RUN:
+            if folder == "mailkick" and is_mac() and not DRY_RUN and not office_open:
                 wef = wef_dir()
                 if wef and os.path.isfile(os.path.join(wef, mfname)):
                     try:
@@ -2715,7 +2764,12 @@ def render_and_sideload():
             _log("rendered %s -> %s (identity version %s)" % (name, mpath, mver))
         rendered.append(name + " (id v" + mver + ")")
         if is_mac() and not DRY_RUN:
-            sideload_mac(folder, mfname, apps.get(folder))
+            if office_open:
+                _log("%s rendered but NOT re-sideloaded (Office is open -"
+                     " run --install again with all Office apps quit when the"
+                     " WEF registration must refresh)" % name)
+            else:
+                sideload_mac(folder, mfname, apps.get(folder))
     if rendered:
         if is_mac():
             _log("mac tip: a saved deck throwing the 'Add-in Error' toast on open"
@@ -3412,9 +3466,10 @@ def ask_autostart():
 
 
 def install(mode_name="Install", interactive=True):
-    global INTERACTIVE, AUTOSTART_WANT, MAILKICK_CHOICE
+    global INTERACTIVE, AUTOSTART_WANT, MAILKICK_CHOICE, OFFICE_OPEN_RUN
     INTERACTIVE = interactive
     AUTOSTART_WANT = None
+    OFFICE_OPEN_RUN = False
     banner(mode_name)
     preflight(mode_name)
     # add-in selection FIRST (console: one ok-line; details in the log)
@@ -3445,6 +3500,14 @@ def install(mode_name="Install", interactive=True):
         AUTOSTART_WANT = ask_autostart()
     phase(5, total, "autostart", autostart_phase)
     phase(6, total, "starting the server", server_phase)
+    if OFFICE_OPEN_RUN:
+        # 0.9.309: office-open runs complete; say exactly what did NOT happen
+        note("Office apps are open - the new build is COPIED and the server"
+             " is restarted, but the OPEN apps keep using the old pane files"
+             " until you quit and REOPEN each of them (Word/PowerPoint/"
+             "Outlook). The WEF re-registration that was skipped this run"
+             " happens with your next install while all Office apps are"
+             " quit.")
     done_note(mode_name)
     pause_after(mode_name)
 
@@ -3466,6 +3529,10 @@ def _drain_stdin():
 
 
 FLAGRUN = False
+
+# 0.9.309: set by render_and_sideload when an install/update ran with Office
+# apps open (files copied + manifests rendered; WEF purge/sideload skipped)
+OFFICE_OPEN_RUN = False
 
 
 def pause_after(label):
@@ -3504,6 +3571,18 @@ def pause_after(label):
 def prepare_phase():
     stop_server()          # first: free our canonical port (a previous,
     resolve_port()         # https-only install answers no http health check)
+    if port_listening(PORT):
+        # 0.9.309: a survivor the pattern kill could not match - hard-stop it
+        # or the whole update runs against an old ghost that reports the old
+        # build forever (the pane's 'update stopped early' dead-end)
+        ghost_port_killer()
+        deadline = time.time() + 4
+        while time.time() < deadline and port_listening(PORT):
+            time.sleep(0.4)
+        if port_listening(PORT):
+            warn("port %d is STILL listening - this run may complete against"
+                 " an old server process (check for a respawn loop: launchctl"
+                 " list | grep -i officekick)" % PORT)
     return "port %d free, previous server stopped" % PORT
 
 

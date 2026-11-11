@@ -42,6 +42,28 @@
   exact layout Office honors, and docs gain the manual Trust Center +
   reg-add unblock for machines that installed older builds.
 
+## 0.9.309
+
+### Fixed
+- Office apps open no longer abort an install/update. Previously the
+  macOS registration phase died on the WEF-purge guard
+  ("quit Office completely... re-run --update"): with Word/PPT/Outlook
+  open the whole run stopped BEFORE the server restart, leaving the pane
+  with a "the update stopped early" dead-end and a running server that
+  could report the old build forever. The install/update now runs to
+  completion in every case: files copy, manifests render, the server
+  restarts - only the steps UNSAFE while a host is live are skipped
+  (WEF purge + per-app sideload: dangling-registration risk; the Office
+  cache flush), each with an explicit note that says to quit + reopen
+  each Office app to pick up the new build (a later closed-Office
+  install re-runs the skipped re-registration). prepare_phase now also
+  HARD-stops any survivor listener on the canonical port the pkill
+  patterns could not match (lsof/taskkill by port) - a ghost answering
+  with the old build read exactly like the "update stopped early" end
+  of the field report. The pane's fallback line no longer claims the
+  installer refuses: it points at install.log and the new behavior
+  (identical in all three pane files).
+
 ## 0.9.308
 
 ### Added

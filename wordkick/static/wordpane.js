@@ -820,7 +820,8 @@
                         ". Reload this pane (About tab -> Reload pane, or quit and reopen the app) to load the new pane files.";
                     } else if (h1 && h1.gen && h1.gen === oldGen && tries > 12) {
                       info.className = "opnote updavail";
-                      info.textContent = "The update stopped early - the installer refuses re-registration while Office apps are open (quit Word/PowerPoint/Outlook completely, then click Update again). The server is still on " + (h1.version || "the old build") + ".";
+                      info.textContent = "The update did not restart the server (still on " + (h1.version || "the old build") + ")."
+                      info.textContent += " Check install.log in the clone for the cause. Updates complete even with Office apps open (0.9.309+: files copy + server restart; only the WEF re-registration is skipped) - on an older build, quit all Office apps completely and click Update again.";
                     } else if (++tries > 150) {
                       info.className = "opnote updavail";
                       info.textContent = "Update is taking unusually long or the server did not come back - check install.log in " +
