@@ -3608,10 +3608,20 @@ function applyOps(deck, ops, ctx) {
         pushHistory(instr, "Nothing to translate (no text paragraphs).");
         return;
       }
+      // 0.9.318: chunk = WHOLE paragraphs only. The ~3,000-character aim is
+      // evaluated BEFORE adding each paragraph: a chunk never exceeds the
+      // target, except when a single paragraph alone is bigger - that one
+      // goes whole (and alone). Nothing is ever cut mid-paragraph, so the
+      // model never receives half a thought (and sentences never split).
       var chunks = [], cur = [], curChars = 0;
       work.forEach(function (w) {
+        var addChars = w.text.length + 10;
+        if (cur.length && curChars + addChars > TRANSLATE_CHUNK_CHARS) {
+          chunks.push(cur);
+          cur = []; curChars = 0;
+        }
         cur.push(w);
-        curChars += w.text.length + 10;
+        curChars += addChars;
         if (curChars >= TRANSLATE_CHUNK_CHARS || cur.length >= TRANSLATE_CHUNK_PARAS) {
           chunks.push(cur);
           cur = []; curChars = 0;

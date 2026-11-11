@@ -42,6 +42,18 @@
   exact layout Office honors, and docs gain the manual Trust Center +
   reg-add unblock for machines that installed older builds.
 
+## 0.9.318
+
+### Changed
+- Translate chunking is now strictly whole-paragraph: the ~3,000-character
+  aim is evaluated BEFORE adding the next paragraph, so a chunk never
+  exceeds the target unless one single paragraph alone is bigger than the
+  target - and that paragraph then goes whole, alone, never cut. Nothing
+  mid-paragraph and no sentence is ever split across asks (the fallback
+  halving was already paragraph-atomic; now the packing is too). Node
+  simulation: paragraphs of 1200/2500/800/900/3000/40 chars chunk as
+  [1200] [2500] [800+900] [3000] [40].
+
 ## 0.9.317
 
 ### Fixed

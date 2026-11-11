@@ -123,8 +123,11 @@ entry field for any other language - and then translates the whole document
 chunk by chunk:
 
 - The document is read end to end (well past the 300-paragraph outline cap)
-  and the text paragraphs are sent to the routed model in ~3k-character
-  chunks (max 24 paragraphs per ask). Progress shows in the status line and
+  and the text paragraphs are sent to the routed model in chunks of whole
+  paragraphs aiming at ~3k characters (max 24 paragraphs per ask). A
+  paragraph is NEVER cut: the size aim is checked before adding each
+  paragraph, and an oversized paragraph travels whole, alone. Progress
+  shows in the status line and
   the activity log; **Cancel** stops between chunks; the run timer keeps
   counting as usual. The loop is self-healing: a reply that yields no usable
   ops is re-asked once with a firmer instruction; if that still fails the
