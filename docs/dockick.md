@@ -140,10 +140,16 @@ chunk by chunk:
   paragraph keeps its style, list level and indentation (tabs and leading
   spaces are carried to the model and force-restored if a reply drops
   them), and paragraphs that need no translation are left untouched.
-- The prompt preserves the document's tone, register and legal weight (an
-  idiomatic rendering, not a literal one) and keeps technical and
-  topic-specific terms untranslated: brand and product names, company and
-  party names, defined terms, legal terms of art, standards, currencies,
+- The prompt preserves the document's tone, register and legal weight and
+  reads each paragraph in its context: it judges the nature of the text
+  from the text itself (legal agreement, manual, letter, report), together
+  with audience and purpose, and re-expresses the content the way a
+  professional translator of that text type would - the target language's
+  own idioms, register and established formulae. A word-for-word rendering
+  that sounds foreign, stilted or shifts the legal or practical weight is
+  a wrong translation, not a safe one. Technical and
+  topic-specific terms stay untranslated: brand and product names, company
+  and party names, defined terms, legal terms of art, standards, currencies,
   URLs, list numbering and cross references (article/clause/section
   numbers, dates, amounts).
 - This is a pane-owned pipeline with no approval gate - you explicitly

@@ -42,6 +42,23 @@
   exact layout Office honors, and docs gain the manual Trust Center +
   reg-add unblock for machines that installed older builds.
 
+## 0.9.313
+
+### Changed
+- DocKick translate prompt deepened on the user's standing complaint:
+  TRANSLATE, DON'T CONVERT - the model must read each paragraph in its
+  context (the nature of the text judged from the text itself: legal
+  agreement, manual, letter, report, the audience and the purpose) and
+  write what a professional translator of THAT text type would have
+  written in the target language - the target language's own idioms,
+  register and established formulae (formal you-forms, legal boilerplate
+  conventions, customary clause phrasings). A word-for-word rendering that
+  sounds foreign, stilted or shifts the legal or practical weight is
+  explicitly called a WRONG translation. The block rides the system prompt
+  of every ask, re-ask and top-up; E2E'd with a mock that gates every
+  reply on the block's presence (plus the 0.9.312 formatting rules) -
+  gate never tripped through the first ask, re-asks and fallback parts.
+
 ## 0.9.312
 
 ### Fixed
