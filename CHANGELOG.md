@@ -42,6 +42,24 @@
   exact layout Office honors, and docs gain the manual Trust Center +
   reg-add unblock for machines that installed older builds.
 
+## 0.9.316
+
+### Changed
+- DocKick translate prompt gains a REGIONAL VARIETIES rule (modeled on the
+  user's Flemish/Belgian-Dutch example prompt, generalized): when the
+  requested target is a regional variety, FIRST translate into the standard
+  written language, THEN adapt vocabulary, idioms and usage to that variety
+  without changing meaning, tone or level of formality; write like an
+  educated native speaker OF the requested variety, avoid the neighbouring
+  variety's vocabulary where the requested variety has its own term, and
+  never slip into dialect spelling, heavy regional slang or informal
+  colloquial mixing. Plus a COMPLETENESS rule (never summarize, shorten,
+  omit, explain or add; no introductions or commentary) and an explicit
+  ban on mirroring the source's sentence structures (rebuild sentences
+  naturally, prefer clear fluent sentences). The E2E prompt gate now also
+  requires both new blocks on every ask - quiet through first ask,
+  re-asks, fallback parts and a free-entry "Flemish (Belgian Dutch)" run.
+
 ## 0.9.315
 
 ### Added

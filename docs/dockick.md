@@ -160,6 +160,14 @@ chunk by chunk:
   and party names, defined terms, legal terms of art, standards, currencies,
   URLs, list numbering and cross references (article/clause/section
   numbers, dates, amounts).
+- Regional targets work through the free-entry field (e.g. "Flemish
+  (Belgian Dutch)", "Brazilian Portuguese", "Austrian German"): the prompt
+  tells the model to translate STANDARD first, then adapt vocabulary,
+  idioms and usage to the requested variety - like an educated native
+  speaker of that variety would, keeping meaning, tone and formality, and
+  without dialect spelling or slang. Nothing is summarized, omitted,
+  explained or added, and sentences are rebuilt naturally rather than
+  mirroring the source's structures.
 - This is a pane-owned pipeline with no approval gate - you explicitly
   pressed Translate and picked the language. With **AI edits land as
   tracked changes** on (Settings), every translation lands as a revision you
