@@ -1136,7 +1136,7 @@
     "",
     "Allowed op types:",
     '- {"type":"create_slide","layout":"title_content|title_only|section|blank","title":"...","body":["bullet",...],"notes":"...","after":N} (body/notes optional; "after" optional: the 1-based slide number to place the NEW slide after - after:0 = at the very start. The pane moves the new slide into that position automatically. Body lines prefixed with [L2] / [L3] (deepest indent [L9]) become real sub-bullets (indentation); never prefix top-level bullets)',
-    '- {"type":"edit_slide","slide":N,"title":"..."|null,"body":[...]|null,"notes":"..."|null} (null means: leave unchanged)',
+    '- {"type":"edit_slide","slide":N,"title":"..."|null,"body":[...]|null,"notes":"..."|null} (null means: leave unchanged). Body lines prefixed with [L2] / [L3] (deepest indent [L9]) become real sub-bullets - RESTRUCTURE and hierarchy asks are handled here: rebuild the full body with explicit markers (top-level bullets unmarked), and when the outline shows [L2].. markers, KEEP or adjust them so existing nesting survives the rewrite',
     '- {"type":"replace_text","slide":N,"shape":N,"text":"..."} (reword one shape; N refers to the shape numbers listed for that slide). PREFERRED for a bullet/list item edit: add "find":"<the exact current text of that one bullet/fragment from the outline>" and make "text" the REPLACEMENT for only that fragment - the rest of the shape\'s text is preserved. Without "find" the op replaces the shape\'s WHOLE text, so only do that when the outline shows the entire text (no …[text continues]) or you really want to rewrite it all',
     '- {"type":"set_notes","slide":N,"notes":"..."}',
     '- {"type":"create_table","slide":N|null,"values":[["h1","h2"],["x","y"]],"left":40,"top":150,"width":640} (all cells strings, rows rectangular; slide null = new title slide first; left/top/width optional points)',
@@ -1168,6 +1168,7 @@
     "Rules:",
     "- BULLET LEVELS (bullet indentations): in shape text, [L2] marks a SECOND-level (sub)bullet, [L3] the third level; no marker = a top-level (L1) bullet. Levels are part of the CURRENT outline text only: NEVER include [L...] markers in your replace_text find/replace or format_text find values (strip them - the pane matches the real text without markers).\n",
     "- BULLET LEVELS are WRITABLE: when the user asks for sub-bullets/indentation in a create_slide or edit_slide body, PREFIX the body line with [L2] (third level: [L3], deepest indent: [L9]) - the pane converts the marker into real bullet indentation. Top-level bullets carry NO marker. Never write [L...] markers anywhere else (not in find values, not in reply text).\n",
+    "- RESTRUCTURE asks ('restructure this slide', 're-group', 'outline it with topics and subtopics', or a complaint that everything sits on one level): hierarchy lives in the TEXT - do NOT try to fix it with format_text font tweaks. Rewrite the body with edit_slide listing every line in order and prefixing sub-levels with [L2]/[L3] (deeper: [L4]...); use the outline's current markers as your source for what was nested before. A body WITHOUT markers on such an ask flattens the slide - that is the 'everything on the same level' failure.",
     "- Slide numbers are 1-based (slide 1 = the first slide in the filmstrip) and MUST come from the outline below. When the user says \"slide 2\", use \"slide\":2. Never invent them. Shape indexes keep the numbers shown in the outline.",
     "- One body element = one bullet/paragraph; keep bullets short unless told otherwise.",
     "- When a shape's text ends with \"…[text continues]\" the outline shows only a preview: NEVER rebuild the whole shape from a preview (you would erase the hidden part of the list). Edit list items with replace_text + \"find\" (fragment replace) instead.",
@@ -6250,6 +6251,7 @@ OfficeDeck.prototype.setNotes = function (i, text) {
       d.textContent = l.text;
       result.appendChild(d);
     });
+    appendLevelsWarning(result, res);   // 0.9.327: flat-write limitation is user-visible
     if (res.manualNotes.length) result.appendChild(manualNotesBox(res));
   }
 
@@ -6696,6 +6698,7 @@ OfficeDeck.prototype.setNotes = function (i, text) {
           d.textContent = l.text;
           result.appendChild(d);
         });
+        appendLevelsWarning(result, res);   // 0.9.327: flat-write limitation is user-visible
         // everything executed cleanly? close the proposal section; only the
         // completed list (+ any manual-notes copy boxes) stays
         var liveRows = rows.filter(function (r) { return !r.removed && !r.done; }).length;
@@ -6726,6 +6729,22 @@ OfficeDeck.prototype.setNotes = function (i, text) {
         try { box.scrollIntoView({ behavior: "smooth", block: "start" }); } catch (eS) { box.scrollIntoView(); }
       });
     dbg("ops.preview", { total: rows.length, auto: autoOps, confirm: confirmOps, deny: rows.filter(function (r) { return r.mode === "deny"; }).length, invalid: invalidOps });
+  }
+
+  function appendLevelsWarning(result, res) {
+    // 0.9.327: an edit_slide/create_slide body may carry [L2]/[L3] sub-bullet
+    // levels that a PowerPoint build without PowerPointApi 1.11 CANNOT write -
+    // the op still "succeeds" but the text lands FLAT (the exact 'everything
+    // on the same level' report). Surface it as its own warning row.
+    var lines = (res && res.lines) || [];
+    var hit = lines.some(function (l) {
+      return l.ok && /bullet levels (not set|rejected|unreadable)|text kept flat|cannot set bullet levels/.test(String(l.text || ""));
+    });
+    if (!hit) return;
+    var d = document.createElement("div");
+    d.className = "resultline warn";
+    d.textContent = "PowerPoint on this build cannot set bullet levels (PowerPointApi 1.11 needed) - sub-bullets landed WITHOUT indentation. Update Microsoft 365; re-run the restructure ask afterwards.";
+    result.appendChild(d);
   }
 
   // ------------------------------------------------------------------ //

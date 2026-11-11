@@ -125,6 +125,10 @@ textarea#chat-input {
 .resultline { font-size: 12.5px; padding: 3px 0; }
 .resultline.ok::before { content: "✓ "; color: var(--ok); font-weight: 700; }
 .resultline.fail::before { content: "✗ "; color: var(--bad); font-weight: 700; }
+/* 0.9.327: build-limitation warnings (e.g. sub-bullet levels cannot be written) */
+.resultline.warn { color: #b26a00; }
+.resultline.warn::before { content: "! "; font-weight: 700; }
+body.dark .resultline.warn { color: #ffcc66; }
 .manualbox {
   margin-top: 8px; border: 1px solid #fde68a; background: #fffbeb; border-radius: 8px; padding: 8px;
 }
@@ -393,6 +397,10 @@ textarea#chat-input {
 .resultline { font-size: 12.5px; padding: 3px 0; }
 .resultline.ok::before { content: "✓ "; color: var(--ok); font-weight: 700; }
 .resultline.fail::before { content: "✗ "; color: var(--bad); font-weight: 700; }
+/* 0.9.327: build-limitation warnings (e.g. sub-bullet levels cannot be written) */
+.resultline.warn { color: #b26a00; }
+.resultline.warn::before { content: "! "; font-weight: 700; }
+body.dark .resultline.warn { color: #ffcc66; }
 .manualbox {
   margin-top: 8px; border: 1px solid #fde68a; background: #fffbeb; border-radius: 8px; padding: 8px;
 }

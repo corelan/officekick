@@ -42,6 +42,31 @@
   exact layout Office honors, and docs gain the manual Trust Center +
   reg-add unblock for machines that installed older builds.
 
+## 0.9.327
+
+### Fixed
+- Slide-level restructure asks ("restructure this slide, use lists in
+  multiple levels") flattened the hierarchy instead of rebuilding it.
+  Root cause: the [L2]/[L3] body-marker convention was documented for
+  create_slide but NOT for edit_slide (where restructures actually land),
+  and no rule told the model to rebuild the body for hierarchy asks - it
+  responded with format_text font tweaks (which cannot create nesting)
+  and a flat, unmarked edit_slide body. SlideKick's prompt now documents
+  the markers on edit_slide itself and adds a RESTRUCTURE rule: rebuild
+  the body with explicit [L2]/[L3] markers, keeping the outline's
+  existing markers as the source for current nesting.
+- When a body DOES carry sub-bullet markers but the PowerPoint build
+  cannot write paragraph levels (PowerPointApi 1.11 gate), the op still
+  "succeeds" and the text lands flat silently. The apply result now
+  appends a visible warning row on such ops ("PowerPoint on this build
+  cannot set bullet levels... - sub-bullets landed WITHOUT indentation.
+  Update Microsoft 365...") in the amber warn style, light and dark.
+
+E2E (simulator, gated mock): restructure ask -> edit_slide body with
+[L2]/[L3] markers -> applied -> next context shows "Overview | [L2] First
+subtopic | [L3] Deep detail..." - markers became real paragraph levels and
+read back for the next ask.
+
 ## 0.9.326
 
 ### Changed
