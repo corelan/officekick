@@ -42,6 +42,22 @@
   exact layout Office honors, and docs gain the manual Trust Center +
   reg-add unblock for machines that installed older builds.
 
+## 0.9.317
+
+### Fixed
+- Every translate ask now carries a DOCUMENT CONTEXT header (built once
+  per run from the full-document read): the document's name, its total
+  paragraph count, how many carry text, and the first three non-empty
+  paragraphs as "opens with" snippets - so the model judges the document's
+  nature, audience and register from the whole-picture opening instead of
+  only from the ~24-paragraph slice it happens to receive. Each ask also
+  states the SLICE position ("chunk 3/21 - paragraphs 49-72 of the whole
+  document; other slices are translated separately under the same rules")
+  so the model never treats a mid-document chunk as the complete text.
+  The header rides the system message of the first ask, the firm re-ask,
+  the swapped-model asks and the top-ups. E2E: the prompt gate now also
+  requires DOCUMENT CONTEXT - quiet through the full split cascade.
+
 ## 0.9.316
 
 ### Changed

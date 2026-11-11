@@ -3586,6 +3586,23 @@ function applyOps(deck, ops, ctx) {
         if (!probe || !/[^\W\d_]/.test(probe)) return;   // empty, or digits/punctuation only
         work.push({ para: p.idx + 1, text: raw, style: p.style || "Normal" });
       });
+      // 0.9.317: DOCUMENT CONTEXT rides every ask - the model must see the
+      // document's nature/title/opening, not just the slice it is asked to
+      // translate (a mid-document chunk says nothing about what the
+      // document IS without this)
+      var docIntro = "";
+      try {
+        var opens = [];
+        for (var iw = 0; iw < work.length && opens.length < 3; iw++) {
+          var snip = String(work[iw].text || "").replace(/\s+/g, " ").trim();
+          if (snip) opens.push("[" + work[iw].para + "] " + snip.slice(0, 110));
+        }
+        docIntro = "DOCUMENT CONTEXT (identical in every ask of this run; each ask translates ONE SLICE under these same rules - do not treat the slice as the whole document): the document \"" +
+          String(ctx.documentName || "document") + "\" holds " + (ctx.paragraphCount || work.length) +
+          " paragraph(s), " + work.length + " of them carry text." +
+          (opens.length ? " It opens with: " + opens.join(" | ") + "." : "") +
+          " Judge the document's nature, audience and register from this opening together with the paragraphs of the slice.";
+      } catch (eDI) { docIntro = ""; }
       if (!work.length) {
         renderParsed({ ok: true, kind: "reply", text: "Nothing to translate - the document has no text paragraphs." }, ctx, instr);
         pushHistory(instr, "Nothing to translate (no text paragraphs).");
@@ -3730,7 +3747,7 @@ function applyOps(deck, ops, ctx) {
           return apiJson("/api/chat", "POST", {
             connection: ref.connection, model: ref.model,
             temperature: 0.3, maxTokens: 7000,
-            messages: [{ role: "system", content: TRANSLATE_SYS + TRANSLATE_FORMAT_RULES },
+            messages: [{ role: "system", content: TRANSLATE_SYS + TRANSLATE_FORMAT_RULES + docIntro },
                        { role: "user", content: user }],
           });
         }).then(function (r) {
@@ -3815,13 +3832,16 @@ function applyOps(deck, ops, ctx) {
         }
         var listing = item.paras.map(function (w) { return "[" + w.para + "] " + w.text; }).join("\n");
         var user = "TARGET LANGUAGE: " + langName + "\n" +
+          "SLICE: " + item.label + " - the " + item.paras.length + " paragraph(s) below are paragraphs " +
+          item.paras[0].para + "\u2013" + item.paras[item.paras.length - 1].para +
+          " of the whole document (other slices are translated separately under the same rules).\n" +
           "Translate the document paragraphs below into the target language now.\n\n" +
           "PARAGRAPHS (each op's para must be EXACTLY the number in brackets):\n" + listing;
         return askRetryable(function () {
           return apiJson("/api/chat", "POST", {
             connection: ref.connection, model: ref.model,
             temperature: 0.3, maxTokens: 7000,
-            messages: [{ role: "system", content: TRANSLATE_SYS + TRANSLATE_FORMAT_RULES },
+            messages: [{ role: "system", content: TRANSLATE_SYS + TRANSLATE_FORMAT_RULES + docIntro },
                        { role: "user", content: user }],
           });
         }).then(function (r) {
@@ -3848,7 +3868,7 @@ function applyOps(deck, ops, ctx) {
           item.retried = true;
           setStatus(item.label + " [" + ref.model + "]: the reply carried no usable ops - re-asking with a firmer instruction\u2026", "busy");
           var retryMsgs = [
-            { role: "system", content: TRANSLATE_SYS + TRANSLATE_FORMAT_RULES },
+            { role: "system", content: TRANSLATE_SYS + TRANSLATE_FORMAT_RULES + docIntro },
             { role: "user", content: user },
             { role: "assistant", content: String((r && r.text) || "").slice(0, 500) },
             { role: "user", content: TRANSLATE_RETRY_NUDGE },
