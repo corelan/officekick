@@ -3411,6 +3411,24 @@ function applyOps(deck, ops, ctx) {
     "Emit an op for EVERY listed paragraph: titles, headings, table-of-contents and cross-reference lines too - translate only the words and keep numbers, page references, clause numbers, amounts, currencies and quoted terms unchanged. " +
     "Never reply with an empty ops list.";
 
+  function translateFallbackRef(prof, currentRef, instruction) {
+    // the OTHER configured slot of the profile - only when it really
+    // differs (a different model, or the same model via another connection)
+    if (!prof || !currentRef) return null;
+    var tried = {};
+    var slots = ["content", "other"];
+    for (var i = 0; i < slots.length; i++) {
+      var cand = routeToModel(prof, slots[i], instruction || "Translate the document");
+      if (!cand || !cand.connection || !cand.model) continue;
+      var key = cand.connection + "|" + cand.model;
+      if (tried[key]) continue;
+      tried[key] = true;
+      if (cand.model === currentRef.model && cand.connection === currentRef.connection) continue;
+      return cand;
+    }
+    return null;
+  }
+
   function stripOutlineMarkers(t) {
     // pane annotations ([L2] list levels, [image x1] counts) must never
     // reach the model prompt or be written back into the document
@@ -3432,6 +3450,25 @@ function applyOps(deck, ops, ctx) {
     q.className = "clarify-q";
     q.textContent = "Translate the document to which language?";
     box.appendChild(q);
+    // 0.9.315: show which model will translate (and what the fallback swap
+    // will use) BEFORE the run starts
+    (function () {
+      try {
+        var profP = currentProfile();
+        var noteP = document.createElement("div");
+        noteP.className = "muted";
+        noteP.style.margin = "2px 0";
+        if (!profP) {
+          noteP.textContent = "Model: not configured yet - pick a profile above.";
+        } else {
+          var refP = routeToModel(profP, (($("chat-route") || {}).value || "auto"), "Translate the document");
+          var fbP = translateFallbackRef(profP, refP);
+          noteP.textContent = "Model: " + (refP && refP.model ? refP.model + " (via " + refP.connection + ")" : "not configured") +
+            (fbP ? " - fallback: " + fbP.model + " (via " + fbP.connection + ")" : " - no fallback model (single-model profile)");
+        }
+        box.appendChild(noteP);
+      } catch (eQ) { /* panel info is best-effort */ }
+    })();
     TRANSLATE_LANGS.forEach(function (lg) {
       var lab = document.createElement("label");
       lab.className = "field-inline check";
@@ -3523,6 +3560,13 @@ function applyOps(deck, ops, ctx) {
     chatTimerStart();
     actReset();
     actLog("Translating the document to " + langName + " (model " + ref.model + " via " + ref.connection + ")");
+    var fallbackRef = translateFallbackRef(prof, ref, instr);
+    if (fallbackRef) {
+      actLog("Fallback model: " + fallbackRef.model + " (via " + fallbackRef.connection +
+        ") - a chunk that survives the firm re-ask swaps to it for the rest of the run");
+    }
+    var swapped = false;
+    var usedModels = [ref.model];
     setStatus("Reading the document\u2026", "busy");
     updateDeckSummary();
     renderSimDeck();
@@ -3626,7 +3670,7 @@ function applyOps(deck, ops, ctx) {
           var okN = 0, badN = 0;
           ((res && res.lines) || []).forEach(function (l) { if (l.ok) okN++; else badN++; });
           applied += okN; failed += badN;
-          actLog(label + ": " + okN + " paragraph(s) translated" + (badN ? ", " + badN + " failed" : ""));
+          actLog(label + " [" + ref.model + "]: " + okN + " paragraph(s) translated" + (badN ? ", " + badN + " failed" : ""));
           setStatus("Translated so far: " + applied + " paragraph(s)\u2026", "busy");
           renderSimDeck();
           updateDeckSummary();
@@ -3732,33 +3776,38 @@ function applyOps(deck, ops, ctx) {
         });
       }
 
-      function runNext() {
-        if (SK.runCancelled) return Promise.reject(new FriendlyError("Run cancelled."));
-        if (!budgetHit && budgetUsed >= TRANSLATE_ASK_BUDGET) {
-          budgetHit = true;
-          actLog("Model-ask budget of " + TRANSLATE_ASK_BUDGET + " reached - finishing the run." +
-            " Run Translate again to continue: already-translated paragraphs are skipped automatically.");
+      // 0.9.315: one item = ask + (firm re-ask when the first reply carries
+      // no usable ops). When THAT still fails and the profile has a second
+      // configured model, the run SWAPS to it once (sticky) and gives the
+      // item a fresh try before the halving fallback takes over.
+      function maybeSwapThenSplit(item) {
+        if (!swapped && fallbackRef && !SK.runCancelled && !budgetHit) {
+          swapped = true;
+          var wasModel = ref.model;
+          ref = fallbackRef;
+          fallbackRef = null;   // a single swap per run
+          usedModels.push(ref.model);
+          actLog("Model swap: " + item.label + " kept failing on " + wasModel +
+            " - switching to " + ref.model + " (via " + ref.connection +
+            ") for this chunk, the fallback parts and the rest of the run");
+          setStatus(item.label + ": switching to fallback model " + ref.model + "\u2026", "busy");
+          return askItem(item, true);
         }
-        if (!queue.length || budgetHit) {
-          var untouched = work.length - Object.keys(paraDone).length - skippedParas;
-          var summary = "Translated " + applied + " paragraph(s) to " + langName +
-            " in " + chunks.length + " chunk(s)." +
-            (skippedParas ? " " + skippedParas + " paragraph(s) could not be translated after all fallbacks (see the activity log)." : "") +
-            (budgetHit ? " Run stopped at the model-ask budget (" + TRANSLATE_ASK_BUDGET + " asks) - run Translate again to continue." : "") +
-            (failed ? " " + failed + " op(s) failed - see the activity log." : "") +
-            (untouched > 0 ? " " + untouched + " paragraph(s) were left unchanged." : "") +
-            (SK.cfg && SK.cfg.trackedChanges ? " Edits landed as tracked changes." : "") +
-            " Technical and topic-specific terms stayed in their original form.";
-          return Promise.resolve(summary);
-        }
-        var item = queue.shift();
-        budgetUsed++;   // every item starts with one ask
+        return splitOrSkip(item);
+      }
+
+      function askItem(item, allowRetry) {
+        budgetUsed++;
+        if (budgetUsed >= TRANSLATE_ASK_BUDGET) budgetHit = true;
+        if (budgetHit) return runNext();
         if (item.isPart) {
           setStatus(item.label + " fallback part (paragraphs " + item.paras[0].para + "\u2013" +
-            item.paras[item.paras.length - 1].para + ", " + item.paras.length + " paragraph(s))\u2026", "busy");
+            item.paras[item.paras.length - 1].para + ", " + item.paras.length + " paragraph(s)) - " +
+            ref.model + "\u2026", "busy");
         } else {
           setStatus("Translating " + item.label +
-            " (paragraphs " + item.paras[0].para + "\u2013" + item.paras[item.paras.length - 1].para + ")\u2026", "busy");
+            " (paragraphs " + item.paras[0].para + "\u2013" + item.paras[item.paras.length - 1].para +
+            ") - " + ref.model + "\u2026", "busy");
         }
         var listing = item.paras.map(function (w) { return "[" + w.para + "] " + w.text; }).join("\n");
         var user = "TARGET LANGUAGE: " + langName + "\n" +
@@ -3773,7 +3822,7 @@ function applyOps(deck, ops, ctx) {
           });
         }).then(function (r) {
           if (SK.runCancelled) return Promise.reject(new FriendlyError("Run cancelled."));
-          dbg("translate.chunk", { label: item.label, paras: item.paras.length, modelTextLen: String(r && r.text || "").length });
+          dbg("translate.chunk", { label: item.label, model: ref.model, paras: item.paras.length, modelTextLen: String(r && r.text || "").length });
           var paraSet = {};
           item.paras.forEach(function (w) { paraSet[w.para] = w; });
           var first = parseChunkReply(r, item.paras, paraSet, item.label);
@@ -3782,17 +3831,18 @@ function applyOps(deck, ops, ctx) {
           // unparseable output, or only out-of-range paragraph numbers)
           var head = String((first.pre && first.pre.text) || (r && r.text) || "").replace(/\s+/g, " ").trim();
           if (!head.length) head = "(empty reply)";
-          actLog(item.label + ": " +
+          actLog(item.label + " [" + ref.model + "]: " +
             (first.pre.ok ?
               ((first.pre.ops || []).length ? "reply parsed but no op fits the chunk paragraphs" : "reply carried 0 ops")
               : "reply not parseable as ops") +
             " - model said: " + head.slice(0, 150));
           if (SK.runCancelled) return Promise.reject(new FriendlyError("Run cancelled."));
-          item.retried = true;
+          if (!allowRetry) return maybeSwapThenSplit(item);
           budgetUsed++;
           if (budgetUsed >= TRANSLATE_ASK_BUDGET) budgetHit = true;
-          if (budgetHit) return runNext();
-          setStatus(item.label + ": the reply carried no usable ops - re-asking with a firmer instruction\u2026", "busy");
+          if (budgetHit) return maybeSwapThenSplit(item);
+          item.retried = true;
+          setStatus(item.label + " [" + ref.model + "]: the reply carried no usable ops - re-asking with a firmer instruction\u2026", "busy");
           var retryMsgs = [
             { role: "system", content: TRANSLATE_SYS + TRANSLATE_FORMAT_RULES },
             { role: "user", content: user },
@@ -3809,14 +3859,38 @@ function applyOps(deck, ops, ctx) {
             if (SK.runCancelled) return Promise.reject(new FriendlyError("Run cancelled."));
             var second = parseChunkReply(r2, item.paras, paraSet, item.label);
             if (second.chunkOps.length) return completeItem(item, second);
-            return splitOrSkip(item);
+            return maybeSwapThenSplit(item);
           }, function (e2) {
             if (SK.runCancelled || /Run cancelled/i.test(String(e2 && e2.message)))
               return Promise.reject(new FriendlyError("Run cancelled."));
-            actLog(item.label + ": the re-ask failed (" + ((e2 && e2.message) || String(e2)) + ")");
-            return splitOrSkip(item);
+            actLog(item.label + " [" + ref.model + "]: the re-ask failed (" + ((e2 && e2.message) || String(e2)) + ")");
+            return maybeSwapThenSplit(item);
           });
         });
+      }
+
+      function runNext() {
+        if (SK.runCancelled) return Promise.reject(new FriendlyError("Run cancelled."));
+        if (!budgetHit && budgetUsed >= TRANSLATE_ASK_BUDGET) {
+          budgetHit = true;
+          actLog("Model-ask budget of " + TRANSLATE_ASK_BUDGET + " reached - finishing the run." +
+            " Run Translate again to continue: already-translated paragraphs are skipped automatically.");
+        }
+        if (!queue.length || budgetHit) {
+          var untouched = work.length - Object.keys(paraDone).length - skippedParas;
+          var summary = "Translated " + applied + " paragraph(s) to " + langName +
+            " in " + chunks.length + " chunk(s)." +
+            (usedModels.length ? " Models: " + usedModels.join(" \u2192 ") + "." : "") +
+            (skippedParas ? " " + skippedParas + " paragraph(s) could not be translated after all fallbacks (see the activity log)." : "") +
+            (budgetHit ? " Run stopped at the model-ask budget (" + TRANSLATE_ASK_BUDGET + " asks) - run Translate again to continue." : "") +
+            (failed ? " " + failed + " op(s) failed - see the activity log." : "") +
+            (untouched > 0 ? " " + untouched + " paragraph(s) were left unchanged." : "") +
+            (SK.cfg && SK.cfg.trackedChanges ? " Edits landed as tracked changes." : "") +
+            " Technical and topic-specific terms stayed in their original form.";
+          return Promise.resolve(summary);
+        }
+        var item = queue.shift();
+        return askItem(item, true);
       }
 
       return runNext().then(function (summary) {

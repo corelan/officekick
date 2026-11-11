@@ -136,6 +136,14 @@ chunk by chunk:
   model-ask budget (160) caps pathological models; the summary names skipped
   paragraphs and tells you to run Translate again to continue (translated
   paragraphs are skipped automatically on the re-run).
+- The language picker states which model will translate and what the
+  fallback swap would use; every chunk status line and activity-log line
+  carries the model that handled it, and the summary lists the model chain
+  ("Models: A -> B"). When the profile has a second configured model (the
+  other route slot), a chunk that produces nothing even after the firm
+  re-ask swaps to it once - for that chunk and stickily for the rest of
+  the run (top-ups included) - and the halving fallback then continues on
+  the swapped model. With a single-model profile nothing changes.
 - Translations apply per chunk through the normal edit_paragraph op - every
   paragraph keeps its style, list level and indentation (tabs and leading
   spaces are carried to the model and force-restored if a reply drops

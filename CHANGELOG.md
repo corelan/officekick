@@ -42,6 +42,25 @@
   exact layout Office honors, and docs gain the manual Trust Center +
   reg-add unblock for machines that installed older builds.
 
+## 0.9.315
+
+### Added
+- DocKick translate shows the model everywhere and can SWAP to the
+  profile's second configured model inside the fallback. The language
+  picker states up front "Model: X (via conn) - fallback: Y (via conn)"
+  (or "no fallback model (single-model profile)"); every chunk/fallback
+  status line carries " - model", ask/apply/reject lines tag the model
+  ("chunk 1/1 [glm-5.3-flash:cloud]: ..."), and the final summary lists
+  the model chain ("Models: A -> B") when a swap happened. The swap fires
+  once per run after an item fails ask + firm re-ask on the primary
+  model: it switches to the OTHER profile slot (content/other - any slot
+  that really differs in model or connection) for that item and stickily
+  for the rest of the run (top-ups included), then the halving fallback
+  continues on the swapped model. E2E'd: primary mock always garbage ->
+  swap line lands, fallback mock translates 3/3, summary shows
+  "Models: mock-large -> mock-mini"; the 0.9.313 prompt gate stayed quiet
+  on the swapped model's asks too.
+
 ## 0.9.314
 
 ### Fixed
