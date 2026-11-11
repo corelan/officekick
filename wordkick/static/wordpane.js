@@ -1116,7 +1116,8 @@
   function updateSessionLabel() {
     var el = $("chat-session-label");
     if (!el) return;
-    if (SK.history.length && SK.sessionId) {
+    if ((SK.history.length && SK.sessionId) ||
+        SK.sessionName === "New session") {   // 0.9.325: placeholder until the AI titles it
       el.innerHTML = "";
       var lbl = document.createElement("span");
       lbl.textContent = "Session: " + (SK.sessionName || derivedSessionName());
@@ -1391,7 +1392,7 @@
       try { delete SK.sessionNames[sessId]; } catch (eN) {}
       if (wasCurrent) {
         // removing the ACTIVE session = wipe its slate + ready a new one
-        SK.sessionId = null; SK.sessionName = ""; SK.sessionManual = false;
+        SK.sessionId = null; SK.sessionName = "New session";   // 0.9.325: placeholder until the AI titles the session SK.sessionManual = false;
         SK.history = [];
         try { localStorage.removeItem("sk-resume-session-wordkick"); } catch (eS) {}
         var inp0 = $("chat-input");
@@ -1748,7 +1749,7 @@
     saveSessionNow();   // 0.9.324: make sure the session file holds EVERYTHING of this run
     SK.history = [];
     SK.sessionId = null;
-    SK.sessionName = "";
+    SK.sessionName = "New session";   // 0.9.325: placeholder until the AI titles the session
     SK.sessionManual = false;
     SK.sessionApprovals = {};   // a new session asks again (session-scoped approvals)
     try { localStorage.removeItem("sk-approvals-wordkick"); } catch (eRC) {}
@@ -1797,7 +1798,7 @@ var nw = $("sess-new");
       updatePastBox();
       SK.history = [];
       SK.sessionId = null;
-      SK.sessionName = "";
+      SK.sessionName = "New session";   // 0.9.325: placeholder until the AI titles the session
       SK.sessionManual = false;
       var inp0 = $("chat-input");
       if (inp0) { inp0.disabled = false; inp0.value = ""; }
@@ -1898,7 +1899,7 @@ var nw = $("sess-new");
     try { localStorage.removeItem("sk-approvals-wordkick"); } catch (eRC) {}
     SK.sessionId = null;
     try { localStorage.removeItem("sk-resume-session-wordkick"); } catch (eS) {}      // the next exchange saves as a NEW session
-    SK.sessionName = "";
+    SK.sessionName = "New session";   // 0.9.325: placeholder until the AI titles the session
     SK.sessionManual = false;
     updateChatMeta();
     updateSessionLabel();

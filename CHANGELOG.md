@@ -42,6 +42,16 @@
   exact layout Office honors, and docs gain the manual Trust Center +
   reg-add unblock for machines that installed older builds.
 
+## 0.9.325
+
+### Changed
+- Starting a new session (+ at the session title, "New session" in the
+  Sessions tab, deleting the active session) now resets the title to
+  "New session" instead of hiding it, until the AI generates its next
+  title (first exchange's "Session start" ask; on success the label
+  updates in place). The resume pointer is still cleared, previous
+  requests/output still empty.
+
 ## 0.9.324
 
 ### Added
