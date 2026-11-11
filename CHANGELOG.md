@@ -42,6 +42,22 @@
   exact layout Office honors, and docs gain the manual Trust Center +
   reg-add unblock for machines that installed older builds.
 
+## 0.9.321
+
+### Added
+- Glowing "Update available" marker at the bottom of all three panes, just
+  above the version/server status line: gold bar with a pulsing glow on
+  dark themes, amber-on-light-gold on light themes; shows the new version
+  and the current build. Appears as soon as any update check (the boot
+  auto-check or a manual Check now) finds an update; disappears and the
+  bottom bar shrinks back to its original single-line size as soon as a
+  check reports up to date, and after an "Update now" run completes. The
+  marker element is created/removed by the pane (the footer stays one line
+  when no update is pending). Shipped identically in DocKick, SlideKick
+  and MailKick. E2E: forced 99.9.999 via a local git origin - marker
+  appeared (footer grew to 59 px, gold pulse in dark), and after the
+  origin caught up the marker vanished and the footer returned to 28 px.
+
 ## 0.9.320
 
 ### Changed

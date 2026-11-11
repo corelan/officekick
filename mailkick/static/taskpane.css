@@ -925,3 +925,13 @@ body.dark #resp-viewer .rv-card { background: #16181c; color: #e6e6e6; }
 #req-list pre, #chat-output pre, #chat-output .mdcode, #resp-viewer .rv-body pre.mdcode {
   white-space: pre-wrap;
 }
+
+/* ===== 0.9.321: glowing "Update available" bar at the pane bottom ===== */
+#update-flag { padding: 3px 10px; margin: 2px 0 5px 0; border-radius: 6px; text-align: center;
+  font-weight: 600; color: #8a5300; background: #fff3c4; border: 1px solid #e0b93f;
+  animation: upglow-light 1.8s ease-in-out infinite; }
+#update-flag:hover { filter: brightness(.97); }
+body.dark #update-flag { color: #ffd76a; background: rgba(255, 204, 0, .10); border-color: rgba(255, 204, 0, .45); }
+@keyframes upglow-light { 0%, 100% { box-shadow: 0 0 2px 0 rgba(224, 185, 63, .15); } 50% { box-shadow: 0 0 10px 2px rgba(224, 185, 63, .5); } }
+@keyframes upglow-dark { 0%, 100% { box-shadow: 0 0 2px 0 rgba(255, 204, 0, .12); } 50% { box-shadow: 0 0 12px 4px rgba(255, 204, 0, .45); } }
+body.dark #update-flag { animation-name: upglow-dark; }

@@ -727,6 +727,26 @@
     });
   }
 
+  function setUpdateFlag(latest) {
+    // 0.9.321: glowing "Update available" marker at the bottom of the pane,
+    // just above the version/server line - removed (footer back to its
+    // original single-line size) as soon as a check reports up to date
+    var foot = document.querySelector(".sk-footer");
+    if (!foot) return;
+    var el = document.getElementById("update-flag");
+    if (!latest) {
+      if (el) { el.parentNode.removeChild(el); }
+      return;
+    }
+    if (!el) {
+      el = document.createElement("div");
+      el.id = "update-flag";
+      foot.insertBefore(el, foot.firstChild);
+    }
+    el.textContent = "\u2B06\uFE0F Update available: " + latest +
+      (SK.cfg && SK.cfg.version ? " (you run " + SK.cfg.version + ")" : "");
+  }
+
   function updCheck() {
     var btn = $("upd-check"), info = $("upd-info");
     if (!btn || !info) return;
@@ -739,9 +759,11 @@
         return;
       }
       if (data.upToDate) {
+        setUpdateFlag(null);
         info.className = "opnote";
         info.textContent = "You are up to date (" + data.current + ", latest " + data.latest + ").";
       } else {
+        setUpdateFlag(data.latest);
         info.className = "opnote updavail";   // bold; gold/purple per theme
         info.textContent = "UPDATE AVAILABLE: " + data.latest + " (you run " + data.current + "). " +
           (data.howToUpdate || "");
@@ -771,6 +793,7 @@
                     if (h1 && h1.gen && h1.gen !== oldGen) {
                       info.className = "opnote";
                       info.textContent = "Update done - the server is on " + (h1.version || "the new build") +
+                      setUpdateFlag(null);
                         ". Reload this pane (About tab -> Reload pane, or quit and reopen the app) to load the new pane files.";
                     } else if (h1 && h1.gen && h1.gen === oldGen && tries > 12) {
                       info.className = "opnote updavail";
