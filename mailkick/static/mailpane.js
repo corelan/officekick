@@ -118,9 +118,17 @@
     });
   }
 
-  function setStatus(text, cls) {
+  function setStatus(text, cls, action) {
     var el = $("chat-status");
     el.className = "status" + (cls ? " " + cls : "") + (text ? "" : " hidden");
+    if (action) {   // 0.9.326: statuses can carry a click action (jump to the section they talk about)
+      el.className += " clickable";
+      el.title = "Jump to the related section";
+      el.onclick = action;
+    } else {
+      el.onclick = null;
+      el.title = "";
+    }
     el.textContent = text || "";
     if (SK.actRunOn && text) actLog(text);   // the activity box mirrors the status trail
   }
@@ -4080,7 +4088,11 @@ function applyOps(deck, ops, ctx) {
     });
 
     out.appendChild(box);
-    setStatus(confirmOps ? "Approval needed before applying." : "Review proposed actions.", "pending");
+    // 0.9.326: the status is clickable and scrolls to the Proposed actions box
+    setStatus(confirmOps ? "Approval needed before applying." : "Review proposed actions.", "pending",
+      function () {
+        try { box.scrollIntoView({ behavior: "smooth", block: "start" }); } catch (eS) { box.scrollIntoView(); }
+      });
     dbg("ops.preview", { total: rows.length, auto: autoOps, confirm: confirmOps, deny: rows.filter(function (r) { return r.mode === "deny"; }).length, invalid: invalidOps });
   }
 

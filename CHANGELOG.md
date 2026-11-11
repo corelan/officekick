@@ -42,6 +42,15 @@
   exact layout Office honors, and docs gain the manual Trust Center +
   reg-add unblock for machines that installed older builds.
 
+## 0.9.326
+
+### Changed
+- The "Review proposed actions." / "Approval needed before applying."
+  status is now clickable: clicking it scrolls the pane to the
+  "Proposed actions" box below. Statuses show a pointer + dotted
+  underline affordance; every other status is not clickable (cleanup on
+  each setStatus). Identical in DocKick, SlideKick and MailKick.
+
 ## 0.9.325
 
 ### Changed
