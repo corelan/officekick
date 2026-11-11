@@ -3390,6 +3390,7 @@ function applyOps(deck, ops, ctx) {
   var TRANSLATE_LANGS = ["English", "French", "Spanish", "German", "Portuguese", "Dutch"];
   var TRANSLATE_CHUNK_CHARS = 3000;   // the provider's reply window must fit the WHOLE translation
   var TRANSLATE_CHUNK_PARAS = 24;
+  var TRANSLATE_ASK_BUDGET = 160;   // hard stop for pathological models - the summary says to run Translate again
   var TRANSLATE_RETRY_NUDGE = "Your last reply contained no usable edit_paragraph ops for the paragraphs above. Reply again NOW: ONLY the JSON object " +
     '{\"kind\":\"slide_ops\",\"ops\":[...]} with ONE {\"type\":\"edit_paragraph\",\"para\":N,\"text\":\"the translated paragraph text\"} per listed paragraph - para = the bracketed number from the message, text = the translation into the target language. ' +
     "Translate titles, headings, table-of-contents and cross-reference lines too; keep numbers, page references, clause numbers, amounts and quoted terms unchanged. No prose, no markdown fences, never an empty ops list.";
@@ -3539,20 +3540,25 @@ function applyOps(deck, ops, ctx) {
         cur.push(w);
         curChars += w.text.length + 10;
         if (curChars >= TRANSLATE_CHUNK_CHARS || cur.length >= TRANSLATE_CHUNK_PARAS) {
-          chunks.push({ paras: cur, retried: false });
+          chunks.push(cur);
           cur = []; curChars = 0;
         }
       });
-      if (cur.length) chunks.push({ paras: cur, retried: false });
+      if (cur.length) chunks.push(cur);
       dbg("translate.plan", { lang: langName, paragraphs: work.length, chunks: chunks.length });
-      var idx = 0, applied = 0, failed = 0, skippedChunks = 0;
+      var applied = 0, failed = 0, skippedParas = 0, budgetUsed = 0, budgetHit = false;
       var paraDone = {};   // 1-based paragraphs that received a translated op
+      var queue = [];      // work items: {paras, retried, label, isPart}
+      chunks.forEach(function (cs, ci) {
+        queue.push({ paras: cs, retried: false, isPart: false,
+                     label: "chunk " + (ci + 1) + "/" + chunks.length });
+      });
 
       // parse one chunk reply into in-chunk edit_paragraph ops. Tolerances:
       // para may arrive as a string; if the model numbered the ask 1..N in
       // its own order (exact count match), the ops zip back by position -
       // a truncated reply is salvaged by tryParse/salvageOps upstream.
-      function parseChunkReply(r, chunk, paraSet) {
+      function parseChunkReply(r, paras, paraSet, label) {
         var pre = tryParse(r && r.text || "");
         var got = (pre.ok && pre.ops) || (salvageOps(r && r.text || "") || []);
         var chunkOps = [], rescued = false;
@@ -3566,10 +3572,10 @@ function applyOps(deck, ops, ctx) {
           o.para = pn; o.text = txt;
           chunkOps.push(o);
         });
-        if (!chunkOps.length && got.length === chunk.length) {
+        if (!chunkOps.length && got.length === paras.length) {
           var zipOps = [], zipBad = false;
           got.forEach(function (o, gi) {
-            var w = chunk[gi];
+            var w = paras[gi];
             var txt = (o && o.type === "edit_paragraph") ? stripOutlineMarkers(o.text).trim() : "";
             if (!txt || txt === w.text) { zipBad = true; }
             else { zipOps.push({ type: "edit_paragraph", para: w.para, text: txt }); }
@@ -3577,20 +3583,13 @@ function applyOps(deck, ops, ctx) {
           if (!zipBad && zipOps.length) { chunkOps = zipOps; rescued = true; }
         }
         if (pre.recovered) {
-          actLog("Chunk " + (idx + 1) + "/" + chunks.length + ": the reply was cut off - recovered " +
+          actLog(label + ": the reply was cut off - recovered " +
                  ((pre.ops || []).length || got.length) + " op(s); uncovered paragraphs get a top-up ask");
         }
         return { pre: pre, chunkOps: chunkOps, rescued: rescued };
       }
 
-      function chunkSkippedNote(retried) {
-        skippedChunks++;
-        actLog("Chunk " + idx + "/" + chunks.length + ": nothing to apply" +
-          (retried ? " (still no usable ops after the re-ask)" : "") +
-          " - the chunk was skipped");
-      }
-
-      function applyValidatedOps(chunk, ops, label) {
+      function applyValidatedOps(item, ops, label) {
         var v = validateOps(ops, ctx);
         if (v.invalid.length) {
           failed += v.invalid.length;
@@ -3605,7 +3604,7 @@ function applyOps(deck, ops, ctx) {
           ((res && res.lines) || []).forEach(function (l) { if (l.ok) okN++; else badN++; });
           applied += okN; failed += badN;
           actLog(label + ": " + okN + " paragraph(s) translated" + (badN ? ", " + badN + " failed" : ""));
-          setStatus("Translated " + idx + "/" + chunks.length + " chunk(s) - " + applied + " paragraph(s) so far\u2026", "busy");
+          setStatus("Translated so far: " + applied + " paragraph(s)\u2026", "busy");
           renderSimDeck();
           updateDeckSummary();
           return { covered: covered };
@@ -3617,11 +3616,35 @@ function applyOps(deck, ops, ctx) {
         });
       }
 
-      // after a chunk's ops land: ask once for the paragraphs the reply did
-      // not cover (stragglers of a truncated reply, or the eager skips)
-      function topUpChunk(chunk, missing) {
-        actLog("Chunk " + idx + "/" + chunks.length + ": " + missing.length +
-          " paragraph(s) uncovered - asking for just those\u2026");
+      function splitOrSkip(item) {
+        if (item.paras.length >= 2) {
+          var half = Math.ceil(item.paras.length / 2);
+          var left = item.paras.slice(0, half);
+          var right = item.paras.slice(half);
+          actLog(item.label + " (paragraphs " + item.paras[0].para + "\u2013" +
+            item.paras[item.paras.length - 1].para + "): still no usable ops after the re-ask" +
+            " - splitting into 2 part(s) of " + left.length + " + " + right.length +
+            " paragraph(s) and re-asking smaller");
+          queue.unshift({ paras: right, retried: false, isPart: true, label: item.label });
+          queue.unshift({ paras: left, retried: false, isPart: true, label: item.label });
+          return runNext();
+        }
+        // the floor: ONE paragraph that even a single-paragraph ask could not
+        // translate (or that the model insists on echoing) - give up on this
+        // one and move on
+        skippedParas++;
+        actLog(item.label + " (paragraph " + item.paras[0].para + "): no usable ops" +
+          " even for this single paragraph - giving up on this one");
+        return runNext();
+      }
+
+      // after an item's ops land: ask once for the paragraphs the reply did
+      // not cover (stragglers of a truncated reply, or the eager skips). If
+      // THAT ask also brings nothing usable, the uncovered set falls into the
+      // same split machinery instead of being dropped.
+      function topUpChunk(item, missing) {
+        var label = item.label + " top-up";
+        actLog(label + ": " + missing.length + " paragraph(s) uncovered - asking for just those\u2026");
         var ms = {};
         missing.forEach(function (w) { ms[w.para] = true; });
         var listing = missing.map(function (w) { return "[" + w.para + "] " + w.text; }).join("\n");
@@ -3629,6 +3652,9 @@ function applyOps(deck, ops, ctx) {
           "You already produced ops for the other paragraphs. The document paragraphs below were NOT covered yet:\n\n" +
           "PARAGRAPHS (each op's para must be EXACTLY the number in brackets):\n" + listing + "\n\n" +
           "Reply ONLY the JSON object with one edit_paragraph op per paragraph listed here.";
+        budgetUsed++;
+        if (budgetUsed >= TRANSLATE_ASK_BUDGET) budgetHit = true;
+        if (budgetHit) { return runNext(); }
         return askRetryable(function () {
           return apiJson("/api/chat", "POST", {
             connection: ref.connection, model: ref.model,
@@ -3638,59 +3664,80 @@ function applyOps(deck, ops, ctx) {
           });
         }).then(function (r) {
           if (SK.runCancelled) return Promise.reject(new FriendlyError("Run cancelled."));
-          var parsed = parseChunkReply(r, missing, ms);
+          var parsed = parseChunkReply(r, missing, ms, label);
           if (!parsed.chunkOps.length) {
-            actLog("Chunk " + idx + "/" + chunks.length + " top-up: nothing usable came back - " +
-              missing.length + " paragraph(s) left unchanged");
-            return Promise.resolve();
+            if (missing.length >= 2) {
+              actLog(label + ": nothing usable came back - sending the " + missing.length +
+                " uncovered paragraph(s) through the split fallback");
+              queue.unshift({ paras: missing, retried: false, isPart: true, label: item.label });
+              return runNext();
+            }
+            skippedParas++;
+            actLog(label + ": nothing usable came back - paragraph " +
+              missing[0].para + " was left unchanged");
+            return runNext();
           }
-          return applyValidatedOps(chunk, parsed.chunkOps,
-            "Chunk " + idx + "/" + chunks.length + " top-up").then(function () {
-            return Promise.resolve();
+          return applyValidatedOps(item, parsed.chunkOps, label).then(function () {
+            return runNext();
           });
         }, function (e) {
-          if (SK.runCancelled) return Promise.reject(new FriendlyError("Run cancelled."));
-          actLog("Chunk " + idx + "/" + chunks.length + " top-up failed: " + ((e && e.message) || e));
-          return Promise.resolve();
-        }).then(function () { return nextChunk(); });
-      }
-
-      function finishChunk(chunk, parsed) {
-        idx++;
-        var chunkLabel = "Chunk " + idx + "/" + chunks.length;
-        if (parsed.rescued) {
-          actLog(chunkLabel + ": the model used its own paragraph numbers - the ops were re-numbered by order");
-        }
-        if (!parsed.chunkOps.length) {
-          chunkSkippedNote(chunk.retried);
-          return nextChunk();
-        }
-        return applyValidatedOps(chunk, parsed.chunkOps, chunkLabel).then(function (appliedInfo) {
-          var covered = appliedInfo.covered || {};
-          var missing = [];
-          chunk.paras.forEach(function (w) { if (!covered[w.para]) missing.push(w); });
-          if (!missing.length) return nextChunk();
-          return topUpChunk(chunk, missing);
+          if (SK.runCancelled || /Run cancelled/i.test(String(e && e.message)))
+            return Promise.reject(new FriendlyError("Run cancelled."));
+          actLog(label + " failed: " + ((e && e.message) || String(e)));
+          if (missing.length >= 2) {
+            queue.unshift({ paras: missing, retried: false, isPart: true, label: item.label });
+            return runNext();
+          }
+          skippedParas++;
+          return runNext();
         });
       }
 
-      function nextChunk() {
+      function completeItem(item, parsed) {
+        if (parsed.rescued) {
+          actLog(item.label + ": the model used its own paragraph numbers - the ops were re-numbered by order");
+        }
+        if (!parsed.chunkOps.length) {   // only reachable via finishItem paths that pre-checked
+          return splitOrSkip(item);
+        }
+        return applyValidatedOps(item, parsed.chunkOps, item.label).then(function (appliedInfo) {
+          var covered = appliedInfo.covered || {};
+          var missing = [];
+          item.paras.forEach(function (w) { if (!covered[w.para]) missing.push(w); });
+          if (!missing.length) return runNext();
+          return topUpChunk(item, missing);
+        });
+      }
+
+      function runNext() {
         if (SK.runCancelled) return Promise.reject(new FriendlyError("Run cancelled."));
-        if (idx >= chunks.length) {
-          var untouched = work.length - Object.keys(paraDone).length;
+        if (!budgetHit && budgetUsed >= TRANSLATE_ASK_BUDGET) {
+          budgetHit = true;
+          actLog("Model-ask budget of " + TRANSLATE_ASK_BUDGET + " reached - finishing the run." +
+            " Run Translate again to continue: already-translated paragraphs are skipped automatically.");
+        }
+        if (!queue.length || budgetHit) {
+          var untouched = work.length - Object.keys(paraDone).length - skippedParas;
           var summary = "Translated " + applied + " paragraph(s) to " + langName +
             " in " + chunks.length + " chunk(s)." +
-            (skippedChunks ? " " + skippedChunks + " chunk(s) yielded no usable ops and were skipped (see the activity log)." : "") +
+            (skippedParas ? " " + skippedParas + " paragraph(s) could not be translated after all fallbacks (see the activity log)." : "") +
+            (budgetHit ? " Run stopped at the model-ask budget (" + TRANSLATE_ASK_BUDGET + " asks) - run Translate again to continue." : "") +
             (failed ? " " + failed + " op(s) failed - see the activity log." : "") +
             (untouched > 0 ? " " + untouched + " paragraph(s) were left unchanged." : "") +
             (SK.cfg && SK.cfg.trackedChanges ? " Edits landed as tracked changes." : "") +
             " Technical and topic-specific terms stayed in their original form.";
           return Promise.resolve(summary);
         }
-        var chunk = chunks[idx];
-        setStatus("Translating chunk " + (idx + 1) + "/" + chunks.length +
-          " (paragraphs " + chunk.paras[0].para + "\u2013" + chunk.paras[chunk.paras.length - 1].para + ")\u2026", "busy");
-        var listing = chunk.paras.map(function (w) { return "[" + w.para + "] " + w.text; }).join("\n");
+        var item = queue.shift();
+        budgetUsed++;   // every item starts with one ask
+        if (item.isPart) {
+          setStatus(item.label + " fallback part (paragraphs " + item.paras[0].para + "\u2013" +
+            item.paras[item.paras.length - 1].para + ", " + item.paras.length + " paragraph(s))\u2026", "busy");
+        } else {
+          setStatus("Translating " + item.label +
+            " (paragraphs " + item.paras[0].para + "\u2013" + item.paras[item.paras.length - 1].para + ")\u2026", "busy");
+        }
+        var listing = item.paras.map(function (w) { return "[" + w.para + "] " + w.text; }).join("\n");
         var user = "TARGET LANGUAGE: " + langName + "\n" +
           "Translate the document paragraphs below into the target language now.\n\n" +
           "PARAGRAPHS (each op's para must be EXACTLY the number in brackets):\n" + listing;
@@ -3703,25 +3750,26 @@ function applyOps(deck, ops, ctx) {
           });
         }).then(function (r) {
           if (SK.runCancelled) return Promise.reject(new FriendlyError("Run cancelled."));
-          dbg("translate.chunk", { chunk: idx + 1, of: chunks.length, modelTextLen: String(r && r.text || "").length });
+          dbg("translate.chunk", { label: item.label, paras: item.paras.length, modelTextLen: String(r && r.text || "").length });
           var paraSet = {};
-          chunk.paras.forEach(function (w) { paraSet[w.para] = w; });
-          var first = parseChunkReply(r, chunk.paras, paraSet);
-          if (first.chunkOps.length) return finishChunk(chunk, first);
-          // a chunk that yields nothing gets ONE firm re-ask before it is
-          // skipped - the trail shows exactly why (prose reply, 0 ops,
+          item.paras.forEach(function (w) { paraSet[w.para] = w; });
+          var first = parseChunkReply(r, item.paras, paraSet, item.label);
+          if (first.chunkOps.length) return completeItem(item, first);
+          // nothing usable: the trail shows why (prose reply, 0 ops,
           // unparseable output, or only out-of-range paragraph numbers)
           var head = String((first.pre && first.pre.text) || (r && r.text) || "").replace(/\s+/g, " ").trim();
           if (!head.length) head = "(empty reply)";
-          actLog("Chunk " + (idx + 1) + "/" + chunks.length + ": " +
+          actLog(item.label + ": " +
             (first.pre.ok ?
               ((first.pre.ops || []).length ? "reply parsed but no op fits the chunk paragraphs" : "reply carried 0 ops")
               : "reply not parseable as ops") +
             " - model said: " + head.slice(0, 150));
           if (SK.runCancelled) return Promise.reject(new FriendlyError("Run cancelled."));
-          chunk.retried = true;
-          setStatus("Chunk " + (idx + 1) + "/" + chunks.length +
-            ": the reply carried no usable ops - re-asking with a firmer instruction\u2026", "busy");
+          item.retried = true;
+          budgetUsed++;
+          if (budgetUsed >= TRANSLATE_ASK_BUDGET) budgetHit = true;
+          if (budgetHit) return runNext();
+          setStatus(item.label + ": the reply carried no usable ops - re-asking with a firmer instruction\u2026", "busy");
           var retryMsgs = [
             { role: "system", content: TRANSLATE_SYS },
             { role: "user", content: user },
@@ -3736,19 +3784,19 @@ function applyOps(deck, ops, ctx) {
             });
           }).then(function (r2) {
             if (SK.runCancelled) return Promise.reject(new FriendlyError("Run cancelled."));
-            var second = parseChunkReply(r2, chunk.paras, paraSet);
-            return finishChunk(chunk, second);
+            var second = parseChunkReply(r2, item.paras, paraSet, item.label);
+            if (second.chunkOps.length) return completeItem(item, second);
+            return splitOrSkip(item);
           }, function (e2) {
             if (SK.runCancelled || /Run cancelled/i.test(String(e2 && e2.message)))
               return Promise.reject(new FriendlyError("Run cancelled."));
-            actLog("Chunk " + (idx + 1) + "/" + chunks.length + ": the re-ask failed (" +
-              ((e2 && e2.message) || String(e2)) + ")");
-            return finishChunk(chunk, first);
+            actLog(item.label + ": the re-ask failed (" + ((e2 && e2.message) || String(e2)) + ")");
+            return splitOrSkip(item);
           });
         });
       }
 
-      return nextChunk().then(function (summary) {
+      return runNext().then(function (summary) {
         renderParsed({ ok: true, kind: "reply", text: summary }, ctx, instr);
         pushHistory(instr, summary);
       });

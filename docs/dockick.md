@@ -127,9 +127,15 @@ chunk by chunk:
   chunks (max 24 paragraphs per ask). Progress shows in the status line and
   the activity log; **Cancel** stops between chunks; the run timer keeps
   counting as usual. The loop is self-healing: a reply that yields no usable
-  ops is re-asked once with a firmer instruction, paragraphs a reply did not
-  cover (truncated output) get one top-up ask for just those, and skips are
-  counted in the final summary with the reason trail in the activity log.
+  ops is re-asked once with a firmer instruction; if that still fails the
+  chunk is HALVED into two smaller parts (each with its own ask + re-ask)
+  recursively down to single paragraphs - only a single paragraph that even
+  the re-ask cannot make usable is skipped. Paragraphs a reply did not cover
+  (truncated output) get one top-up ask for just those, and that top-up also
+  falls into the halving fallback when it comes back empty. A per-run
+  model-ask budget (160) caps pathological models; the summary names skipped
+  paragraphs and tells you to run Translate again to continue (translated
+  paragraphs are skipped automatically on the re-run).
 - Translations apply per chunk through the normal edit_paragraph op - every
   paragraph keeps its style, and paragraphs that need no translation are
   left untouched.

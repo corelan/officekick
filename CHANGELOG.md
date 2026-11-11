@@ -42,6 +42,25 @@
   exact layout Office honors, and docs gain the manual Trust Center +
   reg-add unblock for machines that installed older builds.
 
+## 0.9.311
+
+### Added
+- DocKick translate: the fallback no longer gives up at a failed chunk. A
+  chunk that still produces no usable ops after the firm re-ask is HALVED
+  (2 parts, each with its own ask + re-ask) and the parts are retried at
+  the FRONT of the queue in document order - recursively down to SINGLE
+  paragraphs; only a one-paragraph ask that even the re-ask cannot make
+  usable is skipped (logged "giving up on this one"). The top-up ask for
+  uncovered paragraphs falls into the same machinery on failure. A hard
+  per-run model-ask budget (160) caps pathological models: the run ends
+  with "run Translate again to continue" (translated paragraphs are
+  skipped automatically on the re-run). The final summary counts
+  paragraph-level skips. E2E'd with a content-keyed mock in four modes:
+  normal (1 chunk applied), prose-then-retry (recovered), split (all
+  replies garbage -> halves + singles still land 3/3 with styles kept)
+  and hopeless (every ask garbage -> terminates at the floor, 3 skips,
+  no hang; UI re-enabled).
+
 ## 0.9.310
 
 ### Fixed
