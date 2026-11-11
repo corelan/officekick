@@ -42,6 +42,24 @@
   exact layout Office honors, and docs gain the manual Trust Center +
   reg-add unblock for machines that installed older builds.
 
+## 0.9.312
+
+### Fixed
+- DocKick translate preserves formatting: the chunk asks now carry the RAW
+  paragraph text (only the pane's [L#]/[image] markers are stripped) - the
+  previous pipeline collapsed every whitespace run, which destroyed tabs
+  and leading indentation before the model even saw the text. The system
+  prompt gains an explicit FORMATTING block (carry over leading spaces and
+  tab characters, keep internal tabs and literal bullet characters, do not
+  trim/collapse whitespace; styles and list levels are kept by the pane -
+  never invent numbering) and it rides every ask, re-ask and top-up. The
+  pane now FORCE-restores the source's leading indentation on every op:
+  when a reply drops or shortens it, the source's leading run (spaces,
+  tabs, non-breaking spaces) is re-attached before the echo check and the
+  apply - verified in the simulator against a mock that strips all leads
+  (8-space lead and double-tab lead come back byte-exact, list level 2
+  survives via edit_paragraph's text-only replace).
+
 ## 0.9.311
 
 ### Added

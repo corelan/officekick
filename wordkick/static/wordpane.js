@@ -3394,6 +3394,8 @@ function applyOps(deck, ops, ctx) {
   var TRANSLATE_RETRY_NUDGE = "Your last reply contained no usable edit_paragraph ops for the paragraphs above. Reply again NOW: ONLY the JSON object " +
     '{\"kind\":\"slide_ops\",\"ops\":[...]} with ONE {\"type\":\"edit_paragraph\",\"para\":N,\"text\":\"the translated paragraph text\"} per listed paragraph - para = the bracketed number from the message, text = the translation into the target language. ' +
     "Translate titles, headings, table-of-contents and cross-reference lines too; keep numbers, page references, clause numbers, amounts and quoted terms unchanged. No prose, no markdown fences, never an empty ops list.";
+  var TRANSLATE_FORMAT_RULES = "FORMATTING IS PART OF THE JOB: keep the paragraph's leading indentation exactly as it appears (spaces AND tab characters are preserved in the text you receive - carry them over), keep internal tabs and bullet characters (•, -, *, \u2022) in place, do not trim, collapse or expand whitespace. " +
+    "The pane keeps paragraph styles, list levels and Word's own numbering itself - never add numbering or bullets that are not in the text you received. ";
   var TRANSLATE_SYS = "You are a professional translator working inside DocKick. Translate the paragraphs INTO the requested target language. Preserve the tone, register, style and the legal or technical weight of the original - a natural, idiomatic rendering, never a word-for-word conversion. " +
     "Keep topic-specific and technical terms UNTRANSLATED: brand and product names, company and party names, defined terms, legal terms of art, product and standard names, currencies, URLs and identifiers. " +
     "Keep list numbering, bullet characters and cross references (article/clause/section numbers, dates, amounts) exactly as in the source text. " +
@@ -3526,9 +3528,13 @@ function applyOps(deck, ops, ctx) {
     SK.deck.getContext({ noCap: true }).then(function (ctx) {
       var work = [];
       (ctx.paragraphs || []).forEach(function (p) {
-        var t0 = stripOutlineMarkers(p.text).replace(/\s+/g, " ").trim();
-        if (!t0 || !/[^\W\d_]/.test(t0)) return;   // empty, or digits/punctuation only
-        work.push({ para: p.idx + 1, text: t0, style: p.style || "Normal" });
+        // 0.9.312: keep the RAW text (only pane markers stripped) - tabs,
+        // leading indentation and whitespace runs are formatting that must
+        // reach the model and come back; no whitespace collapsing, no trim
+        var raw = stripOutlineMarkers(p.text).replace(/[\r\n\v]+$/, "");
+        var probe = raw.replace(/\s+/g, " ").trim();
+        if (!probe || !/[^\W\d_]/.test(probe)) return;   // empty, or digits/punctuation only
+        work.push({ para: p.idx + 1, text: raw, style: p.style || "Normal" });
       });
       if (!work.length) {
         renderParsed({ ok: true, kind: "reply", text: "Nothing to translate - the document has no text paragraphs." }, ctx, instr);
@@ -3558,6 +3564,15 @@ function applyOps(deck, ops, ctx) {
       // para may arrive as a string; if the model numbered the ask 1..N in
       // its own order (exact count match), the ops zip back by position -
       // a truncated reply is salvaged by tryParse/salvageOps upstream.
+      // Formatting (0.9.312): the source's leading indentation (tabs,
+      // spaces) is re-attached when the model dropped or shortened it.
+      function restoreLead(srcText, txt) {
+        var srcLead = (String(srcText || "").match(/^[ \t\u00a0]+/) || [""])[0];
+        if (!srcLead) return txt;
+        if (txt.slice(0, srcLead.length) === srcLead) return txt;
+        var txtLead = (txt.match(/^[ \t\u00a0]+/) || [""])[0];
+        return srcLead + (txtLead ? txt.slice(txtLead.length) : txt);
+      }
       function parseChunkReply(r, paras, paraSet, label) {
         var pre = tryParse(r && r.text || "");
         var got = (pre.ok && pre.ops) || (salvageOps(r && r.text || "") || []);
@@ -3568,7 +3583,9 @@ function applyOps(deck, ops, ctx) {
             (typeof o.para === "string" && o.para.trim() && !isNaN(Number(o.para)) ? Number(o.para) : null);
           if (pn === null || !paraSet[pn]) return;
           var txt = stripOutlineMarkers(o.text).trim();
-          if (!txt || txt === paraSet[pn].text) return;   // unchanged echo or empty
+          if (!txt) return;
+          txt = restoreLead(paraSet[pn].text, txt);
+          if (txt === paraSet[pn].text) return;   // unchanged echo or empty
           o.para = pn; o.text = txt;
           chunkOps.push(o);
         });
@@ -3577,8 +3594,12 @@ function applyOps(deck, ops, ctx) {
           got.forEach(function (o, gi) {
             var w = paras[gi];
             var txt = (o && o.type === "edit_paragraph") ? stripOutlineMarkers(o.text).trim() : "";
-            if (!txt || txt === w.text) { zipBad = true; }
-            else { zipOps.push({ type: "edit_paragraph", para: w.para, text: txt }); }
+            if (!txt) { zipBad = true; }
+            else {
+              txt = restoreLead(w.text, txt);
+              if (txt === w.text) { zipBad = true; }
+              else { zipOps.push({ type: "edit_paragraph", para: w.para, text: txt }); }
+            }
           });
           if (!zipBad && zipOps.length) { chunkOps = zipOps; rescued = true; }
         }
@@ -3659,7 +3680,7 @@ function applyOps(deck, ops, ctx) {
           return apiJson("/api/chat", "POST", {
             connection: ref.connection, model: ref.model,
             temperature: 0.3, maxTokens: 7000,
-            messages: [{ role: "system", content: TRANSLATE_SYS },
+            messages: [{ role: "system", content: TRANSLATE_SYS + TRANSLATE_FORMAT_RULES },
                        { role: "user", content: user }],
           });
         }).then(function (r) {
@@ -3745,7 +3766,7 @@ function applyOps(deck, ops, ctx) {
           return apiJson("/api/chat", "POST", {
             connection: ref.connection, model: ref.model,
             temperature: 0.3, maxTokens: 7000,
-            messages: [{ role: "system", content: TRANSLATE_SYS },
+            messages: [{ role: "system", content: TRANSLATE_SYS + TRANSLATE_FORMAT_RULES },
                        { role: "user", content: user }],
           });
         }).then(function (r) {
@@ -3771,7 +3792,7 @@ function applyOps(deck, ops, ctx) {
           if (budgetHit) return runNext();
           setStatus(item.label + ": the reply carried no usable ops - re-asking with a firmer instruction\u2026", "busy");
           var retryMsgs = [
-            { role: "system", content: TRANSLATE_SYS },
+            { role: "system", content: TRANSLATE_SYS + TRANSLATE_FORMAT_RULES },
             { role: "user", content: user },
             { role: "assistant", content: String((r && r.text) || "").slice(0, 500) },
             { role: "user", content: TRANSLATE_RETRY_NUDGE },

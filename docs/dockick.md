@@ -137,8 +137,9 @@ chunk by chunk:
   paragraphs and tells you to run Translate again to continue (translated
   paragraphs are skipped automatically on the re-run).
 - Translations apply per chunk through the normal edit_paragraph op - every
-  paragraph keeps its style, and paragraphs that need no translation are
-  left untouched.
+  paragraph keeps its style, list level and indentation (tabs and leading
+  spaces are carried to the model and force-restored if a reply drops
+  them), and paragraphs that need no translation are left untouched.
 - The prompt preserves the document's tone, register and legal weight (an
   idiomatic rendering, not a literal one) and keeps technical and
   topic-specific terms untranslated: brand and product names, company and
