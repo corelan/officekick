@@ -42,6 +42,25 @@
   exact layout Office honors, and docs gain the manual Trust Center +
   reg-add unblock for machines that installed older builds.
 
+## 0.9.319
+
+### Changed
+- Translate prompt: LANGUAGE VINTAGE rule against the "archaic feel" a
+  legal-agreement translation can drift into: model must write modern
+  business/legal prose the way today's contracts read, reach for dated or
+  ceremonial formulae only where the target language's current contracts
+  still use them, keep legal effect while dropping "museum dust", mirror
+  the source's formality (never less) but not its century, prefer direct
+  active sentence shapes over passive calques of the English, and render
+  ceremonial boilerplate (IN WITNESS WHEREOF / NOW THEREFORE) with the
+  common modern shorter equivalent. Live A/B through the user's own
+  server: old prompt -> "TEN BEWIJZE WAARVAN... NIETTEGENSTAANDE hetgeen
+  daartegen... andersluidend zou zijn bepaald" (stilted passives); new
+  prompt -> "Ter bevestiging hiervan hebben... ondertekend", "verricht de
+  Leverancier de diensten met alle redelijke zorgvuldigheid", "Op basis
+  van het voorgaande... komen de partijen als volgt overeen" (modern
+  contract Dutch, same clauses, same effect).
+
 ## 0.9.318
 
 ### Changed

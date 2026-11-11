@@ -171,6 +171,11 @@ chunk by chunk:
   without dialect spelling or slang. Nothing is summarized, omitted,
   explained or added, and sentences are rebuilt naturally rather than
   mirroring the source's structures.
+- The prompt keeps the language CONTEMPORARY: modern business and legal
+  prose as today's contracts read - no dated or ceremonial formulae where
+  today's phrasing carries the same effect, no passive calques of the
+  English, ceremonial boilerplate becomes its common modern equivalent.
+  The source's formality is mirrored (never less), but not its century.
 - This is a pane-owned pipeline with no approval gate - you explicitly
   pressed Translate and picked the language. With **AI edits land as
   tracked changes** on (Settings), every translation lands as a revision you
