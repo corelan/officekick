@@ -34,7 +34,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 APP = "OfficeKick"
-VERSION = "0.9.321"
+VERSION = "0.9.322"
 
 # --------------------------------------------------------------------------- #
 # Self-restart: the server watches for <cfg dir>/restart.flag. Whatever writes
@@ -1849,6 +1849,8 @@ def filter_image_models(store, conn_name):
 
 
 UPDATE_CACHE = {"t": 0.0, "data": None}
+UPDATE_PROBE_INTERVAL = 7200   # 0.9.322: the server probes for updates every 2 h for all panes
+UPDATE_PROBE_STATE: dict = {"data": None}
 
 
 def test_connection(store, name):
@@ -2202,6 +2204,66 @@ def git_pull(store):
 
 def update_flag_path(store):
     return os.path.join(os.path.dirname(str(store.path)), "update.lock")
+
+
+def run_update_probe(store=None):
+    """0.9.322: the background update probe the SERVER runs for all panes -
+    so each pane no longer needs its own check: the result lands in
+    update_state.json (cfg dir) and rides /api/health for every pane and
+    every pane reload. Failed probes keep the previous state. Returns the
+    probe data (or None)."""
+    global UPDATE_PROBE_STATE
+    if store is None:
+        return None
+    try:
+        data = update_check(store=store)
+    except Exception:
+        return None
+    if isinstance(data, dict) and data.get("ok"):
+        state = {
+            "latest": data.get("latest") or "",
+            "current": data.get("current") or "",
+            "available": not data.get("upToDate"),
+            "source": data.get("source") or "",
+            "checkedAt": time.strftime("%Y-%m-%d %H:%M"),
+            "checkedTs": time.time(),
+        }
+        try:
+            (Path(store.path).parent / "update_state.json").write_text(
+                json.dumps(state), encoding="utf-8")
+        except OSError:
+            pass
+        UPDATE_PROBE_STATE["data"] = state   # normalized: latest/current/available
+    return data if isinstance(data, dict) else None
+
+
+def load_update_probe_state(store=None):
+    """Load the persisted probe result (survives server restarts)."""
+    global UPDATE_PROBE_STATE
+    if store is not None:
+        try:
+            blob = (Path(store.path).parent / "update_state.json").read_text(
+                encoding="utf-8")
+            UPDATE_PROBE_STATE["data"] = json.loads(blob)
+        except Exception:
+            pass
+
+
+def start_update_probe_thread(store):
+    """Background thread: one check ~30 s after boot, then every
+    UPDATE_PROBE_INTERVAL (2 h). Daemon - dies with the server."""
+    load_update_probe_state(store)
+
+    def loop():
+        time.sleep(30)
+        while True:
+            try:
+                run_update_probe(store)
+            except Exception:
+                pass
+            time.sleep(UPDATE_PROBE_INTERVAL)
+
+    threading.Thread(target=loop, daemon=True).start()
 
 
 def installer_pid_alive(pid):
@@ -2900,6 +2962,7 @@ class SlideKickHandler(BaseHTTPRequestHandler):
                         "port": self.serving_port,
                         "configPath": str(self.store.path),
                         "debug": self.store.debug_enabled(),
+                        "update": UPDATE_PROBE_STATE.get("data"),
                     }
                 )
             elif path == "/api/config":
@@ -3585,6 +3648,7 @@ def main(argv=None):
     _RUN_STATE["port"] = port
     _RUN_STATE["gen"] = time.strftime("%Y%m%d-%H%M%S") + "-" + str(os.getpid())
     threading.Thread(target=_restart_watcher, args=(store, servers, port), daemon=True).start()
+    start_update_probe_thread(store)   # 0.9.322: one background probe (~30 s after boot, then every 2 h)
     scheme = "https" if tls else "http"
     for s in servers:
         host = s.server_address[0]

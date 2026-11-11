@@ -7593,18 +7593,23 @@ OfficeDeck.prototype.setNotes = function (i, text) {
     xr.timeout = 4000;
     var stamp = beatStamp();
     xr.onload = function () {
-      var good = xr.status === 200, ver = "";
+      var good = xr.status === 200, ver = "", dUpd = null;
       if (good) {
         try {
           var d = JSON.parse(xr.responseText);
           good = !!d.ok;
           ver = d.version || "";
+          dUpd = d.update || null;   // 0.9.322: the server probes every 2 h for all panes
         } catch (e1) { good = false; }
       }
       el.className = "beat " + (good ? "ok" : "bad");
       el.title = (good ? "Local server reachable (v" + ver + ")" : "Local server NOT reachable")
         + " - last check " + stamp + (good ? "" : ". Start it with: python3 install.py");
       paintStatusbar(good, ver, stamp);
+      if (dUpd) {   // 0.9.322: the gold marker follows the server's 2 h probe
+        if (dUpd.available) setUpdateFlag(dUpd.latest);
+        else setUpdateFlag(null);
+      }
     };
     xr.onerror = xr.ontimeout = function () {
       el.className = "beat bad";

@@ -42,6 +42,21 @@
   exact layout Office honors, and docs gain the manual Trust Center +
   reg-add unblock for machines that installed older builds.
 
+## 0.9.322
+
+### Added
+- The SERVER now runs the background update check for all panes: one
+  probe ~30 s after boot, then every 2 h; the result normalizes into
+  update_state.json (cfg dir, survives restarts) and rides /api/health
+  ("update": {latest, current, available, checkedAt}). The panes' existing
+  5 s heartbeat picks it up and paints/clears the gold marker
+  automatically - no pane-side polling, no manual check needed, works
+  across all three add-ins and after pane reloads. A manual Check now and
+  the boot auto-check still work as before; the manual path wins while a
+  server probe has not run yet (health without update data leaves the
+  pane's own marker untouched). Test: health carries the probe state,
+  null when none.
+
 ## 0.9.321
 
 ### Added

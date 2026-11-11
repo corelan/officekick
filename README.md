@@ -218,7 +218,10 @@ app afterwards** so it loads the new pane files (a later install with all
 Office apps quit re-runs the skipped re-registration if you ever need it).
 With git installed, the **pane's check-for-updates button does the whole
 flow in one click** ("Update now - pull + redeploy + restart"); it asks you
-to reload the pane when it finishes. Heal an
+to reload the pane when it finishes. The **server itself probes for updates
+in the background every 2 hours** (~30 s after boot, then every 2 h) and
+all panes light the gold "Update available" marker from that heartbeat -
+no manual check needed. Heal an
 "add-in is no longer available" toast once with the repair tool
 ([docs/slidekick.md](docs/slidekick.md), troubleshooting).
 
