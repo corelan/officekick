@@ -1081,6 +1081,37 @@
       });
       el.appendChild(ref);
       el.appendChild(ed);
+      // 0.9.324: the label DOM re-renders while the run works - keep the
+      // armed state on the LABEL element (dataset survives innerHTML resets)
+      var plus = document.createElement("button");
+      plus.className = "btn subtle slabelbtn" + (el.dataset.nsArmed === "1" ? " armed" : "");
+      plus.type = "button";
+      plus.textContent = el.dataset.nsArmed === "1" ? "Really start a new session?" : "+";
+      plus.title = "New session";
+      plus.addEventListener("click", function (ev) {
+        ev.stopPropagation();
+        if (SK.busy) {
+          setStatus("A run is in progress - wait for it to finish (or Cancel) before starting a new session.", "pending");
+          return;
+        }
+        if (el.dataset.nsArmed !== "1") {
+          el.dataset.nsArmed = "1";
+          plus.classList.add("armed");
+          plus.textContent = "Really start a new session?";
+          setTimeout(function () {
+            if (el.dataset.nsArmed === "1") {
+              el.dataset.nsArmed = "";
+              updateSessionLabel();
+            }
+          }, 3500);
+          return;
+        }
+        delete el.dataset.nsArmed;
+        plus.dataset.was = "+";
+        plus.dataset.armed = "1";   // pre-armed: this click COMMITS
+        startNewSession(plus);
+      });
+      el.appendChild(plus);
       el.style.display = "";
     } else {
       el.innerHTML = "";
@@ -1236,7 +1267,9 @@
   }
 
   function resumeSession(sessId) {
+    SK.resuming = true;   // 0.9.324: a new session must not commit while a boot resume is still in flight
     apiJson("/api/sessions/" + sessId, "GET").then(function (doc) {
+      SK.resuming = false;
       if (SK.mailStaleResumeDropUntil && Date.now() < SK.mailStaleResumeDropUntil) {
         // 0.9.233: the resumed session belongs to a different email and the
         // new-session-per-email setting is on - drop it once, don't apply
@@ -1263,6 +1296,8 @@
       if (/^session\b\s*$/i.test(String(SK.sessionName || ""))) aiNameSession(doc.id);
     }).catch(function (err) {
       setStatus("Could not load session: " + ((err && err.message) || err), "error");
+    }).then(function () {
+      SK.resuming = false;   // even a failed resume clears the commit guard
     });
   }
 
@@ -1302,7 +1337,7 @@
         // removing the ACTIVE session = wipe its slate + ready a new one
         SK.sessionId = null; SK.sessionName = ""; SK.sessionManual = false;
         SK.history = [];
-        try { localStorage.removeItem("sk-resume-session-' + app + '"); } catch (eS) {}
+        try { localStorage.removeItem("sk-resume-session-mailkick"); } catch (eS) {}
         var inp0 = $("chat-input");
         if (inp0) { inp0.disabled = false; inp0.value = ""; }
         var el0 = $("chat-output");
@@ -1767,6 +1802,13 @@
   // armed confirm, keep the session in History, then a clean slate everywhere
   function startNewSession(btn) {
     if (!btn) return;
+    if (SK.busy || SK.resuming) {   // 0.9.324: a run in flight / a boot resume must not be orphaned
+      btn.dataset.armed = "0";
+      if (btn.dataset.was) { btn.textContent = btn.dataset.was; btn.dataset.was = ""; }
+      btn.classList.remove("armed");
+      setStatus("A run is in progress - wait for it to finish (or Cancel) before starting a new session.", "pending");
+      return;
+    }
     if (btn.dataset.armed !== "1") {
       btn.dataset.armed = "1";
       btn.dataset.was = btn.textContent;
@@ -1781,13 +1823,14 @@
     btn.textContent = btn.dataset.was || btn.textContent;
     btn.classList.remove("armed");
     filePreviousRun();   // the current chat's last exchange = in the session already
+    saveSessionNow();   // 0.9.324: make sure the session file holds EVERYTHING of this run
     SK.history = [];
     SK.sessionId = null;
     SK.sessionName = "";
     SK.sessionManual = false;
     SK.sessionApprovals = {};   // a new session asks again (session-scoped approvals)
     try { localStorage.removeItem("sk-approvals-mailkick"); } catch (eRC) {}
-    try { localStorage.removeItem("sk-res...kick"); } catch (eR) {}
+    try { localStorage.removeItem("sk-resume-session-mailkick"); } catch (eR) {}
     var inp0 = $("chat-input");
     if (inp0) { inp0.disabled = false; inp0.value = ""; }
     var el = $("chat-output");
@@ -1799,6 +1842,7 @@
     updatePastBox();
     switchTab("chat");
     setStatus("New session - the current one stays saved in History.", "ok");
+    updateSessionLabel();   // clear/hide the stale session title + buttons
     renderSessions();
   }
 
@@ -1839,7 +1883,8 @@ var nw = $("sess-new");
       setStatus("New session - the current one stays saved in History.", "ok");
       var el = $("chat-output");
       if (el) el.innerHTML = "";
-      try { localStorage.removeItem("sk-res...kick"); } catch (eR) {}
+      try { localStorage.removeItem("sk-resume-session-mailkick"); } catch (eR) {}
+      updateSessionLabel();   // clear/hide the stale session title + buttons
       renderSessions();
     });
     var rf = $("sess-refresh");

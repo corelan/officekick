@@ -42,6 +42,30 @@
   exact layout Office honors, and docs gain the manual Trust Center +
   reg-add unblock for machines that installed older builds.
 
+## 0.9.324
+
+### Added
+- "+" button next to the session title's refresh/edit buttons (just above
+  the request box) in all three panes: title "New session". It starts a
+  new session exactly like the "New session" button in the Sessions tab:
+  two-click confirm ("Really start a new session?"), the last exchange is
+  filed + the whole session is saved into its session file first, then the
+  Previous requests box, the chat output and the resume pointer are
+  cleared for a clean start. Armed state survives the session label's
+  re-renders (it rides the label element, not the button).
+
+### Fixed
+- In the same code path: "new session" no longer leaves a broken resume
+  pointer. Several localStorage removeItem calls across DocKick/SlideKick/
+  MailKick used corrupted key literals (dots / quote garbage inside the
+  key strings), so the previous session auto-resumed on the next reload
+  even after a new session had started. All six call sites now use the
+  real keys (verified byte-for-byte), and the commit paths refresh the
+  session label so the stale title/buttons disappear immediately.
+- Starting a new session while a run is in flight (or while a boot resume
+  is still loading) is now blocked with a status message instead of
+  orphaning the run.
+
 ## 0.9.323
 
 ### Changed
