@@ -42,6 +42,29 @@
   exact layout Office honors, and docs gain the manual Trust Center +
   reg-add unblock for machines that installed older builds.
 
+## 0.9.310
+
+### Fixed
+- DocKick translate: a chunk whose reply carries no usable ops is no longer
+  a silent skip. Each empty chunk gets ONE firm re-ask (the nudge repeats
+  the op schema and forbids prose/fences/empty lists), and when it still
+  yields nothing the activity log says exactly why (prose reply head,
+  "0 ops", unparseable, or only out-of-range paragraph numbers) and the
+  final summary counts the skipped chunks. Translation replies on the
+  Ollama chain were observed to CUT OFF mid-JSON (44 of 45 op(s) at ~7k
+  chars) - the salvaged ops apply, and every paragraph the reply did NOT
+  cover now gets one TOP-UP ask for just those paragraphs, so a truncated
+  reply no longer silently loses the tail paragraphs of a chunk. Chunks
+  tightened to ~3000 chars / 24 paragraphs (the reply window must fit the
+  whole translation - the 45-paragraph probe hit the cut, 44/45 recovered).
+  The model may now number paragraphs its own way: string "para" values
+  coerce to numbers, and when the op count matches the chunk exactly the
+  ops zip back by order (logged). The prompt no longer offers an empty-ops
+  escape: every listed paragraph gets an op (titles/TOC/cross-reference
+  lines included; numbers, page refs, clause numbers and quoted terms
+  stay). E2E'd live against a content-keyed mock: prose-then-retry and
+  partial-then-topup both land 3/3 with styles kept.
+
 ## 0.9.309
 
 ### Fixed

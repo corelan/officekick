@@ -123,10 +123,13 @@ entry field for any other language - and then translates the whole document
 chunk by chunk:
 
 - The document is read end to end (well past the 300-paragraph outline cap)
-  and the text paragraphs are sent to the routed model in ~5k-character
-  chunks (max 40 paragraphs per ask). Progress shows in the status line and
+  and the text paragraphs are sent to the routed model in ~3k-character
+  chunks (max 24 paragraphs per ask). Progress shows in the status line and
   the activity log; **Cancel** stops between chunks; the run timer keeps
-  counting as usual.
+  counting as usual. The loop is self-healing: a reply that yields no usable
+  ops is re-asked once with a firmer instruction, paragraphs a reply did not
+  cover (truncated output) get one top-up ask for just those, and skips are
+  counted in the final summary with the reason trail in the activity log.
 - Translations apply per chunk through the normal edit_paragraph op - every
   paragraph keeps its style, and paragraphs that need no translation are
   left untouched.
