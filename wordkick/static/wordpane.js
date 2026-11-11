@@ -6238,7 +6238,7 @@ function applyOps(deck, ops, ctx) {
 
   // server heartbeat: a small dot at the right end of the tab strip; green
   // while the LOCAL server answers /api/health (this pane's own origin), red
-  // when it does not - polled every 5 s, tooltip carries the last check.
+  // when it does not - polled every 10 s, tooltip carries the last check.
   function beatStamp() {
     var d = new Date();
     var p2 = function (n) { return (n < 10 ? "0" : "") + n; };
@@ -6323,7 +6323,7 @@ function applyOps(deck, ops, ctx) {
     wireEvents();
     bootLoad(0);
     srvBeat();
-    setInterval(srvBeat, 5000);
+    setInterval(srvBeat, 10000);
   }
 
   function bootSuccess(cfg) {
