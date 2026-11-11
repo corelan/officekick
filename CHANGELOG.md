@@ -42,6 +42,16 @@
   exact layout Office honors, and docs gain the manual Trust Center +
   reg-add unblock for machines that installed older builds.
 
+## 0.9.320
+
+### Changed
+- The DocKick "Translate" button carries the primary border color like the
+  Run button (id-scoped rule in both copies of the pane stylesheet, so it
+  beats the theme's .btn.subtle transparent border in light AND dark
+  themes; hover keeps the border while returning the subtle background).
+  Verified in the simulator: computed border rgb(59, 130, 246) on the
+  Translate button equals Run's border in both themes.
+
 ## 0.9.319
 
 ### Changed
