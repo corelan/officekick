@@ -111,6 +111,38 @@ in the pane with the comment text and its anchor, instead of failing.
 - `give me 3 titles for this doc` - conversational (other-actions model)
 - `rewrite this document: executive summary, then sections ...` - the gated
   full-document rewrite
+- `Translate` (button, below Run) - translate the whole document in place;
+  see the next section
+
+## Translate the document in place
+
+The **Translate** button (below Run) replaces the document text with a
+translation, in place. On click it asks for the target language - a picker
+with **English, French, Spanish, German, Portuguese, Dutch** plus a free
+entry field for any other language - and then translates the whole document
+chunk by chunk:
+
+- The document is read end to end (well past the 300-paragraph outline cap)
+  and the text paragraphs are sent to the routed model in ~5k-character
+  chunks (max 40 paragraphs per ask). Progress shows in the status line and
+  the activity log; **Cancel** stops between chunks; the run timer keeps
+  counting as usual.
+- Translations apply per chunk through the normal edit_paragraph op - every
+  paragraph keeps its style, and paragraphs that need no translation are
+  left untouched.
+- The prompt preserves the document's tone, register and legal weight (an
+  idiomatic rendering, not a literal one) and keeps technical and
+  topic-specific terms untranslated: brand and product names, company and
+  party names, defined terms, legal terms of art, standards, currencies,
+  URLs, list numbering and cross references (article/clause/section
+  numbers, dates, amounts).
+- This is a pane-owned pipeline with no approval gate - you explicitly
+  pressed Translate and picked the language. With **AI edits land as
+  tracked changes** on (Settings), every translation lands as a revision you
+  can accept or reject afterwards.
+- When the run completes it files into the session like any other request
+  ("Translate the document to <language>"), so follow-up prompts know the
+  document was translated.
 
 ## The AI can ask you back (clarify round)
 When a request could plausibly produce a different form of the result -

@@ -1927,7 +1927,8 @@ var nw = $("sess-new");
           } catch (eLI) { /* not a list item - flat */ }
         }
         return ctx.sync().then(function () {
-        var n = Math.min(opts.maxParas || paras.items.length, 300);
+        var capN = opts.noCap ? paras.items.length : 300;   // translate reads the WHOLE document
+        var n = Math.min(opts.maxParas || paras.items.length, capN);
         var t0 = null;
         var items = [];
         var imageCount = 0;
@@ -3367,11 +3368,276 @@ function applyOps(deck, ops, ctx) {
 
   function setRunEnabled(on) {
     $("chat-run").disabled = !on || SK.busy;
+    var tb = $("chat-translate");
+    if (tb) tb.disabled = !on || SK.busy;
     var cb = $("chat-cancel");
     if (cb) {
       cb.disabled = !SK.busy;                          // only meaningful mid-run
       cb.style.display = SK.busy ? "" : "none";        // appears only while a run is in progress
     }
+  }
+
+  // ------------------------------------------------------------------ //
+  // Translate in place (0.9.308): a pane-owned pipeline - no approval
+  // gate, the user explicitly pressed Translate and picked a language.
+  // Paragraph chunks go to the routed model chunk by chunk; every chunk
+  // replies with edit_paragraph ops that validate + apply immediately
+  // (the tracked-changes setting still decides how edits land in Word).
+  // Technical/topic-specific terms stay in their original language by
+  // prompt rule; styles never change (edit_paragraph keeps the style).
+  // ------------------------------------------------------------------ //
+  var TRANSLATE_LANGS = ["English", "French", "Spanish", "German", "Portuguese", "Dutch"];
+  var TRANSLATE_CHUNK_CHARS = 5000;   // + 10 chars/para overhead fits ~1200 output tokens
+  var TRANSLATE_CHUNK_PARAS = 40;
+  var TRANSLATE_SYS = "You are a professional translator working inside DocKick. Translate the paragraphs INTO the requested target language. Preserve the tone, register, style and the legal or technical weight of the original - a natural, idiomatic rendering, never a word-for-word conversion. " +
+    "Keep topic-specific and technical terms UNTRANSLATED: brand and product names, company and party names, defined terms, legal terms of art, product and standard names, currencies, URLs and identifiers. " +
+    "Keep list numbering, bullet characters and cross references (article/clause/section numbers, dates, amounts) exactly as in the source text. " +
+    "Do not merge, split or reorder paragraphs. " +
+    "Reply ONLY with a JSON object " +
+    '{\"kind\":\"slide_ops\",\"ops\":[...]} - no prose, no markdown fences. ' +
+    "Op schema: " +
+    '{\"type\":\"edit_paragraph\",\"para\":N,\"text\":\"the translated paragraph text\"} - ' +
+    "one op per paragraph you actually translate, para = the exact paragraph number given in the input. " +
+    "Never repeat outline markers like [L2] or [image x1] in your output - they are pane annotations, not document text. " +
+    "Return NO op for a paragraph that needs no change. " +
+    "If none of the paragraphs need a translation, reply " +
+    '{\"kind\":\"slide_ops\",\"ops\":[]}.';
+
+  function stripOutlineMarkers(t) {
+    // pane annotations ([L2] list levels, [image x1] counts) must never
+    // reach the model prompt or be written back into the document
+    return String(t == null ? "" : t)
+      .replace(/^\s*\[L\d\]\s*/, "")
+      .replace(/\s*\[image x\d+\]/gi, "");
+  }
+
+  function toggleTranslatePanel() {
+    if (SK.busy) return;
+    var slot = $("translate-slot");
+    if (!slot) return;
+    if (slot.style.display !== "none") { slot.style.display = "none"; return; }
+    slot.innerHTML = "";
+    slot.style.display = "";
+    var box = document.createElement("div");
+    box.className = "clarifybox";
+    var q = document.createElement("div");
+    q.className = "clarify-q";
+    q.textContent = "Translate the document to which language?";
+    box.appendChild(q);
+    TRANSLATE_LANGS.forEach(function (lg) {
+      var lab = document.createElement("label");
+      lab.className = "field-inline check";
+      lab.style.display = "block";
+      lab.style.margin = "2px 0";
+      var r = document.createElement("input");
+      r.type = "radio";
+      r.name = "sk-translate-lang";
+      r.value = lg;
+      lab.appendChild(r);
+      lab.appendChild(document.createTextNode(" " + lg));
+      box.appendChild(lab);
+    });
+    var oRow = document.createElement("div");
+    oRow.className = "clarify-row";
+    var oLab = document.createElement("label");
+    oLab.className = "field-inline check";
+    var oR = document.createElement("input");
+    oR.type = "radio";
+    oR.name = "sk-translate-lang";
+    oR.value = "";
+    oLab.appendChild(oR);
+    oLab.appendChild(document.createTextNode(" Other:"));
+    oRow.appendChild(oLab);
+    var oIn = document.createElement("input");
+    oIn.type = "text";
+    oIn.id = "sk-translate-other";
+    oIn.className = "clarify-input";
+    oIn.placeholder = "language name\u2026";
+    oIn.setAttribute("title", "Any other language - typed here wins over the radio pick");
+    oRow.appendChild(oIn);
+    box.appendChild(oRow);
+    var note = document.createElement("div");
+    note.className = "muted";
+    note.style.margin = "6px 0 2px 0";
+    note.textContent = "Translates the document in place, chunk by chunk. Styles are kept; technical and topic-specific terms stay in their original language.";
+    box.appendChild(note);
+    var bRow = document.createElement("div");
+    bRow.className = "clarify-row";
+    var go = document.createElement("button");
+    go.className = "btn primary";
+    go.type = "button";
+    go.textContent = "Start translation";
+    go.addEventListener("click", function () {
+      if (SK.busy) return;
+      var picked = "";
+      var rads = box.querySelectorAll('input[name="sk-translate-lang"]');
+      Array.prototype.forEach.call(rads, function (rr) { if (rr.checked) picked = rr.value; });
+      var oth = document.getElementById("sk-translate-other");
+      var other = oth ? String(oth.value || "").trim() : "";
+      var lang = other || (picked || "").trim();
+      if (!lang) { setStatus("Pick a language or type one in the free field.", "pending"); return; }
+      runTranslate(lang.slice(0, 40));
+    });
+    var cc = document.createElement("button");
+    cc.className = "btn subtle";
+    cc.type = "button";
+    cc.textContent = "Cancel";
+    cc.addEventListener("click", function () {
+      slot.style.display = "none";
+      slot.innerHTML = "";
+      setStatus("", "");
+    });
+    bRow.appendChild(go);
+    bRow.appendChild(cc);
+    box.appendChild(bRow);
+    slot.appendChild(box);
+  }
+
+  function runTranslate(langName) {
+    if (SK.busy) return;
+    var slot = $("translate-slot");
+    if (slot) { slot.innerHTML = ""; slot.style.display = "none"; }
+    var prof = currentProfile();
+    if (!prof) { setStatus("No profile yet - create one on the Profiles tab first.", "error"); switchTab("settings"); switchSettingsSub("profiles"); return; }
+    var route = $("chat-route").value;
+    var ref = routeToModel(prof, route, "Translate the document to " + langName);
+    if (!ref || !ref.connection || !ref.model) {
+      setStatus("Profile '" + prof.name + "' has no model assigned for this route. Open Profiles and pick connection + model.", "error");
+      return;
+    }
+    var instr = "Translate the document to " + langName + ".";
+    var input = $("chat-input");
+    SK.busy = true;
+    SK.runCancelled = false;
+    SK.cancelErase = false;
+    input.disabled = true;   // a typed draft stays visible + untouched while translating
+    setRunEnabled(false);
+    chatTimerStart();
+    actReset();
+    actLog("Translating the document to " + langName + " (model " + ref.model + " via " + ref.connection + ")");
+    setStatus("Reading the document\u2026", "busy");
+    updateDeckSummary();
+    renderSimDeck();
+
+    SK.deck.getContext({ noCap: true }).then(function (ctx) {
+      var work = [];
+      (ctx.paragraphs || []).forEach(function (p) {
+        var t0 = stripOutlineMarkers(p.text).replace(/\s+/g, " ").trim();
+        if (!t0 || !/[^\W\d_]/.test(t0)) return;   // empty, or digits/punctuation only
+        work.push({ para: p.idx + 1, text: t0, style: p.style || "Normal" });
+      });
+      if (!work.length) {
+        renderParsed({ ok: true, kind: "reply", text: "Nothing to translate - the document has no text paragraphs." }, ctx, instr);
+        pushHistory(instr, "Nothing to translate (no text paragraphs).");
+        return;
+      }
+      var chunks = [], cur = [], curChars = 0;
+      work.forEach(function (w) {
+        cur.push(w);
+        curChars += w.text.length + 10;
+        if (curChars >= TRANSLATE_CHUNK_CHARS || cur.length >= TRANSLATE_CHUNK_PARAS) {
+          chunks.push(cur); cur = []; curChars = 0;
+        }
+      });
+      if (cur.length) chunks.push(cur);
+      dbg("translate.plan", { lang: langName, paragraphs: work.length, chunks: chunks.length });
+      var idx = 0, applied = 0, failed = 0;
+      var paraDone = {};   // 1-based paragraphs that received a translated op
+
+      function nextChunk() {
+        if (SK.runCancelled) return Promise.reject(new FriendlyError("Run cancelled."));
+        if (idx >= chunks.length) {
+          var untouched = work.length - Object.keys(paraDone).length;
+          var summary = "Translated " + applied + " paragraph(s) to " + langName +
+            " in " + chunks.length + " chunk(s)." +
+            (failed ? " " + failed + " op(s) failed - see the activity log." : "") +
+            (untouched > 0 ? " " + untouched + " paragraph(s) were left unchanged." : "") +
+            (SK.cfg && SK.cfg.trackedChanges ? " Edits landed as tracked changes." : "") +
+            " Technical and topic-specific terms stayed in their original form.";
+          return Promise.resolve(summary);
+        }
+        var chunk = chunks[idx];
+        setStatus("Translating chunk " + (idx + 1) + "/" + chunks.length +
+          " (paragraphs " + chunk[0].para + "\u2013" + chunk[chunk.length - 1].para + ")\u2026", "busy");
+        var listing = chunk.map(function (w) { return "[" + w.para + "] " + w.text; }).join("\n");
+        var user = "TARGET LANGUAGE: " + langName + "\n" +
+          "Translate the document paragraphs below into the target language now.\n\n" +
+          "PARAGRAPHS (each op's para must be EXACTLY the number in brackets):\n" + listing;
+        return askRetryable(function () {
+          return apiJson("/api/chat", "POST", {
+            connection: ref.connection, model: ref.model,
+            temperature: 0.3, maxTokens: 7000,
+            messages: [{ role: "system", content: TRANSLATE_SYS },
+                       { role: "user", content: user }],
+          });
+        }).then(function (r) {
+          if (SK.runCancelled) return Promise.reject(new FriendlyError("Run cancelled."));
+          dbg("translate.chunk", { chunk: idx + 1, of: chunks.length, modelTextLen: String(r && r.text || "").length });
+          var pre = tryParse(r && r.text || "");
+          var got = (pre.ok && pre.ops) || (salvageOps(r && r.text || "") || []);
+          var paraSet = {};
+          chunk.forEach(function (w) { paraSet[w.para] = w; });
+          var chunkOps = [];
+          got.forEach(function (o) {
+            if (!o || o.type !== "edit_paragraph" || typeof o.para !== "number" || !paraSet[o.para]) return;
+            var txt = stripOutlineMarkers(o.text).trim();
+            if (!txt || txt === paraSet[o.para].text) return;   // unchanged echo or empty
+            o.text = txt;
+            chunkOps.push(o);
+          });
+          idx++;
+          if (!chunkOps.length) {
+            actLog("Chunk " + idx + "/" + chunks.length + ": nothing to apply");
+            return nextChunk();
+          }
+          var v = validateOps(chunkOps, ctx);
+          if (v.invalid.length) {
+            failed += v.invalid.length;
+            var rs = v.invalid.map(function (iv) { return iv.reason; }).join("; ");
+            actLog("Chunk " + idx + "/" + chunks.length + ": " + v.invalid.length + " op(s) rejected - " + rs.slice(0, 180));
+          }
+          if (!v.ops.length) return nextChunk();
+          v.ops.forEach(function (o) { paraDone[o.para] = true; });
+          return applyOps(SK.deck, v.ops, ctx).then(function (res) {
+            var okN = 0, badN = 0;
+            ((res && res.lines) || []).forEach(function (l) { if (l.ok) okN++; else badN++; });
+            applied += okN; failed += badN;
+            actLog("Chunk " + idx + "/" + chunks.length + ": " + okN + " paragraph(s) translated" + (badN ? ", " + badN + " failed" : ""));
+            setStatus("Translated " + idx + "/" + chunks.length + " chunk(s) - " + applied + " paragraph(s) so far\u2026", "busy");
+            renderSimDeck();
+            updateDeckSummary();
+            return nextChunk();
+          }, function (aerr) {
+            failed += v.ops.length;
+            actLog("Chunk " + idx + "/" + chunks.length + " apply FAILED: " + ((aerr && aerr.message) || String(aerr)));
+            renderSimDeck();
+            return nextChunk();
+          });
+        });
+      }
+
+      return nextChunk().then(function (summary) {
+        renderParsed({ ok: true, kind: "reply", text: summary }, ctx, instr);
+        pushHistory(instr, summary);
+      });
+    }).catch(function (err) {
+      var msg = err && err.friendly ? err.message : (err && err.message) || String(err);
+      if (SK.cancelErase && /Run cancelled/i.test(msg)) {
+        setStatus("Translation cancelled.", "pending");
+        dbg("translate.cancelled.forget", {});
+      } else {
+        setStatus(msg, "error");
+        pushHistory(instr, "(failed: " + msg + ")");
+      }
+    }).then(function () {
+      stopChatTimer();
+      SK.busy = false;
+      SK.actRunOn = false;
+      setRunEnabled(true);
+      input.disabled = false;
+      renderSimDeck();
+      updateDeckSummary();
+    });
   }
 
   function runPrompt() {
@@ -5360,6 +5626,7 @@ function applyOps(deck, ops, ctx) {
     });
 
     $("chat-run").addEventListener("click", runPrompt);
+    $("chat-translate").addEventListener("click", toggleTranslatePanel);
     var cancelBtn = $("chat-cancel");
     if (cancelBtn) cancelBtn.addEventListener("click", cancelRun);
     $("chat-input").addEventListener("keydown", function (ev) {

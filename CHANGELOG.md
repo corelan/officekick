@@ -42,6 +42,27 @@
   exact layout Office honors, and docs gain the manual Trust Center +
   reg-add unblock for machines that installed older builds.
 
+## 0.9.308
+
+### Added
+- DocKick "Translate" button (below Run): translates the whole document
+  IN PLACE to a picked language (English, French, Spanish, German,
+  Portuguese, Dutch, or a free-entry language). Pane-owned pipeline with
+  no approval gate - the user pressed Translate and picked a language
+  explicitly: paragraphs go to the routed model in ~5k-char chunks (40
+  paragraphs max per ask), each chunk replies with edit_paragraph ops
+  that validate + apply immediately, per-chunk progress lands in the
+  activity log + status line, and Cancel stops between chunks. The
+  prompt preserves tone/register (idiomatic, not literal), keeps
+  technical/topic-specific/defined terms, brand/product/party names,
+  legal terms of art and cross references untranslated, and never
+  repeats pane outline markers ([L2]/[image x1] markers are stripped
+  both ways). The translate read spans the WHOLE document (the
+  300-paragraph outline cap does not apply), every paragraph keeps its
+  style (edit_paragraph), the tracked-changes setting still governs how
+  edits land, and the run files into the session as a normal exchange
+  ("Translate the document to <language>").
+
 ## 0.9.307
 
 ### Fixed

@@ -4,7 +4,7 @@ AI assistant add-ins for **Microsoft Office**, from Corelan. They run on macOS
 and Windows and share one technology stack.
 
 - **Corelan SlideKick** - the PowerPoint add-in ([docs/slidekick.md](docs/slidekick.md))
-- **Corelan DocKick** - the Word add-in ([docs/dockick.md](docs/dockick.md))
+- **Corelan DocKick** - the Word add-in ([docs/dockick.md](docs/dockick.md)): document actions plus one-click in-place document translation (Translate button, tone-preserving, technical terms kept)
 - **Corelan MailKick** - the Outlook add-in (New and classic, Windows/macOS): summarize, translate, draft replies (you send), categories. Needs the https prerequisites met (the installer handles and stages it automatically; details: [docs/mailkick.md](docs/mailkick.md))
 
 ## Contents
