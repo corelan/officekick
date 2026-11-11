@@ -34,7 +34,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 APP = "OfficeKick"
-VERSION = "0.9.313"
+VERSION = "0.9.314"
 
 # --------------------------------------------------------------------------- #
 # Self-restart: the server watches for <cfg dir>/restart.flag. Whatever writes
@@ -2204,14 +2204,56 @@ def update_flag_path(store):
     return os.path.join(os.path.dirname(str(store.path)), "update.lock")
 
 
+def installer_pid_alive(pid):
+    """True while the spawned installer process still exists (0.9.314). The
+    update lock is only MEANINGFUL while that process runs - once it exits
+    (success or failure) the lock is stale and must not block the next
+    update click."""
+    try:
+        pid = int(pid)
+    except (TypeError, ValueError):
+        return False
+    if pid <= 0:
+        return False
+    if os.name == "nt":
+        try:
+            p = subprocess.run(["tasklist", "/FI", "PID eq %d" % pid],
+                               stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                               timeout=10)
+            return (str(pid) in (p.stdout or b"").decode("utf-8", "replace"))
+        except Exception:
+            return False
+    if hasattr(os, "waitpid"):
+        # POSIX: the installer is OUR child - waitpid(WNOHANG) reaps a dead
+        # one (kill(0) alone reports zombies as alive) and reports (0, 0)
+        # while it still runs.
+        try:
+            done = os.waitpid(pid, os.WNOHANG)
+            return done[0] == 0   # (0, 0) = still running
+        except ChildProcessError:
+            pass   # not our child (or already reaped) - fall through
+        except OSError:
+            pass
+    try:
+        os.kill(pid, 0)   # signal 0: existence probe only
+        return True
+    except OSError:
+        return False
+    except Exception:
+        return False
+
+
 def spawn_installer_update(store):
     """POST /api/update-run: run install.py --update from the recorded clone
     as a DETACHED process - pull + redeploy + restart in one click (field:
     the pane's pull-only button left users on the old build; the deploy +
     restart always needed a second command). The installer STOPS this server
     mid-run (that is how it frees the port and starts the new build) - the
-    pane polls /api/health until the generation changes. Refuses while
-    another update is fresh (10 min window)."""
+    pane polls /api/health until the generation changes. The 10-minute lock
+    holds only while the spawned installer PROCESS is alive (0.9.314: the
+    lock carries its PID; a dead installer = a stale lock that must not
+    block the next click - field: a COMPLETED update still refused the next
+    update for the full 10 minutes)."""
     if store is None:
         raise ApiError(500, "no config store")
     repo = store.data.get("repoPath")
@@ -2224,19 +2266,18 @@ def spawn_installer_update(store):
     now = time.time()
     try:
         with open(lock, "r", encoding="utf-8") as f:
-            prev = float((f.read() or "").strip() or "0")
-        if 0 < now - prev < 600:
-            raise ApiError(409, "an update is already running (started %d s ago)"
-                           " - wait for the server to come back" % int(now - prev))
+            parts = (f.read() or "").split()
+        prev = float(parts[0]) if parts else 0.0
+        prev_pid = int(parts[1]) if len(parts) > 1 else 0
+        if prev > 0 and installer_pid_alive(prev_pid):
+            if now - prev < 600:
+                raise ApiError(409, "an update is already running (started %d s ago)"
+                               " - wait for the server to come back" % int(now - prev))
+        # no lock, or the recorded installer is gone: stale lock - start fresh
     except ApiError:
         raise
     except Exception:
-        pass
-    try:
-        with open(lock, "w", encoding="utf-8") as f:
-            f.write("%.2f" % now)
-    except OSError:
-        pass
+        pass   # unreadable lock - start fresh
     os.makedirs(os.path.join(cfg_dir, "logs"), exist_ok=True)
     run_log = os.path.join(cfg_dir, "logs", "update_run.log")
     flags, kwargs = 0, {}
@@ -2250,6 +2291,11 @@ def spawn_installer_update(store):
                              stdout=logf, stderr=logf,
                              creationflags=flags, **kwargs)
     dbg_line(store, "update", "installer.spawned", {"pid": p.pid, "cmd": cmd})
+    try:
+        with open(lock, "w", encoding="utf-8") as f:
+            f.write("%.2f %d" % (time.time(), p.pid))   # 0.9.314: the pid lands IN the lock
+    except OSError:
+        pass
     return {"ok": True, "started": True, "pid": p.pid, "repoPath": repo,
             "what": "git pull + redeploy + restart - the server drops mid-run"
                     " and comes back on the new build",

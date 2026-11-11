@@ -42,6 +42,20 @@
   exact layout Office honors, and docs gain the manual Trust Center +
   reg-add unblock for machines that installed older builds.
 
+## 0.9.314
+
+### Fixed
+- The /api/update-run lock is no longer a blind 10-minute timer: it now
+  carries the spawned installer's PID, and a new update is refused ONLY
+  while that process is alive (kill(0) + waitpid(WNOHANG) so a killed
+  installer's zombie does not read as alive). A finished installer -
+  success OR failure - releases the lock immediately, so a COMPLETED
+  update no longer blocks the next click for the full window (field:
+  "an update is already running (started 520 s ago)" after the update had
+  finished). Old-format locks (timestamp only) never block. Regression
+  test covers: alive installer refuses with 409, dead installer re-spawns
+  immediately, new pid lands in the lock, old-format stale locks proceed.
+
 ## 0.9.313
 
 ### Changed
