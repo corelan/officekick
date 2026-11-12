@@ -78,6 +78,7 @@
       }
       return { host: "Outlook", mode: "read", sender: msg.from, to: msg.to,
                subject: msg.subject, bodyText: minimal ? "" : msg.body, categories: (msg.categories || []).slice(), warnings: [], minimal: minimal,
+               readModeDraft: !!(msg && msg.simReadModeDraft === true),
                itemId: msg.id, selectedItems: multi,
                attachments: [{ name: "hunt-plan.pptx", size: 1482334 }, { name: "ioc-list.csv", size: 41210 }] };
     },
