@@ -42,6 +42,28 @@
   exact layout Office honors, and docs gain the manual Trust Center +
   reg-add unblock for machines that installed older builds.
 
+## 0.9.334
+
+### Fixed
+- SlideKick: structure STILL landed flat even though the model now emits
+  the [L2]/[L3] markers (live probe on the real model chain proved the
+  markers arrive). Root cause: the NEW-TEXT-BOX fallback write. Slides
+  without a body placeholder (AI-built slides, custom/manual layouts -
+  exactly the user's target slide) write the body into a freshly created
+  textbox, and that path returned early WITHOUT applying the
+  paragraph levels - only the placeholder path carried the 0.9.300 level
+  writer. The level applier is now shared by BOTH paths: the fallback
+  rewrites the textbox text through textRange (one paragraph per line)
+  and sets the levels. The level status ("bullet levels set (N)" / build
+  limitations) now rides the result line from the fallback too, so the
+  0.9.327 warning surfaces there as well.
+
+Diagnosis trail: model probe through the user's own server showed
+edit_slide body = ["Simulator", "[L2] run taskpane.js logic without
+PowerPoint", "[L2] ops are applied to this in-memory deck"] - markers
+emitted on the current prompt; sim apply worked; the flat result could
+only come from the live Office fallback path.
+
 ## 0.9.333
 
 ### Fixed

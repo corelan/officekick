@@ -3318,7 +3318,61 @@ OfficeDeck.prototype.formatText = function (slideIndex, shapeIndex, font) {
 OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceholderText(i, "title", text); };
   OfficeDeck.prototype.setSlideBody = function (i, lines, levels) { return this._setPlaceholderText(i, "body", lines, levels); };
 
-  OfficeDeck.prototype._setPlaceholderText = function (i, role, lines, levels) {
+  OfficeDeck.prototype._writeTfLevels = function (ctx, tf, levels) {
+    // 0.9.331: ONE level applier for placeholder AND textbox-fallback writes -
+    // the 0.9.300 logic only ran on the placeholder path, so every body
+    // rewrite that landed in the new-text-box fallback (AI-built slides,
+    // custom layouts) silently flattened the [L2]/[L3] structure.
+    var self = this;
+    return ctx.sync().then(function () {
+      var lvls = levels || [];
+      if (!lvls.some(function (v5) { return v5 > 0; })) return null;
+      if (self._lvlApi !== true) {
+        return { ok: true, how: "bullet levels not set - this build cannot (needs PowerPointApi 1.11), text kept flat" };
+      }
+      tf.paragraphs.load("items/text");
+      return ctx.sync().then(function () {
+        var paras = tf.paragraphs.items || [];
+        var wrote5 = 0, over5 = 0;
+        paras.forEach(function (p5, k5) {
+          if (k5 >= lvls.length) { over5++; return; }
+          if (!lvls[k5]) return;
+          p5.level = lvls[k5]; wrote5++;
+        });
+        return ctx.sync().then(function () {
+          return { ok: true, how: "bullet levels set (" + wrote5 + (over5 ? ", " + over5 + " unmatched lines skipped" : "") + ")" };
+        }, function (eLev5) {
+          return { ok: true, how: "bullet levels rejected by this build (" + String((eLev5 && eLev5.message) || eLev5).slice(0, 70) + ") - text kept flat" };
+        });
+      }, function (ePara5) {
+        return { ok: true, how: "bullet levels unreadable (" + String((ePara5 && ePara5.message) || ePara5).slice(0, 70) + ") - text kept flat" };
+      });
+    });
+  };
+
+  // the fallback text box carries its text from creation - rewrite it once
+  // through textRange so the paragraphs split per line, then apply levels
+  OfficeDeck.prototype._writeTextboxWithLevels = function (ctx, tb, joined, levels) {
+    var self = this;
+    return ctx.sync().then(function () {
+      var tf = tb.getTextFrameOrNullObject();
+      tf.load("isNullObject,hasText");
+      return ctx.sync().then(function () {
+        if (tf.isNullObject) return { ok: true, how: "" };
+        tf.textRange.load("text");
+        return ctx.sync().then(function () {
+          tf.textRange.text = joined;
+          return ctx.sync().then(function () {
+            return self._writeTfLevels(ctx, tf, levels).then(function (lvRes) {
+              return lvRes || { ok: true, how: "" };
+            });
+          });
+        });
+      });
+    });
+  };
+
+OfficeDeck.prototype._setPlaceholderText = function (i, role, lines, levels) {
     var self = this;
     var joined = Array.isArray(lines) ? lines.join("\r") : String(lines == null ? "" : lines);
     return this.run("set" + role, function (ctx) {
@@ -3400,7 +3454,9 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
               try {
                 var tb = slide.shapes.addTextBox(joined, std);
                 try { tb.name = "sk-body-fallback-" + (i + 1); } catch (eN2) { /* optional */ }
-                return ctx.sync().then(function () { return { ok: true, how: fallbackNote }; });
+                return self._writeTextboxWithLevels(ctx, tb, joined, levels).then(function (lvRes) {
+                         return { ok: true, how: fallbackNote + (lvRes && lvRes.how ? " - " + lvRes.how : "") };
+                       });
               } catch (eTb1) {
                 try {
                   var tb2 = slide.shapes.addTextBox(joined);
@@ -3408,7 +3464,9 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
                     try { tb2[gk] = std[gk]; } catch (eG4) { /* optional */ }
                   });
                   try { tb2.name = "sk-body-fallback-" + (i + 1); } catch (eN3) { /* optional */ }
-                  return ctx.sync().then(function () { return { ok: true, how: fallbackNote }; });
+                  return self._writeTextboxWithLevels(ctx, tb2, joined, levels).then(function (lvRes) {
+                           return { ok: true, how: fallbackNote + (lvRes && lvRes.how ? " - " + lvRes.how : "") };
+                         });
                 } catch (eTb2) {
                   throw new FriendlyError("No body/content placeholder found on slide " +
                     (i + 1) + ", and the text-box fallback failed (" +
@@ -3421,29 +3479,8 @@ OfficeDeck.prototype.setSlideTitle = function (i, text) { return this._setPlaceh
             return ctx.sync().then(function () {
               pick.tf.textRange.text = joined;
               return ctx.sync().then(function () {
-                // 0.9.300: levels ride the SAME run after the text commits
-                var lvls = levels || [];
-                if (!lvls.some(function (v5) { return v5 > 0; })) return null;
-                if (self._lvlApi !== true) {
-                  return { ok: true, how: "bullet levels not set - this build cannot (needs PowerPointApi 1.11), text kept flat" };
-                }
-                pick.tf.paragraphs.load("items/text");
-                return ctx.sync().then(function () {
-                  var paras = pick.tf.paragraphs.items || [];
-                  var wrote5 = 0, over5 = 0;
-                  paras.forEach(function (p5, k5) {
-                    if (k5 >= lvls.length) { over5++; return; }
-                    if (!lvls[k5]) return;
-                    p5.level = lvls[k5]; wrote5++;
-                  });
-                  return ctx.sync().then(function () {
-                    return { ok: true, how: "bullet levels set (" + wrote5 + (over5 ? ", " + over5 + " unmatched lines skipped" : "") + ")" };
-                  }, function (eLev5) {
-                    return { ok: true, how: "bullet levels rejected by this build (" + String((eLev5 && eLev5.message) || eLev5).slice(0, 70) + ") - text kept flat" };
-                  });
-                }, function (ePara5) {
-                  return { ok: true, how: "bullet levels unreadable (" + String((ePara5 && ePara5.message) || ePara5).slice(0, 70) + ") - text kept flat" };
-                });
+                // 0.9.331: levels ride the SAME run (shared with the fallback)
+                return self._writeTfLevels(ctx, pick.tf, levels);
               });
             });
           });
