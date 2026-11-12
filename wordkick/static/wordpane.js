@@ -97,6 +97,7 @@
     modelsCache: {},     // connName -> {list:[...], at:ms}
     sessionApprovals: {},// opType -> 'auto' when approved for this session
     clarifyAnswer: null,   // 0.9.235: pending user pick from a clarify round
+    trackNextApply: null,   // 0.9.328: a clarify pick of a track-changes option forces tracking for the next apply batch
     clarifyChain: 0,       // clarify rounds served since the original ask
     sessionManual: false,  // the user renamed this session: pause AI titles
     history: [],         // conversation turns shown to the model (session-only)
@@ -1060,7 +1061,7 @@
     '- {"type":"set_header","text":"..."} / {"type":"set_footer","text":"..."} (writes text into the page header / footer of section 1; use when the user asks for a header/footer, e.g. a draft marker)',
     '- {"type":"create_toc","title":"Table of Contents"(optional),"levels":"1-3"(optional)} (inserts a REAL table-of-contents FIELD for the given heading levels at the end of the document; Word fills the entries when fields are updated - never fake TOC entries as plain text)',
 
-    '- {"type":"set_track_changes","on":true|false} (turns the DOCUMENT\'s Track Changes mode on/off - the Review-tab toggle; use when the user asks to start/stop tracking; turning it off does NOT remove existing revisions - offer accept_changes for those; the pane\'s separate "AI edits as tracked changes" lives in Settings)',
+    '- {"type":"set_track_changes","on":true|false} (turns the DOCUMENT\'s Track Changes mode on/off - the Review-tab toggle; use when the user asks to start/stop tracking; turning it off does NOT remove existing revisions - offer accept_changes for those; the pane\'s separate "AI edits as tracked changes" lives in Settings). When you OFFER a track-changes variant in a clarify round and the user PICKS it, your FIRST op must be {"type":"set_track_changes","on":true} before the edit ops - do not rely on the pane setting',
     "",
     "- LIST INDENTATION (writable [L] markers): the outline shows list items as \"[L2] text\" - no marker = a normal paragraph or top-level bullet. WRITABLE: prefix an item's text with [L2] (second level) up to [L9] (deepest, 9 indent levels) in insert_paragraphs / rewrite_doc - the pane turns it into a real list item with that indentation. Never write [L...] markers anywhere else (not in find values).\n",
     "- STYLES AND SIZES (document typography law): RUNNING TEXT (the body of an essay, article, report or letter) is ALWAYS style \"normal\". Use \"title\" for AT MOST ONE document title paragraph, \"heading1\" for section titles, \"heading2\" for subsections. Emphasis inside body text = bold/italic, never a larger size. If you set font.size, keep it near the document's existing scale (body typically 10-14pt, Title at most 28pt) - never upscale running text.",
@@ -3185,14 +3186,14 @@ function applyOps(deck, ops, ctx) {
     var lines = [], manualNotes = [];
     var deleted = [];
     var revNote = null;
-    var revOn = !!(SK.cfg && SK.cfg.trackedChanges);
+    var revOn = !!(SK.cfg && SK.cfg.trackedChanges) || SK.trackNextApply === true;   // 0.9.328: the clarify pick activates tracking
     var pre = Promise.resolve();
     if (revOn && deck.setTrackChanges) {
       pre = deck.setTrackChanges(true).then(function (res) {
         SK.revPrevMode = res && res.previous ? String(res.previous) : null;
       }).catch(function (err) {
         revNote = (err && err.message) || String(err);
-        SK.cfg.trackedChanges = false; // do not retry per-op
+        if (SK.cfg && SK.cfg.trackedChanges) SK.cfg.trackedChanges = false; // do not retry per-op (only when the SETTING drove it)
       });
     }
     var adj = function (i) {
@@ -3392,6 +3393,7 @@ function applyOps(deck, ops, ctx) {
           ? deck.setTrackChanges(wasOn).catch(function () { return null; })
           : Promise.resolve(null);
         SK.revPrevMode = null;
+        SK.trackNextApply = null;   // 0.9.328: one apply batch per pick (the document mode stays ON)
         return off.then(function () { return res; });
       });
     });
@@ -4903,6 +4905,13 @@ function applyOps(deck, ops, ctx) {
       // carries it, not only the first ask after the pick
       var augText = String(instruction) + "\n(your earlier choice on \"" + String(parsed.question || "") + "\": " + String(val) + ")";
       SK.clarifyAnswer = { q: String(parsed.question || ""), a: String(val), expect: augText };
+      // 0.9.328: picking a track-changes option must ACTUALLY activate Track
+      // Changes for the edits that follow - the pane's own setting (off by
+      // default) decides nothing here. Negated mentions do not count.
+      try {
+        var vTC = String(val || "");
+        if (/track/i.test(vTC) && !/(in place|without|don.t|no track|instead)/i.test(vTC)) SK.trackNextApply = true;
+      } catch (eTC) { /* flag stays unset */ }
       var inp = $("chat-input");
       if (inp) { inp.value = augText; }
       runPrompt();   // the re-ask carries the decision as a CLARIFICATION block

@@ -42,6 +42,27 @@
   exact layout Office honors, and docs gain the manual Trust Center +
   reg-add unblock for machines that installed older builds.
 
+## 0.9.328
+
+### Fixed
+- Picking the track-changes variant in a Dockick clarify round ("in place
+  vs tracked") did NOT activate Word's Track Changes: activation was
+  keyed solely on the Settings toggle "AI edits as tracked changes"
+  (off by default), so a full review's edit_paragraph ops landed in
+  place even though the user explicitly chose revisions. A clarify pick
+  that mentions track changes (negated mentions excluded) now activates
+  the document's Track Changes for the apply batch that follows - the
+  mode stays ON so the revisions are reviewable, the Settings toggle is
+  untouched, and every other status flow behaves as before (WordApi 1.6
+  build limits still surface as the "revisions:" result row).
+- The prompt's set_track_changes op doc now requires the model to emit
+  {"type":"set_track_changes","on":true} as its FIRST op after a tracked
+  choices-clarify instead of relying on the pane setting.
+
+E2E (simulator, gated mock): review ask -> clarify -> Track option ->
+apply -> setTrackChanges(true) fired and stays on; the "in place" option
+never activates it; the Settings toggle stays false in both rounds.
+
 ## 0.9.327
 
 ### Fixed

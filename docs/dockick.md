@@ -68,7 +68,7 @@ Sub-bullets: prefix an item's text with [L2] (up to [L9] for deeper indentation)
 | accept tracked changes | accepts ALL tracked changes in the document (`body.getTrackedChanges().acceptAll()`) - finalize the AI edits made with revisions on; confirm by default | confirm |
 | reject tracked changes | rejects ALL tracked changes in the document (`rejectAll()`) - discard the AI edits made with revisions on | confirm |
 | set header / set footer | writes text into the page header / footer of section 1 (`section.getHeader/getFooter`, WordApi 1.1) | confirm |
-| set track changes | turns the document's own Track Changes mode on/off (the Review-tab toggle; `document.changeTrackingMode`) - does not touch existing revisions; confirm by default | confirm |
+| set track changes | turns the document's own Track Changes mode on/off (the Review-tab toggle; `document.changeTrackingMode`) - does not touch existing revisions; confirm by default. When a clarify round offers a track-changes option and you pick it, the pane activates Track Changes for the edits that follow automatically (without touching the Settings toggle) | confirm |
 | add hyperlink | links the FIRST occurrence of a text to a URL (`Range.hyperlink`, WordApi 1.3) | confirm |
 | format selected text | format changes applied to the text you selected right now | confirm |
 | replace text | find/replace (all matches by default) | auto |

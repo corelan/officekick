@@ -144,6 +144,7 @@
     },
     setTrackChanges: async function (on) {
       trackChanges = !!on;
+      try { window.SimDeck.lastTracking = !!on; } catch (e) { /* test observability */ }
       return { ok: true };
     },
     acceptChanges: async function () {
