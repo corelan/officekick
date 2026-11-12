@@ -5430,6 +5430,160 @@ OfficeDeck.prototype.setNotes = function (i, text) {
         });
       }
 
+
+      // 0.9.340: the chunked deck-REVIEW pipeline. A wording/proofread ask
+      // over a large deck cannot be one ask (the op list never fits one
+      // reply) - it walks the deck in 12-slide slices, collects the fixes
+      // and ends in ONE approval gate (the standard preview handles
+      // accept/reject per op; the Track Changes setting is a DocKick thing).
+      var REVIEW_ASK_RE = new RegExp("\\b(review|proofread|proof-?read|proofreading|wording|grammar|spelling|typos?|grammatical|punctuation|recheck|reads? (unnatural|strange|awkward)|feels? (a bit )?(strange|awkward|unnatural|off)|not natural|strange choice|better wording|improv(e|ing).{0,20}(wording|text|language|title)|polish the (text|wording|language|titles))\\b", "i");
+      var REVIEW_MIN_SLIDES = 20;
+      var REVIEW_CHUNK_SLIDES = 12;
+      var REVIEW_ASK_BUDGET = 160;
+      var REVIEW_DECK_SYS = "You are a professional language editor working inside SlideKick. You review the deck text and propose MINIMAL wording fixes. " +
+        "THE USER'S ORIGINAL REQUEST below defines what you look for (strange wording after a translation, odd word choices, broken grammar, unnatural phrasing, repetitions). " +
+        "REVIEW, DON'T REWRITE: propose the smallest edit that fixes the issue - keep the design, the structure, the meaning and the register; keep every technical term, brand name, defined term, number, currency and URL unchanged. " +
+        "Only touch shapes that actually need a fix - a slide that is already fine stays out of the reply entirely (an empty ops list is a valid answer for a clean slice). " +
+        "Reply ONLY with a JSON object {\"kind\":\"slide_ops\",\"ops\":[...]} - no prose, no fences. " +
+        "Op schemas: {\"type\":\"replace_text\",\"slide\":N,\"shape\":M,\"find\":\"the exact current text fragment from the outline\",\"text\":\"the corrected replacement\"} (PREFERRED: fragment-level, the rest of the shape is preserved) " +
+        "and {\"type\":\"edit_slide\",\"slide\":N,\"title\":\"...\"|null,\"body\":[...]|null} (only when the slice needs a full rewrite). " +
+        "Never repeat outline markers like [L2] in find/text values - they are pane annotations, not slide text. " +
+        "Do not invent slide or shape numbers outside the outline below.";
+      function reviewDeckFlow() {
+        var slideN = ctx.slides.length;
+        var outline = [];   // per-slide listing (full shape text, capped)
+        ctx.slides.forEach(function (sl) {
+          var role = slideRoleOf(sl);
+          var title = (sl.shapes || []).filter(function (sh) { return sh.isTitle || (sh.text && /title/i.test(sh.name)); })[0];
+          var line = "[" + (sl.idx + 1) + "] (role: " + role + ") " +
+            (title && title.text ? "TITLE: \"" + String(title.text).slice(0, 200) + "\"" : "(no title)");
+          outline.push(line);
+          (sl.shapes || []).forEach(function (sh) {
+            if (sh.text == null) return;
+            var role2 = sh.isTitle || (title && sh.idx === title.idx) ? "title" : sh.isBody ? "body" : "text";
+            var txt = String(sh.text).replace(/\r|\n/g, " | ");
+            if (!txt.trim()) txt = "(no readable text - table/gfx shape)";
+            if (txt.length > 400) txt = txt.slice(0, 400) + "…[text continues]";
+            outline.push("    shape " + (sh.idx + 1) + " (" + role2 + ", " + sh.name + '): "' + txt + '"');
+          });
+        });
+        // chunk the SLIDES (deck order, 1-based numbers as the outline shows)
+        var chunks = [];
+        for (var ri = 0; ri < slideN; ri += REVIEW_CHUNK_SLIDES) {
+          chunks.push({ from: ri + 1, to: Math.min(ri + REVIEW_CHUNK_SLIDES, slideN) });
+        }
+        dbg("review.deck.plan", { slides: slideN, chunks: chunks.length });
+        var proposed = [], proposedSig = {}, skippedChunks = 0, budgetUsed = 0, budgetHit = false;
+        var queue = [];   // {from, to, label, retried}
+        chunks.forEach(function (cs) {
+          queue.push({ from: cs.from, to: cs.to, retried: false, label: "chunk " + cs.from + ".." + cs.to });
+        });
+        function collect(r2, lo, hi) {
+          var pre = tryParse(r2 && r2.text || "");
+          var got = (pre.ok && pre.ops) || (salvageOps(r2 && r2.text || "") || []);
+          var fixes = [];
+          got.forEach(function (o) {
+            if (!o || o.slide == null) return;
+            var sn = (typeof o.slide === "number") ? o.slide : (String(o.slide).trim() && !isNaN(Number(o.slide)) ? Number(o.slide) : null);
+            if (sn === null || sn < lo || sn > hi) return;   // not this slice
+            var sig = "s" + sn + "|" + o.type + "|" + String(o.shape || "") + "|" + String(o.find || "");
+            if (o.type !== "replace_text" && o.type !== "edit_slide") return;
+            if (o.type === "replace_text" && (!String(o.find || "").trim() || !String(o.text || "").trim())) return;
+            if (o.type === "edit_slide" && o.title == null && o.body == null) return;
+            if (proposedSig[sig]) return;
+            proposedSig[sig] = true;
+            proposed.push(o);
+            fixes.push(o);
+          });
+          return { fixes: fixes, clean: pre.ok };
+        }
+        function finishReview() {
+          var summary = "Review done: " + proposed.length + " proposal(s) across " + (chunks.length - skippedChunks) +
+            " chunk(s)" + (skippedChunks ? "; " + skippedChunks + " chunk(s) could not be completed (see the activity log)." : ".") +
+            (budgetHit ? " The run stopped at the model-ask budget - run the same request again to continue." : "") +
+            (proposed.length ? " Review and accept the proposals below." : " No wording changes suggested.");
+          if (proposed.length) return { ok: true, kind: "slide_ops", ops: proposed, orchestrated: 1 };
+          return { ok: true, kind: "reply", text: summary };
+        }
+        function askChunk(item, allowRetry) {
+          budgetUsed++;
+          if (budgetUsed >= REVIEW_ASK_BUDGET) budgetHit = true;
+          if (budgetHit) return runNext();
+          setStatus("Reviewing " + item.label + " (slides " + item.from + ".." + item.to + ") - " + ref.model + "\u2026", "busy");
+          var lo = item.from, hi = item.to;
+          var listing = outline.filter(function (l) {
+            var m2 = /^\[(\d+)\]/.exec(l);
+            return m2 && Number(m2[1]) >= lo && Number(m2[1]) <= hi;
+          }).join("\n");
+          var user = "REVIEW FOCUS - the user's original request: " + String(instruction || "").slice(0, 500) + "\n" +
+            "This chunk covers slides " + lo + ".." + hi + " ONLY (1-based slide numbers; other slides are reviewed separately).\n" +
+            "The shapes below carry the FULL slide text - review them now.\n\n" + listing + "\n\n" +
+            "Reply with the slide_ops JSON only.";
+          return askRetryable(function () {
+            return apiJson("/api/chat", "POST", {
+              connection: ref.connection, model: ref.model,
+              temperature: 0.2, maxTokens: 7000,
+              messages: [{ role: "system", content: REVIEW_DECK_SYS }, { role: "user", content: user }],
+            });
+          }).then(function (r2) {
+            if (SK.runCancelled) return Promise.reject(new FriendlyError("Run cancelled."));
+            var parsed = collect(r2, lo, hi);
+            if (parsed.fixes.length || parsed.clean) {
+              actLog(item.label + " [" + ref.model + "]: " + parsed.fixes.length + " proposal(s) for slides " + lo + ".." + hi +
+                (parsed.fixes.length ? " - total so far: " + proposed.length : " (slice is clean)"));
+              setStatus("Reviewed so far: " + proposed.length + " proposal(s)\u2026", "busy");
+              return runNext();
+            }
+            var head = String((r2 && r2.text) || "").replace(/\s+/g, " ").trim().slice(0, 150) || "(empty reply)";
+            if (!allowRetry) return skipChunk(item, head);
+            budgetUsed++;
+            if (budgetUsed >= REVIEW_ASK_BUDGET) budgetHit = true;
+            if (budgetHit) return skipChunk(item, head);
+            actLog(item.label + " [" + ref.model + "]: the reply was not parseable - re-asking firm\u2026 model said: " + head);
+            item.retried = true;
+            var rep = [
+              { role: "system", content: REVIEW_DECK_SYS },
+              { role: "user", content: user },
+              { role: "assistant", content: String((r2 && r2.text) || "").slice(0, 500) },
+              { role: "user", content: "Your last reply was not valid action JSON. Reply again NOW: ONLY the slide_ops JSON with the fixes for slides " + lo + ".." + hi + " - or an EMPTY ops list when the slice is clean. No prose, no reasoning." },
+            ];
+            return askRetryable(function () {
+              return apiJson("/api/chat", "POST", {
+                connection: ref.connection, model: ref.model,
+                temperature: 0.2, maxTokens: 7000, messages: rep,
+              });
+            }).then(function (r3) {
+              var parsed3 = collect(r3, lo, hi);
+              if (parsed3.fixes.length || parsed3.clean) {
+                actLog(item.label + " [" + ref.model + "]: " + parsed3.fixes.length + " proposal(s) after the re-ask - total: " + proposed.length);
+                return runNext();
+              }
+              return skipChunk(item, head);
+            }, function () {
+              return skipChunk(item, "");
+            });
+          }, function (e2) {
+            if (SK.runCancelled || /Run cancelled/i.test(String(e2 && e2.message)))
+              return Promise.reject(new FriendlyError("Run cancelled."));
+            actLog(item.label + " failed: " + ((e2 && e2.message) || String(e2)));
+            return skipChunk(item, "");
+          });
+        }
+        function skipChunk(item, why) {
+          skippedChunks++;
+          actLog(item.label + " skipped - the reviewer reply could not be parsed; slides " + item.from + ".." + item.to + " left unchanged" + (why ? " (model said: " + why + ")" : ""));
+          return runNext();
+        }
+        function runNext() {
+          if (SK.runCancelled) return Promise.reject(new FriendlyError("Run cancelled."));
+          if (!budgetHit && budgetUsed >= REVIEW_ASK_BUDGET) budgetHit = true;
+          if (!queue.length || budgetHit) return Promise.resolve(finishReview());
+          return askChunk(queue.shift(), true);
+        }
+        setStatus("Reviewing " + chunks.length + " chunk(s), " + slideN + " slides\u2026", "busy");
+        return runNext();
+      }
+
       var baseChain = function () {
       return mainAsk().then(function (resp) {
         dbg("response", { text: resp.text, elapsedMs: resp.elapsedMs });
@@ -5524,7 +5678,9 @@ OfficeDeck.prototype.setNotes = function (i, text) {
         });
       });
       };
-      var parsedChain = fullMo ? makeOverFlow() : baseChain();
+      var rvDeck = REVIEW_ASK_RE.test(String(instruction || "")) &&
+        !fullMo && !!(ctx && ctx.slides && ctx.slides.length > REVIEW_MIN_SLIDES);
+      var parsedChain = fullMo ? makeOverFlow() : (rvDeck ? reviewDeckFlow() : baseChain());
       var runRetry = function () {
         return parsedChain.then(function (parsed) {
           if (parsed === null) {

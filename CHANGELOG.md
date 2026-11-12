@@ -42,6 +42,25 @@
   exact layout Office honors, and docs gain the manual Trust Center +
   reg-add unblock for machines that installed older builds.
 
+## 0.9.340
+
+### Added
+- SlideKick now runs the SAME chunked review pipeline as DocKick
+  (auto-detected): a wording/proofread/review ask over a deck with more
+  than 20 slides walks the deck in 12-slide slices, each slice gets its
+  own editor ask (REVIEW, DON'T REWRITE; replace_text with find is the
+  preferred fragment-level fix, edit_slide only for full rewrites; empty
+  slice = clean), the fixes are COLLECTED (deduped by slide+op) and end
+  in ONE approval gate (the standard preview). Fallback ask retry,
+  cancellation and the model-ask budget included. Previously such asks
+  went out as ONE reply and were cut mid-fix (the same failure DocKick
+  0.9.339 fixed for documents).
+- The wordpane review pipeline shared the detection regex (kept in sync).
+
+E2E (simulator, per-request scenario mock): 33-slide deck, review ask
+detected -> 3 chunk asks (slides 1..12 / 13..24 / 25..33) -> 1 proposal
+collected -> single gate -> apply verified on the deck.
+
 ## 0.9.339
 
 ### Added
