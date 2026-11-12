@@ -2514,14 +2514,22 @@ var nw = $("sess-new");
       }
       var bad = function (reason) { invalid.push({ op: op, reason: reason }); };
       var paraOk = function (v) { return typeof v === "number" && Math.floor(v) === v && v >= 0 && (!ctx || v < ctx.paragraphCount); };
+      // 0.9.347: the model reusing the prompt EXAMPLE placeholder ("...") as
+      // the actual text is not content - reject it with a plain reason
+      var isPlaceholderHtml = function (s) { return /^\s*(\.\.\.+|\u2026|your (reply|answer|text)( here)?|reply text|the rewritten body)\s*$/i.test(String(s || "")); };
       var out = { type: t };
       if (t === "draft_reply") {
+        if (ctx && ctx.mode === "compose") {
+          bad("WRONG OP: you are COMPOSING this email - edit the draft in place with compose_body (html = the rewritten body). draft_reply cannot run while composing.");
+          return;
+        }
         var html = op.html;
         if (typeof html !== "string" || html.length < 2) {
           if (typeof op.text === "string" && op.text.length >= 2) html = op.text;
           else { bad("missing reply text"); return; }
         }
         if (html.length > 20000) { bad("reply too long (max 20000 chars)"); return; }
+        if (isPlaceholderHtml(html)) { bad("reply text is a placeholder ('" + html.slice(0, 40) + "') - write the actual reply content"); return; }
         out.html = html;
         out.all = op.all === true;
       } else if (t === "compose_body") {
@@ -2532,6 +2540,7 @@ var nw = $("sess-new");
           else { bad("missing body text"); return; }
         }
         if (cb.length > 60000) { bad("body too long (max 60000 chars)"); return; }
+        if (isPlaceholderHtml(cb)) { bad("body text is a placeholder ('" + cb.slice(0, 40) + "') - write the actual rewritten body"); return; }
         out.html = cb;
       } else if (t === "set_categories") {
         var names = op.names || op.categories;
@@ -2597,6 +2606,10 @@ var nw = $("sess-new");
       } else if (t === "save_draft") {
         if (!ctx || ctx.mode !== "compose") { bad("save draft works only while composing"); return; }
       } else if (t === "new_message") {
+        if (ctx && ctx.mode === "compose") {
+          bad("WRONG OP: you are COMPOSING this email - edit the draft in place with compose_body (html = the rewritten body). new_message only opens a NEW email window.");
+          return;
+        }
         var toList = Array.isArray(op.to) ? op.to.filter(function (x) { return typeof x === "string" && x; }) : [];
         var nmHtml = op.html;
         if (typeof nmHtml !== "string" || nmHtml.length < 2) {
@@ -2605,6 +2618,7 @@ var nw = $("sess-new");
         }
         if (toList.length > 50) { bad("too many recipients (max 50)"); return; }
         if (nmHtml.length > 60000) { bad("message too long (max 60000 chars)"); return; }
+        if (isPlaceholderHtml(nmHtml)) { bad("message text is a placeholder ('" + nmHtml.slice(0, 40) + "') - write the actual message content"); return; }
         out.to = toList;
         out.subject = typeof op.subject === "string" ? op.subject.slice(0, 200) : "";
         out.html = nmHtml;

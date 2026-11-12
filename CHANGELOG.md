@@ -42,6 +42,19 @@
   exact layout Office honors, and docs gain the manual Trust Center +
   reg-add unblock for machines that installed older builds.
 
+## 0.9.347
+
+### Fixed
+- MailKick still proposed reply/new-message ops while the user was
+  COMPOSING (field report: "I'm not asking to reply"). Validation now
+  rejects draft_reply and new_message in compose mode with a
+  self-diagnosing reason ("you are COMPOSING this email - edit the
+  draft in place with compose_body") that the existing repair loop
+  sends back to the model verbatim.
+- The model reusing the prompt-example placeholder ("...") as the
+  actual reply/body text is rejected too ("placeholder - write the
+  actual content"), in draft_reply, compose_body and new_message.
+
 ## 0.9.346
 
 ### Fixed
