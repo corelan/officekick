@@ -293,8 +293,9 @@ actual pixels from a provider with an OpenAI-style images API, and inserts them
 
 ## Settings
 
-Open the gear tab: six sub-tabs - **General**, **Approval policy**,
-**Connections**, **Profiles**, **Search**, **Inspector**. What every setting
+Open the gear tab: seven sub-tabs - **General**, **Approvals**, **AI**
+(**Connections** and **Profiles** live together here as sub-subtabs),
+**Search**, **Style**, **Inspector**, **Update**. What every setting
 means and how to configure it: [docs/settings.md](settings.md).
 
 Every value lives in `~/.officekick/config.json`, is re-read on each pane
@@ -383,7 +384,7 @@ design).
   4. Re-run the installer (it restarts the server).
 - **"lacks the text-editing APIs" / read-only pane** - update Microsoft 365
   (PowerPointApi 1.8: Mac 16.96+, Windows 2504+).
-- **401/403 from a provider** - fix the key on the Connections tab (a blank key
+- **401/403 from a provider** - fix the key under Settings > AI > Connections (a blank key
   field keeps the stored key).
 - **Model answers arrive as plain text** - the model ignored the JSON contract;
   with debug logging on, the daily log (`~/.officekick/logs/debug-YYYY-MM-DD.log`)

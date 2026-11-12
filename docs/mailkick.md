@@ -311,8 +311,9 @@ certificate active, the same page also answers on `https://localhost:8766`
 
 ## Settings
 
-Open the gear tab: six sub-tabs - **General**, **Approval policy**,
-**Connections**, **Profiles**, **Search**, **Inspector**. What every setting
+Open the gear tab: seven sub-tabs - **General**, **Approvals**, **AI**
+(**Connections** and **Profiles** live together here as sub-subtabs),
+**Search**, **Style**, **Inspector**, **Update**. What every setting
 means and how to configure it: [docs/settings.md](settings.md).
 
 Every value lives in `~/.officekick/config.json`, is re-read on each pane

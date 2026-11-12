@@ -394,22 +394,22 @@ Outlook does not.
 
 The pane is open - set it up once, in four steps:
 
-1. **Connections** tab: add a provider (Type + Base URL + optional API key).
-   "Test connection" lists its models.
-   See [settings.md > Connections](docs/settings.md#settings--connections).
-2. **Profiles** tab: pick the two model routes - **content** (edits and
-   generation) and **other** (advice and brainstorming). Optional slots:
-   **Image model** (picture generation) and **Web search model** (a lookup
-   channel the pane can use itself).
-   See [settings.md > Profiles](docs/settings.md#settings--profiles).
+1. **Settings > AI > Connections** sub-subtab: add a provider (Type +
+   Base URL + optional API key). "Test connection" lists its models.
+   See [settings.md > AI > Connections](docs/settings.md#settings--ai--connections).
+2. **Settings > AI > Profiles** sub-subtab: pick the two model routes -
+   **content** (edits and generation) and **other** (advice and
+   brainstorming). Optional slots: **Image model** (picture generation)
+   and **Web search model** (a lookup channel the pane can use itself).
+   See [settings.md > AI > Profiles](docs/settings.md#settings--ai--profiles).
 3. **Settings > Search**: the steps the model's web lookups follow. No
    steps configured = the free keyless DuckDuckGo engine.
    See [settings.md > Search](docs/settings.md#settings--search).
 4. Type the request in the **Sessions** tab and press **Run**
    (Cmd/Ctrl+Enter). The run reports every step in the activity log under
    the status line; the approval policy decides what gets applied - set it
-   in Settings > Approval policy
-   ([settings.md > Approval policy](docs/settings.md#settings--approval-policy)).
+   in Settings > Approvals
+   ([settings.md > Approvals](docs/settings.md#settings--approvals)).
 
 That is it - no repeated setup. The provider/profile choices apply to every
 Office app on the machine (one shared local server). The two things to

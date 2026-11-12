@@ -543,7 +543,7 @@ button.armed { border-color: #b00020 !important; color: #fff !important; backgro
 .fieldlabel { font-size: 11px; color: var(--muted, #98989d); margin: 2px 0; }
 .chatbottom { margin-top: 6px; }
 
-/* Settings sub-tabs (General / Approval policy / Connections / Profiles) */
+/* Settings sub-tabs (General / Approvals / AI / Update) */
 .subtabs { display: flex; flex-wrap: wrap; gap: 4px; margin: 2px 0 12px 0; border-bottom: 1px solid rgba(128,128,128,.35); }
 .subtabs button { padding: 7px 12px; white-space: nowrap; border: none; background: none; cursor: pointer; font-weight: 600; border-bottom: 2px solid transparent; color: #0078d4; }
 .subtabs button.active { color: #005a9e; border-bottom-color: #0078d4; }
@@ -918,3 +918,7 @@ body.dark #update-flag { animation-name: upglow-dark; }
 \n
 /* 0.9.330: the bottom update notice opens the Update subtab */
 #update-flag { cursor: pointer; }
+\n
+/* 0.9.331: the AI group's sub-subtabs (Connections / Profiles) */
+.subtabs.subsubtabs { margin: 10px 0 10px 14px; border-bottom: none; }
+.subtabs.subsubtabs button { font-size: 12px; padding: 4px 10px; }

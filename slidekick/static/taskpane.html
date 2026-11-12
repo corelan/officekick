@@ -89,9 +89,8 @@
     <section id="tab-settings" class="tab">
     <div class="subtabs" id="settings-subtabs">
       <button data-subtab="general" class="active">General</button>
-      <button data-subtab="approvals">Approval policy</button>
-      <button data-subtab="connections">Connections</button>
-      <button data-subtab="profiles">Profiles</button>
+      <button data-subtab="approvals">Approvals</button>
+      <button data-subtab="ai">AI</button>
         <button data-subtab="search">Search</button>
       <button data-subtab="style">Style</button>
       <button data-subtab="inspector">Inspector</button>
@@ -181,7 +180,7 @@
       </div>
       <div class="row"><span id="set-autoapply-msg" class="formmsg"></span></div>
       </div>
-      <h2 class="sheettitle">Approval policy per action</h2>
+      <h2 class="sheettitle">Approvals per action</h2>
       <p class="muted">SlideKick never sends deck changes without this policy:
         <b>auto</b> = apply immediately, <b>confirm</b> = apply only after you tick it in the
         preview, <b>deny</b> = blocked with a notice.</p>
@@ -191,7 +190,12 @@
       </div>
       <div id="settings-msg" class="formmsg"></div>
     </div>
-    <div class="subpanel" id="sub-connections">
+        <div class="subpanel" id="sub-ai">
+      <div class="subtabs subsubtabs" id="settings-subsubtabs">
+        <button data-subsubtab="connections" class="active">Connections</button>
+        <button data-subsubtab="profiles">Profiles</button>
+      </div>
+<div class="subpanel" id="sub-connections">
 
       <div class="connlist" id="conn-list"></div>
       <div class="row"><button id="conn-new" class="btn subtle" type="button">+ New connection</button></div>
@@ -277,7 +281,8 @@
         <div id="prof-formmsg" class="formmsg"></div>
       </form>
         </div>
-    <div class="subpanel" id="sub-search">
+        </div>
+<div class="subpanel" id="sub-search">
       <h2 class="sheettitle">Web search steps</h2>
             <p class="muted" style="margin:0 0 6px 0">Runs top to bottom; shared by all OfficeKick add-ins. No steps = free DuckDuckGo lookup.</p>
       <p class="opnote" style="margin:0 0 6px 0">Details: the OfficeKick docs (Settings > Web search).</p>

@@ -96,6 +96,7 @@
     activeFetch: null,       // AbortController of the in-flight pane request
     modelsCache: {},     // connName -> {list:[...], at:ms}
     sessionApprovals: {},// opType -> 'auto' when approved for this session
+    aiSubSub: "connections",   // 0.9.331: the AI group's last sub-subtab
     clarifyAnswer: null,   // 0.9.235: pending user pick from a clarify round
     trackNextApply: null,   // 0.9.328: a clarify pick of a track-changes option forces tracking for the next apply batch
     clarifyChain: 0,       // clarify rounds served since the original ask
@@ -5504,7 +5505,29 @@ function applyOps(deck, ops, ctx) {
   // ------------------------------------------------------------------ //
   // Tabs
   // ------------------------------------------------------------------ //
+  function switchSettingsSubSub(id) {
+    // 0.9.331: the AI group's sub-subtabs (Connections / Profiles)
+    var bar = document.getElementById("settings-subsubtabs");
+    if (!bar) return;
+    Array.prototype.forEach.call(bar.querySelectorAll("button[data-subsubtab]"), function (b) {
+      b.classList.toggle("active", b.dataset.subsubtab === id);
+    });
+    Array.prototype.forEach.call(document.querySelectorAll("#sub-ai .subpanel"), function (p9) {
+      p9.classList.toggle("active", p9.id === "sub-" + id);
+    });
+    try { SK.aiSubSub = id; } catch (eA) { /* first boot */ }
+    if (id === "connections" && typeof renderConnections === "function") renderConnections();
+    if (id === "profiles" && typeof renderProfiles === "function") renderProfiles();
+  }
+
   function switchSettingsSub(id) {
+    // 0.9.331: AI groups Connections + Profiles (sub-subtabs); the old
+    // "connections"/"profiles" subtab ids keep routing to their panels
+    var subsub = null;
+    if (id === "ai") subsub = SK.aiSubSub || "connections";
+    else if (id === "connections") { id = "ai"; subsub = "connections"; }
+    else if (id === "profiles") { id = "ai"; subsub = "profiles"; }
+    if (subsub) SK.aiSubSub = subsub;
     var bar = document.getElementById("settings-subtabs");
     if (!bar) return;
     Array.prototype.forEach.call(bar.querySelectorAll("button[data-subtab]"), function (b) {
@@ -5514,6 +5537,9 @@ function applyOps(deck, ops, ctx) {
       p2.classList.toggle("active", p2.id === "sub-" + id);
     });
     if (id === "inspector" && typeof renderRequests === "function") renderRequests();
+    if (id === "ai") {   // 0.9.331: refresh both AI group sections on entry
+      switchSettingsSubSub(subsub);
+    }
     if (id === "general") {   // a fresh General view: no stale check-now result
       var info = document.getElementById("upd-info");
       if (info) info.textContent = "";
@@ -5899,7 +5925,7 @@ function applyOps(deck, ops, ctx) {
       approvals[t] = el ? el.value : "confirm";
     });
     apiJson("/api/settings", "PUT", { approvals: approvals, generateNotes: SK.cfg ? !!SK.cfg.generateNotes : false }).then(function () {
-      setFormMsg($("settings-msg"), "Approval policy + speaker-notes setting saved.", true);
+      setFormMsg($("settings-msg"), "Approvals + speaker-notes setting saved.", true);
       return loadConfigAndRender();
     }).catch(function (err) { setFormMsg($("settings-msg"), err.message); });
   }
@@ -6188,6 +6214,10 @@ function applyOps(deck, ops, ctx) {
     $("settings-save").addEventListener("click", saveApprovals);
     Array.prototype.forEach.call(document.querySelectorAll("#settings-subtabs button"), function (b) {
       b.addEventListener("click", function () { switchSettingsSub(b.dataset.subtab); });
+    });
+    // 0.9.331: the AI group's sub-subtabs
+    Array.prototype.forEach.call(document.querySelectorAll("#settings-subsubtabs button"), function (b) {
+      b.addEventListener("click", function () { switchSettingsSubSub(b.dataset.subsubtab); });
     });
         var stEl = $("style-image");
     if (stEl) {

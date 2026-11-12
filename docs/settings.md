@@ -12,10 +12,11 @@ add-ins share ONE config:
 ## Contents
 
 - [Settings > General](#settings--general)
-- [Settings > Approval policy](#settings--approval-policy)
-- [Settings > Connections](#settings--connections)
-- [Settings > Profiles](#settings--profiles)
+- [Settings > Approvals](#settings--approvals)
+- [Settings > AI > Connections](#settings--ai--connections)
+- [Settings > AI > Profiles](#settings--ai--profiles)
 - [Settings > Search](#settings--search)
+- [Settings > Update](#settings--update)
 - [Settings > Style](#settings--style)
 - [Inspector](#inspector-tab)
 - [The run activity log](#the-run-activity-log)
@@ -92,8 +93,9 @@ This tab carries the two style controls shared by all three add-ins.
   the whole pane. Applies immediately, saves automatically, and is shared
   by all three add-ins.
 
-### Update (own subtab)
+## Settings > Update
 
+All update controls left General and live in their own **Update** subtab.
 - 0.9.328: all update controls moved from General into their own
   **Settings > Update** subtab. Opening it runs a check automatically and
   paints the real status (up to date / available + the Update now button
@@ -130,9 +132,9 @@ This tab carries the two style controls shared by all three add-ins.
 - The result note under **Check now** clears itself the next time you open
   the General tab, so old "up to date" messages never linger.
 
-## Settings > Approval policy
+## Settings > Approvals
 
-Approval policy decides, per ACTION type, what happens when a run proposes
+Approvals decides, per ACTION type, what happens when a run proposes
 that action:
 
 - `auto` - applied immediately (still reported in the results summary).
@@ -173,7 +175,10 @@ Details:
 - The per-run **auto-apply** checkbox near the prompt does the same for a
   single run.
 
-## Settings > Connections
+## Settings > AI > Connections
+
+Connections and Profiles now live together in the **AI** subtab
+(Connections / Profiles appear as its sub-subtabs).
 
 A connection = one AI provider endpoint.
 
@@ -189,7 +194,7 @@ A connection = one AI provider endpoint.
   the next entry.
 - All connections are shared by the three add-ins (configure once).
 
-## Settings > Profiles
+## Settings > AI > Profiles
 
 A profile = which model runs for what. Routes:
 

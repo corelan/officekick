@@ -42,6 +42,18 @@
   exact layout Office honors, and docs gain the manual Trust Center +
   reg-add unblock for machines that installed older builds.
 
+## 0.9.331
+
+### Changed
+- Settings regrouping (all three panes): the **AI** subtab now holds
+  Connections and Profiles together as sub-subtabs (the last viewed
+  sub-subtab is remembered per session); the old "connections"/"profiles"
+  subtab ids still route there, so every existing flow (onboarding
+  "no connections" jump, gate warnings) lands in the right place.
+  "Approval policy" is renamed to **Approvals** - tab label, panel title,
+  save notice and all docs. Settings reference + all add-in docs + README
+  updated for the new structure (seven sub-tabs).
+
 ## 0.9.330
 
 ### Changed
