@@ -1050,7 +1050,7 @@
   var REPAIR_ASK =
     "Your previous answer did not follow the required format. " +
     "Reply again with ONLY the JSON object (format A or B) and nothing else: " +
-    'either {"kind":"reply","text":"..."} or {"kind":"slide_ops","ops":[...]} - ' +
+    'either {"kind":"reply","text":"..."} or {"kind":"mail_ops","ops":[...]} - ' +
     "no reasoning, no fences, no commentary.";
 
   var REPAIR_EMPTY_ASK =
@@ -1061,8 +1061,8 @@
 
   var CONTINUE_ASK =
     "Your previous reply was cut off mid-way through the op list. Reply with a " +
-    "slide_ops JSON containing ONLY the ops still needed to FINISH the redesign " +
-    "(slides not yet covered), same JSON format. If nothing is missing, reply " +
+    "mail_ops JSON containing ONLY the ops still needed to FINISH the mailbox " +
+    "work not yet covered), same JSON format. If nothing is missing, reply " +
     '{"kind":"reply","text":"done"}';
   function continueAsk(ctx) {
     return CONTINUE_ASK +
@@ -3126,7 +3126,7 @@ function applyOps(deck, ops, ctx) {
                   SK.lastModelText = { text: r3.text };
                   var p3 = tryParse(r3.text);
                   var extra = (p3.ok && !p3.recovered && p3.ops ? p3.ops : salvageOps(r3.text)) || [];
-                  return { ok: true, kind: "slide_ops", ops: parsed.ops.concat(extra), recovered: true };
+                  return { ok: true, kind: "mail_ops", ops: parsed.ops.concat(extra), recovered: true };
                 });
             }
             if (parsed.ok) return parsed;   // clean parse: never repair (the missing escape re-asked every clean mail run)
@@ -3167,7 +3167,7 @@ function applyOps(deck, ops, ctx) {
                   SK.lastModelText = { text: r3.text };
                   var p3 = tryParse(r3.text);
                   var extra = (p3.ok && p3.ops ? p3.ops : salvageOps(r3.text)) || [];
-                  return { ok: true, kind: "slide_ops", ops: salv.concat(extra), recovered: true };
+                  return { ok: true, kind: "mail_ops", ops: salv.concat(extra), recovered: true };
                 });
             });
           });
@@ -3296,12 +3296,12 @@ function applyOps(deck, ops, ctx) {
                  text: stripped };
       }
       if (obj.kind === "reply" && typeof obj.text === "string") return { ok: true, kind: "reply", text: obj.text };
-      if (obj.kind === "slide_ops" && Array.isArray(obj.ops)) return { ok: true, kind: "slide_ops", ops: obj.ops };
-      if (Array.isArray(obj.ops)) return { ok: true, kind: "slide_ops", ops: obj.ops }; // tolerate missing kind
+      if (obj.kind === "mail_ops" && Array.isArray(obj.ops)) return { ok: true, kind: "mail_ops", ops: obj.ops };
+      if (Array.isArray(obj.ops)) return { ok: true, kind: "mail_ops", ops: obj.ops }; // tolerate missing kind
     }
     // truncated reply: salvage every complete op from the cut-off stream
     var salv = salvageOps(stripped);
-    if (salv) return { ok: true, kind: "slide_ops", ops: salv, recovered: true };
+    if (salv) return { ok: true, kind: "mail_ops", ops: salv, recovered: true };
     return { ok: false, text: stripped };
   }
 
@@ -3675,7 +3675,7 @@ function applyOps(deck, ops, ctx) {
     }
     var validation = validateOps(parsed.ops, ctx);
     if (!validation.ops.length && !validation.invalid.length && (SK.pendingWebOps || []).length) {
-      parsed = { ok: true, kind: "slide_ops", ops: SK.pendingWebOps };
+      parsed = { ok: true, kind: "mail_ops", ops: SK.pendingWebOps };
       SK.pendingWebOps = null;
       validation = validateOps(parsed.ops, ctx);
     }
@@ -3788,7 +3788,7 @@ function applyOps(deck, ops, ctx) {
           { role: "user", content:
             "NONE of your proposed actions passed validation. The EXACT reasons:\n" + reasons +
             "\nFix every problem and reply again with ONLY the JSON object " +
-            '({"kind":"reply","text":"..."} or {"kind":"slide_ops","ops":[...]}) - no prose, no fences. ' +
+            '({"kind":"reply","text":"..."} or {"kind":"mail_ops","ops":[...]}) - no prose, no fences. ' +
             "Use only the allowed action types with complete required fields." },
         ]);
         return askRetryable(function () { return apiJson("/api/chat", "POST", { connection: ask.connection, model: ask.model, messages: repairMsgs }); })

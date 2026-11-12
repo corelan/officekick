@@ -1059,7 +1059,7 @@
     '{"kind":"reply","text":"your answer"}',
     "Format B (document changes):",
     '{"kind":"doc_ops","ops":[ ... ]}',
-    'Accepted also: {"kind":"slide_ops","ops":[...]} (treated like doc_ops).',
+    'Also tolerated (legacy, ignored): {"kind":"slide_ops","ops":[...]} - treat it as doc_ops.',
     "",
     "Allowed op types:",
     '- {"type":"insert_paragraphs","items":[{"text":"...","style":"normal|title|heading1|heading2|heading3|quote|listParagraph"}],"place":"cursor | end | an anchor text"} (same placement as insert_image; default end; anchor places are what you want for placeholders; an item text prefixed with [L2]..[L9] becomes a real list item at that indent, deepest [L9], [L1] = a top-level bullet)',
@@ -1114,7 +1114,7 @@
   var REPAIR_ASK =
     "Your previous answer did not follow the required format. " +
     "Reply again with ONLY the JSON object (format A or B) and nothing else: " +
-    'either {"kind":"reply","text":"..."} or {"kind":"slide_ops","ops":[...]} - ' +
+    'either {"kind":"reply","text":"..."} or {"kind":"doc_ops","ops":[...]} - ' +
     "no reasoning, no fences, no commentary.";
 
   var REPAIR_EMPTY_ASK =
@@ -1125,8 +1125,8 @@
 
   var CONTINUE_ASK =
     "Your previous reply was cut off mid-way through the op list. Reply with a " +
-    "slide_ops JSON containing ONLY the ops still needed to FINISH the redesign " +
-    "(slides not yet covered), same JSON format. If nothing is missing, reply " +
+    "doc_ops JSON containing ONLY the ops still needed to FINISH the document " +
+    "edits not yet covered), same JSON format. If nothing is missing, reply " +
     '{"kind":"reply","text":"done"}';
   function continueAsk(ctx) {
     return CONTINUE_ASK +
@@ -3585,7 +3585,7 @@ function applyOps(deck, ops, ctx) {
   var TRANSLATE_CHUNK_PARAS = 24;
   var TRANSLATE_ASK_BUDGET = 160;   // hard stop for pathological models - the summary says to run Translate again
   var TRANSLATE_RETRY_NUDGE = "Your last reply contained no usable edit_paragraph ops for the paragraphs above. Reply again NOW: ONLY the JSON object " +
-    '{\"kind\":\"slide_ops\",\"ops\":[...]} with ONE {\"type\":\"edit_paragraph\",\"para\":N,\"text\":\"the translated paragraph text\"} per listed paragraph - para = the bracketed number from the message, text = the translation into the target language. ' +
+    '{\"kind\":\"doc_ops\",\"ops\":[...]} with ONE {\"type\":\"edit_paragraph\",\"para\":N,\"text\":\"the translated paragraph text\"} per listed paragraph - para = the bracketed number from the message, text = the translation into the target language. ' +
     "Translate titles, headings, table-of-contents and cross-reference lines too; keep numbers, page references, clause numbers, amounts and quoted terms unchanged. No prose, no markdown fences, never an empty ops list.";
   var TRANSLATE_FORMAT_RULES = "FORMATTING IS PART OF THE JOB: keep the paragraph's leading indentation exactly as it appears (spaces AND tab characters are preserved in the text you receive - carry them over), keep internal tabs and bullet characters (•, -, *, \u2022) in place, do not trim, collapse or expand whitespace. " +
     "The pane keeps paragraph styles, list levels and Word's own numbering itself - never add numbering or bullets that are not in the text you received. ";
@@ -3604,7 +3604,7 @@ function applyOps(deck, ops, ctx) {
     "Keep list numbering, bullet characters and cross references (article/clause/section numbers, dates, amounts) exactly as in the source text. " +
     "Do not merge, split or reorder paragraphs. " +
     "Reply ONLY with a JSON object " +
-    '{\"kind\":\"slide_ops\",\"ops\":[...]} - no prose, no markdown fences. ' +
+    '{\"kind\":\"doc_ops\",\"ops\":[...]} - no prose, no markdown fences. ' +
     "Op schema: " +
     '{\"type\":\"edit_paragraph\",\"para\":N,\"text\":\"the translated paragraph text\"} - ' +
     "one op per paragraph you actually translate, para = the exact paragraph number given in the input. " +
@@ -4165,7 +4165,7 @@ function applyOps(deck, ops, ctx) {
     "Only touch paragraphs that actually need a fix - a paragraph that is already fine stays out of the reply entirely. " +
     "Keep the paragraph's leading indentation (spaces AND tab characters) exactly as received, and keep internal bullet characters. " +
     "Do not merge, split or reorder paragraphs. Never add commentary, notes or explanations. " +
-    "Reply ONLY with a JSON object {\"kind\":\"slide_ops\",\"ops\":[...]} - no prose, no markdown fences. " +
+    "Reply ONLY with a JSON object {\"kind\":\"doc_ops\",\"ops\":[...]} - no prose, no markdown fences. " +
     "Op schema: {\"type\":\"edit_paragraph\",\"para\":N,\"text\":\"the whole corrected paragraph text\"} - para = the exact paragraph number given in the input. " +
     "Never repeat outline markers like [L2] or [image x1] in your output - they are pane annotations, not document text. " +
     "An empty ops list is a valid answer when every paragraph of the slice is already fine.";
@@ -4246,7 +4246,7 @@ function applyOps(deck, ops, ctx) {
         (budgetHit ? " The run stopped at the model-ask budget - run the same request again to review the rest." : "") +
         (proposed.length ? " Review and accept the proposals below." : " No wording changes suggested.");
       if (proposed.length) {
-        return { ok: true, kind: "slide_ops", ops: proposed, reviewNote: summary };
+        return { ok: true, kind: "doc_ops", ops: proposed, reviewNote: summary };
       }
       return { ok: true, kind: "reply", text: summary };
     }
@@ -4301,7 +4301,7 @@ function applyOps(deck, ops, ctx) {
           { role: "system", content: REVIEW_SYS + docIntro },
           { role: "user", content: user },
           { role: "assistant", content: String((r && r.text) || "").slice(0, 500) },
-          { role: "user", content: "Your last reply was not valid action JSON. Reply again NOW: ONLY the JSON object {\"kind\":\"slide_ops\",\"ops\":[...]} with the edit_paragraph ops for the paragraphs above - or an EMPTY ops list when the slice is clean. No prose, no reasoning, no fences." },
+          { role: "user", content: "Your last reply was not valid action JSON. Reply again NOW: ONLY the JSON object {\"kind\":\"doc_ops\",\"ops\":[...]} with the edit_paragraph ops for the paragraphs above - or an EMPTY ops list when the slice is clean. No prose, no reasoning, no fences." },
         ];
         return go(msgs2).then(function (r2) {
           var parsed2 = collectChunkReply(r2, item.paras, paraSet);
@@ -4435,7 +4435,7 @@ function applyOps(deck, ops, ctx) {
       var askedLookup = false;
       function MO_SYS(extra) {
         return "You build Word-document make-over actions. Reply ONLY with a JSON object " +
-          '{\"kind\":\"slide_ops\",\"ops\":[...]} - no prose, no markdown fences. Word op schema: ' +
+          '{\"kind\":\"doc_ops\",\"ops\":[...]} - no prose, no markdown fences. Word op schema: ' +
           '{"type":"format_text","para":N,"font":{"bold":true|false,"italic":true|false,"name":"..","size":N,"color":"#RRGGBB"},"align":"left|center|right|justify"}, ' +
           '{"type":"edit_paragraph","para":N,"text":".."}, {"type":"set_header","text":".."}, {"type":"set_footer","text":".."}, ' +
           '{"type":"add_hyperlink","para":N,"find":"exact text in that paragraph","url":"https://.."}, ' +
@@ -4535,18 +4535,18 @@ function applyOps(deck, ops, ctx) {
               setStatus("Builder pass 3/3 - extras…", "busy");
               var b3 = "BUILDER PASS 3 - EXTRAS. From the strategy: set_header with the exact header text (and set_footer if the strategy wants one), " +
                 "add_hyperlink for real links, insert_paragraphs ONLY for a pull-quote/summary block the strategy explicitly asks for. " +
-                'If none apply, reply {"kind":"slide_ops","ops":[]}.\n\nDIRECTOR STRATEGY:\n' + concept + "\n\n" + askBrief;
+                'If none apply, reply {"kind":"doc_ops","ops":[]}.\n\nDIRECTOR STRATEGY:\n' + concept + "\n\n" + askBrief;
               return passAsk("BUILD3-EXTRAS", b3).then(function (r3) {
                 ops = ops.concat(mergeFrom(r3));
                 setStatus("Reviewing make-over coverage…", "busy");
                 var rev = "REVIEW ROUND. Every content paragraph in the outline must be covered by a format_text op in the ops list below " +
                   "per the strategy. Emit ONLY the missing format_text ops (exact 1-based numbers). " +
-                  'If the coverage is complete, reply {"kind":"slide_ops","ops":[]}.\n\n' +
+                  'If the coverage is complete, reply {"kind":"doc_ops","ops":[]}.\n\n' +
                   "OPS SO FAR:\n" + JSON.stringify(ops) + "\n\nDIRECTOR STRATEGY:\n" + concept + "\n\nOUTLINE:\n" + outline.slice(0, 220).join("\n");
                 return passAsk("REVIEW", rev).then(function (r4) {
                   ops = ops.concat(mergeFrom(r4));
                   dbg("makeover.merged", { ops: ops.length });
-                  return { text: JSON.stringify({ kind: "slide_ops", ops: ops,
+                  return { text: JSON.stringify({ kind: "doc_ops", ops: ops,
                            note: "AI document make-over: " + ops.length + " action(s) built in passes - structure -> style -> extras, then review rounds" }) };
                 });
               });
@@ -4772,7 +4772,7 @@ function applyOps(deck, ops, ctx) {
               SK.lastModelText = { text: r3.text };
               var p3 = tryParse(r3.text);
               var extra = (p3.ok && !p3.recovered && p3.ops ? p3.ops : salvageOps(r3.text)) || [];
-              return { ok: true, kind: "slide_ops", ops: parsed.ops.concat(extra), recovered: true };
+              return { ok: true, kind: "doc_ops", ops: parsed.ops.concat(extra), recovered: true };
             });
         }
 
@@ -4816,7 +4816,7 @@ function applyOps(deck, ops, ctx) {
                 SK.lastModelText = { text: r3.text };
                 var p3 = tryParse(r3.text);
                 var extra = (p3.ok && p3.ops ? p3.ops : salvageOps(r3.text)) || [];
-                return { ok: true, kind: "slide_ops", ops: salv.concat(extra), recovered: true };
+                return { ok: true, kind: "doc_ops", ops: salv.concat(extra), recovered: true };
               });
           });
         });
@@ -4952,12 +4952,12 @@ function applyOps(deck, ops, ctx) {
                  text: stripped };
       }
       if (obj.kind === "reply" && typeof obj.text === "string") return { ok: true, kind: "reply", text: obj.text };
-      if (obj.kind === "slide_ops" && Array.isArray(obj.ops)) return { ok: true, kind: "slide_ops", ops: obj.ops };
-      if (Array.isArray(obj.ops)) return { ok: true, kind: "slide_ops", ops: obj.ops }; // tolerate missing kind
+      if (obj.kind === "doc_ops" && Array.isArray(obj.ops)) return { ok: true, kind: "doc_ops", ops: obj.ops };
+      if (Array.isArray(obj.ops)) return { ok: true, kind: "doc_ops", ops: obj.ops }; // tolerate missing kind
     }
     // truncated reply: salvage every complete op from the cut-off stream
     var salv = salvageOps(stripped);
-    if (salv) return { ok: true, kind: "slide_ops", ops: salv, recovered: true };
+    if (salv) return { ok: true, kind: "doc_ops", ops: salv, recovered: true };
     return { ok: false, text: stripped };
   }
 
@@ -5338,7 +5338,7 @@ function applyOps(deck, ops, ctx) {
     }
     var validation = validateOps(parsed.ops, ctx);
     if (!validation.ops.length && !validation.invalid.length && (SK.pendingWebOps || []).length) {
-      parsed = { ok: true, kind: "slide_ops", ops: SK.pendingWebOps };
+      parsed = { ok: true, kind: "doc_ops", ops: SK.pendingWebOps };
       SK.pendingWebOps = null;
       validation = validateOps(parsed.ops, ctx);
     }
@@ -5471,7 +5471,7 @@ function applyOps(deck, ops, ctx) {
           { role: "user", content:
             "NONE of your proposed actions passed validation. The EXACT reasons:\n" + reasons +
             "\nFix every problem and reply again with ONLY the JSON object " +
-            '({"kind":"reply","text":"..."} or {"kind":"slide_ops","ops":[...]}) - no prose, no fences. ' +
+            '({"kind":"reply","text":"..."} or {"kind":"doc_ops","ops":[...]}) - no prose, no fences. ' +
             "For insert_paragraphs/move_text/copy_text use a 'place' that is an EXACT text snippet from the outline (or \"end\"/\"cursor\"); " +
             "for para-referencing ops use only outline numbers; for insert_paragraphs keep styles normal/heading1/heading2/quote/listParagraph." },
         ]);

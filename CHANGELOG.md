@@ -42,6 +42,22 @@
   exact layout Office honors, and docs gain the manual Trust Center +
   reg-add unblock for machines that installed older builds.
 
+## 0.9.344
+
+### Fixed
+- Cross-pane prompt contamination: the unclear-reply repair ask and the
+  cut-off continue ask said format B was {"kind":"slide_ops"} in ALL panes
+  (copied from SlideKick). In MailKick the model was told mail_ops by the
+  system prompt but slide_ops by the correction - and it started second-
+  guessing which pane it was in (field report). Now:
+  - Dockick says doc_ops (repair, continue, orchestrator asks, op-schema
+    blocks, trails and internal markers).
+  - MailKick says mail_ops everywhere (repair, continue, validation-fail
+    re-ask, internal markers). The slide_ops system-prompt alias note was
+    reworded to make doc_ops the required format.
+  - Slidekick keeps slide_ops (it was correct).
+  - The parsers still tolerate a missing kind or any ops array.
+
 ## 0.9.343
 
 ### Added
