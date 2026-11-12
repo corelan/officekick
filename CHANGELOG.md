@@ -42,6 +42,20 @@
   exact layout Office honors, and docs gain the manual Trust Center +
   reg-add unblock for machines that installed older builds.
 
+## 0.9.346
+
+### Fixed
+- MailKick compose-mode requests: the model picked new_message for
+  "rewrite this email" while the user was COMPOSING (the mode line in
+  the context header was too subtle) and the new-message window failed
+  on the user's build (only the Mailbox 1.9 async form was used).
+  - The context block now carries explicit MODE GUIDANCE: while
+    composing, edits go through compose_body (this draft, in place) and
+    new_message/draft_reply must not be used; on a received message,
+    compose_body is unavailable and rewrites mean draft_reply.
+  - new_message now tries the Mailbox 1.6 sync displayNewMessageForm
+    first, then the 1.9 async form, then a clear error.
+
 ## 0.9.345
 
 ### Fixed

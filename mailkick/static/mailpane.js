@@ -2423,15 +2423,30 @@ var nw = $("sess-new");
   MailDeck.prototype.newMessage = function (payload) {
     return promisify(function (resolve, reject) {
       var mb = Office.context.mailbox;
-      if (!mb || !mb.displayNewMessageFormAsync) {
-        reject(new FriendlyError("this Outlook build cannot open new-message windows from add-ins (Mailbox 1.9)."));
+      if (!mb) {
+        reject(new FriendlyError("no mailbox available."));
         return;
       }
-      mb.displayNewMessageFormAsync({
+      var params = {
         htmlBody: String(payload.html),
         subject: payload.subject || "",
         toRecipients: (payload.to || []).map(function (a) { return { emailAddress: String(a) }; }),
-      }, function (r) {
+      };
+      // 0.9.346: the SYNC displayNewMessageForm (Mailbox 1.6, every modern
+      // classic client) is tried FIRST - the 1.9 async form was the only
+      // path and its absence broke "new message" on the user's build.
+      if (mb.displayNewMessageForm) {
+        try {
+          mb.displayNewMessageForm(params);
+          resolve({ ok: true });
+          return;
+        } catch (e1) { /* fall through to the async form */ }
+      }
+      if (!mb.displayNewMessageFormAsync) {
+        reject(new FriendlyError("this Outlook build cannot open new-message windows from add-ins (needs Mailbox 1.6+)."));
+        return;
+      }
+      mb.displayNewMessageFormAsync(params, function (r) {
         r.status === "succeeded" ? resolve({ ok: true }) : reject(new FriendlyError(r.error && r.error.message || "failed"));
       });
     });
@@ -2724,6 +2739,14 @@ function applyOps(deck, ops, ctx) {
   function formatContext(ctx) {
     var lines = [];
     lines.push("EMAIL CONTEXT (host: " + ctx.host + ", mode: " + ctx.mode + "):");
+    // 0.9.346: the mode line alone was too subtle - a weak model picked
+    // new_message for a compose-mode rewrite (which then failed on the
+    // build's API). State the right op type outright.
+    if (ctx.mode === "compose") {
+      lines.push("MODE GUIDANCE: this email is OPEN FOR COMPOSING. To change its content use compose_body (it replaces the body of THIS draft in place). Do NOT use new_message or draft_reply for edits.");
+    } else {
+      lines.push("MODE GUIDANCE: you are on an EXISTING (received/sent) message. compose_body is unavailable here. 'Rewrite/translate/fix this email' means: read it and respond with draft_reply (opens a reply form) - the original cannot be changed.");
+    }
     {
       var dNow = new Date();
       var zN = function (n) { return (n < 10 ? "0" : "") + n; };
