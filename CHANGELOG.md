@@ -42,6 +42,26 @@
   exact layout Office honors, and docs gain the manual Trust Center +
   reg-add unblock for machines that installed older builds.
 
+## 0.9.342
+
+### Fixed
+- The granular tracked writes from 0.9.341 had three field-reported bugs,
+  all fixed:
+  - Word's search anchor cap (~255 chars) threw "SearchStringInvalidOrToo-
+    Long" on long middles - the whole-paragraph fallback now engages for
+    any anchor over 255 chars or containing line breaks (previously the
+    search failure aborted the op and even the op retry).
+  - A pure INSERTION landed "After" an anchor range that included 8 extra
+    context characters - the inserted words jammed INSIDE existing text
+    (broken sentences). Insertions now go at the anchor's start, i.e.
+    exactly at the end of the shared prefix.
+  - The middle diff now aligns prefix/suffix to word boundaries - a
+    replacement no longer cuts inside a word (visible as broken half-words
+    in the revision display).
+- The review collector drops proposals whose only change is whitespace -
+  such "fixes" replaced text with virtually the same text ("no visible
+  change" runs).
+
 ## 0.9.341
 
 ### Fixed

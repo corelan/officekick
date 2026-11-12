@@ -2181,12 +2181,21 @@ var nw = $("sess-new");
   function middleDiff(a, b) {
     // character-level middle diff: everything before/after matches - only the
     // middle changed. Used to keep TRACKED edits granular (tiny deletions +
-    // tiny insertions instead of whole-paragraph churn).
+    // tiny insertions instead of whole-paragraph churn). The prefix/suffix
+    // are extended to word boundaries so the middle never cuts inside a word
+    // (a mid-word replacement would show as broken half-words in Word).
     var n = Math.min(a.length, b.length), p = 0;
     while (p < n && a.charAt(p) === b.charAt(p)) p++;
     var s = 0;
     var lim = n - p;
     while (s < lim && a.charAt(a.length - 1 - s) === b.charAt(b.length - 1 - s)) s++;
+    // extend the prefix to the end of the whole word it stands in (both texts
+    // equal there by construction) - at most to the first difference
+    var isWord = /[\w\u00C0-\u024F]/;
+    while (p < n && isWord.test(a.charAt(p)) && p < b.length && isWord.test(b.charAt(p))) p++;
+    // extend the suffix backwards the same way
+    while (s < lim && isWord.test(a.charAt(a.length - 1 - s)) &&
+           (b.length - 1 - s) >= 0 && isWord.test(b.charAt(b.length - 1 - s))) s++;
     if (a.length - p - s <= 0 && b.length - p - s <= 0) return null;   // identical
     return { prefixLen: p, oldMid: a.slice(p, a.length - s), newMid: b.slice(p, b.length - s), suffixLen: s };
   }
@@ -2212,8 +2221,17 @@ var nw = $("sess-new");
             oldText.length < 4000 && newText.length < 4000) {
           var d = middleDiff(oldText, newText);
           var pureInsert = d && !d.oldMid;
-          var anchor = d ? (d.oldMid.length >= 8 ? d.oldMid : oldText.slice(0, d.prefixLen + (pureInsert ? 8 : 0))) : "";
-          if (d && d.oldMid.length <= 2000 && d.newMid.length <= 2000 && anchor.length >= 8) {
+          // 0.9.342: the search anchor must respect Word's search limits -
+          // <=255 chars, no line breaks; anything else falls back to the
+          // whole-paragraph write instead of throwing
+          var pureDelete = d && d.newMid.length === 0;
+          var anchor = "";
+          if (d && d.oldMid.length <= 240 && d.newMid.length <= 240) {
+            anchor = pureInsert ? oldText.slice(0, d.prefixLen) :
+              (d.oldMid.length >= 8 ? d.oldMid : "");
+          }
+          var anchorOk = anchor.length >= 8 && !/[\r\n\v\f]/.test(anchor) && anchor.length <= 255;
+          if (d && anchorOk) {
             var hits = ctx.document.body.search(anchor, { matchCase: true, matchWholeWord: false });
             hits.load("items");
             return ctx.sync().then(function () {
@@ -2223,14 +2241,26 @@ var nw = $("sess-new");
               }
               var h = hits.items[0];
               if (pureInsert) {
-                h.insertText(d.newMid, "After");
+                // insert AT THE START of the anchor = exactly at the end of
+                // the shared prefix (an "After" would land inside the words
+                // that anchor grabbed as context - the broken-sentence bug)
+                h.insertText(d.newMid, "Start");
                 return ctx.sync().then(function () { return { ok: true, granular: true }; });
               }
+              if (pureDelete) {
+                h.delete();
+                return ctx.sync().then(function () { return { ok: true, granular: true }; });
+              }
+              // replace middle: insert the corrected text BEFORE the old
+              // middle, then delete the old middle (tracked: insertion + 
+              // deletion stay readable and in order)
               h.insertText(d.newMid, "Start");
               h.delete();
               return ctx.sync().then(function () { return { ok: true, granular: true }; });
             });
           }
+          // no workable middle (pure whitespace/case fix or oversized diff):
+          // fall through to the whole-paragraph write
         }
         p.insertText(newText, "Replace");
         return ctx.sync().then(function () { return { ok: true }; });
@@ -4201,6 +4231,10 @@ function applyOps(deck, ops, ctx) {
         if (!txt) return;
         txt = restoreLead(paraSet[pn].text, txt);
         if (txt === paraSet[pn].text) return;   // unchanged echo
+        // 0.9.342: a "fix" that only differs in whitespace is not an edit -
+        // applying it produced paragraphs that read as "replaced with the
+        // same text". Drop the op here.
+        if (txt.replace(/\s+/g, " ").trim() === paraSet[pn].text.replace(/\s+/g, " ").trim()) return;
         fixes.push({ type: "edit_paragraph", para: pn, text: txt });
       });
       return { pre: pre, fixes: fixes, clean: pre.ok || /clean|fine|no (issues|fixes|changes)/i.test(String(r && r.text || "")) };
