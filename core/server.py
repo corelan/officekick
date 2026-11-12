@@ -34,7 +34,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 APP = "OfficeKick"
-VERSION = "0.9.337"
+VERSION = "0.9.338"
 
 # --------------------------------------------------------------------------- #
 # Self-restart: the server watches for <cfg dir>/restart.flag. Whatever writes
@@ -2638,10 +2638,26 @@ def provider_chat(store, conn_name, model, messages, temperature, max_tokens, ti
                 "num_predict": int(max_tokens),
             },
         }
-        data = http_request(
-            base + "/api/chat", method="POST", headers=headers,
-            payload=payload, timeout=timeout,
-        )
+        # 0.9.338: reasoning models burn the token budget on chain-of-thought
+        # BEFORE the JSON ever starts (field: glm-5.3-flash cloud returned pure
+        # reasoning prose on all repair rounds - the ops never arrived). Ask
+        # with thinking DISABLED up-front; older ollama builds reject the key,
+        # so the bare form is retried once.
+        data = None
+        try:
+            first = dict(payload)
+            first["think"] = False
+            data = http_request(
+                base + "/api/chat", method="POST", headers=headers,
+                payload=first, timeout=timeout,
+            )
+        except ApiError:
+            data = None
+        if data is None:
+            data = http_request(
+                base + "/api/chat", method="POST", headers=headers,
+                payload=payload, timeout=timeout,
+            )
         # 0.9.225: thinking-capable ollama models (cloud relays) count their
         # chain-of-thought against num_predict. If the budget is exhausted by
         # the "thinking" field, "content" arrives EMPTY - detected and retried

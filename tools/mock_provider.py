@@ -55,6 +55,7 @@ class MockState:
     echo_request = False
     fail_models = False
     require_key = None
+    reject_think = False
     last_request = None
 
 
@@ -123,6 +124,9 @@ def make_handler(flavor):
                 self._json({"error": {"message": "unauthorized (mock)"}}, 401)
                 return
             STATE.last_request = req
+            if STATE.reject_think and req.get("think") is False:
+                self._json({"error": {"message": "model does not support think"}}, 400)
+                return
             if STATE.echo_request:
                 reply = json.dumps(req)
             else:

@@ -42,6 +42,21 @@
   exact layout Office honors, and docs gain the manual Trust Center +
   reg-add unblock for machines that installed older builds.
 
+## 0.9.338
+
+### Fixed
+- Ollama chat asks now request the model with `think: false` up-front
+  (older ollama builds that reject the key fall back to the bare form).
+  Reasoning models (glm-5.3-flash :cloud and friends) burned the token
+  budget on chain-of-thought BEFORE the JSON - every ask and repair round
+  returned pure reasoning prose, the ops never arrived, and the run ended
+  in "shown as text". With thinking off the answer itself gets the budget
+  and the ops JSON arrives. The 0.9.225 empty-content retry stays as the
+  belt-and-braces.
+
+Tests: ollama chat echoes think:false; a rejecting build falls back to
+the bare form and still answers.
+
 ## 0.9.337
 
 ### Changed
