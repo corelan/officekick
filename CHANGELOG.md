@@ -42,6 +42,21 @@
   exact layout Office honors, and docs gain the manual Trust Center +
   reg-add unblock for machines that installed older builds.
 
+## 0.9.352
+
+### Fixed
+- Reasoning-only replies ending the run too early (field report: the
+  analysis was visible in the model's reasoning, but the pane gave up
+  after the two repair rounds and displayed "Done."). All panes:
+  - After the repair rounds, a COMPACTION LOOP (max 2 rounds) feeds the
+    model its own reasoning back with a strict "do NOT reason again -
+    output ONLY the JSON object starting with {, the text field carries
+    the full conclusion" instruction. A compacted answer is accepted as
+    the result.
+  - The text display is clickable for the FULL response when it was
+    truncated ("... (truncated preview - enable debug logging...)" is
+    gone; click instead).
+
 ## 0.9.351
 
 ### Fixed

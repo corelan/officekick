@@ -4803,7 +4803,39 @@ function applyOps(deck, ops, ctx) {
             if (r2b.parsed.ok) return r2b.parsed;
             var best = r2b.text && r2b.text.length > (resp.text || "").length ? r2b.text : resp.text;
             var salv = salvageOps(best);
-            if (!salv || !salv.length) return r2b.parsed;
+            if (!salv || !salv.length) {
+              // 0.9.352: COMPACTION LOOP - the reply may be reasoned-out but
+              // never emitted the JSON (the user's field report: the analysis
+              // was IN the text, yet the pane gave up and said "Done").
+              // Feed the model its own analysis and demand the JSON; two
+              // compaction rounds before the plain-text fallthrough.
+              var compactBest = String(best || "");
+              var compactRound = function (nC) {
+                if (!compactBest || compactBest.length < 200 || nC > 2) return r2b.parsed;
+                var cMsgs = messages.concat([
+                  { role: "assistant", content: compactBest },
+                  { role: "user", content:
+                    "Your analysis above is on record - do NOT reason again. " +
+                    "Output ONLY the JSON object now, starting with { : " +
+                    'either {"kind":"reply","text":"<your full CONCLUSION in complete sentences>"} or the actions JSON (format B). ' +
+                    "No reasoning, no commentary - the text field carries the whole answer." },
+                ]);
+                setStatus("Extracting the final answer (compaction " + nC + "/2)…", "busy");
+                return askRetryable(function () { return apiJson("/api/chat", "POST", { connection: ref.connection, model: ref.model, messages: cMsgs }); })
+                  .then(function (rC) {
+                    dbg("compaction.response", { round: nC, text: rC.text && rC.text.length });
+                    SK.lastModelText = { text: rC.text };
+                    var pC = tryParse(rC.text);
+                    if (pC.ok && (pC.kind === "reply" && String(pC.text || "").length >= 40 || pC.ops && pC.ops.length)) {
+                      if (pC.kind === "reply") return { ok: true, kind: "reply", text: pC.text, compacted: true };
+                      return pC;
+                    }
+                    if (String(rC.text || "").length > compactBest.length) { compactBest = String(rC.text || ""); }
+                    return compactRound(nC + 1);
+                  }, function () { return r2b.parsed; });
+              };
+              return compactRound(1);
+            }
             SK.lastRecovered = salv.length;
             setStatus("Reply was cut off - recovered " + salv.length + " action(s), asking for the rest…", "busy");
             var cont = messages.concat([
@@ -5329,8 +5361,15 @@ function applyOps(deck, ops, ctx) {
       var box = document.createElement("div");
       box.className = "reply-text";
       var showTxt = String(parsed.text || "");
-      if (showTxt.length > 420) showTxt = showTxt.slice(0, 420) + "\u2026 (truncated preview - enable debug logging for the full raw output)";
+      if (showTxt.length > 420) showTxt = showTxt.slice(0, 420) + "\u2026";
       box.textContent = showTxt || "(empty response)";
+      // 0.9.352: a long text (reasoning/analysis) is clickable to read the
+      // WHOLE thing - the truncated preview was the only copy before
+      if (showTxt.length > 420) {
+        box.style.cursor = "pointer";
+        box.title = "Click to open the full text";
+        box.addEventListener("click", function () { openTextViewer("Full model reply", String(parsed.text || "")); });
+      }
       out.appendChild(box);
       var note = document.createElement("div");
       note.className = "opnote";
