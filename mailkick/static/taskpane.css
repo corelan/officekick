@@ -963,3 +963,6 @@ body.dark #update-flag { animation-name: upglow-dark; }
   0%, 100% { background-color: rgba(255,196,0,.05); box-shadow: 0 0 0 rgba(255,199,0,0); }
   50% { background-color: rgba(255,196,0,.16); box-shadow: 0 0 12px rgba(255,199,0,.45); }
 }
+/* 0.9.337: the default-profile star marker */
+.profstar { color: #b8860b; font-weight: 700; }
+body.dark .profstar { color: #ffd700; }

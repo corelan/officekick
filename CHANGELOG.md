@@ -42,6 +42,16 @@
   exact layout Office honors, and docs gain the manual Trust Center +
   reg-add unblock for machines that installed older builds.
 
+## 0.9.337
+
+### Changed
+- The Profiles description now says what a profile actually is: "A profile
+  tells the add-in what model to use for what purpose: the content model
+  does the ... edits and generation, the other-actions model handles chat,
+  brainstorming and advice, with optional image and web slots."
+- The profile list marks the default profile with the gold ★ (as the
+  description promises) instead of the "(default)" word.
+
 ## 0.9.336
 
 ### Fixed

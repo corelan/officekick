@@ -4436,7 +4436,7 @@ function applyOps(deck, ops, ctx) {
       // click the name to edit; deletion lives in the edit form (with confirm)
       var nameCell =
         '<button class="namebtn" data-edit="' + esc(p.name) + '" title="edit">' +
-        esc(p.name) + "</button>" + (star ? " <span class=\"opnote\">(default)</span>" : "");
+        esc(p.name) + "</button>" + (star ? ' <span class="opnote" title="Default profile">\u2605</span>' : "");
       rows.push(
         "<tr><td>" + nameCell + "</td>" +
         "<td>" + esc(modelRefLabel(p.content)) + "</td><td>" + esc(modelRefLabel(p.other)) + "</td><td>" + esc(modelRefLabel(p.image)) + "</td><td>" + esc(modelRefLabel(p.web)) + "</td></tr>"
