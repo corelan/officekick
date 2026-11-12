@@ -816,7 +816,7 @@
                     if (h1 && h1.gen && h1.gen !== oldGen) {
                       info.className = "opnote";
                       info.textContent = "Update done - the server is on " + (h1.version || "the new build") +
-                        ". Reload this pane (About tab -> Reload pane, or quit and reopen the app) to load the new pane files.";
+                        ". Click Reload add-in above (or quit and reopen the app) to load the new pane files.";
                       setUpdateFlag(null);
                     } else if (h1 && h1.gen && h1.gen === oldGen && tries > 12) {
                       info.className = "opnote updavail";
@@ -4231,13 +4231,13 @@ function applyOps(deck, ops, ctx) {
     li(olA, ["In your clone folder run ", ["git pull"]]);
     li(olA, ["Then run the installer: ", ["python3 install.py"],
              " (copies the panes, restarts the server, re-registers the add-ins)"]);
-    li(olA, ["Reload the pane (About tab > Reload add-in)"]);
+    li(olA, ["Reload the pane: click Reload add-in above"]);
     var olB = mkCard("Option B - no clone (zip download)");
     li(olB, ["Download the latest main-branch zip: ",
              [repo + "/archive/refs/heads/main.zip"]]);
     li(olB, ["Extract it and run the installer from the extracted folder: ",
              ["python3 install.py"]]);
-    li(olB, ["Reload the pane (About tab > Reload add-in)"]);
+    li(olB, ["Reload the pane: click Reload add-in above"]);
   }
 
   function switchTab(id) {

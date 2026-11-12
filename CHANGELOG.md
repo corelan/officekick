@@ -42,6 +42,15 @@
   exact layout Office honors, and docs gain the manual Trust Center +
   reg-add unblock for machines that installed older builds.
 
+## 0.9.333
+
+### Fixed
+- The "Update done" message said "About tab -> Reload pane" - stale twice:
+  the button is "Reload add-in" and it lives in the Update subtab. The
+  message now points at the button that is directly above the notice
+  ("Click Reload add-in above"). The manual update cards say the same.
+- Reload add-in now sits BEFORE Restart server in the Update subtab row.
+
 ## 0.9.332
 
 ### Changed
