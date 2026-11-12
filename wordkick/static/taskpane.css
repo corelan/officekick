@@ -695,6 +695,14 @@ body.dark .pt-text { color: #8fb8ff; }
    click arms it ("sure?"), the second removes the row from the list */
 .op-x { margin-left: auto; min-width: 26px; height: 22px; border: 1px solid rgba(239,68,68,.55);
   background: none; color: #ef4444; border-radius: 5px; cursor: pointer; font-weight: 700; font-size: 12px; }
+/* 0.9.343: per-row play (run this action now) + completed-row marker */
+.op-play { margin-left: 4px; min-width: 26px; height: 22px; border: 1px solid rgba(47,158,91,.55);
+  background: none; color: #2f9e5b; border-radius: 5px; cursor: pointer; font-weight: 700; font-size: 12px; }
+.op-play:disabled { opacity: .45; cursor: default; }
+.op-donerow { opacity: .75; }
+.op-donerow .optype { color: var(--ok); font-weight: 700; }
+body.dark .op-play { color: #9be77f; border-color: rgba(155,232,127,.5); }
+
 .op-x.armed { background: #ef4444; color: #fff; }
 .op-x:hover { background: rgba(239,68,68,.12); }
 

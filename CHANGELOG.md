@@ -42,6 +42,16 @@
   exact layout Office honors, and docs gain the manual Trust Center +
   reg-add unblock for machines that installed older builds.
 
+## 0.9.343
+
+### Added
+- A per-row play button in the approval gate, next to the X: green
+  arrow. It runs that single proposed action IMMEDIATELY (one-op batch -
+  the same apply path the batch uses) without touching the policy for
+  the remaining rows. On success the row becomes a completed marker and
+  the Apply/Discard totals drop by one; the batch Apply then runs only
+  the still-pending rows. All three panes.
+
 ## 0.9.342
 
 ### Fixed

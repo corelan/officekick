@@ -6727,6 +6727,13 @@ OfficeDeck.prototype.setNotes = function (i, text) {
         note4.textContent = row.reason || "";
         line1.appendChild(note4);
       }
+      // 0.9.343: a per-row play - runs THIS action immediately (no apply batch)
+      var play = document.createElement("button");
+      play.type = "button";
+      play.className = "op-play";
+      play.textContent = "\u25B6";
+      play.title = "Run this action immediately";
+      line1.appendChild(play);
       var x = document.createElement("button");
       x.type = "button";
       x.className = "op-x";
@@ -6748,6 +6755,35 @@ OfficeDeck.prototype.setNotes = function (i, text) {
         updateApplyLabel();
       });
       line1.appendChild(x);
+      play.addEventListener("click", function () {
+        if (SK.busy) { setStatus("A run is in progress - wait for it to finish (or Cancel).", "pending"); return; }
+        if (row.done || row.removed) return;
+        play.disabled = true; x.disabled = true;
+        var gateBox = (line1.parentNode && line1.parentNode.parentNode) || null;
+        setStatus("Running 1 action (" + ((OPS_META[row.op.type] || { label: row.op.type }).label) + ")…", "busy");
+        applyOps(SK.deck, [row.op], SK.lastCtx || ctx).then(function (res) {
+          var okLine = (res && res.lines || []).some(function (l) { return l.ok; });
+          var failLine = (res && res.lines || []).find(function (l) { return !l.ok; });
+          if (okLine) {
+            row.done = true; if (row.op && row.op._gateRow) row.op._gateRow.done = true;
+            r.classList.add("op-donerow");   // 0.9.343: visual completion
+            line1.innerHTML = "";
+            var dtick = document.createElement("span");
+            dtick.className = "optype";
+            dtick.textContent = "\u2713 " + ((OPS_META[row.op.type] || { label: row.op.type }).label) + " done";
+            line1.appendChild(dtick);
+            setStatus(failLine ? "1 action applied with a note: " + failLine.text : "1 action applied.", "ok");
+            try { updateApplyLabel(); } catch (eU) { /* label refresh best-effort */ }   // 0.9.343
+          } else {
+            play.disabled = false; x.disabled = false;
+            r.classList.add("opfailrow");
+            setStatus("Action failed: " + (failLine ? failLine.text.slice(0, 140) : "unknown error"), "error");
+          }
+        }, function (e2) {
+          play.disabled = false; x.disabled = false;
+          setStatus("Action failed: " + ((e2 && e2.message) || e2), "error");
+        });
+      });
       tableRows.appendChild(r);
       r.appendChild(desc);   // the action explanation, below the action line
     });
