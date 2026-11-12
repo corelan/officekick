@@ -42,6 +42,16 @@
   exact layout Office honors, and docs gain the manual Trust Center +
   reg-add unblock for machines that installed older builds.
 
+## 0.9.330
+
+### Changed
+- The bottom "Update available" notice now opens the Settings > Update
+  subtab when clicked (which runs a fresh check as always) - all three
+  panes.
+- "Reload add-in" now lands on Settings > Update after the reload (it
+  used to land on General, so the post-update state was one click away).
+  Older build URLs tagged reloadnav=general still work.
+
 ## 0.9.329
 
 ### Added

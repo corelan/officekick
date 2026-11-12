@@ -761,6 +761,9 @@
       el.id = "update-flag";
       foot.insertBefore(el, foot.firstChild);
     }
+    // 0.9.330: the notice opens Settings -> Update (auto-runs the check)
+    el.title = "Open the Update settings";
+    el.onclick = function () { switchTab("settings"); switchSettingsSub("update"); };
     el.textContent = "\u2B06\uFE0F Update available: " + latest +
       (SK.cfg && SK.cfg.version ? " (you run " + SK.cfg.version + ")" : "");
   }
@@ -4931,10 +4934,10 @@ function applyOps(deck, ops, ctx) {
     if (relBtn) relBtn.addEventListener("click", function () {
       dbg("pane.reload", {});
       // hard reload of the pane from the running server, busting any cache;
-      // boots into Settings -> General (where updates/user settings live)
+      // boots into Settings -> Update (the refresh shows the new state there)
       var qs = String(location.search || "").replace(/cb=\d+(&|$)/g, "").replace(/^\?/, "");
-      if (/reloadnav=general(&|$)/.test("?" + qs + "&")) qs = qs.replace(/&?reloadnav=general/, "");
-      location.replace(location.pathname + "?" + (qs ? qs + "&" : "") + "reloadnav=general&cb=" + Date.now());
+      if (/reloadnav=[a-z]+(&|$)/.test("?" + qs + "&")) qs = qs.replace(/&?reloadnav=[a-z]+/, "");
+      location.replace(location.pathname + "?" + (qs ? qs + "&" : "") + "reloadnav=update&cb=" + Date.now());
     });
     // a pane reload (or back-end update) resumes the session that was active
     var bootResume = null;
@@ -4944,6 +4947,13 @@ function applyOps(deck, ops, ctx) {
     // a pane reload lands on Settings -> General (the caller tags the URL)
     try {
       var qnav = new URLSearchParams(location.search);
+      if (qnav.get("reloadnav") === "update") {   // 0.9.330: reloads land on Update
+        switchTab("settings");
+        switchSettingsSub("update");
+        qnav.delete("reloadnav");   // not sticky: a plain reload keeps the normal boot
+        var cleanUrl = location.pathname + ("" + qnav ? "?" + qnav.toString() : "");
+        try { history.replaceState(null, "", cleanUrl); } catch (eH) { location.replace(cleanUrl); }
+      }
       if (qnav.get("reloadnav") === "general") {
         switchTab("settings");
         switchSettingsSub("general");

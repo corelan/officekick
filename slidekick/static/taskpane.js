@@ -777,6 +777,9 @@
       el.id = "update-flag";
       foot.insertBefore(el, foot.firstChild);
     }
+    // 0.9.330: the notice opens Settings -> Update (auto-runs the check)
+    el.title = "Open the Update settings";
+    el.onclick = function () { switchTab("settings"); switchSettingsSub("update"); };
     el.textContent = "\u2B06\uFE0F Update available: " + latest +
       (SK.cfg && SK.cfg.version ? " (you run " + SK.cfg.version + ")" : "");
   }
@@ -7566,10 +7569,10 @@ OfficeDeck.prototype.setNotes = function (i, text) {
     if (relBtn) relBtn.addEventListener("click", function () {
       dbg("pane.reload", {});
       // hard reload of the pane from the running server, busting any cache;
-      // boots into Settings -> General (where updates/user settings live)
+      // boots into Settings -> Update (the refresh shows the new state there)
       var qs = String(location.search || "").replace(/cb=\d+(&|$)/g, "").replace(/^\?/, "");
-      if (/reloadnav=general(&|$)/.test("?" + qs + "&")) qs = qs.replace(/&?reloadnav=general/, "");
-      location.replace(location.pathname + "?" + (qs ? qs + "&" : "") + "reloadnav=general&cb=" + Date.now());
+      if (/reloadnav=[a-z]+(&|$)/.test("?" + qs + "&")) qs = qs.replace(/&?reloadnav=[a-z]+/, "");
+      location.replace(location.pathname + "?" + (qs ? qs + "&" : "") + "reloadnav=update&cb=" + Date.now());
     });
     wireAutoApplySetting();
     var updAuto = $("upd-auto");
@@ -7598,6 +7601,15 @@ OfficeDeck.prototype.setNotes = function (i, text) {
     // a pane reload lands on Settings -> General (the caller tags the URL)
     try {
       var q = new URLSearchParams(location.search);
+      if (q.get("reloadnav") === "update") {   // 0.9.330: reloads land on Update
+        switchTab("settings");
+        switchSettingsSub("update");
+        q.delete("reloadnav");   // not sticky: a plain F5 keeps the normal boot
+        var clean = location.pathname + ("" + q ? "?" + q.toString() : "");
+        try { history.replaceState(null, "", clean); } catch (eH) {
+          location.replace(clean);   // WebViews without replaceState
+        }
+      }
       if (q.get("reloadnav") === "general") {
         switchTab("settings");
         switchSettingsSub("general");
