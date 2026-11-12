@@ -790,16 +790,19 @@
     if (!btn || !info) return;
     btn.disabled = true;
     info.textContent = "Checking for updates…";
+    SK.updLastInfo = info.textContent;   // repaint on re-entry (0.9.336)
     apiJson("/api/update-check", "GET").then(function (data) {
       btn.disabled = false;
       if (!data || data.ok === false) {
         info.textContent = data && data.error ? data.error : "could not check for updates";
+        SK.updLastInfo = info.textContent;   // repaint on re-entry (0.9.336)
         return;
       }
       if (data.upToDate) {
         setUpdateFlag(null);
         info.className = "opnote";
         info.textContent = "You are up to date (" + data.current + ", latest " + data.latest + ").";
+        SK.updLastInfo = info.textContent;   // repaint on re-entry (0.9.336)
       } else {
         setUpdateFlag(data.latest);
         info.className = "opnote updavail";   // bold; gold/purple per theme
@@ -813,15 +816,18 @@
             pullBtn.disabled = true;
             info.className = "opnote upd-running";   // 0.9.331: pulse while the update runs
             info.textContent = "Starting the full update (pull + redeploy + restart)\u2026";
+            SK.updLastInfo = info.textContent;   // repaint on re-entry (0.9.336)
             apiJson("/api/update-run", "POST", {}).then(function (ur) {
               if (!(ur && ur.ok)) {
                 pullBtn.disabled = false;
                 info.className = "opnote updavail";
                 info.textContent = "Update could not start: " + ((ur && ur.error) || "unknown error");
+                SK.updLastInfo = info.textContent;   // repaint on re-entry (0.9.336)
                 return;
               }
               info.className = "opnote upd-running";   // 0.9.331: pulse until the new server is back
               info.textContent = "Update running (pull + redeploy + restart) - the server drops mid-run and comes back on the new build\u2026";
+              SK.updLastInfo = info.textContent;   // repaint on re-entry (0.9.336)
               var oldGen = "";
               apiJson("/api/health", "GET").then(function (h0) {
                 oldGen = (h0 && h0.gen) || "";
@@ -858,6 +864,7 @@
               pullBtn.disabled = false;
               info.className = "opnote updavail";
               info.textContent = "Update could not start: " + ((e2 && e2.message) || e2);
+              SK.updLastInfo = info.textContent;   // repaint on re-entry (0.9.336)
             });
           });
           info.appendChild(pullBtn);
@@ -866,6 +873,7 @@
     }).catch(function (e) {
       btn.disabled = false;
       info.textContent = "could not check for updates: " + (e && e.message ? e.message : e);
+      SK.updLastInfo = info.textContent;   // repaint on re-entry (0.9.336)
     });
   }
     var rsBtn2 = $("btn-restart-server");
@@ -6881,7 +6889,13 @@ OfficeDeck.prototype.setNotes = function (i, text) {
     if (id === "update") {   // 0.9.328: the subtab paints its real status on open
       var um = document.getElementById("upd-manual");
       if (um && !um.dataset.painted) { paintManualUpdate(um); um.dataset.painted = "1"; }
-      updCheck();
+      // 0.9.336: auto-check once per pane session - re-entering the tab (e.g.
+      // clicking the bottom notice while it is open) must not fire a fresh
+      // check that can clear the notice on the spot; the last result is
+      // repainted instead
+      var infoE = document.getElementById("upd-info");
+      if (infoE && !infoE.textContent && SK.updLastInfo) infoE.textContent = SK.updLastInfo;
+      if (!SK.updAutoRan) { SK.updAutoRan = true; updCheck(); }
     }
   }
 

@@ -42,6 +42,18 @@
   exact layout Office honors, and docs gain the manual Trust Center +
   reg-add unblock for machines that installed older builds.
 
+## 0.9.336
+
+### Fixed
+- Clicking the bottom "Update available" notice while the Update subtab
+  was already open re-ran the update check, and an up-to-date result
+  cleared the notice on the spot (the report: "the notice just
+  disappeared"). The auto-check now runs once per pane session on the
+  FIRST time the Update subtab opens; re-entering the tab (notice click,
+  tab switching) repaints the last state instead (the result line is
+  cached and repainted so it survives a General visit). Check now always
+  runs on demand.
+
 ## 0.9.335
 
 ### Fixed
