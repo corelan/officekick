@@ -97,11 +97,6 @@
       <button data-subtab="update">Update</button>
     </div>
     <div class="subpanel active" id="sub-general">
-      <div class="row" style="margin:2px 0 8px 0">
-        <button id="pane-reload" class="btn" type="button">Reload add-in</button>
-          <button id="btn-restart-server" class="btn subtle" type="button" title="Stops the local server, starts it again with this setup's own start mechanism.">Restart server</button>
-      </div>
-
       <div class="setgroup"><h2 class="setgh">General (all add-ins)</h2>
       <div class="row">
         <label class="field-inline check"><input type="checkbox" id="settings-debug" /> enable debug logging</label>
@@ -159,6 +154,10 @@
           <button id="upd-check" class="btn" type="button">Check now</button>
         </div>
         <span id="upd-info" class="opnote updinfoblock"></span>
+        <div class="row" style="margin:12px 0 0 0">
+          <button id="btn-restart-server" class="btn subtle" type="button" title="Stops the local server, starts it again with this setup's own start mechanism.">Restart server</button>
+          <button id="pane-reload" class="btn" type="button">Reload add-in</button>
+        </div>
         <div style="margin:12px 0 0 0">
           <label class="field-inline check" style="margin:0 0 8px 0"><input type="checkbox" id="upd-auto" />
             Check for updates automatically at startup</label>

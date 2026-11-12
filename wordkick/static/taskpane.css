@@ -915,3 +915,15 @@ body.dark #update-flag { animation-name: upglow-dark; }
 /* 0.9.331: the AI group's sub-subtabs (Connections / Profiles) */
 .subtabs.subsubtabs { margin: 10px 0 10px 14px; border-bottom: none; }
 .subtabs.subsubtabs button { font-size: 12px; padding: 4px 10px; }
+\n
+/* 0.9.331: manual update option cards + pulsing "update running" notice */
+.updopt { border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; margin: 8px 0 0 0; background: var(--panel); }
+.updopt h4 { margin: 2px 0 6px 0; font-size: 12.5px; }
+.updopt ol { margin: 0 0 0 18px; padding: 0; }
+.updopt li { margin: 4px 0; overflow-wrap: anywhere; }
+.updopt code { font-family: Menlo, Consolas, monospace; font-size: 11px; padding: 1px 5px; border-radius: 4px; border: 1px solid var(--line); background: rgba(127,127,127,.14); }
+.upd-running { animation: updPulse 1.6s ease-in-out infinite; border-radius: 8px; }
+@keyframes updPulse {
+  0%, 100% { background-color: rgba(255,196,0,.05); box-shadow: 0 0 0 rgba(255,199,0,0); }
+  50% { background-color: rgba(255,196,0,.16); box-shadow: 0 0 12px rgba(255,199,0,.45); }
+}

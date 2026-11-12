@@ -118,10 +118,13 @@ All update controls left General and live in their own **Update** subtab.
      add-in) - the new UI is live immediately.
   2. Then run the installer (`python3 install.py --update`, Windows
      `py -3 install.py --update`) to deploy manifests and server code.
-- **Manual update**: prints the two hand-update recipes verbatim - a git
+- **Restart server / Reload add-in**: also live in the Update subtab
+  (0.9.331), next to the auto-update toggles.
+- **Manual update**: the two hand-update recipes as option cards - a git
   clone (`git pull`, then `python3 install.py`, then reload the pane) and
   the zip route (download the main-branch zip, extract, run
-  `python3 install.py`, reload the pane).
+  `python3 install.py`, reload the pane). While an update runs, the
+  notice pulses (gold) until the new server is back.
 - An update probe state written BEFORE an update can no longer claim an
   older "latest" is available after that update: the server reconciles it
   at boot and the pane double-checks the version numbers, so after an

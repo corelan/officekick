@@ -811,6 +811,7 @@
           pullBtn.textContent = "Update now (pull + redeploy + restart)";
           pullBtn.addEventListener("click", function () {
             pullBtn.disabled = true;
+            info.className = "opnote upd-running";   // 0.9.331: pulse while the update runs
             info.textContent = "Starting the full update (pull + redeploy + restart)\u2026";
             apiJson("/api/update-run", "POST", {}).then(function (ur) {
               if (!(ur && ur.ok)) {
@@ -819,7 +820,7 @@
                 info.textContent = "Update could not start: " + ((ur && ur.error) || "unknown error");
                 return;
               }
-              info.className = "opnote";
+              info.className = "opnote upd-running";   // 0.9.331: pulse until the new server is back
               info.textContent = "Update running (pull + redeploy + restart) - the server drops mid-run and comes back on the new build\u2026";
               var oldGen = "";
               apiJson("/api/health", "GET").then(function (h0) {
@@ -6824,27 +6825,43 @@ OfficeDeck.prototype.setNotes = function (i, text) {
     }
     if (id === "update") {   // 0.9.328: the subtab paints its real status on open
       var um = document.getElementById("upd-manual");
-      if (um && !um.dataset.painted) { um.textContent = manualUpdateSteps(); um.dataset.painted = "1"; }
+      if (um && !um.dataset.painted) { paintManualUpdate(um); um.dataset.painted = "1"; }
       updCheck();
     }
   }
 
-  function manualUpdateSteps() {
+  function paintManualUpdate(el) {
+    // 0.9.331: the manual update recipes as two readable option cards
+    el.innerHTML = "";
     var repo = "https://github.com/corelan/officekick";
-    return [
-      "Option A - you installed from a git clone:",
-      "  1. In your clone folder run:      git pull",
-      "  2. Then run the installer:        python3 install.py",
-      "     (copies the panes, restarts the server, re-registers the add-ins)",
-      "  3. Reload the pane (About tab -> Reload add-in)",
-      "",
-      "Option B - no clone (zip download):",
-      "  1. Download the latest main-branch zip:",
-      "     " + repo + "/archive/refs/heads/main.zip",
-      "  2. Extract it and run the installer from the extracted folder:",
-      "     python3 install.py",
-      "  3. Reload the pane (About tab -> Reload add-in)",
-    ].join("\n");
+    var mkCard = function (title) {
+      var card = document.createElement("div");
+      card.className = "updopt";
+      card.appendChild(document.createElement("h4")).textContent = title;
+      var ol = document.createElement("ol");
+      card.appendChild(ol);
+      el.appendChild(card);
+      return ol;
+    };
+    var li = function (ol, parts) {
+      var li = document.createElement("li");
+      parts.forEach(function (p) {
+        if (typeof p === "string") li.appendChild(document.createTextNode(p));
+        else { var c = document.createElement("code"); c.textContent = p; li.appendChild(c); }
+      });
+      ol.appendChild(li);
+    };
+    var olA = mkCard("Option A - you installed from a git clone");
+    li(olA, ["In your clone folder run ", ["git pull"]]);
+    li(olA, ["Then run the installer: ", ["python3 install.py"],
+             " (copies the panes, restarts the server, re-registers the add-ins)"]);
+    li(olA, ["Reload the pane (About tab > Reload add-in)"]);
+    var olB = mkCard("Option B - no clone (zip download)");
+    li(olB, ["Download the latest main-branch zip: ",
+             [repo + "/archive/refs/heads/main.zip"]]);
+    li(olB, ["Extract it and run the installer from the extracted folder: ",
+             ["python3 install.py"]]);
+    li(olB, ["Reload the pane (About tab > Reload add-in)"]);
   }
 
   function switchTab(id) {

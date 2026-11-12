@@ -42,6 +42,25 @@
   exact layout Office honors, and docs gain the manual Trust Center +
   reg-add unblock for machines that installed older builds.
 
+## 0.9.332
+
+### Changed
+- Settings > Update: **Restart server** and **Reload add-in** moved from
+  General into the Updates section (next to the auto-update toggles), so
+  everything that touches the running build lives in one tab. General now
+  opens straight with its settings.
+- The "Update running (pull + redeploy + restart) - the server drops
+  mid-run..." notice now glows/pulses (gold, themed) until the update
+  finishes; done/failure states clear the pulse.
+- Manual update section: the recipes render as two option cards
+  (Option A git clone / Option B zip) with numbered steps and code chips
+  instead of the plain monospace text block.
+
+E2E (simulator + stub clone): buttons verified inside the Update subtab
+and absent from General; Update now -> the notice glows (upd-running,
+updPulse animation) while the (stub) installer runs and the glow clears on
+the terminal state.
+
 ## 0.9.331
 
 ### Changed
