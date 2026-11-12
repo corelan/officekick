@@ -92,9 +92,18 @@
 
   var WORD_STYLES = ["normal", "title", "heading1", "heading2", "heading3", "quote", "listParagraph"];
 
+  function htmlToFallbackText(h) {
+    // 0.9.348: readable text of a rewritten body (the ultimate fallback view)
+    return String(h || "").replace(/<\s*br\s*\/?>/gi, "\n").replace(/<\s*\/\s*(p|div|li|h[1-6])\s*>/gi, "\n")
+      .replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&")
+      .replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+      .replace(/\n{3,}/g, "\n\n").trim();
+  }
+
   var OPS_META = {
     draft_reply:    { label: "draft reply", hint: "Opens a reply window with AI-written HTML content - you review and send." },
     compose_body:   { label: "replace compose text", hint: "Rewrites the body of the email you are composing (review first)." },
+    edit_body_inplace: { label: "edit draft in place", hint: "Rewrites the open draft message in place - no new email. If Outlook refuses, the rewritten text is printed in this box instead." },
     set_categories: { label: "categories", hint: "Adds Outlook categories to the selected message; names are checked against your mailbox master list when Outlook's permission level allows reading it." },
     save_draft:     { label: "save draft", hint: "Saves the message you are composing as a draft." },
     new_message:    { label: "new message from template", hint: "Opens a prefilled NEW email window (to/subject/body) - you review and send." },
@@ -2243,6 +2252,15 @@ var nw = $("sess-new");
         var out = { host: "Outlook", mode: "", subject: "", sender: "", to: "", bodyText: "", categories: [], warnings: [], minimal: minimal };
         var isCompose = (item.getAsync !== undefined && item.subject && item.subject.getAsync);
         out.mode = isCompose ? "compose" : "read";
+        try {
+          // 0.9.348: a DRAFT opened in the reading pane reports read mode -
+          // mark it so rewrite asks convert to edit_body_inplace instead of
+          // draft_reply (whose reply-form API these items lack)
+          var ownAddr = Office.context.mailbox.userProfile &&
+            Office.context.mailbox.userProfile.emailAddress || "";
+          var frmAddr = item.from && (item.from.emailAddress || item.from.address) || "";
+          out.readModeDraft = !isCompose && !!ownAddr && frmAddr === ownAddr;
+        } catch (eDraft) { out.readModeDraft = false; }
         try { out.itemId = mailIdentityFromItem(item); } catch (eI0) { out.itemId = ""; }
         Promise.all([
           new Promise(function (res, rej) {
@@ -2371,6 +2389,21 @@ var nw = $("sess-new");
       }
       item.body.setAsync(String(html), { coercionType: Office.CoercionType.Html }, function (r) {
         r.status === "succeeded" ? resolve({ ok: true }) : reject(new FriendlyError(r.error.message));
+      });
+    });
+  };
+  MailDeck.prototype.editBodyInPlace = function (html) {
+    // 0.9.348: for a DRAFT message open in the READING PANE (the compose
+    // guard saw "read" mode). body.setAsync decides for itself whether the
+    // build allows it; a refusal surfaces as the text fallback.
+    return promisify(function (resolve, reject) {
+      var item = Office.context.mailbox.item;
+      if (!item || !item.body || !item.body.setAsync) {
+        reject(new FriendlyError("this Outlook build cannot edit this item's body from the add-in."));
+        return;
+      }
+      item.body.setAsync(String(html), { coercionType: Office.CoercionType.Html }, function (r) {
+        r.status === "succeeded" ? resolve({ ok: true }) : reject(new FriendlyError(r.error && r.error.message || "editing in place failed"));
       });
     });
   };
@@ -2519,11 +2552,24 @@ var nw = $("sess-new");
       var isPlaceholderHtml = function (s) { return /^\s*(\.\.\.+|\u2026|your (reply|answer|text)( here)?|reply text|the rewritten body)\s*$/i.test(String(s || "")); };
       var out = { type: t };
       if (t === "draft_reply") {
-        if (ctx && ctx.mode === "compose") {
-          bad("WRONG OP: you are COMPOSING this email - edit the draft in place with compose_body (html = the rewritten body). draft_reply cannot run while composing.");
-          return;
-        }
-        var html = op.html;
+        var dHtml = (typeof op.html === "string" && op.html.length >= 2) ? op.html :
+          (typeof op.text === "string" ? op.text : "");
+        if (ctx && ctx.mode === "compose" && dHtml.length >= 2) {
+          // 0.9.348: CONVERT instead of reject - a reply op while composing
+          // is really a rewrite of THIS draft; compose_body does it in place
+          if (dHtml.length > 60000) { bad("content too long (max 60000 chars)"); return; }
+          if (isPlaceholderHtml(dHtml)) { bad("reply text is a placeholder ('" + dHtml.slice(0, 40) + "') - write the actual reply content"); return; }
+          out = { type: "compose_body", html: dHtml, convertedFrom: "draft_reply (compose mode - edited in place instead)" };
+        } else if (ctx && ctx.readModeDraft && dHtml.length >= 2 &&
+                   !/\b(reply|respond|answer)\s+(to|about)\b/i.test(SK.lastInstruction || "")) {
+          // 0.9.348: the open item is the user's own DRAFT in the reading
+          // pane - rewrite it in place (reply-form ops fail there anyway).
+          // A "reply to this"-styled ask keeps draft_reply.
+          if (dHtml.length > 60000) { bad("content too long (max 60000 chars)"); return; }
+          if (isPlaceholderHtml(dHtml)) { bad("reply text is a placeholder ('" + dHtml.slice(0, 40) + "') - write the actual content"); return; }
+          out = { type: "edit_body_inplace", html: dHtml, convertedFrom: "draft_reply (draft message - edited in place instead)" };
+        } else {
+          var html = op.html;
         if (typeof html !== "string" || html.length < 2) {
           if (typeof op.text === "string" && op.text.length >= 2) html = op.text;
           else { bad("missing reply text"); return; }
@@ -2532,6 +2578,7 @@ var nw = $("sess-new");
         if (isPlaceholderHtml(html)) { bad("reply text is a placeholder ('" + html.slice(0, 40) + "') - write the actual reply content"); return; }
         out.html = html;
         out.all = op.all === true;
+        }
       } else if (t === "compose_body") {
         if (!ctx || ctx.mode !== "compose") { bad("compose_body works only on an email being composed"); return; }
         var cb = op.html;
@@ -2607,9 +2654,18 @@ var nw = $("sess-new");
         if (!ctx || ctx.mode !== "compose") { bad("save draft works only while composing"); return; }
       } else if (t === "new_message") {
         if (ctx && ctx.mode === "compose") {
-          bad("WRONG OP: you are COMPOSING this email - edit the draft in place with compose_body (html = the rewritten body). new_message only opens a NEW email window.");
-          return;
-        }
+          var nmHtmlC = (typeof op.html === "string" && op.html.length >= 2) ? op.html :
+            (typeof op.text === "string" ? op.text : "");
+          if (nmHtmlC.length < 2) {
+            bad("WRONG OP: you are COMPOSING - use compose_body and include the rewritten body");
+            return;
+          }
+          // 0.9.348: CONVERT - the model opened a new email when a rewrite
+          // was wanted; in compose mode do the edit in place (subject lost)
+          if (nmHtmlC.length > 60000) { bad("content too long (max 60000 chars)"); return; }
+          if (isPlaceholderHtml(nmHtmlC)) { bad("message text is a placeholder ('" + nmHtmlC.slice(0, 40) + "') - write the actual message content"); return; }
+          out = { type: "compose_body", html: nmHtmlC, convertedFrom: "new_message (compose mode - edited in place instead)" };
+        } else {
         var toList = Array.isArray(op.to) ? op.to.filter(function (x) { return typeof x === "string" && x; }) : [];
         var nmHtml = op.html;
         if (typeof nmHtml !== "string" || nmHtml.length < 2) {
@@ -2622,6 +2678,7 @@ var nw = $("sess-new");
         out.to = toList;
         out.subject = typeof op.subject === "string" ? op.subject.slice(0, 200) : "";
         out.html = nmHtml;
+        }
       }
       ops.push(out);
     });
@@ -2634,7 +2691,7 @@ var nw = $("sess-new");
     apply_layout: "edit", format_text: "edit", format_selection: "edit",
     move_shape: "edit", move_slide: "edit", set_background: "edit", add_hyperlink: "edit",
     set_alt_text: "edit", set_categories: "edit", draft_reply: "add", new_message: "add",
-    compose_body: "edit", save_draft: "add", create_template: "add", web_lookup: "edit", forward: "add", new_meeting: "add",
+    compose_body: "edit", edit_body_inplace: "edit", save_draft: "add", create_template: "add", web_lookup: "edit", forward: "add", new_meeting: "add",
     delete_slide: "del", delete_shape: "del"
   };
 
@@ -2656,6 +2713,8 @@ var nw = $("sess-new");
       }
       case "compose_body":
         return "REPLACE the email you are composing (" + op.html.length + " chars) - review";
+      case "edit_body_inplace":
+        return "EDIT this draft in place (" + op.html.length + " chars) - review";
       case "set_categories":
         return "Add categories: " + op.names.join(", ");
       case "save_draft":
@@ -2682,8 +2741,22 @@ function applyOps(deck, ops, ctx) {
             lines.push({ ok: true, text: "forward window opened (quoted original" + (op.to && op.to.length ? ", " + op.to.length + " recipient(s)" : "") + ") - review and send" });
           });
         case "compose_body":
+          // 0.9.348: a converted op notes where it came from
           return deck.composeBody(op.html).then(function () {
-            lines.push({ ok: true, text: "compose body replaced (" + op.html.length + " chars)" });
+            lines.push({ ok: true, text: "compose body replaced (" + op.html.length + " chars)" +
+              (op.convertedFrom ? " - converted: " + op.convertedFrom : "") });
+          });
+        case "edit_body_inplace":
+          return deck.editBodyInPlace(op.html).then(function () {
+            lines.push({ ok: true, text: "draft edited in place (" + op.html.length + " chars)" +
+              (op.convertedFrom ? " - converted: " + op.convertedFrom : "") });
+          }, function (e) {
+            // 0.9.348: ULTIMATE FALLBACK (user request): if the in-place edit
+            // cannot run on this item, the rewritten text is printed in this
+            // box instead of just an error
+            lines.push({ ok: false, text: "editing this item in place failed: " + String(e && e.message || e),
+                         fallbackHtml: op.html,
+                         fallbackNote: "could not edit the draft in place - the rewritten text is shown below (copy it manually)" });
           });
         case "set_categories":
           return deck.setCategories(op.names).then(function (r) {
@@ -3993,6 +4066,19 @@ function applyOps(deck, ops, ctx) {
             play.disabled = false; x.disabled = false;
             r.classList.add("opfailrow");
             setStatus("Action failed: " + (failLine ? failLine.text.slice(0, 140) : "unknown error"), "error");
+            if (failLine && failLine.fallbackHtml) {   // 0.9.348: show the text under the failed row
+              var fb9 = document.createElement("div");
+              fb9.className = "applyfallback";
+              var fh9 = document.createElement("div");
+              fh9.className = "applyfallback-h";
+              fh9.textContent = failLine.fallbackNote || "the rewritten text (not applied):";
+              fb9.appendChild(fh9);
+              var ft9 = document.createElement("div");
+              ft9.className = "applyfallback-t";
+              ft9.textContent = htmlToFallbackText(failLine.fallbackHtml);
+              fb9.appendChild(ft9);
+              r.appendChild(fb9);
+            }
           }
         }, function (e2) {
           play.disabled = false; x.disabled = false;
@@ -4181,6 +4267,19 @@ function applyOps(deck, ops, ctx) {
           d.className = "resultline " + (l.ok ? "ok" : "fail");
           d.textContent = l.text;
           result.appendChild(d);
+          if (l.fallbackHtml) {   // 0.9.348: print the rewrite instead of just the error
+            var fb = document.createElement("div");
+            fb.className = "applyfallback";
+            var fh = document.createElement("div");
+            fh.className = "applyfallback-h";
+            fh.textContent = l.fallbackNote || "the rewritten text (not applied):";
+            fb.appendChild(fh);
+            var ft = document.createElement("div");
+            ft.className = "applyfallback-t";
+            ft.textContent = htmlToFallbackText(l.fallbackHtml);
+            fb.appendChild(ft);
+            result.appendChild(fb);
+          }
         });
         var liveRows = rows.filter(function (r) { return !r.removed && !r.done; }).length;
         if (!liveRows) {

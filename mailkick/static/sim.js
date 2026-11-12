@@ -95,6 +95,19 @@
       log.push("compose body replaced");
       return { ok: true };
     },
+    editBodyInPlace: async function (html) {
+      // 0.9.348 sim: a read-mode draft in the simulator = always editable
+      // (the real Outlook may refuse; the pane falls back to the text)
+      if (compose) {
+        compose.bodyText = String(html);
+      } else if (item && item.bodyText !== undefined) {
+        item.bodyText = String(html);
+      } else {
+        throw new FriendlyError("editing in place failed (simulator)");
+      }
+      log.push("draft edited in place (simulated) with " + String(html).length + " chars");
+      return { ok: true };
+    },
     setCategories: async function (names) {
       // sim mirrors the real degraded mode: the fake mailbox master list
       var known = ["Blue Team", "Red Team", "AI"];

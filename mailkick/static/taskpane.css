@@ -719,6 +719,12 @@ body.dark .pt-text { color: #8fb8ff; }
 .op-play { margin-left: 4px; min-width: 26px; height: 22px; border: 1px solid rgba(47,158,91,.55);
   background: none; color: #2f9e5b; border-radius: 5px; cursor: pointer; font-weight: 700; font-size: 12px; }
 .op-play:disabled { opacity: .45; cursor: default; }
+/* 0.9.348: ultimate-fallback text block (rewrite shown as text when the in-place edit fails) */
+.applyfallback { margin: 6px 0 2px 0; border: 1px solid var(--line); border-left: 3px solid var(--primary);
+  border-radius: 8px; padding: 8px 10px; background: var(--panel); }
+.applyfallback-h { font-size: 11px; color: var(--muted); margin-bottom: 4px; }
+.applyfallback-t { font-size: 12.5px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
+
 .op-donerow { opacity: .75; }
 .op-donerow .optype { color: var(--ok); font-weight: 700; }
 body.dark .op-play { color: #9be77f; border-color: rgba(155,232,127,.5); }

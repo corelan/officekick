@@ -42,6 +42,23 @@
   exact layout Office honors, and docs gain the manual Trust Center +
   reg-add unblock for machines that installed older builds.
 
+## 0.9.348
+
+### Fixed
+- MailKick "rewrite this email" while a DRAFT is open (field report:
+  the model kept proposing reply ops which cannot run there):
+  - COMPOSING: draft_reply and new_message proposals are now CONVERTED
+    to compose_body automatically - the rewrite lands in the open draft
+    in place (the row notes the conversion).
+  - A DRAFT MESSAGE open in the reading pane reports read mode; the pane
+    detects it (sender = your own address) and converts draft_reply to
+    a new edit_body_inplace op that rewrites the draft body directly.
+  - ULTIMATE FALLBACK (user request): when an in-place edit is refused
+    by Outlook on any item, the rewritten text is PRINTED in the chat
+    output ("could not edit ... - the rewritten text is shown below")
+    instead of only an error row - batch apply and the per-row play.
+- The simulator mirrors edit_body_inplace.
+
 ## 0.9.347
 
 ### Fixed
