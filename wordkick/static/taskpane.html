@@ -98,19 +98,13 @@
         <button data-subtab="search">Search</button>
       <button data-subtab="style">Style</button>
       <button data-subtab="inspector">Inspector</button>
+      <button data-subtab="update">Update</button>
     </div>
     <div class="subpanel active" id="sub-general">
       <div class="row" style="margin:2px 0 8px 0">
         <button id="pane-reload" class="btn" type="button">Reload add-in</button>
-        <button id="upd-check" class="btn" type="button">Check now</button>
           <button id="btn-restart-server" class="btn subtle" type="button" title="Stops the local server, starts it again with this setup's own start mechanism.">Restart server</button>
-          <span id="upd-info" class="opnote"></span>
       </div>
-      <label class="field-inline check" style="margin:0 0 8px 0"><input type="checkbox" id="upd-auto" />
-        Check for updates automatically at startup</label>
-      <label class="field-inline check" style="margin:0 0 8px 0"><input type="checkbox" id="upd-auto-server" />
-        Update the server automatically before it starts (git pull with a clone,
-        GitHub zip otherwise)</label>
 
       <div class="setgroup"><h2 class="setgh">General (all add-ins)</h2>
             <p class="muted">Logs (one file per day) are written to
@@ -162,6 +156,25 @@
       <div class="row"><span id="settings-tc-msg" class="formmsg"></span></div>
       </div>
 
+    </div>
+        <div class="subpanel" id="sub-update">
+      <div class="setgroup"><h2 class="setgh">Updates</h2>
+        <div class="row" style="margin:2px 0 10px 0">
+          <button id="upd-check" class="btn" type="button">Check now</button>
+        </div>
+        <span id="upd-info" class="opnote updinfoblock"></span>
+        <div style="margin:12px 0 0 0">
+          <label class="field-inline check" style="margin:0 0 8px 0"><input type="checkbox" id="upd-auto" />
+            Check for updates automatically at startup</label>
+          <label class="field-inline check" style="margin:0 0 8px 0"><input type="checkbox" id="upd-auto-server" />
+            Update the server automatically before it starts (git pull with a clone,
+            GitHub zip otherwise)</label>
+        </div>
+      </div>
+      <div class="setgroup"><h2 class="setgh">Manual update</h2>
+        <p class="muted" style="margin:0 0 6px 0">If the automatic update cannot run in your setup, update by hand:</p>
+        <div id="upd-manual" class="updmanual"></div>
+      </div>
     </div>
     <div class="subpanel" id="sub-approvals">
       <div class="setgroup"><h2 class="setgh">Behaviour</h2>

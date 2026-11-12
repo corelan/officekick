@@ -42,6 +42,30 @@
   exact layout Office honors, and docs gain the manual Trust Center +
   reg-add unblock for machines that installed older builds.
 
+## 0.9.329
+
+### Added
+- New **Settings > Update** subtab (all three panes): every update control
+  moved out of General - Check now (runs automatically when the subtab
+  opens, painting the real status), the auto-check + auto-update-server
+  toggles and the update result area (with proper spacing; the
+  "Update now (pull + redeploy + restart)" button no longer sits glued to
+  the text). A **Manual update** section prints the hand-update recipes
+  verbatim: git clone (git pull + python3 install.py + reload) and the
+  zip route (download the main-branch zip, extract, run the installer,
+  reload the pane).
+
+### Fixed
+- "Update done - the server is on Xundefined": the 0.9.321 marker-clear
+  call had been inserted INTO the "Update done" text concatenation, so
+  the message ended with "undefined" and silently dropped the
+  "Reload this pane" tail. Fixed (the call runs after the text).
+- After an update, /api/health could still claim "available (<older>)"
+  from a probe state written before the update until the next probe.
+  The server now reconciles the persisted state at boot and the panes
+  double-check the versions, so the marker and note go "up to date"
+  immediately. (Test: update_probe_state_reconciles_older_latest_at_boot.)
+
 ## 0.9.328
 
 ### Fixed

@@ -751,10 +751,20 @@
     });
   }
 
+  function versionTuple(v) {
+    var parts = String(v || "").match(/\d+/g) || [];
+    return parts.length ? parts.map(Number) : null;
+  }
   function setUpdateFlag(latest) {
     // 0.9.321: glowing "Update available" marker at the bottom of the pane,
     // just above the version/server line - removed (footer back to its
     // original single-line size) as soon as a check reports up to date
+    // 0.9.328: never claim an update to an OLDER build (a probe state written
+    // before an update can ride /api/health during the boot window)
+    if (latest && SK.cfg && SK.cfg.version) {
+      var aU = versionTuple(latest), bU = versionTuple(SK.cfg.version);
+      if (aU && bU && aU <= bU) latest = null;
+    }
     var foot = document.querySelector(".sk-footer");
     if (!foot) return;
     var el = document.getElementById("update-flag");
@@ -817,8 +827,8 @@
                     if (h1 && h1.gen && h1.gen !== oldGen) {
                       info.className = "opnote";
                       info.textContent = "Update done - the server is on " + (h1.version || "the new build") +
-                      setUpdateFlag(null);
                         ". Reload this pane (About tab -> Reload pane, or quit and reopen the app) to load the new pane files.";
+                      setUpdateFlag(null);
                     } else if (h1 && h1.gen && h1.gen === oldGen && tries > 12) {
                       info.className = "opnote updavail";
                       info.textContent = "The update did not restart the server (still on " + (h1.version || "the old build") + ")."
@@ -6783,6 +6793,29 @@ OfficeDeck.prototype.setNotes = function (i, text) {
       var info = document.getElementById("upd-info");
       if (info) info.textContent = "";
     }
+    if (id === "update") {   // 0.9.328: the subtab paints its real status on open
+      var um = document.getElementById("upd-manual");
+      if (um && !um.dataset.painted) { um.textContent = manualUpdateSteps(); um.dataset.painted = "1"; }
+      updCheck();
+    }
+  }
+
+  function manualUpdateSteps() {
+    var repo = "https://github.com/corelan/officekick";
+    return [
+      "Option A - you installed from a git clone:",
+      "  1. In your clone folder run:      git pull",
+      "  2. Then run the installer:        python3 install.py",
+      "     (copies the panes, restarts the server, re-registers the add-ins)",
+      "  3. Reload the pane (About tab -> Reload add-in)",
+      "",
+      "Option B - no clone (zip download):",
+      "  1. Download the latest main-branch zip:",
+      "     " + repo + "/archive/refs/heads/main.zip",
+      "  2. Extract it and run the installer from the extracted folder:",
+      "     python3 install.py",
+      "  3. Reload the pane (About tab -> Reload add-in)",
+    ].join("\n");
   }
 
   function switchTab(id) {

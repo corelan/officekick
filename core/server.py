@@ -34,7 +34,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 APP = "OfficeKick"
-VERSION = "0.9.328"
+VERSION = "0.9.329"
 
 # --------------------------------------------------------------------------- #
 # Self-restart: the server watches for <cfg dir>/restart.flag. Whatever writes
@@ -2245,6 +2245,20 @@ def load_update_probe_state(store=None):
             blob = (Path(store.path).parent / "update_state.json").read_text(
                 encoding="utf-8")
             UPDATE_PROBE_STATE["data"] = json.loads(blob)
+        except Exception:
+            pass
+        # 0.9.328: a state probe run BEFORE an update can claim an OLDER
+        # "latest" is available (the update itself bumped VERSION). Never
+        # surface that stale claim on boot: reconcile against the running
+        # version and persist the corrected state.
+        st = UPDATE_PROBE_STATE.get("data") or {}
+        try:
+            if st.get("latest") and _version_tuple(st["latest"]) <= _version_tuple(VERSION):
+                st["available"] = False
+                st["current"] = VERSION
+                UPDATE_PROBE_STATE["data"] = st
+                (Path(store.path).parent / "update_state.json").write_text(
+                    json.dumps(st), encoding="utf-8")
         except Exception:
             pass
 

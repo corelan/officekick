@@ -92,8 +92,12 @@ This tab carries the two style controls shared by all three add-ins.
   the whole pane. Applies immediately, saves automatically, and is shared
   by all three add-ins.
 
-### About / updates (same tab)
+### Update (own subtab)
 
+- 0.9.328: all update controls moved from General into their own
+  **Settings > Update** subtab. Opening it runs a check automatically and
+  paints the real status (up to date / available + the Update now button
+  when a clone deploy is possible).
 - **Check for updates automatically at startup** (default on): once per
   boot, the pane reads the released VERSION - from your local OfficeKick
   clone when one was recorded at install (it runs `git fetch`), otherwise
@@ -112,6 +116,15 @@ This tab carries the two style controls shared by all three add-ins.
      add-in) - the new UI is live immediately.
   2. Then run the installer (`python3 install.py --update`, Windows
      `py -3 install.py --update`) to deploy manifests and server code.
+- **Manual update**: prints the two hand-update recipes verbatim - a git
+  clone (`git pull`, then `python3 install.py`, then reload the pane) and
+  the zip route (download the main-branch zip, extract, run
+  `python3 install.py`, reload the pane).
+- An update probe state written BEFORE an update can no longer claim an
+  older "latest" is available after that update: the server reconciles it
+  at boot and the pane double-checks the version numbers, so after an
+  update the marker and the note switch to "up to date" instead of
+  flashing "update available (<older>)" until the next probe.
 - **Reload add-in**: hard-reloads the pane and picks up new build files
   without reopening Office. Your active session auto-resumes.
 - The result note under **Check now** clears itself the next time you open

@@ -938,3 +938,9 @@ body.dark #update-flag { animation-name: upglow-dark; }
 
 /* 0.9.326: statuses with a click action (cursor + dotted underline affordance) */
 #chat-status.clickable { cursor: pointer; text-decoration: underline dotted; }
+/* 0.9.328: the Update subtab - roomy update info + manual steps block */
+#upd-info { display: block; margin: 8px 0 6px 0; }
+#upd-info .btn { margin-top: 8px; }
+.updmanual { white-space: pre-wrap; font-family: Menlo, Consolas, monospace; font-size: 11.5px;
+  border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; background: var(--panel);
+  overflow-wrap: anywhere; }
