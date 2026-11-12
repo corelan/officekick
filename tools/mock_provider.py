@@ -20,6 +20,7 @@ Standard library only.
 import argparse
 import base64
 import json
+import os
 import struct
 import sys
 import threading
@@ -56,6 +57,7 @@ class MockState:
     fail_models = False
     require_key = None
     reject_think = False
+    scenario_file = None
     last_request = None
 
 
@@ -124,6 +126,17 @@ def make_handler(flavor):
                 self._json({"error": {"message": "unauthorized (mock)"}}, 401)
                 return
             STATE.last_request = req
+            scf = STATE.scenario_file
+            if scf and os.path.exists(scf):
+                try:
+                    reply = open(scf, "r", encoding="utf-8").read()
+                    if flavor in ("openai", "llamacpp", "openrouter") and self.path in ("/v1/chat/completions", "/chat/completions"):
+                        self._json({"choices": [{"message": {"role": "assistant", "content": reply}}]})
+                    else:
+                        self._json({"message": {"role": "assistant", "content": reply}, "done": True})
+                    return
+                except Exception:
+                    pass
             if STATE.reject_think and req.get("think") is False:
                 self._json({"error": {"message": "model does not support think"}}, 400)
                 return

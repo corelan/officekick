@@ -4057,6 +4057,212 @@ function applyOps(deck, ops, ctx) {
     });
   }
 
+
+  // ========================================================================== 0.9.339
+  // The chunked document-REVIEW pipeline. A wording/review ask over a large
+  // document cannot be one single ask (the op list never fits one reply) -
+  // it walks the document in slices like Translate, COLLECTS the proposals
+  // and ends in ONE approval gate: the collected ops go through the normal
+  // preview (accept/reject per paragraph; the Track Changes setting works).
+  var REVIEW_CHUNK_CHARS = 3000;
+  var REVIEW_CHUNK_PARAS = 24;
+  var REVIEW_ASK_BUDGET = 160;
+  var REVIEW_MIN_PARAS = 60;
+  var REVIEW_SYS = "You are a professional language editor working inside DocKick. You review the user's document text and propose MINIMAL wording fixes. " +
+    "THE USER'S ORIGINAL REQUEST below defines what you look for (strange wording after a translation, odd word choices, broken grammar, unnatural phrasing, repetitions). " +
+    "REVIEW, DON'T REWRITE: propose the smallest edit that fixes the issue - keep every sentence's structure, meaning, purpose and level of formality; keep every technical term, brand name, defined term, clause number, currency, URL and identifier unchanged. " +
+    "Only touch paragraphs that actually need a fix - a paragraph that is already fine stays out of the reply entirely. " +
+    "Keep the paragraph's leading indentation (spaces AND tab characters) exactly as received, and keep internal bullet characters. " +
+    "Do not merge, split or reorder paragraphs. Never add commentary, notes or explanations. " +
+    "Reply ONLY with a JSON object {\"kind\":\"slide_ops\",\"ops\":[...]} - no prose, no markdown fences. " +
+    "Op schema: {\"type\":\"edit_paragraph\",\"para\":N,\"text\":\"the whole corrected paragraph text\"} - para = the exact paragraph number given in the input. " +
+    "Never repeat outline markers like [L2] or [image x1] in your output - they are pane annotations, not document text. " +
+    "An empty ops list is a valid answer when every paragraph of the slice is already fine.";
+  function runReview(instruction, ctx, ref, prof, input) {
+    var instr = "Review the document wording per: " + String(instruction || "").slice(0, 160);
+    actLog("Reviewing the document in chunks (model " + ref.model + " via " + ref.connection + ")");
+    var fallbackRef = translateFallbackRef(prof, ref, instruction);
+    if (fallbackRef) {
+      actLog("Fallback model: " + fallbackRef.model + " (via " + fallbackRef.connection + ") - a chunk that survives the re-ask swaps to it");
+    }
+    var swapped = false;
+    var usedModels = [ref.model];
+    var work = [];
+    (ctx.paragraphs || []).forEach(function (p) {
+      var raw = stripOutlineMarkers(p.text).replace(/[\r\n\v]+$/, "");
+      var probe = raw.replace(/\s+/g, " ").trim();
+      if (!probe || !/[^\\W\\d_]/.test(probe)) return;
+      work.push({ para: p.idx + 1, text: raw });
+    });
+    var docIntro = "";
+    try {
+      var opens = [];
+      for (var iw = 0; iw < work.length && opens.length < 3; iw++) {
+        var snip = String(work[iw].text || "").replace(/\s+/g, " ").trim();
+        if (snip) opens.push("[" + work[iw].para + "] " + snip.slice(0, 110));
+      }
+      docIntro = "DOCUMENT CONTEXT (identical in every ask; each ask reviews ONE SLICE under the same rules - do not treat the slice as the whole document): the document \"" +
+        String(ctx.documentName || "document") + "\" holds " + (ctx.paragraphCount || work.length) + " paragraph(s), " + work.length + " of them carry text." +
+        (opens.length ? " It opens with: " + opens.join(" | ") + "." : "") +
+        " Judge the document's nature, audience and register from this opening together with the paragraphs of the slice.";
+    } catch (eDI) { docIntro = ""; }
+    var chunks = [], cur = [], curChars = 0;
+    work.forEach(function (w) {
+      var addChars = w.text.length + 10;
+      if (cur.length && curChars + addChars > REVIEW_CHUNK_CHARS) { chunks.push(cur); cur = []; curChars = 0; }
+      cur.push(w); curChars += addChars;
+      if (curChars >= REVIEW_CHUNK_CHARS || cur.length >= REVIEW_CHUNK_PARAS) { chunks.push(cur); cur = []; curChars = 0; }
+    });
+    if (cur.length) chunks.push(cur);
+    dbg("review.plan", { paragraphs: work.length, chunks: chunks.length });
+    var queue = [];      // work items: {paras, label, retried}
+    chunks.forEach(function (cs, ci) {
+      queue.push({ paras: cs, retried: false, label: "chunk " + (ci + 1) + "/" + chunks.length });
+    });
+    var proposed = [], applied0 = 0, failed = 0, skippedChunks = 0, budgetUsed = 0, budgetHit = false;
+    function restoreLead(srcText, txt) {
+      var srcLead = (String(srcText || "").match(/^[ \t\u00a0]+/) || [""])[0];
+      if (!srcLead) return txt;
+      if (txt.slice(0, srcLead.length) === srcLead) return txt;
+      var txtLead = (txt.match(/^[ \t\u00a0]+/) || [""])[0];
+      return srcLead + (txtLead ? txt.slice(txtLead.length) : txt);
+    }
+    function collectChunkReply(r, paras, paraSet) {
+      var pre = tryParse(r && r.text || "");
+      var got = (pre.ok && pre.ops) || (salvageOps(r && r.text || "") || []);
+      var fixes = [];
+      got.forEach(function (o) {
+        if (!o || o.type !== "edit_paragraph") return;
+        var pn = (typeof o.para === "number") ? o.para :
+          (typeof o.para === "string" && o.para.trim() && !isNaN(Number(o.para)) ? Number(o.para) : null);
+        if (pn === null || !paraSet[pn]) return;
+        var txt = stripOutlineMarkers(o.text).trim();
+        if (!txt) return;
+        txt = restoreLead(paraSet[pn].text, txt);
+        if (txt === paraSet[pn].text) return;   // unchanged echo
+        fixes.push({ type: "edit_paragraph", para: pn, text: txt });
+      });
+      return { pre: pre, fixes: fixes, clean: pre.ok || /clean|fine|no (issues|fixes|changes)/i.test(String(r && r.text || "")) };
+    }
+    function finish() {
+      var summary = "Review done: " + proposed.length + " proposal(s) across " + (chunks.length - skippedChunks) +
+        " chunk(s)" + (usedModels.length ? " (models: " + usedModels.join(" \u2192 ") + ")" : "") +
+        (skippedChunks ? "; " + skippedChunks + " chunk(s) could not be reviewed (see the activity log)." : ".") +
+        (budgetHit ? " The run stopped at the model-ask budget - run the same request again to review the rest." : "") +
+        (proposed.length ? " Review and accept the proposals below." : " No wording changes suggested.");
+      if (proposed.length) {
+        return { ok: true, kind: "slide_ops", ops: proposed, reviewNote: summary };
+      }
+      return { ok: true, kind: "reply", text: summary };
+    }
+    function askItem(item, allowRetry) {
+      budgetUsed++;
+      if (budgetUsed >= REVIEW_ASK_BUDGET) budgetHit = true;
+      if (budgetHit) return runNext();
+      setStatus("Reviewing " + item.label + " (paragraphs " + item.paras[0].para + "\u2013" +
+        item.paras[item.paras.length - 1].para + ") - " + ref.model + "\u2026", "busy");
+      var listing = item.paras.map(function (w) { return "[" + w.para + "] " + w.text; }).join("\n");
+      var user = "REVIEW FOCUS - the user's original request: " + String(instruction || "").slice(0, 500) + "\n" +
+        "SLICE: " + item.label + " - the " + item.paras.length + " paragraph(s) below are paragraphs " +
+        item.paras[0].para + "\u2013" + item.paras[item.paras.length - 1].para + " of the whole document (other slices are reviewed separately under the same rules).\n" +
+        "Review the paragraphs below now.\n\n" +
+        "PARAGRAPHS (each op's para must be EXACTLY the number in brackets):\n" + listing;
+      function go(msgs) {
+        if (SK.runCancelled) return Promise.reject(new FriendlyError("Run cancelled."));
+        return askRetryable(function () {
+          return apiJson("/api/chat", "POST", {
+            connection: ref.connection, model: ref.model,
+            temperature: 0.2, maxTokens: 7000,
+            messages: msgs,
+          });
+        });
+      }
+      var msgs1 = [{ role: "system", content: REVIEW_SYS + docIntro },
+                   { role: "user", content: user }];
+      return go(msgs1).then(function (r) {
+        var paraSet = {};
+        item.paras.forEach(function (w) { paraSet[w.para] = w; });
+        var parsed = collectChunkReply(r, item.paras, paraSet);
+        if (SK.runCancelled) return Promise.reject(new FriendlyError("Run cancelled."));
+        if (parsed.fixes.length || parsed.pre.ok) {
+          proposed.push.apply(proposed, parsed.fixes);
+          actLog(item.label + " [" + ref.model + "]: " + parsed.fixes.length + " proposal(s)" +
+            (parsed.fixes.length ? " - total so far: " + proposed.length : " (slice is clean)"));
+          setStatus("Reviewed so far: " + proposed.length + " proposal(s)\u2026", "busy");
+          return runNext();
+        }
+        // unparseable reply: ONE firm re-ask; empty-ops replies are already
+        // accepted above (a clean slice is success here)
+        var head = String((r && r.text) || "").replace(/\s+/g, " ").trim().slice(0, 150) || "(empty reply)";
+        if (SK.runCancelled) return Promise.reject(new FriendlyError("Run cancelled."));
+        if (!allowRetry) return maybeSwapThenSkip(item, head);
+        budgetUsed++;
+        if (budgetUsed >= REVIEW_ASK_BUDGET) budgetHit = true;
+        if (budgetHit) return maybeSwapThenSkip(item, head);
+        actLog(item.label + " [" + ref.model + "]: the reply was not parseable - re-asking with a firmer instruction\u2026 model said: " + head);
+        item.retried = true;
+        setStatus(item.label + " [model " + ref.model + "]: re-asking\u2026", "busy");
+        var msgs2 = [
+          { role: "system", content: REVIEW_SYS + docIntro },
+          { role: "user", content: user },
+          { role: "assistant", content: String((r && r.text) || "").slice(0, 500) },
+          { role: "user", content: "Your last reply was not valid action JSON. Reply again NOW: ONLY the JSON object {\"kind\":\"slide_ops\",\"ops\":[...]} with the edit_paragraph ops for the paragraphs above - or an EMPTY ops list when the slice is clean. No prose, no reasoning, no fences." },
+        ];
+        return go(msgs2).then(function (r2) {
+          var parsed2 = collectChunkReply(r2, item.paras, paraSet);
+          if (parsed2.fixes.length || parsed2.pre.ok) {
+            proposed.push.apply(proposed, parsed2.fixes);
+            actLog(item.label + " [" + ref.model + "]: " + parsed2.fixes.length + " proposal(s) after the re-ask - total: " + proposed.length);
+            setStatus("Reviewed so far: " + proposed.length + " proposal(s)\u2026", "busy");
+            return runNext();
+          }
+          return maybeSwapThenSkip(item, head);
+        }, function (e2) {
+          if (SK.runCancelled || /Run cancelled/i.test(String(e2 && e2.message)))
+            return Promise.reject(new FriendlyError("Run cancelled."));
+          actLog(item.label + " failed: " + ((e2 && e2.message) || String(e2)));
+          return maybeSwapThenSkip(item, "");
+        });
+      }, function (e) {
+        if (SK.runCancelled || /Run cancelled/i.test(String(e && e.message)))
+          return Promise.reject(new FriendlyError("Run cancelled."));
+        actLog(item.label + " failed: " + ((e && e.message) || String(e)));
+        return maybeSwapThenSkip(item, "");
+      });
+    }
+    function maybeSwapThenSkip(item, why) {
+      if (!swapped && fallbackRef && !SK.runCancelled && !budgetHit) {
+        swapped = true;
+        var wasModel = ref.model;
+        ref = fallbackRef;
+        fallbackRef = null;
+        usedModels.push(ref.model);
+        actLog("Model swap: " + item.label + " kept failing on " + wasModel + " - switching to " + ref.model + " (via " + ref.connection + ")");
+        item.retried = false;
+        return askItem(item, true);
+      }
+      skippedChunks++;
+      actLog(item.label + " skipped - the reviewer could not be parsed, the chunk is left unchanged" + (why ? " (model said: " + why + ")" : ""));
+      return runNext();
+    }
+    function runNext() {
+      if (SK.runCancelled) return Promise.reject(new FriendlyError("Run cancelled."));
+      if (!budgetHit && budgetUsed >= REVIEW_ASK_BUDGET) {
+        budgetHit = true;
+        actLog("Model-ask budget of " + REVIEW_ASK_BUDGET + " reached - finishing the review.");
+      }
+      if (!queue || !queue.length || budgetHit) return Promise.resolve(finish());
+      return askItem(queue.shift(), true);
+    }
+    setStatus("Reviewing " + chunks.length + " chunk(s), " + work.length + " paragraph(s)\u2026", "busy");
+    return runNext().then(function (parsedFinal) {
+      actLog(parsedFinal.ok && parsedFinal.kind === "reply" ? parsedFinal.text : (parsedFinal.reviewNote || "review complete - proposals ready for approval"));
+      var waitApply = renderParsed(parsedFinal, ctx, instruction);
+      pushHistory(instr, assistantHistoryText(parsedFinal));
+      return Promise.resolve(waitApply);
+    });
+  }
+
   function runPrompt() {
     if (SK.busy) return;
     var input = $("chat-input");
@@ -4098,6 +4304,15 @@ function applyOps(deck, ops, ctx) {
       SK.webRounds = 0;
       SK.pageReads = 0;
       SK.webResults = "";
+      // 0.9.339: a wording/review ask over a LARGE document cannot be one
+      // single ask (the op list never fits one reply) - it runs as its own
+      // chunked pipeline (like Translate) and ends in ONE approval gate.
+      var REVIEW_ASK_RE = new RegExp("\\b(review|proofread|proof-?read|proofreading|wording|grammar|spelling|typos?|grammatical|punctuation|recheck|reads? (unnatural|strange|awkward)|feels? (a bit )?(strange|awkward|unnatural|off)|not natural|strange choice|better wording|improv(e|ing).{0,20}(wording|text|translation|sentence)|polish the (text|wording|language))\\b", "i");
+      if (wantCtx && REVIEW_ASK_RE.test(String(instruction || "")) &&
+          ctx && (ctx.paragraphCount || (ctx.paragraphs || []).length) > REVIEW_MIN_PARAS && !SK.clarifyAnswer) {
+        dbg("review.flow.detected", { paras: ctx.paragraphCount || (ctx.paragraphs || []).length, instruction: instruction });
+        return runReview(instruction, ctx, ref, prof, input);
+      }
       if (!(SK.clarifyAnswer && SK.clarifyAnswer.expect === instruction)) SK.clarifyChain = 0;   // a free new ask resets the clarify chain
       var webPromise = Promise.resolve("");
       return webPromise.then(function () {

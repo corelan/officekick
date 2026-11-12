@@ -42,6 +42,23 @@
   exact layout Office honors, and docs gain the manual Trust Center +
   reg-add unblock for machines that installed older builds.
 
+## 0.9.339
+
+### Added
+- Chunked document REVIEW (DocKick, auto-detected): a wording/review/
+  proofread ask over a large document (> 60 paragraphs) uses the
+  Translate-style pipeline - the document walks 24-paragraph slices, every
+  slice gets its own editor ask (REVIEW, DON'T REWRITE: minimal wording
+  fixes only, the user's original request defines the focus, empty slice =
+  clean), everything is COLLECTED and ends in ONE approval gate (the
+  standard preview: accept/reject per paragraph, Track Changes honoured).
+  Fallback model swap + ask budget included; cancellation supported.
+  Previously such asks went out as ONE ask, the model burned the whole
+  reply budget on a prose op list, nothing parsed and nothing was applied.
+
+E2E (simulator, per-request scenario mock): 76-paragraph document, ask
+detected -> 4 chunk asks -> 2 proposals collected -> single gate -> apply.
+
 ## 0.9.338
 
 ### Fixed
