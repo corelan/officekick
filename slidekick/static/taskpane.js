@@ -4899,6 +4899,7 @@ OfficeDeck.prototype.setNotes = function (i, text) {
     filePreviousRun();  // the previous request/response moves into the history box NOW
     SK.busy = true;
     SK.runCancelled = false;
+    SK.emptyRunRetried = false;   // one full re-run per run (0.9.335)
     SK.cancelErase = false;  // fresh run: cancellable until it renders (renderParsed re-clears)
     SK.insertGuard = null;   // a new run rebuilds the target guard from its own parse (0.9.270)
     SK.targetConfirmDone = false;   // one AI target-confirmation round per run
@@ -5516,13 +5517,30 @@ OfficeDeck.prototype.setNotes = function (i, text) {
       });
       };
       var parsedChain = fullMo ? makeOverFlow() : baseChain();
-      return parsedChain.then(function (parsed) {
-        if (parsed === null) {
-          // orchestration produced nothing usable - fall back to the plain chain
-          return baseChain();
+      var runRetry = function () {
+        return parsedChain.then(function (parsed) {
+          if (parsed === null) {
+            // orchestration produced nothing usable - fall back to the plain chain
+            return baseChain();
+          }
+          return parsed;
+        });
+      };
+      return runRetry().then(function (parsed) {
+        if (parsed && !parsed.ok && !String(parsed.text || "").trim() && !SK.emptyRunRetried) {
+          SK.emptyRunRetried = true;
+          dbg("run.emptyRetry", {});
+          setStatus("Empty reply - running the same ask one more time…", "busy");
+          return runRetry();
         }
         return parsed;
       }).then(function (parsed) {
+        if (parsed && !parsed.ok && !String(parsed.text || "").trim()) {
+          dbg("run.emptyFinal", {});
+          setStatus("Empty response - the original ask is back in the input box; press Run to try again.", "error");
+          if (input && !input.value) input.value = instruction;
+          return Promise.resolve(null);
+        }
         if (parsed && parsed.kind !== "clarify" && !(SK.clarifyChain || 0) &&
             /infographics?\b/i.test(instruction) &&
             !/\b(image|picture|illustration|screenshot|photo|poster|graphic)\b/i.test(instruction)) {

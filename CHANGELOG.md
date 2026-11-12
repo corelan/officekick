@@ -42,6 +42,21 @@
   exact layout Office honors, and docs gain the manual Trust Center +
   reg-add unblock for machines that installed older builds.
 
+## 0.9.335
+
+### Fixed
+- An EMPTY model reply no longer files "(empty response)" as a chat turn.
+  After the usual two repair rounds, the pane now runs the ORIGINAL ask
+  sequence ONE more time (fresh ask + repair ladder - up to 6 asks total);
+  if both sequences end empty, nothing is filed or rendered: the status
+  says "Empty response - the original ask is back in the input box; press
+  Run to try again." and the request is restored verbatim in the input box
+  for a manual re-run. The retry is bounded (one extra sequence per run)
+  and identical in DocKick, SlideKick and MailKick.
+
+E2E (empty-mode mock): run -> 6 asks -> input restored to the original
+prompt, error status shown, no "(empty response)" box, nothing filed.
+
 ## 0.9.334
 
 ### Fixed
