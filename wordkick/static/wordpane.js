@@ -2178,6 +2178,19 @@ var nw = $("sess-new");
       });
     });
   };
+  function middleDiff(a, b) {
+    // character-level middle diff: everything before/after matches - only the
+    // middle changed. Used to keep TRACKED edits granular (tiny deletions +
+    // tiny insertions instead of whole-paragraph churn).
+    var n = Math.min(a.length, b.length), p = 0;
+    while (p < n && a.charAt(p) === b.charAt(p)) p++;
+    var s = 0;
+    var lim = n - p;
+    while (s < lim && a.charAt(a.length - 1 - s) === b.charAt(b.length - 1 - s)) s++;
+    if (a.length - p - s <= 0 && b.length - p - s <= 0) return null;   // identical
+    return { prefixLen: p, oldMid: a.slice(p, a.length - s), newMid: b.slice(p, b.length - s), suffixLen: s };
+  }
+
   WordDeck.prototype.editParagraph = function (index, text) {
     return this.run("editParagraph", function (ctx) {
       // Word.js collections: use .items after load+sync (no getItemAt here)
@@ -2186,7 +2199,40 @@ var nw = $("sess-new");
       return ctx.sync().then(function () {
         var p = paras.items[index];
         if (!p) throw new FriendlyError("Paragraph " + (index + 1) + " does not exist");   // 0.9.307: op numbering is 1-based
-        p.insertText(String(text), "Replace");
+        var oldText = String(p.text || "");
+        var newText = String(text || "");
+        // 0.9.345: with Track Changes ON, a whole-paragraph insertText(Replace)
+        // marks the ENTIRE old text deleted + the entire new text inserted in
+        // one blob (field: the review read as "only deletions"). When tracking
+        // is active, replace GRANULARLY: write the changed middle only -
+        // insert before the located old middle, then delete it - so the
+        // revisions show tiny deletion/insertion pairs. Uniqueness guards
+        // fall back to the whole-paragraph write.
+        if (SK.trackedNow && newText && oldText !== newText &&
+            oldText.length < 4000 && newText.length < 4000) {
+          var d = middleDiff(oldText, newText);
+          var pureInsert = d && !d.oldMid;
+          var anchor = d ? (d.oldMid.length >= 8 ? d.oldMid : oldText.slice(0, d.prefixLen + (pureInsert ? 8 : 0))) : "";
+          if (d && d.oldMid.length <= 2000 && d.newMid.length <= 2000 && anchor.length >= 8) {
+            var hits = ctx.document.body.search(anchor, { matchCase: true, matchWholeWord: false });
+            hits.load("items");
+            return ctx.sync().then(function () {
+              if (hits.items.length !== 1) {   // not unique document-wide - whole-paragraph write
+                p.insertText(newText, "Replace");
+                return ctx.sync().then(function () { return { ok: true }; });
+              }
+              var h = hits.items[0];
+              if (pureInsert) {
+                h.insertText(d.newMid, "After");
+                return ctx.sync().then(function () { return { ok: true, granular: true }; });
+              }
+              h.insertText(d.newMid, "Start");
+              h.delete();
+              return ctx.sync().then(function () { return { ok: true, granular: true }; });
+            });
+          }
+        }
+        p.insertText(newText, "Replace");
         return ctx.sync().then(function () { return { ok: true }; });
       });
     });
@@ -2198,6 +2244,16 @@ var nw = $("sess-new");
       results.load("items");
       return ctx.sync().then(function () {
         var items = all ? results.items : (results.items.length ? [results.items[0]] : []);
+        if (SK.trackedNow) {
+          // 0.9.345: tracked-safe write - insert the replacement BEFORE the hit
+          // range, then delete the hit; both revisions stay readable and the
+          // inserted text cannot be swallowed by the replace path
+          items.forEach(function (r) {
+            r.insertText(String(replace), "Start");
+            r.delete();
+          });
+          return ctx.sync().then(function () { return { ok: true, hits: items.length, granular: true }; });
+        }
         items.forEach(function (r) { r.insertText(String(replace), "Replace"); });
         return ctx.sync().then(function () { return { ok: true, hits: items.length }; });
       });
@@ -3214,8 +3270,10 @@ function applyOps(deck, ops, ctx) {
     if (revOn && deck.setTrackChanges) {
       pre = deck.setTrackChanges(true).then(function (res) {
         SK.revPrevMode = res && res.previous ? String(res.previous) : null;
+        SK.trackedNow = true;   // 0.9.345: the op writers switch to granular writes
       }).catch(function (err) {
         revNote = (err && err.message) || String(err);
+        SK.trackedNow = false;
         if (SK.cfg && SK.cfg.trackedChanges) SK.cfg.trackedChanges = false; // do not retry per-op (only when the SETTING drove it)
       });
     }
@@ -3301,6 +3359,8 @@ function applyOps(deck, ops, ctx) {
           });
         case "set_track_changes":
           return deck.setTrackChanges(op.on).then(function () {
+            // 0.9.345: a model-emitted toggle switches the writers too
+            SK.trackedNow = !!op.on;
             lines.push({ ok: true, text: "track changes turned " + (op.on ? "on" : "off") + " in the document" });
           });
         case "rewrite_doc":
@@ -3416,6 +3476,7 @@ function applyOps(deck, ops, ctx) {
           ? deck.setTrackChanges(wasOn).catch(function () { return null; })
           : Promise.resolve(null);
         SK.revPrevMode = null;
+        SK.trackedNow = false;      // 0.9.345: the batch is done - back to plain writes
         SK.trackNextApply = null;   // 0.9.328: one apply batch per pick (the document mode stays ON)
         return off.then(function () { return res; });
       });

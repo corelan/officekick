@@ -42,6 +42,23 @@
   exact layout Office honors, and docs gain the manual Trust Center +
   reg-add unblock for machines that installed older builds.
 
+## 0.9.341
+
+### Fixed
+- Dockick edits under Track Changes: a whole-paragraph
+  insertText(..., "Replace") records the ENTIRE old text as one deletion
+  plus the ENTIRE new text as one insertion - on some decks that reads as
+  "only deletes, the replacement never arrives". Edits are now written
+  GRANULARLY while tracking is on: a character-level middle diff locates
+  the changed span, inserts the replacement before the located old middle
+  and deletes it, so revisions show tiny deletion/insertion pairs with
+  everything stable left untouched. Uniqueness guards fall back to the
+  whole-paragraph write when the middle text is not unique or too big.
+- find/replace writes switch to the tracked-safe form under tracking
+  (insert the replacement before the hit, then delete the hit).
+- The model-emitted set_track_changes op now flips the writers'
+  tracked/plain mode as well.
+
 ## 0.9.340
 
 ### Added
