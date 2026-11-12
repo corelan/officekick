@@ -2259,7 +2259,9 @@ var nw = $("sess-new");
           var ownAddr = Office.context.mailbox.userProfile &&
             Office.context.mailbox.userProfile.emailAddress || "";
           var frmAddr = item.from && (item.from.emailAddress || item.from.address) || "";
-          out.readModeDraft = !isCompose && !!ownAddr && frmAddr === ownAddr;
+          // an empty from in read mode is also a draft signal - received
+          // mail ALWAYS has a sender; drafts often carry none
+          out.readModeDraft = !isCompose && !!ownAddr && (!frmAddr || frmAddr === ownAddr);
         } catch (eDraft) { out.readModeDraft = false; }
         try { out.itemId = mailIdentityFromItem(item); } catch (eI0) { out.itemId = ""; }
         Promise.all([
@@ -2310,10 +2312,21 @@ var nw = $("sess-new");
   MailDeck.prototype.draftReply = function (html, all) {
     return promisify(function (resolve, reject) {
       var item = Office.context.mailbox.item;
-      if (!item || (!all && !item.displayReplyForm) || (all && !item.displayReplyAllForm)) {
+      var canReply = item && (all ? item.displayReplyAllForm : item.displayReplyForm);
+      if (!canReply) {
+        // 0.9.350: the open item cannot answer (a compose draft, or a draft
+        // opened from the reading pane). The body may STILL be writable in
+        // place - try that before failing outright.
+        if (item && item.body && item.body.setAsync && !all) {
+          item.body.setAsync(String(html), { coercionType: Office.CoercionType.Html }, function (r) {
+            if (r.status === "succeeded") resolve({ ok: true, note: "no reply window here - the open draft was edited in place instead" });
+            else reject(new FriendlyError("cannot reply from this open item, and in-place editing is not allowed for it either (" + (r.error && r.error.message || "write refused") + ")"));
+          });
+          return;
+        }
         reject(new FriendlyError(all
           ? "Open a received message first (a reply-all needs an existing email)."
-          : "Open a received message first (a reply needs an existing email)."));
+          : "Open a received message first (a reply needs an existing email - and this item's body cannot be edited from the add-in)."));
         return;
       }
       if (all) item.displayReplyAllForm(String(html));   // Mailbox 1.1
@@ -2733,8 +2746,15 @@ function applyOps(deck, ops, ctx) {
     var runOne = function (op) {
       switch (op.type) {
         case "draft_reply":
-          return deck.draftReply(op.html, !!op.all).then(function () {
-            lines.push({ ok: true, text: (op.all ? "reply-ALL window opened" : "reply window opened") + " with AI content - review and send" });
+          return deck.draftReply(op.html, !!op.all).then(function (r2) {
+            lines.push({ ok: true, text: (r2 && r2.note ? r2.note : (op.all ? "reply-ALL window opened" : "reply window opened") + " with AI content - review and send") });
+          }, function (e) {
+            // 0.9.350: the self-healing draftReply already tried the in-place
+            // edit; if that failed too, the rewrite itself is still the useful
+            // artifact - print it instead of a dead error row
+            lines.push({ ok: false, text: "reply failed: " + String(e && e.message || e),
+                         fallbackHtml: op.html,
+                         fallbackNote: "the rewritten text is shown below (copy it manually)" });
           });
         case "forward":
           return deck.forwardMessage(op, ctx).then(function () {
@@ -2745,15 +2765,19 @@ function applyOps(deck, ops, ctx) {
           return deck.composeBody(op.html).then(function () {
             lines.push({ ok: true, text: "compose body replaced (" + op.html.length + " chars)" +
               (op.convertedFrom ? " - converted: " + op.convertedFrom : "") });
+          }, function (e) {
+            lines.push({ ok: false, text: "editing the compose body failed: " + String(e && e.message || e),
+                         fallbackHtml: op.html,
+                         fallbackNote: "the rewritten text is shown below (copy it manually)" });
           });
         case "edit_body_inplace":
           return deck.editBodyInPlace(op.html).then(function () {
             lines.push({ ok: true, text: "draft edited in place (" + op.html.length + " chars)" +
               (op.convertedFrom ? " - converted: " + op.convertedFrom : "") });
           }, function (e) {
-            // 0.9.348: ULTIMATE FALLBACK (user request): if the in-place edit
-            // cannot run on this item, the rewritten text is printed in this
-            // box instead of just an error
+            // 0.9.348/0.9.350: ULTIMATE FALLBACK (user request): if the
+            // in-place edit cannot run on this item, the rewritten text is
+            // printed in this box instead of just an error
             lines.push({ ok: false, text: "editing this item in place failed: " + String(e && e.message || e),
                          fallbackHtml: op.html,
                          fallbackNote: "could not edit the draft in place - the rewritten text is shown below (copy it manually)" });

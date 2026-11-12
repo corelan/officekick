@@ -42,6 +42,24 @@
   exact layout Office honors, and docs gain the manual Trust Center +
   reg-add unblock for machines that installed older builds.
 
+## 0.9.350
+
+### Fixed
+- MailKick "rewrite this email" still landing as a failed reply op
+  (field report, pane on 0.9.347):
+  - The apply path is now self-healing: when draftReply cannot open a
+    reply form (composing, or a draft in the reading pane), it
+    automatically attempts the in-place body write (body.setAsync) with
+    the same content before failing.
+  - draft-detection also treats a read-mode item with an EMPTY sender as
+    a draft (received mail always has a sender) - conversion to
+    edit_body_inplace no longer depends on the from field.
+  - Every compose-family failure (draft_reply, compose_body,
+    edit_body_inplace) now falls back to printing the rewritten text in
+    the chat output, so the user always gets the artifact.
+  - Fixed the apply switch: edit_body_inplace had lost its case label in
+    the previous edit; labels verified unique.
+
 ## 0.9.349
 
 ### Changed
