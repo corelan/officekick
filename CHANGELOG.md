@@ -42,6 +42,16 @@
   exact layout Office honors, and docs gain the manual Trust Center +
   reg-add unblock for machines that installed older builds.
 
+## 0.9.351
+
+### Fixed
+- Rewrites no longer abandon the draft's font styling. Outlook exposes no
+  API for the user's configured "new mail" stationery font, so MailKick
+  reads the draft's body as HTML before replacing anything, extracts the
+  font family/size/color styles it carries, and wraps the rewritten text
+  in them (compose_body, edit_body_inplace and the self-healing reply
+  path). Body HTML already carrying its own font-family is left as-is.
+
 ## 0.9.350
 
 ### Fixed

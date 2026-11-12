@@ -92,6 +92,30 @@
 
   var WORD_STYLES = ["normal", "title", "heading1", "heading2", "heading3", "quote", "listParagraph"];
 
+  // 0.9.351: font preservation - the draft's own styling is captured from
+  // its HTML and re-applied to rewritten text (Outlook exposes no API for
+  // the user's configured stationery/default font)
+  function extractFontStyle(html) {
+    var s = String(html || "");
+    if (!s) return "";
+    var picks = [];
+    var mFam = s.match(/font-family\s*:\s*([^;]+?)(?:;|["'])/i);   // quoted names ("Aptos",sans-serif) are legal
+    if (mFam) picks.push("font-family: " + mFam[1].replace(/^\s*["']|["']\s*$/g, "").trim());
+    var mSize = s.match(/font-size\s*:\s*([0-9.]+(?:pt|px))/i);
+    if (mSize) picks.push("font-size: " + mSize[1].trim());
+    var mCol = s.match(/(?:(?<!-)color)\s*:\s*(#[0-9a-fA-F]{3,8}|rgb[^;"'>]+)/i);
+    // color only up to the first <body> - avoid picking inline-code highlighting from later spans
+    var head = s.slice(0, Math.max(s.indexOf("<body"), 0) + 4000);
+    if (mCol && head.indexOf(mCol[0]) >= 0) picks.push("color: " + mCol[1].trim());
+    return picks.join("; ");
+  }
+  function wrapInFontStyle(fontStyle, html) {
+    var h = String(html || "");
+    if (!fontStyle || !h) return h;                          // nothing captured - leave as-is
+    if (/style\s*=\s*["'][^"']*font-family/i.test(h.slice(0, 400))) return h;   // already styled
+    return '<div style="' + fontStyle + '">' + h + "</div>";
+  }
+
   function htmlToFallbackText(h) {
     // 0.9.348: readable text of a rewritten body (the ultimate fallback view)
     return String(h || "").replace(/<\s*br\s*\/?>/gi, "\n").replace(/<\s*\/\s*(p|div|li|h[1-6])\s*>/gi, "\n")
@@ -2296,10 +2320,25 @@ var nw = $("sess-new");
                 });
               }
             } catch (eAtt) { /* listing not available */ }
-            var done = function (txt) { out.bodyText = String(txt || ""); resolve(out); };
+            var done = function (txt, htmlBody) { out.bodyText = String(txt || ""); resolve(out); };
             try {
               item.body.getAsync("text", function (r) {
-                if (r.status === "succeeded") done(r.value);
+                if (r.status === "succeeded") {
+                  // 0.9.351: also read the HTML form to capture the draft's
+                  // own font styling - Outlook has no API for the configured
+                  // "new mail" font, so the pane preserves the styling the
+                  // body already carries and re-applies it after rewrites
+                  item.body.getAsync("html", function (rH) {
+                    try {
+                      out.bodyHtml = rH.status === "succeeded" ? String(rH.value || "") : "";
+                      out.fontStyle = extractFontStyle(out.bodyHtml);
+                      // the deck's self-healing reply path reads the last
+                      // captured style from here (no ctx flows into it)
+                      try { SK.fontStyleOfCtx = out.fontStyle || ""; } catch (eSk) { }
+                    } catch (eF) { out.bodyHtml = ""; out.fontStyle = ""; }
+                    done(r.value, out.bodyHtml);
+                  });
+                }
                 else { out.warnings.push("body: " + (r.error && r.error.message || "read failed")); resolve(out); }
               });
             } catch (e) { out.warnings.push("body: " + e.message); resolve(out); }
@@ -2318,7 +2357,8 @@ var nw = $("sess-new");
         // opened from the reading pane). The body may STILL be writable in
         // place - try that before failing outright.
         if (item && item.body && item.body.setAsync && !all) {
-          item.body.setAsync(String(html), { coercionType: Office.CoercionType.Html }, function (r) {
+          var htmlStyled = SK.fontStyleOfCtx ? wrapInFontStyle(SK.fontStyleOfCtx, String(html)) : String(html);
+          item.body.setAsync(htmlStyled, { coercionType: Office.CoercionType.Html }, function (r) {
             if (r.status === "succeeded") resolve({ ok: true, note: "no reply window here - the open draft was edited in place instead" });
             else reject(new FriendlyError("cannot reply from this open item, and in-place editing is not allowed for it either (" + (r.error && r.error.message || "write refused") + ")"));
           });
@@ -2761,8 +2801,9 @@ function applyOps(deck, ops, ctx) {
             lines.push({ ok: true, text: "forward window opened (quoted original" + (op.to && op.to.length ? ", " + op.to.length + " recipient(s)" : "") + ") - review and send" });
           });
         case "compose_body":
-          // 0.9.348: a converted op notes where it came from
-          return deck.composeBody(op.html).then(function () {
+          // 0.9.348: a converted op notes where it came from;
+          // 0.9.351: the rewrite carries the draft's own font styling
+          return deck.composeBody(wrapInFontStyle(ctx && ctx.fontStyle, op.html)).then(function () {
             lines.push({ ok: true, text: "compose body replaced (" + op.html.length + " chars)" +
               (op.convertedFrom ? " - converted: " + op.convertedFrom : "") });
           }, function (e) {
@@ -2771,7 +2812,7 @@ function applyOps(deck, ops, ctx) {
                          fallbackNote: "the rewritten text is shown below (copy it manually)" });
           });
         case "edit_body_inplace":
-          return deck.editBodyInPlace(op.html).then(function () {
+          return deck.editBodyInPlace(wrapInFontStyle(ctx && ctx.fontStyle, op.html)).then(function () {
             lines.push({ ok: true, text: "draft edited in place (" + op.html.length + " chars)" +
               (op.convertedFrom ? " - converted: " + op.convertedFrom : "") });
           }, function (e) {
