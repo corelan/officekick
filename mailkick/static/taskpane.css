@@ -821,7 +821,13 @@ body.dark .legend-refresh { color: #FFFFFF; }
 #chat-cancel { color: #b03a2e; }
 body.dark #chat-cancel { color: #e07066; }
 
-.pt-delbtn { margin: 0 0 8px 0; }
+/* 0.9.349: per-entry bin on the Previous requests header (delete moved out of the expanded box) */
+.pt-del2 { margin-left: auto; margin-right: 2px; background: none; border: none;
+  cursor: pointer; font-size: 12px; line-height: 1; opacity: .65; color: inherit; }
+.pt-del2:hover { opacity: 1; color: #ef4444; }
+.pt-del2.armed { opacity: 1; color: #ef4444; font-weight: 700; font-size: 11px; }
+body.dark .pt-del2:hover, body.dark .pt-del2.armed { color: #ff7a7a; }
+
 
 /* unconfigured state: the sessions list shows only guidance */
 .sesslist.disabled { opacity: .72; }

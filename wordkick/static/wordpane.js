@@ -5067,6 +5067,28 @@ function applyOps(deck, ops, ctx) {
     ts1.className = "ptts";
     ts1.textContent = u.ts || "no timestamp";   // timestamp first
     head.appendChild(ts1);
+    // 0.9.349: the delete moves OUT of the expanded box - a little bin on
+    // the right of the header, same two-click confirm (window.confirm does
+    // not survive Office WebViews)
+    var bin = document.createElement("button");
+    bin.className = "pt-del2 btnbtn";
+    bin.type = "button";
+    bin.textContent = "\u{1F5D1}";
+    bin.title = "Delete this request/response pair - a second click within 3.5 s confirms (future prompts will no longer include it)";
+    bin.addEventListener("click", function (ev) {
+      ev.stopPropagation();
+      if (bin.dataset.armed !== "1") {
+        bin.dataset.armed = "1";
+        bin.textContent = "\u2715?";
+        bin.classList.add("armed");
+        setTimeout(function () {
+          if (bin.parentNode) { bin.dataset.armed = "0"; bin.textContent = "\u{1F5D1}"; bin.classList.remove("armed"); }
+        }, 3500);
+        return;
+      }
+      removeHistoryPair(u.ts, grp);
+    });
+    head.appendChild(bin);
     var cpIc = document.createElement("span");
     cpIc.className = "pt-copy";
     cpIc.innerHTML = copyIconSvg();               // copy icon next to the step title
@@ -5081,26 +5103,6 @@ function applyOps(deck, ops, ctx) {
     snip.appendChild(cpIc);                    // copy affordance on the title line
     var body = document.createElement("div");
     body.className = "reqbody";
-    // delete = the same two-stage button as the sessions list (real Office
-    // WebViews swallow window.confirm, so the dialog form never appeared)
-    var delBtn = document.createElement("button");
-    delBtn.className = "btn subtle danger pt-delbtn";
-    delBtn.textContent = "Delete";
-    delBtn.title = "Remove this request/response pair from the session - a second click within 3.5 s confirms (future prompts will no longer include it)";
-    delBtn.addEventListener("click", function (ev) {
-      ev.stopPropagation();
-      if (delBtn.dataset.armed !== "1") {
-        delBtn.dataset.armed = "1";
-        delBtn.textContent = "Really delete?";
-        delBtn.classList.add("armed");
-        setTimeout(function () {
-          if (delBtn.parentNode) { delBtn.dataset.armed = "0"; delBtn.textContent = "Delete"; delBtn.classList.remove("armed"); }
-        }, 3500);
-        return;
-      }
-      removeHistoryPair(u.ts, grp);
-    });
-    body.appendChild(delBtn);
     var q1 = document.createElement("div");
     q1.className = "pt-req";
     q1.style.cursor = "pointer";

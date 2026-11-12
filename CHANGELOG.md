@@ -42,6 +42,15 @@
   exact layout Office honors, and docs gain the manual Trust Center +
   reg-add unblock for machines that installed older builds.
 
+## 0.9.349
+
+### Changed
+- The "Previous requests" boxes: the delete is no longer buried inside
+  the expanded box - a little bin button sits at the right of the
+  collapsed header (next to the date/time). Same two-click confirmation
+  (the bin turns into "x?" for 3.5 s), and the removal still syncs to
+  the server session. All three panes.
+
 ## 0.9.348
 
 ### Fixed
