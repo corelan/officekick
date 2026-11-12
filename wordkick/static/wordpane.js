@@ -1056,7 +1056,7 @@
     "You get the document outline and a user request. Reply with ONLY one JSON",
     "object - never commentary, never code fences, never reasoning. Format A",
     "(conversational):",
-    '{"kind":"reply","text":"your answer"}',
+    '{"kind":"reply","text":"..."}',   // 0.9.345: placeholder text a weak model would ECHO - use "..."
     "Format B (document changes):",
     '{"kind":"doc_ops","ops":[ ... ]}',
     'Also tolerated (legacy, ignored): {"kind":"slide_ops","ops":[...]} - treat it as doc_ops.',
@@ -4925,6 +4925,12 @@ function applyOps(deck, ops, ctx) {
     return ops.length ? ops : null;
   }
 
+  function isStubReplyText(t) {
+    // 0.9.345: a reply that EXACTLY equals the format-A placeholder (or the
+    // repair asks' "...") is an echo of the example - not an answer. Forces
+    // the unclear-retry path instead of showing "your answer" to the user.
+    return /^\s*(your answer(\s+here)?|answer|\.+|\u2026|todo)\s*$/i.test(String(t || ""));
+  }
   function tryParse(text) {
     var stripped = stripReasoning(text);
     if (!stripped) return { ok: false, text: text };
@@ -4951,7 +4957,10 @@ function applyOps(deck, ops, ctx) {
                    .map(function (o) { return String(o == null ? "" : o).trim(); }).filter(Boolean),
                  text: stripped };
       }
-      if (obj.kind === "reply" && typeof obj.text === "string") return { ok: true, kind: "reply", text: obj.text };
+      if (obj.kind === "reply" && typeof obj.text === "string") {
+      if (isStubReplyText(obj.text)) return { ok: false, stubReply: true, text: text };   // 0.9.345: echoed placeholder - route to the repair rounds (text keeps it out of the EMPTY branch)
+      return { ok: true, kind: "reply", text: obj.text };
+    }
       if (obj.kind === "doc_ops" && Array.isArray(obj.ops)) return { ok: true, kind: "doc_ops", ops: obj.ops };
       if (Array.isArray(obj.ops)) return { ok: true, kind: "doc_ops", ops: obj.ops }; // tolerate missing kind
     }

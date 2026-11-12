@@ -1153,7 +1153,7 @@
     "You get the current deck outline and a user request. Reply with ONLY one",
     "JSON object - never any commentary, never code fences, never reasoning or",
     "chain-of-thought. Format A (conversational):",
-    '{"kind":"reply","text":"your answer"}',
+    '{"kind":"reply","text":"..."}',   // 0.9.345: placeholder text a weak model would ECHO - use "..."
     "Format B (deck changes):",
     '{"kind":"slide_ops","ops":[ ... ]}',
     "",
@@ -5968,6 +5968,12 @@ OfficeDeck.prototype.setNotes = function (i, text) {
     return ops.length ? ops : null;
   }
 
+  function isStubReplyText(t) {
+    // 0.9.345: a reply that EXACTLY equals the format-A placeholder (or the
+    // repair asks' "...") is an echo of the example - not an answer. Forces
+    // the unclear-retry path instead of showing "your answer" to the user.
+    return /^\s*(your answer(\s+here)?|answer|\.+|\u2026|todo)\s*$/i.test(String(t || ""));
+  }
   function tryParse(text) {
     var stripped = stripReasoning(text);
     if (!stripped) return { ok: false, text: text };
@@ -5984,7 +5990,10 @@ OfficeDeck.prototype.setNotes = function (i, text) {
                  text: stripped };
       }
       if (obj.kind === "reply") {
-        if (typeof obj.text === "string") return { ok: true, kind: "reply", text: obj.text };
+        if (typeof obj.text === "string") {
+          if (isStubReplyText(obj.text)) return { ok: false, stubReply: true, text: text };   // 0.9.345: echoed placeholder - route to the repair rounds (text keeps it out of the EMPTY branch)
+          return { ok: true, kind: "reply", text: obj.text };
+        }
         return { ok: true, kind: "reply", text: String(obj.text == null ? "" : JSON.stringify(obj.text)) };
       }
       if (obj.kind === "read_page" && typeof obj.url === "string" && /^https?:\/\//i.test(obj.url)) {

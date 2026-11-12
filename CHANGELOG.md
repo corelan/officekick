@@ -42,6 +42,18 @@
   exact layout Office honors, and docs gain the manual Trust Center +
   reg-add unblock for machines that installed older builds.
 
+## 0.9.345
+
+### Fixed
+- The system prompt's format-A example used {"kind":"reply",
+  "text":"your answer"} - a model echoed the placeholder verbatim as its
+  entire answer (field report: the pane showed the literal "your
+  answer"). The example now uses "..." (like the repair asks).
+- An exact-placeholder echo ("your answer", "your answer here", "answer",
+  "...", a lone ellipsis) is no longer accepted as a reply: the parsers
+  route it into the existing unclear-reply repair rounds instead
+  (all three panes). Real short answers like "Done." still parse as-is.
+
 ## 0.9.344
 
 ### Fixed
