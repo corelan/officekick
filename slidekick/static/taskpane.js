@@ -93,6 +93,7 @@
     create_slide: { label: "create slide", hint: "Appends a new slide (Office.js can only append; drag into place if needed)." },
     edit_slide: { label: "edit slide", hint: "Replaces title / body / speaker notes of an existing slide." },
     replace_text: { label: "replace text", hint: "Rewrites the text of one shape in place; with a find fragment, only that fragment is replaced (rest of the list untouched)." },
+    replace_all_text: { label: "replace everywhere", hint: "Deck-wide find/replace: replaces EVERY occurrence of find with text in every text shape on EVERY slide (case-insensitive) - one op for whole-deck wording changes." },
     set_notes: { label: "set notes", hint: "Writes speaker notes on a slide." },
     create_table: { label: "create table", hint: "Adds a table (new slide when slide is empty; position/size in points)." },
     move_shape: { label: "move/resize shape", hint: "Sets left/top/width/height (points) and optional rotation (degrees) of one shape - design passes use this." },
@@ -1161,6 +1162,7 @@
     '- {"type":"create_slide","layout":"title_content|title_only|section|blank","title":"...","body":["bullet",...],"notes":"...","after":N} (body/notes optional; "after" optional: the 1-based slide number to place the NEW slide after - after:0 = at the very start. The pane moves the new slide into that position automatically. Body lines prefixed with [L2] / [L3] (deepest indent [L9]) become real sub-bullets (indentation); never prefix top-level bullets)',
     '- {"type":"edit_slide","slide":N,"title":"..."|null,"body":[...]|null,"notes":"..."|null} (null means: leave unchanged). Body lines prefixed with [L2] / [L3] (deepest indent [L9]) become real sub-bullets - RESTRUCTURE and hierarchy asks are handled here: rebuild the full body with explicit markers (top-level bullets unmarked), and when the outline shows [L2].. markers, KEEP or adjust them so existing nesting survives the rewrite',
     '- {"type":"replace_text","slide":N,"shape":N,"text":"..."} (reword one shape; N refers to the shape numbers listed for that slide). PREFERRED for a bullet/list item edit: add "find":"<the exact current text of that one bullet/fragment from the outline>" and make "text" the REPLACEMENT for only that fragment - the rest of the shape\'s text is preserved. Without "find" the op replaces the shape\'s WHOLE text, so only do that when the outline shows the entire text (no …[text continues]) or you really want to rewrite it all',
+    '- {"type":"replace_all_text","find":"...","text":"..."} (DECK-WIDE replace: changes EVERY occurrence of "find" into "text" in EVERY text shape on EVERY slide - case-insensitive; titles, body/bullet shapes and textboxes. Speaker notes and table cell text are not touched. THE op for "entire/whole deck", "all slides", "everywhere" wording asks: ONE op covers the whole deck - never a per-slide replace_text batch for those. "text" may be "" to delete every occurrence of "find")',
     '- {"type":"set_notes","slide":N,"notes":"..."}',
     '- {"type":"create_table","slide":N|null,"values":[["h1","h2"],["x","y"]],"left":40,"top":150,"width":640} (all cells strings, rows rectangular; slide null = new title slide first; left/top/width optional points)',
     '- {"type":"move_shape","slide":N,"shape":N,"left":40,"top":150,"width":300,"height":60} (points; only the fields to change; keep shapes inside the slide bounds shown in the outline)',
@@ -3597,6 +3599,61 @@ OfficeDeck.prototype._setPlaceholderText = function (i, role, lines, levels) {
     });
   };
 
+  // 0.9.353: deck-wide find/replace (replace_all_text) - ONE Office.js pass
+  // over every slide's text shapes, so a whole-deck wording change never
+  // depends on the model seeing every slide (large decks cut body previews)
+  OfficeDeck.prototype.replaceAllText = function (findText, replText) {
+    var self = this;
+    if (self._textApi === false) {
+      return Promise.reject(new FriendlyError("this Office build does not expose slide text APIs - a deck-wide replace is unavailable here"));
+    }
+    var needle = String(findText == null ? "" : findText);
+    if (!needle) return Promise.reject(new FriendlyError("replace_all_text: empty find string"));
+    return this.run("replaceAllText", function (ctx) {
+      var slides = ctx.presentation.slides;
+      slides.load("items/id");
+      return ctx.sync().then(function () {
+        var count = slides.items.length;
+        var s2;
+        for (s2 = 0; s2 < count; s2++) slides.items[s2].shapes.load("items/type,items/name,items/id");
+        return ctx.sync().then(function () {
+          var frames = [];
+          for (var s3 = 0; s3 < count; s3++) {
+            var shps = slides.items[s3].shapes.items;
+            for (var j2 = 0; j2 < shps.length; j2++) {
+              var tf = shps[j2].getTextFrameOrNullObject();
+              tf.load("isNullObject,hasText");
+              frames.push({ tf: tf, slide: s3, shape: j2 });
+            }
+          }
+          return ctx.sync().then(function () {
+            var withText = frames.filter(function (e) { return !e.tf.isNullObject && e.tf.hasText; });
+            if (!withText.length) return { changed: 0, slides: 0 };
+            var re = new RegExp(needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi");
+            withText.forEach(function (e) { e.tf.textRange.load("text"); });
+            return ctx.sync().then(function () {
+              var hits = 0;
+              var touched = {};
+              var writers = [];
+              withText.forEach(function (e3) {
+                var full = String(e3.tf.textRange.text || "");
+                var m = full.match(re);
+                if (!m || !m.length) return;
+                e3.tf.textRange.text = full.replace(re, function () { hits++; return String(replText == null ? "" : replText); });
+                touched[e3.slide] = 1;
+                writers.push(e3);
+              });
+              if (!writers.length) return { changed: 0, slides: 0 };
+              return ctx.sync().then(function () {
+                return { changed: hits, slides: Object.keys(touched).length };
+              });
+            });
+          });
+        });
+      });
+    });
+  };
+
   OfficeDeck.prototype.mergeDeck = function (b64) {
     // PowerPointApi 1.2: insert ALL slides of a .pptx after the current last slide
     return this.run("mergeDeck", function (ctx) {
@@ -4015,7 +4072,17 @@ OfficeDeck.prototype.setNotes = function (i, text) {
         var curTr = textOf(originSlide(op.slide), op.shape);
         textState[originSlide(op.slide) + ":" + op.shape] = out.find ?
           (typeof curTr === "string" ? (cutReplace(curTr, findR, op.text)) : null) : op.text;
-      } else if (t === "set_notes") {
+      } else if (t === "replace_all_text") {
+        // 0.9.353: deck-wide find/replace - the PANE sweeps every text shape
+        // on every slide, so the op carries no slide/shape fields and the
+        // compact large-deck outline (body previews cut) cannot starve it:
+        // the model only needs the two strings
+        if (typeof op.find !== "string" || !op.find.trim()) { bad("missing find (the exact text to replace everywhere)"); return; }
+        if (typeof op.text !== "string") { bad("missing text (the replacement - an empty string deletes the find text)"); return; }
+        var findA = stripLevelMarkers(op.find.trim());
+        if (findA.length > 200) { bad("find text too long (200 chars max)"); return; }
+        out.find = findA; out.text = op.text;
+      } else if (t === "set_notes") { 
         // notes-off no longer drops the op: it goes through as "confirm"
         // (renderOpsPreview forces confirm when generateNotes is off)
         if (!slideOk(op.slide)) { bad("bad slide index"); return; }
@@ -4334,7 +4401,7 @@ OfficeDeck.prototype.setNotes = function (i, text) {
   }
 
   var OP_EFFECT = {
-    create_slide: "add", edit_slide: "edit", replace_text: "edit", set_notes: "edit",
+    create_slide: "add", edit_slide: "edit", replace_text: "edit", replace_all_text: "edit", set_notes: "edit",
     create_table: "add", create_shape: "add", create_image: "add", insert_image: "add", set_shape_image: "add",
     apply_layout: "edit", format_text: "edit", format_selection: "edit",
     move_shape: "edit", move_slide: "edit", set_background: "edit", add_hyperlink: "edit",
@@ -4365,6 +4432,8 @@ OfficeDeck.prototype.setNotes = function (i, text) {
       }
       case "replace_text":
         return "Slide " + op.slide + ", shape " + op.shape + (op.find ? ": \"" + op.find + "\" -> " : ": -> ") + op.text;
+      case "replace_all_text":
+        return "Every slide: \"" + op.find + "\" -> " + (op.text ? "\"" + op.text + "\"" : "(every occurrence removed)") + " (deck-wide)";
       case "set_notes":
         return "Slide " + op.slide + slideTitle(op.slide) + ": speaker notes (" + op.notes.length + " chars)";
       case "create_table":
@@ -4514,6 +4583,11 @@ OfficeDeck.prototype.setNotes = function (i, text) {
             lines.push({ ok: true, text: "replace text on slide " + op.slide + " shape " + op.shape });
           });
         }
+        case "replace_all_text":
+          return deck.replaceAllText(op.find, op.text).then(function (r) {
+            lines.push({ ok: true, text: "replace every occurrence of \"" + op.find + "\": " +
+              ((r && r.changed) || 0) + " occurrence(s) on " + ((r && r.slides) || 0) + " slide(s)" });
+          });
         case "create_table": {
           var runTable = function (slideIndex) {
             return deck.addTable({ values: op.values, slide: slideIndex, geometry: op.geometry }).then(function (r) {

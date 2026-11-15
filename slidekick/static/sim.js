@@ -373,6 +373,27 @@ window.__SK_SIM__ = true;
       sh.text = full.slice(0, idx) + String(replText == null ? "" : replText) + full.slice(idx + String(findText).length);
       return { ok: true, mode: "fragment" };
     }
+    // 0.9.353: deck-wide find/replace - mirrors OfficeDeck.replaceAllText
+    // (text shapes only, case-insensitive, every occurrence)
+    async replaceAllText(findText, replText) {
+      const needle = String(findText == null ? "" : findText);
+      if (!needle) throw new FriendlyError("replace_all_text: empty find string");
+      const repl = String(replText == null ? "" : replText);
+      const re = new RegExp(needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi");
+      let changed = 0;
+      const touched = new Set();
+      slides.forEach((sl) => {
+        sl.shapes.forEach((sh) => {
+          if (typeof sh.text !== "string" || sh.type === "table") return;
+          const hits = String(sh.text).match(re);
+          if (!hits || !hits.length) return;
+          sh.text = String(sh.text).replace(re, () => { changed++; return repl; });
+          if (sh.isTitle) sl.title = sh.text;   // keep the convenience field in sync (matches setSlideTitle)
+          touched.add(sl);
+        });
+      });
+      return { ok: true, changed, slides: touched.size };
+    }
     async setNotes(i, text) {
       if (!slides[i]) throw new FriendlyError("Slide " + (i + 1) + " does not exist")   /* 0.9.307: 1-based */;
       slides[i].notes = String(text);

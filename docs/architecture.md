@@ -59,7 +59,8 @@ Office.js apply. Models may answer conversationally (`{"kind":"reply",...}`) or
 emit an ops list (`slide_ops` / `doc_ops` / bare `{"ops":[...]}`); the panes
 share the gate, the sessions, the Inspector log and the Settings model.
 
-- SlideKick ops: `create_slide`, `edit_slide`, `replace_text`, `set_notes`,
+- SlideKick ops: `create_slide`, `edit_slide`, `replace_text`, `replace_all_text`
+  (deck-wide find/replace in ONE op across every text shape on every slide), `set_notes`,
   `create_table`, `move_shape`, `create_shape`, `create_image`, `apply_layout`,
   `format_text`, `format_selection`, `move_slide`, `duplicate_slide`,
   `duplicate_slide_to`, `clear_slide`, `set_background`, `set_shape_image`,

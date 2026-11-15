@@ -42,6 +42,20 @@
   exact layout Office honors, and docs gain the manual Trust Center +
   reg-add unblock for machines that installed older builds.
 
+## 0.9.353
+
+### Added / fixed
+- Whole-deck wording changes no longer shrink to the open slide. Field report:
+  "in the entire slide deck, replace py -V:3 with py -3.14" - the model only
+  looked at the current + next slide, because a large deck's compact outline
+  cuts every body preview, so it could neither see the string on the other
+  slides nor batch 70+ per-slide ops. New slide op `replace_all_text`
+  (find -> text, case-insensitive): ONE op that sweeps every text shape on
+  every slide pane-side (notes and table cells untouched), with the standard
+  four-point wiring (OPS_META + schema line, validator, apply, preview) and a
+  `confirm` approval default. The preview row reads "Every slide: ... -> ...
+  (deck-wide)"; the apply line reports occurrences and slides touched.
+
 ## 0.9.352
 
 ### Fixed

@@ -266,6 +266,10 @@ produce a gate row.
 - `set the layout of slide 3 to title only`
 - `explain slide 70` - in a large deck the model asks read_slide for that
   slide and answers from its exact text instead of guessing from the title
+- `in the entire slide deck, replace py -V:3 with py -3.14` - deck-wide wording
+  changes run as ONE replace-everywhere op (case-insensitive) across every text
+  shape on every slide; the model does not have to read or address each slide,
+  so the compact large-deck outline cannot shrink the scope to the open slide
 
 ## Pictures (AI image generation)
 

@@ -34,7 +34,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 APP = "OfficeKick"
-VERSION = "0.9.352"
+VERSION = "0.9.353"
 
 # --------------------------------------------------------------------------- #
 # Self-restart: the server watches for <cfg dir>/restart.flag. Whatever writes
@@ -472,6 +472,7 @@ DEFAULT_APPROVALS = {
     "create_slide": "auto",
     "edit_slide": "auto",
     "replace_text": "auto",
+    "replace_all_text": "confirm",
     "set_notes": "auto",
     "create_table": "auto",
     "move_shape": "auto",
