@@ -42,6 +42,28 @@
   exact layout Office honors, and docs gain the manual Trust Center +
   reg-add unblock for machines that installed older builds.
 
+## 0.9.354
+
+### Fixed
+- replace_all_text no longer rewrote WHOLE text frames. Field report
+  (first real run after 0.9.353): the fragment was replaced, but the
+  sentence got rewritten and every color/bold/code-font run inside the
+  touched shapes was gone - a textRange.text setter collapses all runs.
+  The deck method now does FRAGMENT WRITES ONLY: every occurrence goes
+  through getSubstring(i, len).text, LAST match first so earlier offsets
+  stay valid across variable-length replacements, then verifies by
+  re-reading every frame and runs ONE bounded retry pass when leftovers
+  remain (counters ACCUMULATE across passes - a partial skip no longer
+  reports "changed nothing" and no longer throws when other slides were
+  fixed). Old builds without sub-range writes skip their shapes honestly
+  ("write(s) skipped" in the chat line, FriendlyError only when NOTHING
+  could be written). Schema rule added: find must be exactly the fragment
+  the user named - never a wider phrase/sentence. Verified by a node
+  harness running the extracted real method against a fake Office.js
+  context with per-run formatting (17 assertions: formatting preserved,
+  zero whole-shape writes, multi-slide/multi-occurrence/mixed-case,
+  skipped-degrade, self-matching-replacement bound).
+
 ## 0.9.353
 
 ### Added / fixed
