@@ -42,6 +42,28 @@
   exact layout Office honors, and docs gain the manual Trust Center +
   reg-add unblock for machines that installed older builds.
 
+## 0.9.358
+
+### Added / fixed
+- No artificial read caps: whole-document and range reads work for ANY size,
+  worst case in chunks. resolveRangeWork (ONE resolution source for routing
+  and the pre-read) returns the FULL non-empty range - the previous
+  200-paragraph pane-side cap is gone, and a range bigger than the
+  single-ask envelope is CHUNKED instead of refused:
+  - "lees het document tot en met X" + an improvement intent -> the
+    review pipeline over exactly the named range (full-text slices of 3000
+    chars / 24 paragraphs, model fallback + re-asks, ONE approval gate);
+  - a pure read bigger than one ask -> the new part-feed read
+    (runRangeRead): the document arrives PART BY PART in the conversation,
+    the parts accumulate in the model's context, one final ask answers the
+    original request; a part that fails to deliver is logged and skipped
+    WITHOUT aborting the run.
+  Both branches read everything; the 60000-char / 120-paragraph numbers are
+  mechanism-selection thresholds only. Verified in the simulator: a
+  300-paragraph letter read through the range resolver (marker boundary at
+  the sign-off, 10 chunks), chunked-review ops gated and applied scoped to
+  the range, part-feed answers with the whole text in context.
+
 ## 0.9.357
 
 ### Fixed / added

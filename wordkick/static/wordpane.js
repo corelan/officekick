@@ -4190,6 +4190,54 @@ function applyOps(deck, ops, ctx) {
   // it walks the document in slices like Translate, COLLECTS the proposals
   // and ends in ONE approval gate: the collected ops go through the normal
   // preview (accept/reject per paragraph; the Track Changes setting works).
+  // 0.9.358: ONE source for document-range resolution ("lees het document
+  // tot en met <marker>", "read the whole document"). Routing and the
+  // pre-read both use it. Nothing here refuses a big range: `big` only
+  // SELECTS the mechanism (single ask vs the chunked pipelines) - every
+  // path reads the FULL range, worst case in chunks.
+  var RANGE_ONEASK_CHARS = 60000;
+  var RANGE_ONEASK_PARAS = 120;
+  function normParaText(s) {
+    return String(s == null ? "" : s)
+      .replace(/[\u2018\u2019\u201C\u201D\u201E]/g, "'").toLowerCase()
+      .replace(/\s+/g, " ").trim();
+  }
+  function resolveRangeWork(instruction, ctx) {
+    if (!ctx || !ctx.paragraphs || !ctx.paragraphs.length) return null;
+    var s = String(instruction || "");
+    var rangeVerb = /\b(lees|lezen|read|doorneem|neem door|bekijk)\b/i.test(s);
+    var docNoun = /\bdocuments?\b|\bdoc\b/i.test(s);
+    if (!rangeVerb || !docNoun) return null;
+    var mk = /(?:tot (?:en )?met|up to(?: and including)?|until|through|t\/m)\s*[:\-]?\s*["\u201C]([^\n"\u201D]{2,160})/i.exec(s);
+    var wholeDoc = /\b(whole|entire|complete|hele|volledige?|ganse)\b[\s\S]{0,24}?\b(documents?|doc)\b/i.test(s) ||
+      (docNoun && !/(?:tot (?:en )?met|up to|until|through|t\/m)/i.test(s));
+    if (!mk && !wholeDoc) return null;
+    var endPar = -1, endMarker = "";
+    if (mk) {
+      endMarker = normParaText(mk[1]);
+      for (var im = 0; im < ctx.paragraphs.length; im++) {
+        var tm = normParaText(ctx.paragraphs[im].text);
+        if (tm.length && tm.indexOf(endMarker) >= 0 && String(ctx.paragraphs[im].text || "").trim()) { endPar = im + 1; break; }
+      }
+      if (endPar < 0) return null;   // marker not in the outline - the model's read_paragraph decides
+    } else if (wholeDoc) {
+      endPar = ctx.paragraphCount || ctx.paragraphs.length;
+    }
+    var work = [], chars = 0;
+    ctx.paragraphs.forEach(function (p) {
+      var n = p.idx + 1;
+      if (n < 1 || n > endPar) return;
+      var raw = stripOutlineMarkers(String(p.text || "")).replace(/[\r\n\v]+$/, "");
+      if (!normParaText(raw)) return;
+      work.push({ para: n, text: raw });
+      chars += raw.length + 10;
+    });
+    if (work.length < 2) return null;   // a one-line range is a prefix job
+    return { startPar: 1, endPar: endPar, endMarker: endMarker, whole: wholeDoc && !mk,
+             work: work, chars: chars,
+             big: chars > RANGE_ONEASK_CHARS || work.length > RANGE_ONEASK_PARAS };
+  }
+
   var REVIEW_CHUNK_CHARS = 3000;
   var REVIEW_CHUNK_PARAS = 24;
   var REVIEW_ASK_BUDGET = 160;
@@ -4204,7 +4252,7 @@ function applyOps(deck, ops, ctx) {
     "Op schema: {\"type\":\"edit_paragraph\",\"para\":N,\"text\":\"the whole corrected paragraph text\"} - para = the exact paragraph number given in the input. " +
     "Never repeat outline markers like [L2] or [image x1] in your output - they are pane annotations, not document text. " +
     "An empty ops list is a valid answer when every paragraph of the slice is already fine.";
-  function runReview(instruction, ctx, ref, prof, input) {
+  function runReview(instruction, ctx, ref, prof, input, opts) {
     var instr = "Review the document wording per: " + String(instruction || "").slice(0, 160);
     actLog("Reviewing the document in chunks (model " + ref.model + " via " + ref.connection + ")");
     var fallbackRef = translateFallbackRef(prof, ref, instruction);
@@ -4213,13 +4261,15 @@ function applyOps(deck, ops, ctx) {
     }
     var swapped = false;
     var usedModels = [ref.model];
-    var work = [];
+    var workAll = [];
     (ctx.paragraphs || []).forEach(function (p) {
       var raw = stripOutlineMarkers(p.text).replace(/[\r\n\v]+$/, "");
       var probe = raw.replace(/\s+/g, " ").trim();
-      if (!probe || !/[^\\W\\d_]/.test(probe)) return;
-      work.push({ para: p.idx + 1, text: raw });
+      if (!probe || !/[^\W\d_]/.test(probe)) return;
+      workAll.push({ para: p.idx + 1, text: raw });
     });
+    var work = workAll;   // 0.9.358: a range-ask caller passes its own (scoped) work list
+    if (opts && opts.work && opts.work.length) work = opts.work;
     var docIntro = "";
     try {
       var opens = [];
@@ -4393,6 +4443,95 @@ function applyOps(deck, ops, ctx) {
     });
   }
 
+  // 0.9.358: read a document/range too big for one ask - the text is fed
+  // PART BY PART into the conversation (each part one ask, the model replies
+  // "ok"), the parts ACCUMULATE in the context, and only the final ask asks
+  // for the answer to the original request. The part count derives from the
+  // document size (review-proven 3000-char / 24-paragraph chunks) - no fixed
+  // read budget, nothing refused, nothing left unread. A part that cannot be
+  // delivered is logged and skipped WITHOUT aborting the run.
+  function runRangeRead(instruction, ctx, ref, prof, input, work) {
+    var chunks = [], cur = [], curChars = 0;
+    work.forEach(function (w) {
+      var add = w.text.length + 10;
+      if (cur.length && curChars + add > 3000) { chunks.push(cur); cur = []; curChars = 0; }
+      cur.push(w); curChars += add;
+      if (curChars >= 3000 || cur.length >= 24) { chunks.push(cur); cur = []; curChars = 0; }
+    });
+    if (cur.length) chunks.push(cur);
+    actLog("Reading the document in " + chunks.length + " part(s) (model " + ref.model + " via " + ref.connection + ")");
+    var readSys = "You are DocKick inside a Word task pane. The user asked you to READ (part of) the document; " +
+      "the COMPLETE text arrives PART BY PART as user messages. After every part reply with ONLY " +
+      '{"kind":"reply","text":"ok"} - do not analyze, do not answer, do not propose anything yet. ' +
+      "The pane sends END OF PARTS when every part has arrived; only then answer the ORIGINAL USER REQUEST " +
+      "(the usual JSON format rules apply there).";
+    var hist = [];   // parts accumulate here: user part + the model's "ok"
+    var pi = 0;
+    function go(msgs) {
+      if (SK.runCancelled) return Promise.reject(new FriendlyError("Run cancelled."));
+      return askRetryable(function () {
+        return apiJson("/api/chat", "POST", { connection: ref.connection, model: ref.model,
+          temperature: 0.2, maxTokens: 7000, messages: msgs });
+      });
+    }
+    function feedPart() {
+      if (SK.runCancelled) return Promise.reject(new FriendlyError("Run cancelled."));
+      if (pi >= chunks.length) return finalAsk();
+      var part = chunks[pi];
+      pi++;
+      setStatus("Reading part " + pi + "/" + chunks.length + " (paragraphs " + part[0].para + "\u2013" +
+        part[part.length - 1].para + ")\u2026", "busy");
+      var user = { role: "user", content: "PART " + pi + "/" + chunks.length + " of the document text (outline numbering):\n" +
+        part.map(function (w) { return "[" + w.para + "] " + w.text; }).join("\n") };
+      return go([ { role: "system", content: readSys } ].concat(hist).concat([ user ])).then(function (r) {
+        hist.push(user);
+        hist.push({ role: "assistant", content: String((r && r.text) || "").slice(0, 300) });
+        dbg("range.part", { part: pi, of: chunks.length });
+        return feedPart();
+      }, function (eP) {
+        if (SK.runCancelled || /Run cancelled/i.test(String(eP && eP.message))) return Promise.reject(new FriendlyError("Run cancelled."));
+        actLog("Part " + pi + "/" + chunks.length + " could not be read (" + ((eP && eP.message) || eP) + ") - continuing without it.");
+        hist.push(user);
+        hist.push({ role: "assistant", content: "(unreadable - that part could not be delivered)" });
+        return feedPart();
+      });
+    }
+    function finalAsk() {
+      setStatus("Answering from the complete document text\u2026", "busy");
+      var finMsgs = [ { role: "system", content: SYSTEM_PROMPT + "\nHost: " + (SK.sim ? "DocKick simulator" : SK.deck.capabilities().host) } ]
+        .concat(hist)
+        .concat([ { role: "user", content: "END OF PARTS (" + chunks.length + "/" + chunks.length + " delivered). Now answer the ORIGINAL USER REQUEST:\n" +
+          instruction + "\nThe complete requested text sits in this conversation part by part (outline numbering). The required JSON format rules apply now." } ]);
+      return go(finMsgs).then(function (rF) {
+        SK.lastModelText = { text: rF.text };
+        var parsed = tryParse(rF.text);
+        if (parsed.ok) return parsed;
+        // same contract as the main ask: ONE firm re-ask, then text fallthrough
+        return go(finMsgs.concat([
+          { role: "assistant", content: String((rF && rF.text) || "").slice(0, 500) },
+          { role: "user", content: REPAIR_ASK },
+        ])).then(function (r2) {
+          SK.lastModelText = { text: r2.text };
+          var p2 = tryParse(r2.text);
+          return p2.ok ? p2 : { ok: false, text: String(r2.text || "") };
+        });
+      }, function (eF) {
+        if (SK.runCancelled || /Run cancelled/i.test(String(eF && eF.message))) return Promise.reject(new FriendlyError("Run cancelled."));
+        throw eF;
+      });
+    }
+    setStatus("Reading " + work.length + " paragraph(s) in " + chunks.length + " part(s)\u2026", "busy");
+    return feedPart().then(function (parsed) {
+      actLog(parsed.ok && parsed.kind === "reply"
+        ? "Read " + work.length + " paragraph(s) in " + chunks.length + " part(s); answered."
+        : "Read " + work.length + " paragraph(s) in " + chunks.length + " part(s); proposals below.");
+      var waitApply = renderParsed(parsed, ctx, instruction);
+      pushHistory(instruction, assistantHistoryText(parsed));
+      return Promise.resolve(waitApply);
+    });
+    // rejections propagate: runPrompt's catch renders the failure/cancel
+  }
+
   function runPrompt() {
     if (SK.busy) return;
     var input = $("chat-input");
@@ -4443,6 +4582,24 @@ function applyOps(deck, ops, ctx) {
           ctx && (ctx.paragraphCount || (ctx.paragraphs || []).length) > REVIEW_MIN_PARAS && !SK.clarifyAnswer) {
         dbg("review.flow.detected", { paras: ctx.paragraphCount || (ctx.paragraphs || []).length, instruction: instruction });
         return runReview(instruction, ctx, ref, prof, input);
+      }
+      // 0.9.358: whole-document / range asks - no artificial caps. Small
+      // ranges ride the single ask (the pre-read injects the full range);
+      // anything bigger runs the CHUNKED pipelines: improve intents over the
+      // named range -> the review slices (one gate), pure reads -> the
+      // part-feed read. Both read EVERYTHING; the split only picks the
+      // mechanism.
+      var rngWork = resolveRangeWork(instruction, ctx);
+      if (rngWork) {
+        var improveIntent = /\b(improve|improving|verbeter(?:en|de|d|ing)?|aanbrengen|aanpassen|rewrite|herschrijf|herzie|corrigeer|fix|update|review|proofread|check|kijk)\b/i.test(instruction || "");
+        if (improveIntent) {
+          dbg("range.review.route", { paras: rngWork.work.length, chars: rngWork.chars, big: rngWork.big });
+          return runReview(instruction, ctx, ref, prof, input, { work: rngWork.work });
+        }
+        if (rngWork.big) {
+          dbg("range.read.route", { paras: rngWork.work.length, chars: rngWork.chars });
+          return runRangeRead(instruction, ctx, ref, prof, input, rngWork.work);
+        }
       }
       if (!(SK.clarifyAnswer && SK.clarifyAnswer.expect === instruction)) SK.clarifyChain = 0;   // a free new ask resets the clarify chain
       var webPromise = Promise.resolve("");
@@ -4597,11 +4754,6 @@ function applyOps(deck, ops, ctx) {
       // "begins with ..." references itself, but ONLY on ONE clean match;
       // fuzzy references (typos, several matches) stay with the model's
       // read_paragraph op so guesswork can never hit the wrong paragraph.
-      function normParaText(s) {
-        return String(s == null ? "" : s)
-          .replace(/[\u2018\u2019\u201C\u201D\u201E]/g, "'").toLowerCase()
-          .replace(/\s+/g, " ").trim();
-      }
       var READ_ASK_RE = /\b(read|quote|show|display|list|repeat|give|paste|check|look at|lees|lezen|toon|tonen|bekijk|citeer|wat is)\b[^\n]{0,90}\b(paragraphs?|paragraaf|alinea)\b/i;
       var EDIT_FOR_PARAS_RE = /\b(improve|improving|rewrite|rewriting|simplify|reword|tighten|shorten|rephrase|edit|trim|polish|redraft|fix|update|change|verbeter(?:en|de|d|ing|t)?|herzie(?:n)?|herschrijf(?:en|t)?|corrigeer(?:en|de)?|bijwerk(?:en|t)?|pas aan)\b/i;
       var preReadDone = null;
@@ -4616,38 +4768,22 @@ function applyOps(deck, ops, ctx) {
           var wantEdit = EDIT_FOR_PARAS_RE.test(instruction || "") &&
             /(?:paragraphs?|paragraaf|alinea)/i.test(instruction || "");
           var nums = [];
+          var endMarker = "";   // set by the range resolver (0.9.358) for the injection note
           if ((wantRead || wantEdit || (rangeVerb && docNoun)) && instruction) {
             var mm, re3 = /(?:paragraphs?|paragraaf|alinea)\s+(\d{1,4})/gi;
             while ((mm = re3.exec(instruction)) !== null && nums.length < 8) {
               var n2 = parseInt(mm[1], 10);
               if (n2 >= 1 && (!paraCount || n2 <= paraCount) && nums.indexOf(n2) < 0) nums.push(n2);
             }
-            // 0.9.357: document-range reads - "lees het document tot en met
-            // <marker>", "read the whole document". A legal letter holds far
-            // more text than the model-driven 2x12 read_paragraph budget can
-            // fetch (field report: 2 rounds of 12, then the budget slammed
-            // shut), so the pane reads the whole named range ITSELF.
             if (!nums.length && rangeVerb && docNoun) {
-              var startPar = 1, endPar = -1, endMarker = "";
-              var wholeDoc = /\b(whole|entire|complete|hele|volledige?|ganse)\b[\s\S]{0,24}?\b(documents?|doc)\b/i.test(instruction) ||
-                (docNoun && !/tot (?:en )?met|up to|until|through|t\/m/i.test(instruction));
-              var mk = /(?:tot (?:en )?met|up to(?: and including)?|until|through|t\/m)\s*[:\-]?\s*["\u201C]([^\n"\u201D]{2,160})/i.exec(instruction);
-              if (mk) {
-                endMarker = normParaText(mk[1]);
-                var hitsEnd = -1;
-                (ctx.paragraphs || []).forEach(function (p) {
-                  if (hitsEnd < 0 && normParaText(p.text).indexOf(endMarker) >= 0 && String(p.text || "").trim()) hitsEnd = p.idx + 1;
-                });
-                if (hitsEnd > 0) endPar = hitsEnd;
-              } else if (wholeDoc) {
-                endPar = paraCount;
-              }
-              if (endPar > 0 && endPar - startPar + 1 <= 200) {
-                for (var rq = startPar; rq <= endPar && nums.length < 200; rq++) {
-                  var pe = (ctx.paragraphs || [])[rq - 1];
-                  if (pe === undefined || String(pe.text || "").trim()) nums.push(rq);
-                }
-                if (nums.length < 2) nums = [];   // a range read of one line is a prefix job
+              // 0.9.358: ONE resolution source (resolveRangeWork). Small
+              // ranges ride this single ask (full text injected below); big
+              // ones were routed to the chunked pipelines BEFORE the normal
+              // ask, so no range is ever skipped or half-read here.
+              var rng = resolveRangeWork(instruction, ctx);
+              if (rng) {
+                rng.work.forEach(function (w) { nums.push(w.para); });
+                endMarker = rng.endMarker;
               }
             }
             // "begins with / begint met <fragment>" - resolve against the SAME
