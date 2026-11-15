@@ -42,6 +42,26 @@
   exact layout Office honors, and docs gain the manual Trust Center +
   reg-add unblock for machines that installed older builds.
 
+## 0.9.355
+
+### Added / fixed
+- DocKick: the model could not actually READ a paragraph. Field report (legal
+  letter in Dutch): "lees de paragraaf die begint met ... en kijk of je de
+  tekst kan verbeteren" - the outline cuts each paragraph at 180 characters,
+  the pane had no paragraph-read mechanism and no vocabulary for the model to
+  ask for full text, so the model refused to edit and asked the USER to paste
+  the paragraph. New: a read_paragraph round mirroring SlideKick's read_slide
+  ({"kind":"read_paragraph","paragraphs":[N]} -> the pane re-asks with the
+  COMPLETE text, 2-read budget per run), a system rule (never ask the user to
+  paste text read_paragraph can fetch; never rewrite text you have not fully
+  read), and a pane-side pre-read that fetches the named paragraphs BEFORE the
+  first ask (numbers, or "begins with"/"begint met" fragments on exactly ONE
+  clean match - ambiguity or typos stay with the model's read_paragraph op so
+  no guesswork ever lands on the wrong paragraph). WordDeck.readParagraphs
+  reads items after load+sync (field lesson) and the DocKick simulator
+  implements the same method. E2E: typo-typed prefix (model op path, no
+  pane-side guess) and clean prefix (pane-side pre-read, one edit op applied).
+
 ## 0.9.354
 
 ### Fixed

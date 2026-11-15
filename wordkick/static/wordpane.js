@@ -1095,6 +1095,7 @@
     "- If the request is a question/explanation/brainstorm rather than a document change, use format A.",
     "- Image requests: always return an insert_image op (never generate the picture inline); DocKick fetches it with the user's configured image model. Include a concrete, self-contained prompt in the op.",
     "- Image refinement ('refine/change the image'): write a FRESH self-contained image prompt describing the FULL desired result. Never embed previous prompts, the conversation, or op JSON into it - only the scene essentials plus the requested change. Prefer 200-600 words.",
+    "- READ PARAGRAPHS BEFORE YOU QUOTE OR REWRITE THEM: the outline shows each paragraph's first ~180 characters only - the full text is NOT in your context. When the user asks to READ, QUOTE, SHOW, CHECK or otherwise look at a paragraph, or BEFORE you rewrite/improve/edit one, reply with ONLY {\"kind\":\"read_paragraph\",\"paragraphs\":[N]} (1-based outline numbers, max 12) - DocKick re-asks you with the COMPLETE paragraph text. Never ask the user to paste text that read_paragraph can fetch, and never rewrite text you have not fully read (on legal/official wording this is mandatory). When the pane has already injected a FULL PARAGRAPH TEXT block, answer directly from it.\n",
     "- LIVE WEB LOOKUPS: when the request needs up-to-date info you cannot reliably know (current events, news, prices, recent releases, rankings, live data), reply with ONLY {\"kind\":\"web_lookup\"} - nothing else. SlideKick then runs a web-enabled lookup and re-asks you with fresh citable results. Never use it for deck/document/mail edits, styling, general concepts, or what the outline/context already answers. Lookups are INTERNAL actions - free (never gated/approved) - and you may reply with later rounds of {\"kind\":\"web_lookup\"} as well (up to 3 lookups per run). After a lookup you may also ask for the FULL text of one page from its results by replying with ONLY {\"kind\":\"read_page\",\"url\":\"https://...\"} (internal, free, up to 4 pages per run). When a page's text carries a \"…[page continues]\" ending and the info you need may sit deeper, read the NEXT part by replying with ONLY {\"kind\":\"read_page\",\"url\":\"https://...\",\"from\":<n>} using the part start the pane gave you (continuations are free and do not use the 4-page budget). You have no web access yourself and cannot run a search; the lookup channel belongs to SlideKick - never claim you tried a lookup or that the lookup channel is unavailable, and never refuse for lack of live data: reply with {\"kind\":\"web_lookup\"} instead. For CONTENT-CREATION requests (write me an essay/article/report/letter/plan/...): the pane has ALREADY run a web lookup before this ask and any fetched results sit in the context above - verify your claims against them, keep facts current and cite the sources you use; if you need MORE, reply {\"kind\":\"web_lookup\"} again (up to 3 rounds per run).",
 
     "- Picture placement: ALWAYS set 'place' on insert_image - \"cursor\" = the caret/current selection, \"end\" = end of document, or give an ANCHOR (a short exact-ish text from the document) to insert the image right AFTER that text, e.g. \"place\":\"Figure 1: Results\". Omit it only when you truly cannot decide (then the pane's setting applies).",
@@ -2055,6 +2056,29 @@ var nw = $("sess-new");
                    paragraphs: items, tables: [], selected: sel.text || "", host: self.capabilities().host };
         });
         });
+      });
+    });
+  };
+
+  // 0.9.355: COMPLETE text of specific 1-based paragraphs (read_paragraph) -
+  // the outline preview is deliberately cut at 180 chars, so quoting or
+  // rewriting from it truncates (field report: legal letter, paragraph 34).
+  // Items are read AFTER load+sync per the field lesson, never getItemAt.
+  WordDeck.prototype.readParagraphs = function (idxs) {
+    var self = this;
+    return this.run("readParagraphs", function (ctx) {
+      var paras = ctx.document.body.paragraphs;
+      paras.load("text, style");
+      return ctx.sync().then(function () {
+        var total = paras.items.length;
+        var out = [];
+        (idxs || []).forEach(function (n) {
+          if (typeof n !== "number" || Math.floor(n) !== n || n < 1 || n > total) return;
+          var pt = paras.items[n - 1];
+          out.push("PARAGRAPH " + n + " (" + (pt.style || "Normal") + "): \"" +
+            String(pt.text == null ? "" : pt.text).replace(/\r|\n/g, " | ") + "\"");
+        });
+        return out.join("\n");
       });
     });
   };
@@ -3519,7 +3543,8 @@ function applyOps(deck, ops, ctx) {
   function formatContext(ctx) {
     var lines = [];
     lines.push("DOCUMENT OUTLINE: " + ctx.paragraphCount + " paragraphs, " +
-      (ctx.tables || []).length + " table(s), host: " + ctx.host);
+      (ctx.tables || []).length + " table(s), host: " + ctx.host +
+      "\n(Paragraph text is CUT to its first 180 characters in this outline - the full text is NOT included. To read, quote, check or rewrite a paragraph, reply ONLY {\"kind\":\"read_paragraph\",\"paragraphs\":[N]} (1-based outline numbers, max 12) - the pane re-asks you with the COMPLETE text. Never quote or rewrite from a preview, and never edit what you have not fully read - especially on legal/official text.)");
     if (ctx.selected && ctx.selected.length) {
       lines.push('CURRENT SELECTION: "' + String(ctx.selected).slice(0, 200) + '"');
     }
@@ -4398,6 +4423,7 @@ function applyOps(deck, ops, ctx) {
       SK.lastCtx = ctx;
       SK.webRounds = 0;
       SK.pageReads = 0;
+      SK.readRounds = 0;   // 0.9.355: shared 2-read budget (pre-read + read_paragraph)
       SK.webResults = "";
       // 0.9.339: a wording/review ask over a LARGE document cannot be one
       // single ask (the op list never fits one reply) - it runs as its own
@@ -4554,6 +4580,71 @@ function applyOps(deck, ops, ctx) {
           });
         });
       }
+      // 0.9.355: targeted paragraph asks get the FULL paragraph text BEFORE
+      // the first ask - the outline preview is cut at 180 chars, so a model
+      // that quotes or rewrites from it truncates hidden content (field
+      // report: legal letter). The pane reads named paragraph numbers and
+      // "begins with ..." references itself, but ONLY on ONE clean match;
+      // fuzzy references (typos, several matches) stay with the model's
+      // read_paragraph op so guesswork can never hit the wrong paragraph.
+      function normParaText(s) {
+        return String(s == null ? "" : s)
+          .replace(/[\u2018\u2019\u201C\u201D\u201E]/g, "'").toLowerCase()
+          .replace(/\s+/g, " ").trim();
+      }
+      var READ_ASK_RE = /\b(read|quote|show|display|list|repeat|give|paste|check|look at|lees|lezen|toon|tonen|bekijk|citeer|wat is)\b[^\n]{0,90}\b(paragraphs?|paragraaf|alinea)\b/i;
+      var EDIT_FOR_PARAS_RE = /\b(improve|improving|rewrite|rewriting|simplify|reword|tighten|shorten|rephrase|edit|trim|polish|redraft|fix|update|change|verbeter(?:en|de|d|ing|t)?|herzie(?:n)?|herschrijf(?:en|t)?|corrigeer(?:en|de)?|bijwerk(?:en|t)?|pas aan)\b/i;
+      var preReadDone = null;
+      function preReadRun() {
+        if (preReadDone === null) {
+          var paraCount = ctx ? (ctx.paragraphCount || 0) : 0;
+          var wantRead = READ_ASK_RE.test(instruction || "");
+          var wantEdit = EDIT_FOR_PARAS_RE.test(instruction || "") &&
+            /(?:paragraphs?|paragraaf|alinea)/i.test(instruction || "");
+          var nums = [];
+          if ((wantRead || wantEdit) && instruction) {
+            var mm, re3 = /(?:paragraphs?|paragraaf|alinea)\s+(\d{1,4})/gi;
+            while ((mm = re3.exec(instruction)) !== null && nums.length < 8) {
+              var n2 = parseInt(mm[1], 10);
+              if (n2 >= 1 && (!paraCount || n2 <= paraCount) && nums.indexOf(n2) < 0) nums.push(n2);
+            }
+            // "begins with / begint met <fragment>" - resolve against the SAME
+            // outline the model sees; one clean startswith match or nothing
+            if (!nums.length) {
+              var pfr = /\b(?:begins? with|starting (?:with|at)|begint (?:met|bij)|beginnend met|start(?:end|t) (?:met|bij))\s*[:\-]?\s*["\u201C'"'\u201E ]*([^\n"'\u201D'\u201E]{6,240})/i.exec(instruction);
+              if (pfr && ctx && ctx.paragraphs) {
+                var needle = normParaText(pfr[1]);
+                if (needle.length >= 6) {
+                  var hit = -1, hitsCount = 0;
+                  (ctx.paragraphs || []).forEach(function (p) {
+                    var t = normParaText(p.text);
+                    if (t.length && t.indexOf(needle) === 0) { hit = p.idx + 1; hitsCount++; }
+                  });
+                  if (hit > 0 && hitsCount === 1) nums.push(hit);
+                }
+              }
+            }
+          }
+          if ((wantRead || wantEdit) && nums.length) {
+            SK.readRounds = (SK.readRounds || 0) + 1;   // the shared 2-read budget
+            setStatus("Reading paragraph(s) " + nums.join(", ") + " in full\u2026", "busy");
+            preReadDone = SK.deck.readParagraphs(nums).then(function (full) {
+              dbg("pre.read_paragraph", { paragraphs: nums, chars: full.length });
+              messages = messages.concat([{ role: "user", content:
+                "FULL PARAGRAPH TEXT (paragraph numbers are 1-based, same numbering as the outline):\n" + full +
+                "\n\nUse this complete text for the ORIGINAL USER REQUEST; quote it accurately; when writing replace_text \"find\" strings, use EXACT substrings of THIS text (do not invent wording); do NOT reply with read_paragraph for these paragraph(s) again." }]);
+              return true;
+            }).catch(function (ePr) {
+              dbg("pre.read_paragraph.failed", { err: String(ePr && ePr.message || ePr).slice(0, 160) });
+              SK.readRounds = Math.max(0, (SK.readRounds || 1) - 1);
+              return null;
+            });
+          } else {
+            preReadDone = Promise.resolve(null);
+          }
+        }
+        return preReadDone;
+      }
       // 0.9.186: content-creation requests ALWAYS run the web lookup first
       // (standing rule: the pane owns the lookup channel - internal, free);
       // fetched results feed the writing ask; the 3-lookup budget still caps it.
@@ -4587,7 +4678,7 @@ function applyOps(deck, ops, ctx) {
         return preLookupDone;
       }
       function mainAsk() {
-        return preLookupRun().then(function () { return mainAskInner(); });
+        return preReadRun().then(function () { return preLookupRun(); }).then(function () { return mainAskInner(); });
       }
       function mainAskInner() {
         return askRetryable(function () { return apiJson("/api/chat", "POST", { connection: ref.connection, model: ref.model, messages: messages }); })
@@ -4705,12 +4796,47 @@ function applyOps(deck, ops, ctx) {
           return { ok: true, kind: "reply", text: "Page read failed: " + ((e && e.message) || e) };
         });
       }
+      // read_paragraph: the model asked for the FULL text of specific
+      // paragraph(s) (outline previews are cut at 180 chars); fetch and
+      // re-ask, bounded to 2 read rounds per run (SlideKick read_slide
+      // contract - a model that keeps asking cannot loop forever).
+      function readParagraphThen(resp) {
+        var pre = tryParse(resp.text);
+        var lim = ctx ? (ctx.paragraphCount || 0) : 0;
+        var idxs = [];
+        (pre.paragraphs || []).forEach(function (n) {
+          if (idxs.length >= 12 || idxs.indexOf(n) >= 0) return;
+          if (typeof n === "number" && Math.floor(n) === n && n >= 1 && (lim ? n <= lim : true)) idxs.push(n);
+        });
+        if (!idxs.length)
+          return { ok: true, kind: "reply",
+                   text: JSON.stringify({ kind: "reply", text: "read_paragraph needs the 1-based paragraph numbers from the outline (this document has " + lim + " paragraph(s)). Reply again with valid numbers, or answer from the outline." }) };
+        if ((SK.readRounds || 0) >= 2)
+          return { ok: true, kind: "reply",
+                   text: JSON.stringify({ kind: "reply", text: "Full paragraph text was already provided twice in this run. Answer from it now, or ask the user for specifics." }) };
+        SK.readRounds = (SK.readRounds || 0) + 1;
+        setStatus("Reading paragraph(s) " + idxs.join(", ") + " in full…", "busy");
+        return SK.deck.readParagraphs(idxs).then(function (full) {
+          dbg("read_paragraph", { paragraphs: idxs, chars: full.length });
+          messages = messages.concat([
+            { role: "assistant", content: resp.text },
+            { role: "user", content: "FULL PARAGRAPH TEXT (paragraph numbers are 1-based, same numbering as the outline):\n" + full +
+              "\n\nAnswer the ORIGINAL USER REQUEST now using this complete text. The required JSON format rules apply again. Do NOT reply with read_paragraph for these paragraph(s) again." }
+          ]);
+          setStatus("Answering with the full paragraph text…", "busy");
+          return mainAsk2();
+        }, function (err) {
+          return { ok: true, kind: "reply",
+                   text: JSON.stringify({ kind: "reply", text: "Reading paragraph(s) " + idxs.join(",") + " failed: " + ((err && err.message) || err) }) };
+        });
+      }
       function mainAsk2() {
         return askRetryable(function () { return apiJson("/api/chat", "POST", { connection: ref.connection, model: ref.model, messages: messages }); })
           .then(function (resp) {
             var pre = tryParse(resp.text);
             if (pre.ok && pre.kind === "web_lookup") return webLookupThen(resp);
             if (pre.ok && pre.kind === "read_page") return readPageThen(resp);
+            if (pre.ok && pre.kind === "read_paragraph") return readParagraphThen(resp);
             return resp;
           });
       }
@@ -4753,6 +4879,13 @@ function applyOps(deck, ops, ctx) {
         if (parsed.ok && parsed.kind === "read_page" && parsed.ops) {
           SK.pendingWebOps = parsed.ops;
           return readPageThen(resp);
+        }
+        if (parsed.ok && parsed.kind === "read_paragraph" && parsed.ops) {
+          SK.pendingWebOps = parsed.ops;
+          return readParagraphThen(resp);
+        }
+        if (parsed.ok && parsed.kind === "read_paragraph") {
+          return readParagraphThen(resp);
         }
         if (parsed.ok && parsed.kind === "read_page") {
           if (!SK.webResults) return readPageThen(resp);
@@ -4979,6 +5112,12 @@ function applyOps(deck, ops, ctx) {
         // Models sometimes emit look-up-plus-actions in one reply: keep the
         // ops so the runner can apply them after the lookup round.
         return { ok: true, kind: "web_lookup", ops: Array.isArray(obj.ops) ? obj.ops : null, text: stripped };
+      }
+      if (obj.kind === "read_paragraph" && Array.isArray(obj.paragraphs)) {
+        // 0.9.355: internal read intent (never gated) - the pane fetches the
+        // COMPLETE paragraph text and re-asks (like SlideKick's read_slide)
+        return { ok: true, kind: "read_paragraph",
+                 paragraphs: obj.paragraphs, text: stripped };
       }
       if (obj.kind === "clarify" && typeof obj.question === "string" && obj.question.trim()) {
         // 0.9.235: the model asks the user to pick the form of the result;

@@ -84,6 +84,17 @@
         host: "DocKick simulator",
       };
     },
+    readParagraphs: async function (idxs) {
+      // 0.9.355: full text of specific 1-based paragraphs (read_paragraph)
+      const total = paras.length;
+      const parts = [];
+      (Array.isArray(idxs) ? idxs : []).forEach((n) => {
+        if (!Number.isInteger(n) || n < 1 || n > total) return;
+        parts.push("PARAGRAPH " + n + " (" + (paras[n - 1].style || "Normal") + '): "' +
+          String(paras[n - 1].text == null ? "" : paras[n - 1].text).replace(/\r|\n/g, " | ") + '"');
+      });
+      return parts.join("\n");
+    },
     createToc: async function (op) {
       const title = (op.title || "Table of Contents").trim();
       const lvl = String(op.levels || "1-3");

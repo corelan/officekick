@@ -107,12 +107,32 @@ in the pane with the comment text and its anchor, instead of failing.
   Heading 1 + paragraphs + a real table at the document end
 - `rewrite the introduction paragraph` (edit paragraph)
 - `replace every "utilize" with "use"` (find/replace)
+- `lees de paragraaf die begint met "Sinds begin november 2024" en verbeter de
+  tekst` - DocKick fetches the COMPLETE paragraph text pane-side (or via the
+  model's read_paragraph op) before editing, so nothing is rewritten from a
+  truncated preview (matters for legal documents)
 - `leave a comment on the methodology section suggesting a worked example`
 - `give me 3 titles for this doc` - conversational (other-actions model)
 - `rewrite this document: executive summary, then sections ...` - the gated
   full-document rewrite
 - `Translate` (button, below Run) - translate the whole document in place;
   see the next section
+
+## Reading paragraph content (read_paragraph)
+
+The document outline deliberately shows only each paragraph's first ~180
+characters. When an ask needs the FULL text (read/quote/check one paragraph, or
+improve it), the pane fetches it before the model answers:
+
+- the user names a paragraph number or `begins with "..."` / `begint met "..."`
+  (exactly one clean match) - the pane reads it itself before the first ask
+- otherwise the model replies `{"kind":"read_paragraph","paragraphs":[N]}`
+  (1-based outline numbering, max 12) and DocKick re-asks it with the complete
+  text - bounded to 2 read rounds per run
+
+Quoting or rewriting from a preview truncates hidden content (field report: a
+legal letter where paragraph 34 ran far past the preview), so DocKick never
+edits text the model has not fully read.
 
 ## Translate the document in place
 
