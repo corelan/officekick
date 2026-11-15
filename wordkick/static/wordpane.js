@@ -4608,15 +4608,47 @@ function applyOps(deck, ops, ctx) {
       function preReadRun() {
         if (preReadDone === null) {
           var paraCount = ctx ? (ctx.paragraphCount || 0) : 0;
+          // 0.9.357: document-range reads ("lees het document ...") resolve
+          // pane-side - the model's read budget cannot cover a whole letter
+          var rangeVerb = /\b(lees|lezen|read|doorneem|neem door|bekijk)\b/i.test(instruction || "");
+          var docNoun = /\bdocuments?\b|\bdoc\b/i.test(instruction || "");
           var wantRead = READ_ASK_RE.test(instruction || "");
           var wantEdit = EDIT_FOR_PARAS_RE.test(instruction || "") &&
             /(?:paragraphs?|paragraaf|alinea)/i.test(instruction || "");
           var nums = [];
-          if ((wantRead || wantEdit) && instruction) {
+          if ((wantRead || wantEdit || (rangeVerb && docNoun)) && instruction) {
             var mm, re3 = /(?:paragraphs?|paragraaf|alinea)\s+(\d{1,4})/gi;
             while ((mm = re3.exec(instruction)) !== null && nums.length < 8) {
               var n2 = parseInt(mm[1], 10);
               if (n2 >= 1 && (!paraCount || n2 <= paraCount) && nums.indexOf(n2) < 0) nums.push(n2);
+            }
+            // 0.9.357: document-range reads - "lees het document tot en met
+            // <marker>", "read the whole document". A legal letter holds far
+            // more text than the model-driven 2x12 read_paragraph budget can
+            // fetch (field report: 2 rounds of 12, then the budget slammed
+            // shut), so the pane reads the whole named range ITSELF.
+            if (!nums.length && rangeVerb && docNoun) {
+              var startPar = 1, endPar = -1, endMarker = "";
+              var wholeDoc = /\b(whole|entire|complete|hele|volledige?|ganse)\b[\s\S]{0,24}?\b(documents?|doc)\b/i.test(instruction) ||
+                (docNoun && !/tot (?:en )?met|up to|until|through|t\/m/i.test(instruction));
+              var mk = /(?:tot (?:en )?met|up to(?: and including)?|until|through|t\/m)\s*[:\-]?\s*["\u201C]([^\n"\u201D]{2,160})/i.exec(instruction);
+              if (mk) {
+                endMarker = normParaText(mk[1]);
+                var hitsEnd = -1;
+                (ctx.paragraphs || []).forEach(function (p) {
+                  if (hitsEnd < 0 && normParaText(p.text).indexOf(endMarker) >= 0 && String(p.text || "").trim()) hitsEnd = p.idx + 1;
+                });
+                if (hitsEnd > 0) endPar = hitsEnd;
+              } else if (wholeDoc) {
+                endPar = paraCount;
+              }
+              if (endPar > 0 && endPar - startPar + 1 <= 200) {
+                for (var rq = startPar; rq <= endPar && nums.length < 200; rq++) {
+                  var pe = (ctx.paragraphs || [])[rq - 1];
+                  if (pe === undefined || String(pe.text || "").trim()) nums.push(rq);
+                }
+                if (nums.length < 2) nums = [];   // a range read of one line is a prefix job
+              }
             }
             // "begins with / begint met <fragment>" - resolve against the SAME
             // outline the model sees; one clean startswith match or nothing
@@ -4635,14 +4667,21 @@ function applyOps(deck, ops, ctx) {
               }
             }
           }
-          if ((wantRead || wantEdit) && nums.length) {
+          if ((wantRead || wantEdit || (rangeVerb && docNoun)) && nums.length) {
             SK.readRounds = (SK.readRounds || 0) + 1;   // the shared 2-read budget
-            setStatus("Reading paragraph(s) " + nums.join(", ") + " in full\u2026", "busy");
+            var isRange = nums.length >= 8 && nums[0] < nums[nums.length - 1] && (nums[nums.length - 1] - nums[0] + 1) === nums.length;
+            setStatus(isRange
+              ? "Reading the document (paragraphs " + nums[0] + " to " + nums[nums.length - 1] + ") in full\u2026"
+              : "Reading paragraph(s) " + nums.join(", ") + " in full\u2026", "busy");
             preReadDone = SK.deck.readParagraphs(nums).then(function (full) {
-              dbg("pre.read_paragraph", { paragraphs: nums, chars: full.length });
+              dbg("pre.read_paragraph", { paragraphs: nums, chars: full.length, range: isRange });
               messages = messages.concat([{ role: "user", content:
-                "FULL PARAGRAPH TEXT (paragraph numbers are 1-based, same numbering as the outline):\n" + full +
-                "\n\nUse this complete text for the ORIGINAL USER REQUEST; quote it accurately; when writing replace_text \"find\" strings, use EXACT substrings of THIS text (do not invent wording); do NOT reply with read_paragraph for these paragraph(s) again." }]);
+                (isRange
+                  ? "FULL DOCUMENT TEXT (every paragraph from " + nums[0] + " to and including " + nums[nums.length - 1] +
+                    ", exactly as numbered in the outline" + (endMarker ? ", up to and including the paragraph carrying \"" + endMarker + "\"" : "") + "):\n" + full +
+                    "\n\nUse this COMPLETE text for the ORIGINAL USER REQUEST. You may quote any of it and you may propose edit_paragraph ops for the paragraphs shown above (para = the outline numbers above); when writing replace_text \"find\" strings, use EXACT substrings of THIS text (do not invent wording); do NOT reply with read_paragraph for paragraphs included above - you already have their complete text."
+                  : "FULL PARAGRAPH TEXT (paragraph numbers are 1-based, same numbering as the outline):\n" + full +
+                    "\n\nUse this complete text for the ORIGINAL USER REQUEST; quote it accurately; when writing replace_text \"find\" strings, use EXACT substrings of THIS text (do not invent wording); do NOT reply with read_paragraph for these paragraph(s) again.") }]);
               return true;
             }).catch(function (ePr) {
               dbg("pre.read_paragraph.failed", { err: String(ePr && ePr.message || ePr).slice(0, 160) });
@@ -4820,10 +4859,13 @@ function applyOps(deck, ops, ctx) {
         });
         if (!idxs.length)
           return { ok: true, kind: "reply",
-                   text: JSON.stringify({ kind: "reply", text: "read_paragraph needs the 1-based paragraph numbers from the outline (this document has " + lim + " paragraph(s)). Reply again with valid numbers, or answer from the outline." }) };
+                   text: "read_paragraph needs the 1-based paragraph numbers from the outline (this document has " + lim + " paragraph(s)). Reply again with valid numbers, or answer from the outline." };
         if ((SK.readRounds || 0) >= 2)
+          // 0.9.357: plain reply text (NOT re-wrapped JSON) - the stringify
+          // wrapper could surface as a raw {"kind":"reply",...} string in the
+          // pane when the synthetic skips the re-parse
           return { ok: true, kind: "reply",
-                   text: JSON.stringify({ kind: "reply", text: "Full paragraph text was already provided twice in this run. Answer from it now, or ask the user for specifics." }) };
+                   text: "Full paragraph text was already provided twice in this run. Answer from it now, or ask the user for specifics." };
         SK.readRounds = (SK.readRounds || 0) + 1;
         setStatus("Reading paragraph(s) " + idxs.join(", ") + " in full…", "busy");
         return SK.deck.readParagraphs(idxs).then(function (full) {
@@ -4837,7 +4879,7 @@ function applyOps(deck, ops, ctx) {
           return mainAsk2();
         }, function (err) {
           return { ok: true, kind: "reply",
-                   text: JSON.stringify({ kind: "reply", text: "Reading paragraph(s) " + idxs.join(",") + " failed: " + ((err && err.message) || err) }) };
+                   text: "Reading paragraph(s) " + idxs.join(",") + " failed: " + ((err && err.message) || err) };
         });
       }
       function mainAsk2() {

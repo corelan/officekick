@@ -5341,10 +5341,13 @@ OfficeDeck.prototype.setNotes = function (i, text) {
         });
         if (!idxs.length)
           return { ok: true, kind: "reply",
-                   text: JSON.stringify({ kind: "reply", text: "read_slide needs 1-based slide numbers from the outline (this deck has " + lim + " slide(s)). Ask again with valid numbers, or answer from the outline." }) };
+                   text: "read_slide needs 1-based slide numbers from the outline (this deck has " + lim + " slide(s)). Ask again with valid numbers, or answer from the outline." };
         if ((SK.readRounds || 0) >= 2)
+          // 0.9.357: plain reply text (NOT re-wrapped JSON) - the stringify
+          // wrapper could surface as a raw {"kind":"reply",...} string in the
+          // pane when the synthetic skips the re-parse
           return { ok: true, kind: "reply",
-                   text: JSON.stringify({ kind: "reply", text: "Full slide text was already provided twice in this run. Answer from it now, or ask the user for specifics." }) };
+                   text: "Full slide text was already provided twice in this run. Answer from it now, or ask the user for specifics." };
         SK.readRounds = (SK.readRounds || 0) + 1;
         setStatus("Reading slide(s) " + idxs.join(", ") + " in full…", "busy");
         return SK.deck.readSlides(idxs).then(function (full) {
@@ -5358,7 +5361,7 @@ OfficeDeck.prototype.setNotes = function (i, text) {
           return mainAsk2();
         }, function (err) {
           return { ok: true, kind: "reply",
-                   text: JSON.stringify({ kind: "reply", text: "Reading slide(s) " + idxs.join(",") + " failed: " + ((err && err.message) || err) }) };
+                   text: "Reading slide(s) " + idxs.join(",") + " failed: " + ((err && err.message) || err) };
         });
       }
       function mainAsk2() {

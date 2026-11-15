@@ -42,6 +42,26 @@
   exact layout Office honors, and docs gain the manual Trust Center +
   reg-add unblock for machines that installed older builds.
 
+## 0.9.357
+
+### Fixed / added
+- Document-RANGE reads ("Lees het document tot en met \"Met vriendelijke
+  groet\" en kijk of je verbeteringen kan aanbrengen") collapsed into the
+  read_paragraph spot-read machinery: the model burned the 2x12 budget on
+  24 scattered paragraphs of a ~60-paragraph legal letter and the run ended
+  with the budget canned reply - the pane had never actually read the
+  document range the user named. Now the pane resolves document-range asks
+  ITSIDE before the first ask: "read/lees/doorneem + document" with a "tot
+  en met / up to / until" marker (first paragraph containing it) or
+  whole-document wording fetches paragraphs 1..end (non-empty, max 200) in
+  ONE pane-side read and injects them as FULL DOCUMENT TEXT with the
+  instruction that outline-numbered edit_paragraph ops are now allowed for
+  everything fetched. Range status line: "Reading the document (paragraphs
+  1 to 12) in full…". Also: the read budget's canned synthetics no longer
+  wrap their reply in a re-serialized {"kind":"reply",...} JSON string
+  (that wrapper could surface as raw JSON in the pane); same fix in
+  SlideKick's read_slide synthetics.
+
 ## 0.9.356
 
 ### Fixed
