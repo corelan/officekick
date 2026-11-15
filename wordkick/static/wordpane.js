@@ -1118,7 +1118,17 @@
     'either {"kind":"reply","text":"..."} or {"kind":"doc_ops","ops":[...]} - ' +
     "no reasoning, no fences, no commentary.";
 
-  var REPAIR_EMPTY_ASK =
+  // 0.9.356: a reply that visibly ATTEMPTED actions (prose-wrapped JSON cut
+  // off mid-value) gets a different nudge than a plain format violation -
+  // a weak model keeps repeating the same mixed output unless told WHY the
+  // parse failed and that its prose is what spent the reply budget.
+  var OPS_ATTEMPT_RE = /"(doc|slide|mail)_ops"|"ops"\s*:\s*\[/i;
+  var REPAIR_CUTOFF_ASK =
+    "Your previous reply mixed explanation text with the actions JSON and was " +
+    "CUT OFF mid-value, so it was not valid JSON. Reply AGAIN with ONLY the " +
+    '{"kind":"doc_ops","ops":[...]} - complete, every value closed, and NO words before or after it' +
+    " (no explanations, no reasoning): the prose you wrote first spent the " +
+    "reply budget that then cut the JSON off.";
     "Your previous reply was EMPTY. An empty response is NEVER acceptable. " +
     "Always produce something useful: the ops JSON with actions for the " +
     "user's request, or format A (reply) with the answer/reason. Respond NOW " +
@@ -4930,8 +4940,12 @@ function applyOps(deck, ops, ctx) {
           if (r1.parsed.ok) return r1.parsed;
           var wasEmpty = !String(r1.text || "").trim();
           var prevEmpty = !String(resp.text || "").trim();
-          var nudge2 = (wasEmpty || prevEmpty) ? REPAIR_EMPTY_ASK : REPAIR_ASK;
-          setStatus(wasEmpty || prevEmpty ? "Empty/unclear reply - re-asking firmly…" : "Still unclear - one more clean-JSON round…", "busy");
+          var opsAttempt = OPS_ATTEMPT_RE.test(String(r1.text || "") + " " + String(resp.text || ""));
+          var nudge2 = (wasEmpty || prevEmpty) ? REPAIR_EMPTY_ASK
+                    : opsAttempt ? REPAIR_CUTOFF_ASK : REPAIR_ASK;
+          setStatus(wasEmpty || prevEmpty ? "Empty/unclear reply - re-asking firmly…"
+                    : opsAttempt ? "The action JSON was cut off - re-asking for the complete object…"
+                    : "Still unclear - one more clean-JSON round…", "busy");
           return repairRound(nudge2, r1.text, 2).then(function (r2b) {
             if (r2b.parsed.ok) return r2b.parsed;
             var best = r2b.text && r2b.text.length > (resp.text || "").length ? r2b.text : resp.text;
@@ -4943,11 +4957,14 @@ function applyOps(deck, ops, ctx) {
               // Feed the model its own analysis and demand the JSON; two
               // compaction rounds before the plain-text fallthrough.
               var compactBest = String(best || "");
+              var cutPreC = OPS_ATTEMPT_RE.test(String(best || "")) ?
+                "Your previous reply was cut off mid-action - your prose spent the reply budget. " : "";
               var compactRound = function (nC) {
                 if (!compactBest || compactBest.length < 200 || nC > 2) return r2b.parsed;
                 var cMsgs = messages.concat([
                   { role: "assistant", content: compactBest },
                   { role: "user", content:
+                    cutPreC +
                     "Your analysis above is on record - do NOT reason again. " +
                     "Output ONLY the JSON object now, starting with { : " +
                     'either {"kind":"reply","text":"<your full CONCLUSION in complete sentences>"} or the actions JSON (format B). ' +
@@ -5512,6 +5529,30 @@ function applyOps(deck, ops, ctx) {
       out.appendChild(box);
       var note = document.createElement("div");
       note.className = "opnote";
+      // 0.9.356: the model may have ATTEMPTED actions (prose-wrapped JSON cut
+      // off mid-value). "Done." was a lie there - say what happened and how
+      // to recover instead of a success-flavored text-only reply.
+      var opsAttempt = OPS_ATTEMPT_RE.test(String(parsed.text || ""));
+      if (opsAttempt) {
+        note.textContent = "The model tried to emit actions but the JSON was cut off or wrapped in prose and could not be repaired (repair + compaction rounds exhausted). NOTHING was changed in the document. Enable debug logging (Settings) to inspect the raw output.";
+        var reRow = document.createElement("div");
+        reRow.className = "row";
+        var reBtn = document.createElement("button");
+        reBtn.className = "btn";
+        reBtn.type = "button";
+        reBtn.textContent = "Ask again (same request)";
+        reBtn.addEventListener("click", function () {
+          var inp = $("chat-input");
+          if (SK.busy) return;
+          if (!inp.value.trim() && SK.lastInstruction) { inp.value = SK.lastInstruction; }
+          runPrompt();
+        });
+        reRow.appendChild(reBtn);
+        out.appendChild(reRow);
+        if (SK.lastAsk) { SK.lastAsk.rounds = 0; }   // the re-request gets fresh repair rounds too
+        setStatus("The action JSON was incomplete - nothing was changed.", "error");
+        return;
+      }
       note.textContent = "Shown as text: the model did not return a valid action JSON. Enable debug logging (Settings) to inspect the raw output.";
       out.appendChild(note);
       setStatus("Done (reply as text).", "ok");

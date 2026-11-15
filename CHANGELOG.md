@@ -42,6 +42,28 @@
   exact layout Office honors, and docs gain the manual Trust Center +
   reg-add unblock for machines that installed older builds.
 
+## 0.9.356
+
+### Fixed
+- A model reply that MIXED prose with an actions JSON and got cut off
+  mid-value (field report right after 0.9.355: the improved legal paragraph
+  came back as Dutch prose + a truncated edit_paragraph op) failed all
+  repairs and the pane then reported "Done (reply as text)." - looked like
+  an action was made while NOTHING was. All three panes:
+  - Round 2 of the repair chain (and the compaction rounds) now DETECT the
+    attempted-actions shape and use a dedicated nudge that says the JSON
+    was cut off and that the prose spent the reply budget - a weak model
+    kept repeating the same mixed output against the generic re-ask.
+  - The failed terminal state is honest: when the reply visibly attempted
+    ops, the status is "The action JSON was incomplete - nothing was
+    changed." (error, red) with an "Ask again (same request)" button and a
+    note that nothing was applied - no more success-flavored "Done.".
+  Verified in the DocKick simulator with an exact replica of the field
+  reply (prose + mid-string cut): repairs run with the cutoff nudge, the
+  terminal state shows the honest error + re-run, the document stays
+  untouched, and an Ask-again on the same request with a clean reply then
+  gates and applies one edit_paragraph.
+
 ## 0.9.355
 
 ### Added / fixed
