@@ -42,6 +42,27 @@
   exact layout Office honors, and docs gain the manual Trust Center +
   reg-add unblock for machines that installed older builds.
 
+## 0.9.361
+
+### Fixed
+- A model reply that NARRATED success ("Done: I replaced every occurrence ...
+  using deck-wide replace_all_text ops") rendered the pane a "Done." while
+  nothing was applied - the field report: the request asked for two dash
+  variants (hyphen + EN dash) deck-wide; the model wrote prose about the
+  edits instead of emitting ops, and the pane played along. All three panes:
+  ACTION_CLAIM_RE (first-person/done framing + a change verb, EN + NL verbs)
+  with zero ops -> the run DEMANDS the real ops JSON (max twice, then the
+  pane's own truth note appended: "the model described these changes in
+  prose but emitted NO actions - NOTHING was changed"); claim-free answers
+  pass through untouched; the demand counter resets per run. Claim detection
+  sits at the final render (covers both parsed replies and unparseable
+  prose) plus the pre-repair .ok path.
+  Verified: regex harness (7 cases: field claim EN + NL, negations, future
+  intent, plain answers); SlideKick simulator E2E - the narrated claim gets
+  two demands and the honest note with the deck untouched; the same request
+  with real replace_all_text ops gates both variants and applies them
+  (hyphen and en-dash strings both replaced).
+
 ## 0.9.360
 
 ### Fixed

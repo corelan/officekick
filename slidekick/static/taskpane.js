@@ -1287,6 +1287,22 @@
   // a weak model keeps repeating the same mixed output unless told WHY the
   // parse failed and that its prose is what spent the reply budget.
   var OPS_ATTEMPT_RE = /"(doc|slide|mail)_ops"|"ops"\s*:\s*\[/i;
+  // 0.9.361: a reply that NARRATES success ("Done: I replaced X using ops")
+  // without any action JSON presented the pane a lie while nothing was
+  // applied (field report). First-person/done framing + a change verb with
+  // zero ops -> the run demands the real ops JSON twice, then renders the
+  // reply with its own honest pane note.
+  var ACTION_CLAIM_RE = new RegExp("\\b(?:done\\s*[.:!][^]{0,30}|" +
+    "i(?:'|'ve|'d| have| had| did| just| now| already)?\\s+[^]{0,40}|" +
+    "ik heb\\s+[^]{0,40})\\b(replaced|applied|updated|edited|rewrote|removed|" +
+    "deleted|inserted|created|set|changed|fixed|drafted|sent|vervangen|" +
+    "toegepast|bijgewerkt|aangepast|herschreven|gewijzigd|gedaan)", "i");
+  var CLAIM_NUDGE =
+    "Your reply CLAIMS changes were made, but it contains NO action JSON - " +
+    "SlideKick only applies changes through the ops JSON, so nothing happened yet. " +
+    "Reply ONLY with the SlideKick JSON that performs exactly the changes you described, " +
+    'or reply {"kind":"reply","text":"<what you cannot do and why>"} if you truly cannot act. ' +
+    "No prose about what you did - the pane renders it as done without doing it.";
   var REPAIR_CUTOFF_ASK =
     "Your previous reply mixed explanation text with the actions JSON and was " +
     "CUT OFF mid-value, so it was not valid JSON. Reply AGAIN with ONLY the " +
@@ -5128,6 +5144,7 @@ OfficeDeck.prototype.setNotes = function (i, text) {
     ctxPromise.then(function (ctx) {
       SK.lastCtx = ctx;
       SK.readRounds = 0;
+      SK.claimNudged = 0;   // 0.9.361: narrated-success demand counter (per run)
       SK.webRounds = 0;
       SK.pageReads = 0;
       SK.webResults = "";
@@ -5821,6 +5838,40 @@ OfficeDeck.prototype.setNotes = function (i, text) {
             });
         }
 
+        // 0.9.361: narrated success with zero ops - demand the real ops JSON
+        // (max twice), then pass through with the pane's honest note instead
+        // of letting the claim stand as a "Done.".
+        if (parsed.ok && parsed.kind === "reply" && (SK.claimNudged || 0) < 2 &&
+            ACTION_CLAIM_RE.test(String(parsed.text || ""))) {
+          var claimT = String(parsed.text || "");
+          var claimLoop = function (prevText, attempts) {
+            var claimMsgs = messages.concat([
+              { role: "assistant", content: prevText },
+              { role: "user", content: CLAIM_NUDGE },
+            ]);
+            SK.claimNudged = attempts + 1;
+            setStatus("The model narrated changes without actions - demanding the slide_ops JSON (" + (attempts + 1) + "/2)\u2026", "busy");
+            return askRetryable(function () { return apiJson("/api/chat", "POST", { connection: ref.connection, model: ref.model, messages: claimMsgs }); })
+              .then(function (rC) {
+                dbg("claim.nudge", { attempt: attempts + 1, text: String(rC && rC.text || "").slice(0, 200) });
+                SK.lastModelText = { text: rC.text };
+                var pC = tryParse(rC.text);
+                if (pC.ok && pC.ops && pC.ops.length) return pC;   // real ops finally
+                var claimAgain = pC.ok && pC.kind === "reply" && ACTION_CLAIM_RE.test(String(pC.text || ""));
+                if (claimAgain && attempts < 1) return claimLoop(String(pC.text || prevText), attempts + 1);   // 2 demands max
+                // a claim-free reply answers the user honestly; a stale claim
+                // gets the pane's truth note appended - never a bare lie
+                var outC = pC.ok ? pC : (String(pC.text || "").trim() ? { ok: true, kind: "reply", text: String(pC.text) } : parsed);
+                if (ACTION_CLAIM_RE.test(String(outC.text || ""))) {
+                  outC = { ok: true, kind: "reply",
+                           text: String(outC.text || "") +
+                             "\n\n[SlideKick note: the model described these changes in prose but emitted NO actions - NOTHING was changed. Run the same request again, or give it to a different model.]" };
+                }
+                return outC;
+              }).catch(function () { return parsed; });
+          };
+          return claimLoop(claimT, 0);
+        }
         if (parsed.ok) return parsed;
         // escalate: up to 2 repair rounds with increasingly strong nudges.
         // Empty replies get the loudest one - an empty response must never end a run.
@@ -6130,9 +6181,46 @@ OfficeDeck.prototype.setNotes = function (i, text) {
             return Promise.resolve(null);
           }
         }
-        var waitApply = renderParsed(parsed, ctx, instruction);
-        pushHistory(instruction, assistantHistoryText(parsed));
-        return Promise.resolve(waitApply);   // timer/busy wait for the auto-apply to finish
+        // 0.9.361: narrated success with zero ops ("Done: I replaced ...")
+        // must never stand as a "Done." - demand the real ops JSON (max
+        // twice), then render the reply with the pane's honest note.
+        var claimGuardFinal = function (parsed) {
+          if (!parsed || parsed.kind === "clarify") return Promise.resolve(parsed);
+          if (parsed.ok && parsed.ops && parsed.ops.length) return Promise.resolve(parsed);   // real actions
+          if ((SK.claimNudged || 0) >= 2) return Promise.resolve(parsed);
+          var t = String(parsed.text || "");
+          if (t.indexOf("[SlideKick note:") >= 0) return Promise.resolve(parsed);   // note already present
+          if (!ACTION_CLAIM_RE.test(t)) return Promise.resolve(parsed);
+          var claimLoopF = function (prevText, attempts) {
+            var claimMsgs = messages.concat([
+              { role: "assistant", content: prevText },
+              { role: "user", content: CLAIM_NUDGE },
+            ]);
+            SK.claimNudged = attempts + 1;
+            setStatus("The model narrated changes without actions - demanding the slide_ops JSON (" + (attempts + 1) + "/2)\u2026", "busy");
+            return askRetryable(function () { return apiJson("/api/chat", "POST", { connection: ref.connection, model: ref.model, messages: claimMsgs }); })
+              .then(function (rC) {
+                dbg("claim.final", { attempt: attempts + 1, text: String(rC && rC.text || "").slice(0, 160) });
+                SK.lastModelText = { text: rC.text };
+                var pC = tryParse(rC.text);
+                if (pC.ok && pC.ops && pC.ops.length) return pC;   // real ops finally
+                if (ACTION_CLAIM_RE.test(String(rC && rC.text || "")) && attempts < 1) return claimLoopF(String(rC.text || prevText), attempts + 1);
+                var bodyC = String((rC && rC.text) || t || "");
+                if (ACTION_CLAIM_RE.test(bodyC)) {
+                  return { ok: true, kind: "reply", text: bodyC +
+                    "\n\n[SlideKick note: the model described these changes in prose but emitted NO actions - NOTHING was changed. Run the same request again, or give it to a different model.]" };
+                }
+                return pC.ok ? pC : { ok: true, kind: "reply", text: bodyC };
+              }).catch(function () { return parsed; });
+          };
+          return claimLoopF(t, 0);
+        };
+        var waitApply = Promise.resolve(claimGuardFinal(parsed)).then(function (parsedG) {
+        var waitApply2 = renderParsed(parsedG, ctx, instruction);
+        pushHistory(instruction, assistantHistoryText(parsedG));
+        return Promise.resolve(waitApply2);   // timer/busy wait for the auto-apply to finish
+        });
+        return waitApply;
         });
       });
     }).catch(function (err) {
