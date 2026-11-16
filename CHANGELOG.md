@@ -42,6 +42,30 @@
   exact layout Office honors, and docs gain the manual Trust Center +
   reg-add unblock for machines that installed older builds.
 
+## 0.9.360
+
+### Fixed
+- Structure audit of DocKick's read paths (user question: is Word
+  bullet/heading aware). Verdict: the OUTLINE was already structure-aware
+  (paragraph style, [L2]..[L9] list levels, [image xN], tables), but
+  two gaps made the model still work structure-blind:
+  - read_paragraph FULL reads delivered RAW paragraph text - no [L2]..[L9]
+    markers and no [image xN] (a full read followed by a rebuild would
+    flatten lists - the Word edition of the image-flattening field report).
+    readParagraphs now loads isListItem + listItem.level +
+    inlinePictures/items and bakes the same markers as the outline (sim
+    mirrors via simParaText + image marker).
+  - real table content was never read: getContext hardcoded `tables: []`
+    (the outline literally claimed "0 table(s)" with tables present, and the
+    itemCount load was dead code). WordApi table reads are now attempted
+    with per-table/per-cell guards: rows -> cells -> cell body text; a
+    build without the cell API shows an honest "[table ...]" marker in the
+    outline instead of a fake empty.
+  Verified in the DocKick simulator by capturing the model-facing ask via
+  fetch interception: outline carries "(Heading 1)", "[L2]" on the list
+  item, "table 1: A | B // C | D", and the pre-read injection delivers
+  "PARAGRAPH 2 (List Paragraph): \"[L2] ...\"".
+
 ## 0.9.359
 
 ### Fixed

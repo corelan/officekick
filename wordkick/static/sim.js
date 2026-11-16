@@ -85,13 +85,17 @@
       };
     },
     readParagraphs: async function (idxs) {
-      // 0.9.355: full text of specific 1-based paragraphs (read_paragraph)
+      // 0.9.355 full reads; 0.9.360: STRUCTURE-aware like the outline -
+      // [L2]..[L9] level markers and [image xN] markers ride along
       const total = paras.length;
       const parts = [];
       (Array.isArray(idxs) ? idxs : []).forEach((n) => {
         if (!Number.isInteger(n) || n < 1 || n > total) return;
-        parts.push("PARAGRAPH " + n + " (" + (paras[n - 1].style || "Normal") + '): "' +
-          String(paras[n - 1].text == null ? "" : paras[n - 1].text).replace(/\r|\n/g, " | ") + '"');
+        const p = paras[n - 1];
+        let t = simParaText(p);
+        if (p.image) t = (t ? t + " " : "") + "[image x1]";
+        parts.push("PARAGRAPH " + n + " (" + (p.style || "Normal") + '): "' +
+          String(t).replace(/\r|\n/g, " | ") + '"');
       });
       return parts.join("\n");
     },

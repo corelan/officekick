@@ -2060,10 +2060,62 @@ var nw = $("sess-new");
           if (lvW > 0) ptxt = "[L" + Math.min(lvW + 1, 9) + "] " + ptxt;
           items.push({ idx: i, text: ptxt, style: paras.items[i].style || "Normal" });
         }
-        return ctx.sync().then(function () {
+        // 0.9.360: table CONTENT in the outline (was a hardcoded tables: []
+        // - the model saw "0 table(s)" even in a document full of tables).
+        // WordApi rows/cells with per-table/cell guards: a build without the
+        // API shows an honest "[table ...]" marker, never a fake empty.
+        var buildTables = function () {
+          var tablesData = [];
+          var tcount = 0;
+          try { tcount = Number(tables.itemCount) || 0; } catch (eTC) { tcount = 0; }
+          if (tcount <= 0) return Promise.resolve(tablesData);
+          var tbls = body.tables;
+          try { tbls.load("items"); } catch (eTL) {
+            tablesData.push({ idx: 0, values: [["[table - this Word build does not expose table cell APIs]"]] });
+            return Promise.resolve(tablesData);
+          }
+          return ctx.sync().then(function () {
+            (tbls.items || []).forEach(function (tb) {
+              try { tb.rows.load("items"); } catch (eR) {}
+            });
+            return ctx.sync().then(function () {
+              var cellLoads = [];
+              (tbls.items || []).forEach(function (tb) {
+                ((tb.rows && tb.rows.items) || []).forEach(function (row) {
+                  ((row.cells && row.cells.items) || []).forEach(function (cell) {
+                    try { cell.load("body"); cellLoads.push(cell); } catch (eC) {}
+                  });
+                });
+              });
+              return ctx.sync().then(function () {
+                cellLoads.forEach(function (cell) {
+                  try { cell.body.load("text"); } catch (eB) {}
+                });
+                return ctx.sync().then(function () {
+                  (tbls.items || []).forEach(function (tb, ti) {
+                    var vals = [];
+                    ((tb.rows && tb.rows.items) || []).forEach(function (row) {
+                      var rvals = [];
+                      ((row.cells && row.cells.items) || []).forEach(function (cell) {
+                        var ct = "";
+                        try { ct = String(cell.body.text || ""); } catch (eT) { ct = "[unreadable]"; }
+                        rvals.push(ct);
+                      });
+                      if (rvals.length) vals.push(rvals);
+                    });
+                    if (!vals.length) vals = [["[table - cells not readable in this Word build]"]];
+                    tablesData.push({ idx: ti, values: vals });
+                  });
+                  return tablesData;
+                });
+              });
+            });
+          });
+        };
+        return buildTables().then(function (tablesData) {
           return { documentName: "document", paragraphCount: paras.items.length,
                    images: imageCount,
-                   paragraphs: items, tables: [], selected: sel.text || "", host: self.capabilities().host };
+                   paragraphs: items, tables: tablesData, selected: sel.text || "", host: self.capabilities().host };
         });
         });
       });
@@ -2078,17 +2130,40 @@ var nw = $("sess-new");
     var self = this;
     return this.run("readParagraphs", function (ctx) {
       var paras = ctx.document.body.paragraphs;
-      paras.load("text, style");
+      // 0.9.360: full reads are STRUCTURE-AWARE like the outline - a full
+      // read without the [L2] markers would invite the model to rebuild a
+      // list as flat text (the image-flattening field report, Word edition)
+      paras.load("text, style, isListItem, inlinePictures/items");
       return ctx.sync().then(function () {
         var total = paras.items.length;
-        var out = [];
-        (idxs || []).forEach(function (n) {
-          if (typeof n !== "number" || Math.floor(n) !== n || n < 1 || n > total) return;
-          var pt = paras.items[n - 1];
-          out.push("PARAGRAPH " + n + " (" + (pt.style || "Normal") + "): \"" +
-            String(pt.text == null ? "" : pt.text).replace(/\r|\n/g, " | ") + "\"");
+        var lvlIdx = {};
+        for (var iL = 0; iL < total; iL++) {
+          try {
+            if (paras.items[iL].isListItem) {
+              paras.items[iL].listItem.load("level");
+              lvlIdx[iL] = 1;
+            }
+          } catch (eLI) { /* not a list item - flat */ }
+        }
+        return ctx.sync().then(function () {
+          var out = [];
+          (idxs || []).forEach(function (n) {
+            if (typeof n !== "number" || Math.floor(n) !== n || n < 1 || n > total) return;
+            var pt = paras.items[n - 1];
+            var txt = String(pt.text == null ? "" : pt.text);
+            var lvW = 0;
+            if (lvlIdx[n - 1]) {
+              try { lvW = Number(pt.listItem.level) || 0; } catch (eLv) { lvW = 0; }
+            }
+            if (lvW > 0) txt = "[L" + Math.min(lvW + 1, 9) + "] " + txt;
+            var np = 0;
+            try { np = (pt.inlinePictures && pt.inlinePictures.items) ? pt.inlinePictures.items.length : 0; } catch (eP) {}
+            if (np > 0 && txt) txt = txt + " [image x" + np + "]";
+            out.push("PARAGRAPH " + n + " (" + (pt.style || "Normal") + "): \"" +
+              txt.replace(/\r|\n/g, " | ") + "\"");
+          });
+          return out.join("\n");
         });
-        return out.join("\n");
       });
     });
   };
