@@ -42,6 +42,30 @@
   exact layout Office honors, and docs gain the manual Trust Center +
   reg-add unblock for machines that installed older builds.
 
+## 0.9.359
+
+### Fixed
+- Generated slide images flattened the bullet hierarchy. Field report: a
+  slide with 5 top-level bullets and 2 children under the first came back
+  as a picture with every line on the same level - the model writes the
+  image prompt from the outline (which carries [L2]/[L3] markers) but strips
+  the structure when describing it, and the image renderer had nothing telling
+  it which lines are sub-points. SlideKick now appends the EXACT structure
+  to every create_image prompt pane-side (createImageSlideStructure, wired in
+  the validator so the gate reviews the final prompt): "SLIDE CONTENT EXACTLY
+  AS STRUCTURED - N top-level bullet(s); an indented line is a CHILD of the
+  line above it" - built from the same [L] markers the pane itself bakes,
+  covering slide null via the active slide, skipped for flat slides (nothing
+  to repair) and when the combined prompt exceeds the 5000-char budget
+  (dbg image.structure.skipped). Schema line gained the hierarchy rule. The
+  outline markers the model should NOT echo into op text are not echoed
+  anywhere new - the block is pane-computed, never model-authored.
+  Verified: helper harness on the extracted real source (5 cases: named
+  slide / null->active / flat -> null / missing slide -> null / indentation),
+  SlideKick simulator E2E with an openrouter image mock: the /api/image/start
+  payload captured via fetch interception carries the full structure block
+  ("children indented under - recon first"), image lands on the slide.
+
 ## 0.9.358
 
 ### Added / fixed

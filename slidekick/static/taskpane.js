@@ -1168,7 +1168,7 @@
     '- {"type":"move_shape","slide":N,"shape":N,"left":40,"top":150,"width":300,"height":60} (points; only the fields to change; keep shapes inside the slide bounds shown in the outline)',
     '- {"type":"copy_shape","slide":N,"shape":N,"to":M,"left":40,"top":150} (duplicate the shape onto slide M; "to" omitted = the same slide; left/top optional re-placement; full fidelity copy)',
     '- {"type":"move_shape_to","slide":N,"shape":N,"to":M,"left":40,"top":150} (CUT: relocate that shape to slide M - original removed)',
-    '- {"type":"create_image","prompt":"detailed image description","slide":N|null,"width":400} (generate an image from the description and insert it; slide null = the slide the user currently has open; only when the user asks for a picture/image/illustration/logo)',
+    '- {"type":"create_image","prompt":"detailed image description","slide":N|null,"width":400} (generate an image from the description and insert it; slide null = the slide the user currently has open; only when the user asks for a picture/image/illustration/logo. When the image shows the BULLETS of a slide, keep the hierarchy: the outline marks sub-bullets with [L2]/[L3] - describe those lines INDENTED UNDER their parent in the prompt, never as a flat list; the pane also appends the exact structure)',
     '- {"type":"apply_layout","slide":N,"layout":"title_content|title_only|section|blank"} (only when the user asks for layout/design changes)',
     '- {"type":"format_text","slide":N,"shape":N,"font":{"bold":true},"align":"center","bullet":true} (format ONE shape from the outline: font = {"bold","italic","color","size","name","underline","allCaps"} subset only, colors as HTML hex/red/green/...; align = left|center|right; bullet = true adds bullets; only requested properties)',
     '- format_text needs a TEXT shape (textbox or placeholder): tables, charts and pictures have no formattable text range - for formatted prose next to a table, add a textbox (create_shape) and format that',
@@ -3985,6 +3985,41 @@ OfficeDeck.prototype.setNotes = function (i, text) {
   // ------------------------------------------------------------------ //
   // Ops validation / approvals
   // ------------------------------------------------------------------ //
+  // 0.9.359: image prompts must SHOW the slide's bullet hierarchy. The model
+  // reads the outline text WITH [L2]/[L3] markers but writes the image prompt
+  // without them - the generated picture then renders every line on the same
+  // level (field report: a slide with 5 top bullets, 2 children under the
+  // first, came back as one flat list). The pane appends the EXACT structure
+  // to the prompt so the image renderer never guesses levels from prose.
+  function createImageSlideStructure(op, ctx) {
+    if (!ctx || !ctx.slides) return null;
+    var slideIdx = null;
+    if (op && op.slide != null) slideIdx = op.slide - 1;
+    else if (ctx.activeSlide != null) slideIdx = ctx.activeSlide;
+    if (slideIdx == null || !ctx.slides[slideIdx]) return null;
+    var lines = [];
+    var hasChild = false;
+    (ctx.slides[slideIdx].shapes || []).forEach(function (sh) {
+      String(sh.text || "").split(/\n/).forEach(function (lnIn) {
+        var m = /^\s*\[L(\d)\]\s*(.*)$/.exec(lnIn);
+        var lvl = m ? (parseInt(m[1], 10) - 1) : 0;
+        var txt = (m ? m[2] : lnIn).trim();
+        if (!txt) return;
+        if (lvl > 0) hasChild = true;
+        lines.push({ lvl: lvl, txt: txt });
+      });
+    });
+    if (!hasChild || !lines.length) return null;   // flat slide - nothing to repair
+    var tops = lines.filter(function (e) { return e.lvl === 0; }).length;
+    var block = "SLIDE CONTENT EXACTLY AS STRUCTURED - " + tops + " top-level bullet(s); " +
+      "an indented line is a CHILD of the line above it (render them visually indented/nested, never on the same level):\n" +
+      lines.map(function (e) {
+        var pad = new Array(e.lvl + 1).join("    ");
+        return pad + "- " + e.txt;
+      }).join("\n");
+    return block;
+  }
+
   function validateOps(rawOps, ctx, preInvalid) {
     var ops = [], invalid = [];
     var notesDropped = 0;
@@ -4198,6 +4233,14 @@ OfficeDeck.prototype.setNotes = function (i, text) {
         if (op.slide != null && !slideOk(op.slide)) { bad("bad slide index"); return; }
         out.slide = typeof op.slide === "number" ? op.slide : null;
         out.prompt = op.prompt.trim();
+        // 0.9.359: keep the slide's bullet hierarchy in the image (appended
+        // EXACTLY from the outline - the model's prose has flattened it)
+        var structBlock = createImageSlideStructure(op, ctx);
+        if (structBlock && (out.prompt.length + structBlock.length) <= 5000) {
+          out.prompt += "\n\n" + structBlock;
+        } else if (structBlock) {
+          dbg("image.structure.skipped", { reason: "prompt budget", slide: out.slide });
+        }
         var geoI = {};
         ["left", "top", "width", "height"].forEach(function (p2) {
           if (typeof op[p2] === "number" && op[p2] >= 0) geoI[p2] = op[p2];

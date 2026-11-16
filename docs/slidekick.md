@@ -276,6 +276,10 @@ produce a gate row.
 ## Pictures (AI image generation)
 
 Type e.g. `add a picture of a clean data center rack` or `insert a picture of ...`.
+
+Slide pictures keep the bullet hierarchy: when an image shows a slide's bullets, the
+pane appends the exact structure (from the outline [L2]/[L3] levels) to the image
+prompt, so indented sub-points render as indented children - never a flat list.
 SlideKick/DocKick asks the model for a **create_image/insert_image** op, fetches the
 actual pixels from a provider with an OpenAI-style images API, and inserts them
 (op default = confirm, change per-op in Settings).
