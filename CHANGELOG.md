@@ -42,6 +42,44 @@
   exact layout Office honors, and docs gain the manual Trust Center +
   reg-add unblock for machines that installed older builds.
 
+## 0.9.362
+
+### Fixed
+- field report (DocKick Translate, Dutch -> French letter): most paragraphs
+  landed as degenerate first+last fragments of the SOURCE text glued together
+  ("In" + "beperken." -> "Inbeperken.", "2" + "jou." -> "2jou.") while the
+  run reported unqualified success - the reply PARSED as valid edit_paragraph
+  ops (right para numbers, non-empty text), so every existing check (para
+  membership, empty text, unchanged-echo) passed and the model's degenerate
+  compression sailed into the document. New per-op source-fragment gate in
+  the translate pipeline (wordpane.js fragmentEchoText; pure length math -
+  src>=100 -> op<25%, 40-99 -> op<30%, 20-39 -> op<50%, 20+ -> op<12 chars is
+  junk): calibrated against the real incident (26/28 fragments caught; the
+  two misses are paragraphs that had received correct French and must pass)
+  with zero false positives on plausible real translations, and with the
+  zipped-by-order rescue covered too. A gate-rejected op is simply
+  "uncovered": the existing ladder takes over (firm re-ask, fallback-model
+  swap, halving to singles, top-up, skip floor) instead of applying garbage.
+- top-up paraSet regression from the gate's first cut: topUpChunk built its
+  para map as booleans (ms[para] = true); reading .text for the gate crashed
+  ("Cannot read properties of undefined (reading 'replace')") the run's
+  top-up legs - the map now carries the real work items, which also makes
+  restoreLead + the unchanged-echo check functional for top-up replies.
+- user rule (failure shape): a paragraph that ends up untranslated after the
+  full ladder now keeps its original text AND gets an anchored Word comment
+  ("[DocKick] Left untranslated on purpose: the <language> translation of
+  this paragraph did not produce usable output (<model>). The original text
+  is unchanged - run Translate again to retry it."); the summary reports the
+  note count. Destroying the text is never an option.
+- E2E (ask-keyed-mock): canned replies are length-realistic (padded to the
+  source) + two new scenarios: glue (the incident replay - valid ops whose
+  text is a source-fragment echo; asserts the gate line, the full ladder
+  down to the skip floor, an untouched deck and the anchored notes) and
+  halfglue (mixed reply; good half applies, glued half is uncovered and
+  re-asked - per-op granularity). Prompt-gate markers still assert all 8
+  TRANSLATE_SYS blocks ride every ask (first/re-asks/top-ups/fallback
+  parts/swap).
+
 ## 0.9.361
 
 ### Fixed

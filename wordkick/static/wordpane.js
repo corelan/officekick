@@ -3764,6 +3764,26 @@ function applyOps(deck, ops, ctx) {
       .replace(/\s*\[image x\d+\]/gi, "");
   }
 
+  // 0.9.362: degenerate-output gate (translate flows). A model or its cloud
+  // proxy can answer a chunk with ops whose "text" is a tiny FRAGMENT of the
+  // source text - first characters glued to last characters ("In" +
+  // "beperken." -> "Inbeperken.") while the para number and the JSON shape
+  // are perfectly valid, so everything downstream sees "usable ops" and the
+  // fragments land in the document. A real translation keeps roughly the
+  // source's length; a fragment compression is a small fraction of it.
+  // Pure length math (no language detection), so same-language runs
+  // (e.g. Belgian Dutch for a Dutch document) cannot false-positive, and a
+  // rejected op just means "not covered": the existing ladder (firm re-ask,
+  // fallback-model swap, halving, top-up, skip floor) takes over.
+  function fragmentEchoText(srcLen, outLen) {
+    var src = srcLen || 0, op = outLen || 0;
+    if (src >= 100 && op < src * 0.25) return true;     // a fourth of the source or less
+    if (src >= 40 && src < 100 && op < src * 0.30) return true;
+    if (src >= 20 && src < 40 && op < src * 0.50) return true;
+    if (src >= 20 && op < 12) return true;              // tiny junk ("Ik", "2jou.", "H!!)")
+    return false;
+  }
+
   function toggleTranslatePanel() {
     if (SK.busy) return;
     var slot = $("translate-slot");
@@ -3952,7 +3972,7 @@ function applyOps(deck, ops, ctx) {
       });
       if (cur.length) chunks.push(cur);
       dbg("translate.plan", { lang: langName, paragraphs: work.length, chunks: chunks.length });
-      var applied = 0, failed = 0, skippedParas = 0, budgetUsed = 0, budgetHit = false;
+      var applied = 0, failed = 0, skippedParas = 0, budgetUsed = 0, budgetHit = false, marked = 0;
       var paraDone = {};   // 1-based paragraphs that received a translated op
       var queue = [];      // work items: {paras, retried, label, isPart}
       chunks.forEach(function (cs, ci) {
@@ -3976,7 +3996,7 @@ function applyOps(deck, ops, ctx) {
       function parseChunkReply(r, paras, paraSet, label) {
         var pre = tryParse(r && r.text || "");
         var got = (pre.ok && pre.ops) || (salvageOps(r && r.text || "") || []);
-        var chunkOps = [], rescued = false;
+        var chunkOps = [], rescued = false, gateRejected = [];
         got.forEach(function (o) {
           if (!o || o.type !== "edit_paragraph") return;
           var pn = (typeof o.para === "number") ? o.para :
@@ -3984,6 +4004,13 @@ function applyOps(deck, ops, ctx) {
           if (pn === null || !paraSet[pn]) return;
           var txt = stripOutlineMarkers(o.text).trim();
           if (!txt) return;
+          var wItem = paraSet[pn];
+          var srcLen = (wItem && typeof wItem.text === "string")
+            ? wItem.text.replace(/\s+/g, " ").trim().length : -1;
+          if (srcLen >= 0 && fragmentEchoText(srcLen, txt.length)) {
+            gateRejected.push(pn);
+            return;
+          }
           txt = restoreLead(paraSet[pn].text, txt);
           if (txt === paraSet[pn].text) return;   // unchanged echo or empty
           o.para = pn; o.text = txt;
@@ -3994,7 +4021,7 @@ function applyOps(deck, ops, ctx) {
           got.forEach(function (o, gi) {
             var w = paras[gi];
             var txt = (o && o.type === "edit_paragraph") ? stripOutlineMarkers(o.text).trim() : "";
-            if (!txt) { zipBad = true; }
+            if (!txt || fragmentEchoText(w.text.replace(/\s+/g, " ").trim().length, txt.length)) { zipBad = true; }
             else {
               txt = restoreLead(w.text, txt);
               if (txt === w.text) { zipBad = true; }
@@ -4003,11 +4030,16 @@ function applyOps(deck, ops, ctx) {
           });
           if (!zipBad && zipOps.length) { chunkOps = zipOps; rescued = true; }
         }
+        if (gateRejected.length) {
+          actLog(label + ": " + gateRejected.length + " op(s) did not translate - they echoed a tiny fragment of the source" +
+            (gateRejected.length <= 6 ? " (paragraph " + gateRejected.join(", ") + ")" : "") +
+            " - rejected as unusable output");
+        }
         if (pre.recovered) {
           actLog(label + ": the reply was cut off - recovered " +
                  ((pre.ops || []).length || got.length) + " op(s); uncovered paragraphs get a top-up ask");
         }
-        return { pre: pre, chunkOps: chunkOps, rescued: rescued };
+        return { pre: pre, chunkOps: chunkOps, rescued: rescued, gateRejected: gateRejected };
       }
 
       function applyValidatedOps(item, ops, label) {
@@ -4037,6 +4069,28 @@ function applyOps(deck, ops, ctx) {
         });
       }
 
+      // the user's rule (0.9.362): a paragraph that survives the whole ladder
+      // untranslated NEVER loses its text and is never silently dropped -
+      // DocKick anchors a Word comment on it (find = the paragraph's first
+      // line) so the author sees exactly which sentences still need a look.
+      function skipMark(w, why) {
+        var find = String(w && w.text || "").replace(/\s+/g, " ").trim().slice(0, 120);
+        if (!find || find.length < 2) return Promise.resolve();
+        var note = "[DocKick] Left untranslated on purpose: the " + langName +
+          " translation of this paragraph did not produce usable output" +
+          (why ? " (" + why + ")" : "") +
+          ". The original text is unchanged - run Translate again to retry it.";
+        return applyOps(SK.deck, [{ type: "insert_comment", find: find, text: note }], ctx)
+          .then(function () {
+            marked++;
+            actLog("Marked paragraph " + w.para + " with a translate note (text left unchanged)");
+            renderSimDeck();
+          }, function (nerr) {
+            actLog("translate note for paragraph " + w.para + " could not be stored: " +
+              ((nerr && nerr.message) || String(nerr)));
+          });
+      }
+
       function splitOrSkip(item) {
         if (item.paras.length >= 2) {
           var half = Math.ceil(item.paras.length / 2);
@@ -4056,7 +4110,8 @@ function applyOps(deck, ops, ctx) {
         skippedParas++;
         actLog(item.label + " (paragraph " + item.paras[0].para + "): no usable ops" +
           " even for this single paragraph - giving up on this one");
-        return runNext();
+        return skipMark(item.paras[0], "model " + ref.model)
+          .then(function () { return runNext(); });
       }
 
       // after an item's ops land: ask once for the paragraphs the reply did
@@ -4067,7 +4122,7 @@ function applyOps(deck, ops, ctx) {
         var label = item.label + " top-up";
         actLog(label + ": " + missing.length + " paragraph(s) uncovered - asking for just those\u2026");
         var ms = {};
-        missing.forEach(function (w) { ms[w.para] = true; });
+        missing.forEach(function (w) { ms[w.para] = w; });
         var listing = missing.map(function (w) { return "[" + w.para + "] " + w.text; }).join("\n");
         var user = "TARGET LANGUAGE: " + langName + "\n" +
           "You already produced ops for the other paragraphs. The document paragraphs below were NOT covered yet:\n\n" +
@@ -4096,7 +4151,8 @@ function applyOps(deck, ops, ctx) {
             skippedParas++;
             actLog(label + ": nothing usable came back - paragraph " +
               missing[0].para + " was left unchanged");
-            return runNext();
+            return skipMark(missing[0], "top-up fail, model " + ref.model)
+              .then(function () { return runNext(); });
           }
           return applyValidatedOps(item, parsed.chunkOps, label).then(function () {
             return runNext();
@@ -4110,7 +4166,8 @@ function applyOps(deck, ops, ctx) {
             return runNext();
           }
           skippedParas++;
-          return runNext();
+          return skipMark(missing[0], "top-up transport error, model " + ref.model)
+            .then(function () { return runNext(); });
         });
       }
 
@@ -4190,7 +4247,11 @@ function applyOps(deck, ops, ctx) {
           if (!head.length) head = "(empty reply)";
           actLog(item.label + " [" + ref.model + "]: " +
             (first.pre.ok ?
-              ((first.pre.ops || []).length ? "reply parsed but no op fits the chunk paragraphs" : "reply carried 0 ops")
+              ((first.pre.ops || []).length ?
+                (first.gateRejected && first.gateRejected.length && !first.chunkOps.length ?
+                  "reply parsed but ALL op(s) echoed tiny source fragments (rejected)" :
+                  "reply parsed but no op fits the chunk paragraphs") :
+                "reply carried 0 ops")
               : "reply not parseable as ops") +
             " - model said: " + head.slice(0, 150));
           if (SK.runCancelled) return Promise.reject(new FriendlyError("Run cancelled."));
@@ -4239,6 +4300,7 @@ function applyOps(deck, ops, ctx) {
             " in " + chunks.length + " chunk(s)." +
             (usedModels.length ? " Models: " + usedModels.join(" \u2192 ") + "." : "") +
             (skippedParas ? " " + skippedParas + " paragraph(s) could not be translated after all fallbacks (see the activity log)." : "") +
+            (marked ? " " + marked + " paragraph(s) were marked with a translate note (text left unchanged - run Translate again to retry)." : "") +
             (budgetHit ? " Run stopped at the model-ask budget (" + TRANSLATE_ASK_BUDGET + " asks) - run Translate again to continue." : "") +
             (failed ? " " + failed + " op(s) failed - see the activity log." : "") +
             (untouched > 0 ? " " + untouched + " paragraph(s) were left unchanged." : "") +

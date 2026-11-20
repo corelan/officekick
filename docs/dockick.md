@@ -171,6 +171,23 @@ chunk by chunk:
   paragraph keeps its style, list level and indentation (tabs and leading
   spaces are carried to the model and force-restored if a reply drops
   them), and paragraphs that need no translation are left untouched.
+- **Degenerate replies are rejected, never applied** (0.9.362): a model (or
+  its provider) can return a perfectly valid ops reply whose text is just a
+  tiny fragment of the SOURCE glued together ("In" + "beperken." ->
+  "Inbeperken.") instead of a translation. Every reply op is checked
+  against its source paragraph by length (a real translation keeps roughly
+  the source's length; a fragment compression does not). Rejected ops are
+  treated as no usable output, so the whole ladder above fires instead -
+  re-ask, fallback model, smaller chunks. Text is destroyed neither by a
+  garbage apply nor by a rejected reply.
+- **A paragraph that stays untranslated is marked, not destroyed**: when a
+  paragraph ends up untranslated after all fallbacks, its original text is
+  kept as-is and DocKick anchors a Word comment on it ("[DocKick] Left
+  untranslated on purpose: the <language> translation of this paragraph did
+  not produce usable output (<model>). The original text is unchanged - run
+  Translate again to retry it."). The summary reports how many paragraphs
+  were marked; the comment makes it obvious in the document exactly which
+  sentences still need a look.
 - The prompt preserves the document's tone, register and legal weight and
   reads each paragraph in its context: it judges the nature of the text
   from the text itself (legal agreement, manual, letter, report), together
