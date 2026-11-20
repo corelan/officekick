@@ -42,6 +42,38 @@
   exact layout Office honors, and docs gain the manual Trust Center +
   reg-add unblock for machines that installed older builds.
 
+## 0.9.363
+
+### Fixed
+- field report (the SAME letter, 11:12 run): the user TYPED "Translate the
+  document to French." into the chat - the one-shot chat ask carried the
+  whole 28-paragraph outline, the reply was degenerate glue again and the
+  chat gate APPLIED it (edit_paragraph x28, summary "Executed 28 action(s)",
+  no model tag). Two fixes:
+  1) whole-document translate tasks typed as a normal request now ROUTE to
+     the Translate pipeline (matchTranslateTask: translate verb + document
+     noun + "to/into/naar <language>" tail; multi-word and article forms
+     covered; paragraph-level asks keep the chat path) - chunked slices,
+     0.9.362 fragment gate, fallback-model swap, skip notes, model tags.
+  2) defense in depth: on a translation-intent instruction the chat gate
+     itself now rejects edit_paragraph ops whose text is a compressed
+     fragment of the paragraph's current text (fragmentEchoText with
+     SK.lastInstruction scoping); rejected rows carry the reason and the
+     existing all-rejected ladder gives the model 2 more rounds with the
+     per-op reasons before the manual "Ask again" fallback - nothing
+     touches the document on that path either.
+- Verified in the simulator: typed "Translate the document to French." with
+  a glue-replying mock routes into the pipeline (activity trail like the
+  button flow; deck untouched; 3 anchored notes for 3 paragraphs), typed
+  "Translate paragraph 2 to French." with a glue mock ends "None of the 3
+  action(s) survived validation - no changes were applied" after 3 /api/chat
+  calls (original + 2 repair rounds with the per-op reasons) with an
+  untouched deck + the Ask again affordance, and length-realistic ops replies
+  still pass the chat gate and apply (no false positives).
+- E2E mock: ask-keyed harvest also reads the chat outline shape
+  ('para N (Style): "text"') so translate-intent chat flows are
+  scenario-driven like pipeline asks.
+
 ## 0.9.362
 
 ### Fixed

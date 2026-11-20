@@ -217,6 +217,15 @@ chunk by chunk:
   pressed Translate and picked the language. With **AI edits land as
   tracked changes** on (Settings), every translation lands as a revision you
   can accept or reject afterwards.
+- You can also TYPe the translation as a normal request ("Translate the
+  document to French."): the pane routes that to this same pipeline
+  (0.9.363) instead of one chat ask, so the chunked self-healing run, the
+  fragment gate, the fallback-model swap and the notes apply either way.
+  On any other translation ask that stays in the chat (paragraph-level
+  requests, phrasings the router does not recognise), the chat gate
+  rejects ops whose text is a compressed fragment of the paragraph itself
+  and gives the model two repair rounds with the per-op reasons before
+  anything can touch the document.
 - When the run completes it files into the session like any other request
   ("Translate the document to <language>"), so follow-up prompts know the
   document was translated.

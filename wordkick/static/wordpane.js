@@ -3188,6 +3188,22 @@ var nw = $("sess-new");
       } else if (t === "edit_paragraph") {
         if (!paraOk(op.para)) { bad("bad paragraph index"); return; }
         if (typeof op.text !== "string") { bad("missing text"); return; }
+        // 0.9.363: on a translation task, an ops reply must not slip a
+        // compressed SOURCE fragment through as the "translation" (the
+        // 'Inbeperken.' incident reached the document through the chat gate
+        // on 2026-11-20 11:12). A real translation keeps roughly the
+        // source's length; a fragment echo does not. Rejected rows carry
+        // the reason into the preview and the all-rejected repair ladder.
+        var srcSnap = (ctx && ctx.paragraphs ? (ctx.paragraphs[op.para - 1] || null) : null);
+        if (srcSnap && typeof srcSnap.text === "string" &&
+            /translat\w*|vertaal\w*|traduc|tradui|traducz|traduz|ubersetzt|übersetzt/i.test(String(SK.lastInstruction || ""))) {
+          var srcLen2 = srcSnap.text.replace(/\s+/g, " ").trim().length;
+          var opLen2 = op.text.replace(/\s+/g, " ").trim().length;
+          if (fragmentEchoText(srcLen2, opLen2)) {
+            bad("unusable output: the text is a tiny fragment of the paragraph's current text (compressed echo, not a translation)");
+            return;
+          }
+        }
         out.para = op.para; out.text = op.text;
         paraState[op.para] = op.text;
       } else if (t === "replace_text") {
@@ -3784,6 +3800,26 @@ function applyOps(deck, ops, ctx) {
     return false;
   }
 
+  // 0.9.363: a TYPED whole-document translation task ("Translate the
+  // document to French.") must not run through the single chat ask - one
+  // reply cannot carry 20+ translations, and that shape is exactly the
+  // degenerate first+last-fragment incident twice over. The translate
+  // intent plus a nameable target language routes to runTranslate (the
+  // chunked pipeline with the fragment gate, the fallback-model swap and
+  // the skip notes). The document noun is required, so paragraph-level
+  // and other translation asks keep the chat path.
+  function matchTranslateTask(instruction) {
+    var s = String(instruction || "");
+    if (!/\b(translat\w*|vertaal\w*|traduis\w*|traduire|traduce|traducir|traduza|traduzir|tradurre|ubersetzt?|übersetzt?)\b/i.test(s)) return null;
+    if (!/\b(documents?|doc\b|bestand|brief|tekst|file|letter)\b/i.test(s)) return null;
+    var m = /\b(?:to|into|naar|vers|zu|auf)\s*[:\-]?\s*([a-zA-ZÀ-ÿ'’ ()\-]{2,32})\s*[.!?;,]?\s*$/i.exec(s.trim());
+    if (!m) return null;
+    var lang = String(m[1] || "").replace(/\s+/g, " ").trim();
+    lang = lang.replace(/^(?:the|het|de|den|der|die|een|le|la|el)\s+/i, "").trim();
+    if (!lang || lang.length < 2 || /^(is|in|it|of)\b/i.test(lang)) return null;
+    return lang.slice(0, 40);
+  }
+
   function toggleTranslatePanel() {
     if (SK.busy) return;
     var slot = $("translate-slot");
@@ -3885,8 +3921,8 @@ function applyOps(deck, ops, ctx) {
     slot.appendChild(box);
   }
 
-  function runTranslate(langName) {
-    if (SK.busy) return;
+  function runTranslate(langName, fromRun) {
+    if (SK.busy && !fromRun) return;   // fromRun = routed from a typed ask (0.9.363); the caller owns the busy state
     var slot = $("translate-slot");
     if (slot) { slot.innerHTML = ""; slot.style.display = "none"; }
     var prof = currentProfile();
@@ -3898,6 +3934,7 @@ function applyOps(deck, ops, ctx) {
       return;
     }
     var instr = "Translate the document to " + langName + ".";
+    SK.lastInstruction = instr;   // the validateOps fragment gate keys on the run's own instruction (0.9.363)
     var input = $("chat-input");
     SK.busy = true;
     SK.runCancelled = false;
@@ -4731,6 +4768,17 @@ function applyOps(deck, ops, ctx) {
       // 0.9.339: a wording/review ask over a LARGE document cannot be one
       // single ask (the op list never fits one reply) - it runs as its own
       // chunked pipeline (like Translate) and ends in ONE approval gate.
+      // 0.9.363: same for a TYPED whole-document translate task - it routes
+      // to the Translate pipeline (chunked slices + fragment gate + fallback
+      // swap + skip notes) instead of one chat ask whose reply cannot carry
+      // 20+ translations (the degenerate-fragment incident, twice).
+      var trLang = matchTranslateTask(instruction);
+      if (wantCtx && trLang && ctx &&
+          (ctx.paragraphCount || (ctx.paragraphs || []).length) > 1) {
+        dbg("translate.flow.detected", { lang: trLang,
+          paras: ctx.paragraphCount || (ctx.paragraphs || []).length });
+        return runTranslate(trLang, true);
+      }
       var REVIEW_ASK_RE = new RegExp("\\b(review|proofread|proof-?read|proofreading|wording|grammar|spelling|typos?|grammatical|punctuation|recheck|reads? (unnatural|strange|awkward)|feels? (a bit )?(strange|awkward|unnatural|off)|not natural|strange choice|better wording|improv(e|ing).{0,20}(wording|text|translation|sentence)|polish the (text|wording|language))\\b", "i");
       if (wantCtx && REVIEW_ASK_RE.test(String(instruction || "")) &&
           ctx && (ctx.paragraphCount || (ctx.paragraphs || []).length) > REVIEW_MIN_PARAS && !SK.clarifyAnswer) {
