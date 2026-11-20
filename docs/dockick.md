@@ -188,6 +188,16 @@ chunk by chunk:
   Translate again to retry it."). The summary reports how many paragraphs
   were marked; the comment makes it obvious in the document exactly which
   sentences still need a look.
+- **Every write is verified by reading it back** (0.9.364): after each
+  chunk applies - with Track Changes ON or OFF - the pipeline re-reads the
+  edited paragraphs from the document and compares them against what it
+  just wrote; the summary reports "Writes verified by read-back: N/M." If
+  Word holds different wording than DocKick wrote (pending revisions,
+  revision-view divergence), the affected paragraphs keep the document's
+  own wording, get an anchored note, the run stops with instructions
+  (accept/reject the pending changes or turn Track Changes off and run
+  Translate again), rather than reporting success over a document that
+  silently kept old text.
 - The prompt preserves the document's tone, register and legal weight and
   reads each paragraph in its context: it judges the nature of the text
   from the text itself (legal agreement, manual, letter, report), together

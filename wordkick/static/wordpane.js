@@ -4010,6 +4010,7 @@ function applyOps(deck, ops, ctx) {
       if (cur.length) chunks.push(cur);
       dbg("translate.plan", { lang: langName, paragraphs: work.length, chunks: chunks.length });
       var applied = 0, failed = 0, skippedParas = 0, budgetUsed = 0, budgetHit = false, marked = 0;
+      var verifiedWrites = 0, unverifiableWrites = 0, stoppedOnDivergence = false;
       var paraDone = {};   // 1-based paragraphs that received a translated op
       var queue = [];      // work items: {paras, retried, label, isPart}
       chunks.forEach(function (cs, ci) {
@@ -4091,13 +4092,59 @@ function applyOps(deck, ops, ctx) {
         v.ops.forEach(function (o) { covered[o.para] = true; paraDone[o.para] = true; });
         return applyOps(SK.deck, v.ops, ctx).then(function (res) {
           var okN = 0, badN = 0;
-          ((res && res.lines) || []).forEach(function (l) { if (l.ok) okN++; else badN++; });
+          var okParas = [], appliedTexts = {};
+          var lines = (res && res.lines) || [];
+          lines.forEach(function (l, li) {
+            if (l.ok) {
+              okN++;
+              var oOk = v.ops[li];
+              if (oOk && oOk.para) { okParas.push(oOk.para); appliedTexts[oOk.para] = String(oOk.text || ""); }
+            } else badN++;
+          });
           applied += okN; failed += badN;
           actLog(label + " [" + ref.model + "]: " + okN + " paragraph(s) translated" + (badN ? ", " + badN + " failed" : ""));
           setStatus("Translated so far: " + applied + " paragraph(s)\u2026", "busy");
           renderSimDeck();
           updateDeckSummary();
-          return { covered: covered };
+          if (!okParas.length || !SK.deck.readParagraphs) return Promise.resolve({ covered: covered });
+          // 0.9.364: reads BACK what was just written and compares - the
+          // tracked-changes field report (11:31) ended with edits that
+          // reported ok:true while the accepted document held old junk.
+          // A read-back that disagrees with the write means the document's
+          // revision state diverges from what DocKick sees; those
+          // paragraphs keep whatever Word actually holds, get anchored
+          // notes, and the run stops with instructions instead of
+          // continuing blind.
+          return SK.deck.readParagraphs(okParas).then(function (rb) {
+            var readMap = {};
+            String(rb == null ? "" : String(rb).replace(/\r/g, "\n")).split("\n").forEach(function (ln) {
+              var m = /PARAGRAPH (\d+) \([^)]*\): "(.*)"\s*$/.exec(String(ln || ""));
+              if (m) readMap[Number(m[1])] = m[2];
+            });
+            var vN = 0, diverged = [];
+            okParas.forEach(function (p) {
+              var want = (appliedTexts[p] || "").replace(/\s+/g, " ").trim();
+              var gotT = readMap[p];
+              if (gotT != null && String(gotT).replace(/\s+/g, " ").trim() === want) vN++;
+              else diverged.push(p);
+            });
+            verifiedWrites += vN;
+            if (!diverged.length) return { covered: covered };
+            unverifiableWrites += diverged.length;
+            actLog(label + " [" + ref.model + "]: " + diverged.length + " write(s) did NOT stick in the document as read back (paragraph " +
+              diverged.slice(0, 6).join(", ") + (diverged.length > 6 ? "\u2026" : "") +
+              ") - the wording DocKick wrote is not the wording Word holds for those paragraphs (tracked-changes / revision state divergence)");
+            diverged.forEach(function (p) {
+              var wRead = { para: p, text: readMap[p] != null ? readMap[p] : (appliedTexts[p] || "") };
+              skipMark(wRead, "write not verifiable in the document, model " + ref.model);
+            });
+            budgetHit = true;
+            stoppedOnDivergence = true;
+            return { covered: covered };
+          }, function (rerr) {
+            actLog(label + " [" + ref.model + "]: read-back verification unavailable (" + ((rerr && rerr.message) || String(rerr)) + ")");
+            return { covered: covered };
+          });
         }, function (aerr) {
           failed += v.ops.length;
           actLog(label + " apply FAILED: " + ((aerr && aerr.message) || String(aerr)));
@@ -4333,11 +4380,13 @@ function applyOps(deck, ops, ctx) {
         }
         if (!queue.length || budgetHit) {
           var untouched = work.length - Object.keys(paraDone).length - skippedParas;
-          var summary = "Translated " + applied + " paragraph(s) to " + langName +
+          var summary = "Translated " + Math.max(0, applied - unverifiableWrites) + " paragraph(s) to " + langName +
             " in " + chunks.length + " chunk(s)." +
             (usedModels.length ? " Models: " + usedModels.join(" \u2192 ") + "." : "") +
             (skippedParas ? " " + skippedParas + " paragraph(s) could not be translated after all fallbacks (see the activity log)." : "") +
             (marked ? " " + marked + " paragraph(s) were marked with a translate note (text left unchanged - run Translate again to retry)." : "") +
+            (verifiedWrites || unverifiableWrites ? " Writes verified by read-back: " + verifiedWrites + "/" + (verifiedWrites + unverifiableWrites) + "." : "") +
+            (stoppedOnDivergence ? " The run stopped: some writes did not stick in the document's revision state - accept or reject pending tracked changes (or turn Track Changes off) and run Translate again; translated paragraphs are skipped automatically." : "") +
             (budgetHit ? " Run stopped at the model-ask budget (" + TRANSLATE_ASK_BUDGET + " asks) - run Translate again to continue." : "") +
             (failed ? " " + failed + " op(s) failed - see the activity log." : "") +
             (untouched > 0 ? " " + untouched + " paragraph(s) were left unchanged." : "") +

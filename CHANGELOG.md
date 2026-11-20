@@ -42,6 +42,29 @@
   exact layout Office honors, and docs gain the manual Trust Center +
   reg-add unblock for machines that installed older builds.
 
+## 0.9.364
+
+### Fixed
+- field report (the user's demand after the 11:31 incident): "this needs to
+  work with track changes on as well". The 11:31 translate-with-tracking run
+  wrote 28 tracked edits every one reporting ok:true, while the user's
+  ACCEPT-ALL produced the old junk again - nothing verified what Word
+  actually held after each write. The Translate pipeline now READS BACK every
+  applied chunk from the document (deck.readParagraphs on the applied
+  paragraphs) and compares against the ops it just wrote (whitespace-
+  normalized): the summary reports "Writes verified by read-back: N/M."
+  every run, in both tracking modes. Diverging writes (wording Word holds
+  differs from what DocKick wrote - revision fog / view divergence) keep the
+  document's own wording, get anchored [DocKick] notes, the run STOPS with
+  the instruction (accept/reject pending revisions or turn Track Changes
+  off, re-run; translated paragraphs skip automatically), and the summary's
+  "Translated" count excludes non-sticking writes.
+- Verified in the simulator with a deck patched to silently swallow writes:
+  the run reports "Writes verified by read-back: 1/3.", stops with the
+  guidance, anchors 2 notes on the diverged paragraphs and leaves their
+  text untouched; the clean scenario reports 3/3 and applies fully. node
+  --check + the 36 server tests green.
+
 ## 0.9.363
 
 ### Fixed
